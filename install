@@ -1,0 +1,38 @@
+#!/bin/bash
+DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+echo $DIR
+
+link(){
+    if [[ -e $HOME/$1 ]]; then
+        if [[ $(diff -q $DIR/$1 $HOME/$1) ]]; then
+            cp $HOME/$1 $HOME/$1.old
+            echo "moved old $1"
+        else
+            echo "didnt move $1, file is same, just deleting instead"
+        fi
+        rm $HOME/$1
+    fi
+    ln -s $DIR/$1 $HOME/$1
+    echo "Linked $1"
+}
+
+linkConfig(){
+    mkdir -p "$HOME/.config"
+
+    if [[ -e $HOME/.config/$1 ]]; then
+        mv $HOME/.config/$1 $HOME/.config/$1.old
+        echo "moved old config $1"
+    fi
+    ln -s $DIR/.config/$1 $HOME/.config/$1
+    echo "Linked config $1"
+}
+
+link .zshrc
+link .gitconfig
+link .tmux.conf
+link .bashrc
+link .vimrc
+
+linkConfig htop
+linkConfig i3
+linkConfig i3status
