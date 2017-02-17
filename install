@@ -27,12 +27,18 @@ linkConfig(){
     echo "Linked config $1"
 }
 
-link .zshrc
 link .gitconfig
 link .tmux.conf
-link .bashrc
 link .vimrc
 
 linkConfig htop
 linkConfig i3
 linkConfig i3status
+
+if [[ -s $ZSH ]]; then
+    link .zshrc
+    rm $HOME/.oh-my-zsh/custom/themes/john.zsh-theme
+    ln -s $DIR/john.zsh-theme $HOME/.oh-my-zsh/custom/themes/john.zsh-theme
+elif [[ -s $BASH ]]; then
+    link .bashrc
+fi
