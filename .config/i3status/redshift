@@ -1,0 +1,71 @@
+#!/bin/bash
+
+SHIFTDEFAULT=6000
+
+RSF="$HOME/.redshift"
+if [[ ! -f $RSF ]]; then
+    SHIFT=$SHIFTDEFAULT
+    SHIFTMIN=2500
+    SHIFTMAX=6000
+    CRONSHIFT=0
+else
+    source $RSF
+fi
+
+updateBar(){
+    pkill -RTMIN+2 i3blocks
+}
+
+updateShiftfile(){
+    if [[ $SHIFT -gt 10000 ]]; then
+        SHIFT=10000
+    elif [[ $SHIFT -lt 1000 ]]; then
+        SHIFT=1000
+    fi
+
+    echo "SHIFT=$SHIFT" >  $RSF
+    echo "CRONSHIFT=$CRONSHIFT" >> $RSF
+    echo "SHIFTMIN=$SHIFTMIN" >> $RSF
+    echo "SHIFTMAX=$SHIFTMAX" >> $RSF
+}
+
+updateRedshift(){
+    redshift -O $SHIFT > /home/john/cronthing
+    echo "$SHIFT" >> /home/john/cronthing
+    echo "NEW" >> /home/john/cronthing
+}
+
+if [[ $1 == "get" ]]; then
+    if [[ $SHIFT -ne $SHIFTDEFAULT ]] || [[ $CRONSHIFT -ne 0 ]]; then
+        echo "Shift $SHIFT $CRONSHIFT"
+    fi
+elif [[ $1 == "cron" ]]; then
+    if [[ $CRONSHIFT -eq 0 ]]; then
+        echo "NO SHIFT"
+        exit 0
+    fi
+
+    SHIFT=$(($SHIFT + $CRONSHIFT))
+
+    if [[ $SHIFT -lt $SHIFTMIN ]]; then
+        SHIFT=$SHIFTMIN
+        CRONSHIFT=0
+    elif [[ $SHIFT -gt $SHIFTMAX ]]; then
+        SHIFT=$SHIFTMAX
+        CRONSHIFT=0
+    fi
+
+    updateShiftfile
+    updateRedshift
+    updateBar
+elif [[ $1 == "cronset" ]]; then
+    CRONSHIFT=$2
+    updateShiftfile
+    updateBar
+else
+    SHIFT=$(($SHIFT + $1))
+
+    updateShiftfile
+    updateRedshift
+    updateBar
+fi

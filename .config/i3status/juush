@@ -1,0 +1,3 @@
+#!/bin/bash
+
+scrot '/home/john/screenshots/%s-cb-%Y-%m-%d_%I-%M-%S%p.png' -s -z -q 90 -e '/usr/bin/juush -x $f'

@@ -1,0 +1,40 @@
+#!/bin/bash
+
+getVOL(){
+    VOL=$(pactl list sinks | grep '^[[:space:]]Volume:' | awk '{print $3}')
+    MUTE=$(pactl list sinks | grep 'Mute' | awk '{print $2}')
+}
+
+setVOL(){
+    pactl set-sink-volume 1 $1%
+}
+
+updateBar(){
+    pkill -RTMIN+1 i3blocks
+}
+
+if [[ $1 == "get" ]]; then
+    getVOL
+    if [[ $MUTE == "no" ]]; then
+        MUTESTR=""
+    else
+        MUTESTR=" (M)"
+    fi
+
+    echo "Vol $VOL$MUTESTR"
+elif [[ $1 == "mute" ]]; then
+    pactl set-sink-mute 1 toggle
+    updateBar
+elif [[ $1 == "setvol" ]]; then
+    updateBar
+    setVOL $2
+elif [[ $1 == "vol" ]]; then
+    getVOL
+    VOL=$(echo $VOL | sed 's/%//')
+    VOL=$(($VOL + $2))
+    setVOL $VOL
+    updateBar
+else
+    echo "unknown command $1"
+    exit 1
+fi

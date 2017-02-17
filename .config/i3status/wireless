@@ -1,0 +1,20 @@
+#!/bin/bash
+
+if [ -z $1 ]; then
+    echo "Enter device as argument"
+    echo
+    exit 1;
+fi
+
+STATE=`cat /sys/class/net/$1/operstate`
+
+if [ $STATE != "up" ]; then
+    echo "W: Down"
+    exit 1;
+fi
+
+PCT=`grep $1 /proc/net/wireless | awk '{print int($3 * 100/70)}'`
+IP=`/sbin/ifconfig wlan0 | grep "inet add" | sed -ne 's/inet addr:\s*\(\S*\).*/\1/p'`
+SSID=`/sbin/iw wlan0 link | grep SSID | cut -d" " -f2`
+
+echo W: $IP on $SSID str $PCT%

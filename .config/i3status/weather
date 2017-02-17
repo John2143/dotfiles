@@ -1,0 +1,11 @@
+#!/bin/bash
+
+if [ -z $1 ]; then
+    echo "Enter zip code as argument"
+    echo
+    exit 1;
+fi
+
+curl -s http://rss.accuweather.com/rss/liveweather_rss.asp\?metric\=0\&locCode\=$1 \
+  | sed -n '/<title>Curr/p' \
+  | perl -n -e'/Currently: ([^:]+): (\d+)/ && print "$2F $1\n"'

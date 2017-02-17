@@ -1,0 +1,23 @@
+#!/bin/bash
+
+DIR="/sys/class/backlight/$1/"
+
+BRIGHTNESSMAX=`cat $DIR/max_brightness`
+BRIGHTNESS=`cat $DIR/brightness`
+
+if [ $2 != "get" ]; then
+
+    BRIGHTNESS=$(($BRIGHTNESS+ $2))
+
+    if [[ $BRIGHTNESS -gt $BRIGHTNESSMAX ]]; then
+        BRIGHTNESS=$BRIGHTNESSMAX
+    elif [[ $BRIGHTNESS -lt 0 ]]; then
+        BRIGHTNESS=0
+    fi
+
+    sudo echo $BRIGHTNESS > $DIR/brightness
+
+    pkill -RTMIN+3 i3blocks
+else
+    echo "Br $BRIGHTNESS/$BRIGHTNESSMAX"
+fi

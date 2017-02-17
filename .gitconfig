@@ -1,0 +1,31 @@
+[user]
+	email = john@john2143.com
+	name = John Schmidt
+[push]
+	default = simple
+[alias]
+	tree = log --oneline --decorate --all --graph
+	hist = log --pretty=format:'%h %ad | %s%d [%an]' --graph --date=short
+
+	co = checkout
+	cod = checkout develop
+	com = checkout master
+
+	bb = checkout -t -b
+	br = branch
+
+	s = status
+	st = status
+	sts = status -s
+	ss = status -s
+
+	mf = merge --no-ff
+
+	adl = add -A
+
+	ci = commit
+	cim = commit -m
+	cia = commit -a
+	ciam = commit -a -m
+
+	dh = diff HEAD

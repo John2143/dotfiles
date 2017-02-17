@@ -1,0 +1,12 @@
+#!/bin/bash
+
+if pidof spotify > /dev/null 2> /dev/null
+then
+    sp eval > /tmp/trackinfo
+    source /tmp/trackinfo
+    if [[ -n "$SPOTIFY_ARTIST" ]]; then
+        echo "$SPOTIFY_ARTIST - $SPOTIFY_TITLE"
+    else
+        echo "Ad"
+    fi
+fi

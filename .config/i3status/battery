@@ -1,0 +1,29 @@
+#!/bin/bash
+
+if [ -z $1 ]; then
+    echo "Enter battery device as argument"
+    echo
+    exit 1;
+fi
+
+source /sys/class/power_supply/$1/uevent
+
+STATUS=$POWER_SUPPLY_STATUS
+PCT=$POWER_SUPPLY_CAPACITY
+
+if [ $STATUS == "Charging" ]; then
+    STATUS="On AC"
+    if [ $PCT -eq "100" ]; then
+        PCT=-1
+    fi
+elif [ $STATUS == "Discharging" ]; then
+    STATUS="On Battery"
+fi
+
+if [ $PCT -ne "-1" ]; then
+    PCT=$PCT%
+else
+    PCT=""
+fi
+
+echo $STATUS $PCT
