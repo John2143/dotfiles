@@ -238,8 +238,7 @@ set statusline+=%l/%L   "cursor line/total lines
 set statusline+=\ %P    "percent through file
 set laststatus=2
 
-noremap <leader>t :silent !ctags src/* include/*<cr>:UpdateTypesFileOnly<cr>:redr!<cr>
-noremap <leader>T :silent !ctags ./*.c<cr>:UpdateTypesFileOnly<cr>:redr!<cr>
+noremap <leader>t :!ctags -R .<cr>:UpdateTypesFileOnly<cr>:redr!<cr>
 
 autocmd cursorhold,bufwritepost * unlet! b:statusline_tab_warning
 function! StatuslineTabWarning()

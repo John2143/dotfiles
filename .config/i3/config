@@ -78,6 +78,8 @@ bindsym Mod1+Shift+F6 exec "~/.config/i3status/redshift -100"
 
 bindsym Mod1+F5 exec "~/.config/i3status/juush"
 
+bindsym Mod4+l exec "xset dpms force standby"
+
 #Search forward/back for spotify
 bindsym Mod4+F1 exec "sp prev"
 bindsym Mod4+F2 exec "sp next"

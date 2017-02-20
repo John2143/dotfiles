@@ -30,9 +30,7 @@ updateShiftfile(){
 }
 
 updateRedshift(){
-    redshift -O $SHIFT > /home/john/cronthing
-    echo "$SHIFT" >> /home/john/cronthing
-    echo "NEW" >> /home/john/cronthing
+    redshift -O $SHIFT
 }
 
 if [[ $1 == "get" ]]; then
