@@ -63,8 +63,8 @@ if has("gui_running")
   set go -=T
   set go -=r
   call togglebg#map("<F4>")
+  colo solarized
 else
-  "colo solarized
   colo desert
 end
 let mapleader = ","
