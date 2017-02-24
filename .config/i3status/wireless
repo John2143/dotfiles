@@ -17,4 +17,4 @@ PCT=`grep $1 /proc/net/wireless | awk '{print int($3 * 100/70)}'`
 IP=`/sbin/ifconfig wlan0 | grep "inet add" | sed -ne 's/inet addr:\s*\(\S*\).*/\1/p'`
 SSID=`/sbin/iw wlan0 link | grep SSID | cut -d" " -f2`
 
-echo W: $IP on $SSID str $PCT%
+echo $IP $SSID \($PCT%\)

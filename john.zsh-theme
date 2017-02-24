@@ -87,7 +87,7 @@ fi
 
 HOSTNAME=`hostname`
 
-if [[ $HOSTNAME == "localhost" ]]; then
+if [[ $HOSTNAME == "localhost" ]] || [[ $HOSTNAME == "chromebook" ]]; then
   HOSTNAME="%{$fg_bold[green]%}Chromebook"
 elif [[ $HOSTNAME == "pi" ]]; then
   HOSTNAME="%{$fg_bold[cyan]%}pi"

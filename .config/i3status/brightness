@@ -19,5 +19,5 @@ if [ $2 != "get" ]; then
 
     pkill -RTMIN+3 i3blocks
 else
-    echo "Br $BRIGHTNESS/$BRIGHTNESSMAX"
+    echo "scale=0; ($BRIGHTNESS * 100)/$BRIGHTNESSMAX" | bc
 fi

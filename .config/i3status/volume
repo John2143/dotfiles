@@ -15,13 +15,14 @@ updateBar(){
 
 if [[ $1 == "get" ]]; then
     getVOL
+
     if [[ $MUTE == "no" ]]; then
-        MUTESTR=""
+        LABEL=
     else
-        MUTESTR=" (M)"
+        LABEL=
     fi
 
-    echo "Vol $VOL$MUTESTR"
+    echo "$LABEL $VOL"
 elif [[ $1 == "mute" ]]; then
     pactl set-sink-mute 1 toggle
     updateBar
