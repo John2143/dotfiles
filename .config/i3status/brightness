@@ -5,9 +5,9 @@ DIR="/sys/class/backlight/$1/"
 BRIGHTNESSMAX=`cat $DIR/max_brightness`
 BRIGHTNESS=`cat $DIR/brightness`
 
-if [ $2 != "get" ]; then
+if [[ $2 != "get" ]]; then
 
-    BRIGHTNESS=$(($BRIGHTNESS+ $2))
+    BRIGHTNESS=$(($BRIGHTNESS + $2))
 
     if [[ $BRIGHTNESS -gt $BRIGHTNESSMAX ]]; then
         BRIGHTNESS=$BRIGHTNESSMAX

@@ -10,6 +10,7 @@ source /sys/class/power_supply/$1/uevent
 
 STATUS=$POWER_SUPPLY_STATUS
 PCT=$POWER_SUPPLY_CAPACITY
+COLOR="#5555AA"
 
 B0=
 B1=
@@ -25,20 +26,22 @@ elif [[ $PCT -gt 75 ]]; then
 elif [[ $PCT -gt 50 ]]; then
     B=$B2
 elif [[ $PCT -gt 25 ]]; then
+    COLOR="#FFAA33"
     B=$B1
 elif [[ $PCT -gt 0 ]]; then
+    COLOR="#FF3333"
     B=$B0
 fi
 
+STATUS=`echo "scale=2; $POWER_SUPPLY_CHARGE_NOW/$POWER_SUPPLY_CURRENT_NOW" | bc`
+STATUS=${STATUS}H
+
 if [ $STATUS == "Charging" ]; then
     if [ $PCT -eq "100" ]; then
-        STATUS=$B6
+        STATUS="$B6 $STATUS"
     else
-        STATUS=""
+        STATUS=" $STATUS"
     fi
-elif [ $STATUS == "Discharging" ]; then
-    STATUS=`echo "scale=2; $POWER_SUPPLY_CHARGE_NOW/$POWER_SUPPLY_CURRENT_NOW" | bc`
-    STATUS=${STATUS}H
 fi
 
 if [ $PCT -ne "-1" ]; then
@@ -48,3 +51,5 @@ else
 fi
 
 echo $B $PCT $STATUS
+echo $PCT
+echo $COLOR

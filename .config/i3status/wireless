@@ -18,3 +18,4 @@ IP=`/sbin/ifconfig wlan0 | grep "inet add" | sed -ne 's/inet addr:\s*\(\S*\).*/\
 SSID=`/sbin/iw wlan0 link | grep SSID | cut -d" " -f2`
 
 echo $IP $SSID \($PCT%\)
+echo $IP lol

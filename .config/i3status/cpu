@@ -1,0 +1,17 @@
+#!/bin/bash
+
+CPU=$(ps -eo pcpu | tail -n +2 | paste -s -d+ - | bc)
+CPUINT=${CPU%.*}
+
+COLOR="#CCCCCC"
+if [[ $CPUINT -gt "100" ]]; then
+    COLOR="#CCCC33"
+elif [[ $CPUINT -gt "200" ]]; then
+    COLOR="#CC3333"
+elif [[ $CPUINT -gt "300" ]]; then
+    COLOR="#FF0000"
+fi
+
+echo $CPU%
+echo $CPU%
+echo $COLOR
