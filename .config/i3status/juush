@@ -1,3 +1,9 @@
 #!/bin/bash
 
-scrot '/home/john/screenshots/%s-cb-%Y-%m-%d_%I-%M-%S%p.png' -z -q 75 -e '/usr/bin/juush -x $f'
+if [[ $1 == "imgur" ]]; then
+    scrot '/home/john/screenshots/%s-cb-%Y-%m-%d_%I-%M-%S%p.png' -z -e 'echo $f > /home/john/scrn'
+else
+    scrot '/home/john/screenshots/%s-cb-%Y-%m-%d_%I-%M-%S%p.png' -z -q 75 -e '/usr/bin/juush -x $f'
+fi
+
+pkill -RTMIN+4 i3blocks

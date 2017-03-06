@@ -76,7 +76,8 @@ bindsym Mod1+Mod4 +F6 exec "~/.config/i3status/redshift -500"
 bindsym Mod1+Shift+F7 exec "~/.config/i3status/redshift 100"
 bindsym Mod1+Shift+F6 exec "~/.config/i3status/redshift -100"
 
-bindsym Mod1+F5 exec "~/.config/i3status/juush"
+bindsym Mod4+F5      exec "~/.config/i3status/juush"
+bindsym Mod4+Shift+F5 exec "~/.config/i3status/juush imgur"
 
 bindsym Mod4+l exec "xset dpms force standby"
 

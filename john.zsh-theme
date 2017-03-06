@@ -105,7 +105,7 @@ bureau_precmd () {
 
 setopt prompt_subst
 PROMPT='$_LIBERTY '
-RPROMPT='%B⬡%b $NVM_INFO [$(date "+%a %k:%M %p")]'
+RPROMPT='$? %B⬡%b $NVM_INFO [$(date "+%a %k:%M %p")]'
 
 autoload -U add-zsh-hook
 add-zsh-hook precmd bureau_precmd

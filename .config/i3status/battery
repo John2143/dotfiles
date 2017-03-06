@@ -12,12 +12,16 @@ STATUS=$POWER_SUPPLY_STATUS
 PCT=$POWER_SUPPLY_CAPACITY
 COLOR="#5555AA"
 
+#Battery levels
 B0=
 B1=
 B2=
 B3=
 B4=
-B6=
+
+#Status icons
+B6=	#Plug
+B7=	#Charge
 
 if [[ $PCT -gt 95 ]]; then
     B=$B4
@@ -33,23 +37,22 @@ elif [[ $PCT -gt 0 ]]; then
     B=$B0
 fi
 
-STATUS=`echo "scale=2; $POWER_SUPPLY_CHARGE_NOW/$POWER_SUPPLY_CURRENT_NOW" | bc`
-STATUS=${STATUS}H
+HOURS=`echo "scale=2; $POWER_SUPPLY_CHARGE_NOW/$POWER_SUPPLY_CURRENT_NOW" | bc`
+if [[ $HOURS -eq 0 ]]; then
+    HOURS=
+else
+    HOURS=${HOURS}H
+fi
 
-if [ $STATUS == "Charging" ]; then
-    if [ $PCT -eq "100" ]; then
-        STATUS="$B6 $STATUS"
+if [[ $STATUS == "Charging" ]]; then
+    if [[ $PCT -eq "100" ]]; then
+        COLOR="#55AAAA"
+        B=$B6
     else
-        STATUS=" $STATUS"
+        B=$B7
     fi
 fi
 
-if [ $PCT -ne "-1" ]; then
-    PCT=$PCT%
-else
-    PCT=""
-fi
-
-echo $B $PCT $STATUS
-echo $PCT
+echo $B $PCT% $HOURS
+echo $PCT%
 echo $COLOR
