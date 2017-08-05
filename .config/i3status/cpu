@@ -1,14 +1,14 @@
 #!/bin/bash
 
-CPU=$(ps -eo pcpu | tail -n +2 | paste -s -d+ - | bc)
+CPU=$(cat /proc/loadavg | awk '{printf("%3.0f", $1 * 100 / 4)}')
 CPUINT=${CPU%.*}
 
 COLOR="#CCCCCC"
-if [[ $CPUINT -gt "100" ]]; then
+if [[ $CPUINT -gt "30" ]]; then
     COLOR="#CCCC33"
-elif [[ $CPUINT -gt "200" ]]; then
+elif [[ $CPUINT -gt "60" ]]; then
     COLOR="#CC3333"
-elif [[ $CPUINT -gt "300" ]]; then
+elif [[ $CPUINT -gt "90" ]]; then
     COLOR="#FF0000"
 fi
 

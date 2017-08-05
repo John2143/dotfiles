@@ -11,11 +11,11 @@ if [[ $2 != "get" ]]; then
 
     if [[ $BRIGHTNESS -gt $BRIGHTNESSMAX ]]; then
         BRIGHTNESS=$BRIGHTNESSMAX
-    elif [[ $BRIGHTNESS -lt 0 ]]; then
-        BRIGHTNESS=0
+    elif [[ $BRIGHTNESS -lt 50 ]]; then
+        BRIGHTNESS=50
     fi
 
-    sudo echo $BRIGHTNESS > $DIR/brightness
+    echo "echo $BRIGHTNESS > $DIR/brightness" | sudo bash
 
     pkill -RTMIN+3 i3blocks
 else

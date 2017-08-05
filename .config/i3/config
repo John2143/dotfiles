@@ -68,7 +68,7 @@ bindsym      Shift+F8  exec "~/.config/i3status/volume setvol 100"
 bindsym Mod1+F8        exec "~/.config/i3status/volume mute"
 bindsym      F8        exec "~/.config/i3status/volume mute"
 
-bindsym Mod1+F7  exec "sudo $HOME/.config/i3status/brightness intel_backlight 25 > $HOME/test 2>&1"
+bindsym Mod1+F7  exec "sudo $HOME/.config/i3status/brightness intel_backlight 25"
 bindsym Mod1+F6  exec "sudo $HOME/.config/i3status/brightness intel_backlight -25"
 
 bindsym Mod1+Mod4 +F7 exec "~/.config/i3status/redshift 500"
