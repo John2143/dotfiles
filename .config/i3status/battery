@@ -13,15 +13,15 @@ PCT=$POWER_SUPPLY_CAPACITY
 COLOR="#5555AA"
 
 #Battery levels
-B0=
-B1=
-B2=
-B3=
-B4=
+B0=
+B1=
+B2=
+B3=
+B4=
 
 #Status icons
-B6=	#Plug
-B7=	#Charge
+B6=	#Plug
+B7=	#Charge
 
 if [[ $PCT -gt 95 ]]; then
     B=$B4

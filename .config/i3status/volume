@@ -17,9 +17,9 @@ if [[ $1 == "get" ]]; then
     getVOL
 
     if [[ $MUTE == "no" ]]; then
-        LABEL=
+        LABEL=
     else
-        LABEL=
+        LABEL=
     fi
 
     echo "$LABEL $VOL"
