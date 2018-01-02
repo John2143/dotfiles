@@ -61,16 +61,11 @@ NODE_GLOBALS=(` find ~/.nvm/versions/node -maxdepth 3 -type l -wholename '*/bin/
 NODE_GLOBALS+=("node")
 NODE_GLOBALS+=("nvm")
 
-function set_nvm_info(){
-    export NVM_INFO=`node -v 2> /dev/null`
-}
-
 load_nvm () {
-    echo "Loading nvm..." >&2
     export NVM_DIR=~/.nvm
     [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
-    set_nvm_info
 }
+
 export NVM_INFO="-"
 
 for cmd in "${NODE_GLOBALS[@]}"; do
@@ -109,8 +104,3 @@ export EDITOR="vim"
 # Example aliases
 # alias zshconfig="mate ~/.zshrc"
 # alias ohmyzsh="mate ~/.oh-my-zsh"
-
-
-if [[ $HOSTNAME == "localhost" ]] || [[ $HOSTNAME == "chromebook" ]]; then
-  synclient TapButton3=2
-fi

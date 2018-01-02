@@ -208,3 +208,8 @@ new_window none
 hide_edge_borders both
 
 bindsym Mod1+m exec xdotool mousemove_relative 10000 -10000
+
+# Apply background
+exec --no-startup-id /home/john/.fehbg
+# Allow for 3 finger taps
+exec synclient TapButton3=2
