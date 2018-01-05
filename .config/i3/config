@@ -208,7 +208,7 @@ new_window none
 hide_edge_borders both
 
 bindsym Mod1+m exec xdotool mousemove_relative 10000 -10000
-
+bindsym Mod1+Mod4+l exec i3lock -i /home/john/mandel/cool/1514253926-mbrot-17-12-25_09-05-26PM.png
 # Apply background
 exec --no-startup-id /home/john/.fehbg
 # Allow for 3 finger taps
