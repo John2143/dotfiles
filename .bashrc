@@ -57,7 +57,7 @@ get_branch(){
     git branch 2>/dev/null | sed -e '/^[^*]/d' -e 's/* \(.*\)/ (\1)/'
 }
 
-PS1='\[\033[01;36m\]\u@\H\[\033[01;034m\] \w\[\033[32m\]$(get_branch)\[\033[01;37m\] \$\[\033[00m\] '
+PS1='\[\033[01;36m\]\u@\H\[\033[01;034m\] \w\[\033[32m\]$(get_branch)\[\033[01;37m\]\n\$\[\033[00m\] '
 unset color_prompt force_color_prompt
 
 # enable color support of ls and also add handy aliases
@@ -102,3 +102,4 @@ fi
 
 export NVM_DIR="/home/john/.nvm"
 [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"  # This loads nvm
+[ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"  # This loads nvm bash_completion
