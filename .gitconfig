@@ -30,4 +30,20 @@
 	cia = commit -a
 	ciam = commit -a -m
 
+    pushb = push -u origin HEAD
+
 	dh = diff HEAD
+
+	ignore = update-index --assume-unchanged
+	unignore = update-index --no-assume-unchanged
+	ignored = !git ls-files -v | grep "^[[:lower:]]"
+
+
+
+
+
+
+[core]
+	excludesfile = /Users/jschmidt/.gitignore
+[hub]
+	host = github.discovery.com

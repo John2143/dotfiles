@@ -1,4 +1,6 @@
 # ~/.bashrc: executed by bash(1) for non-login shells.
+[[ -s "$HOME/.rvm/scripts/rvm" ]] && source "$HOME/.rvm/scripts/rvm" # Load RVM into a shell session *as a function*
+
 # see /usr/share/doc/bash/examples/startup-files (in the package bash-doc)
 # for examples
 
@@ -57,7 +59,7 @@ get_branch(){
     git branch 2>/dev/null | sed -e '/^[^*]/d' -e 's/* \(.*\)/ (\1)/'
 }
 
-PS1='\[\033[01;36m\]\u@\H\[\033[01;034m\] \w\[\033[32m\]$(get_branch)\[\033[01;37m\] \$\[\033[00m\] '
+PS1='\[\033[01;36m\]\u@\H\[\033[01;034m\] \w\[\033[32m\]$(get_branch)\[\033[01;37m\]\n\$\[\033[00m\] '
 unset color_prompt force_color_prompt
 
 # enable color support of ls and also add handy aliases
@@ -100,5 +102,11 @@ if [ -f /etc/bash_completion ] && ! shopt -oq posix; then
     . /etc/bash_completion
 fi
 
-export NVM_DIR="/home/john/.nvm"
+PATH=$PATH:~/bin
+
+export NVM_DIR="$HOME/.nvm"
 [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"  # This loads nvm
+
+# Add RVM to PATH for scripting. Make sure this is the last PATH variable change.
+export PATH="$PATH:$HOME/.rvm/bin"
+[ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"  # This loads nvm bash_completion

@@ -1,13 +1,13 @@
 let g:solarized_termcolors=256
 let g:solarized_italic=0
 let g:solarized_visibility="medium"
-syntax enable
+syntax on
 set background=dark
+set mouse=a
 
-"let g:airline_powerline_fonts=1
-
-let g:syntastic_check_on_open=1
-let g:syntastic_enable_signs=1
+let &t_SI = "\<Esc>Ptmux;\<Esc>\<Esc>]50;CursorShape=1\x7\<Esc>\\"
+let &t_SR = "\<Esc>Ptmux;\<Esc>\<Esc>]50;CursorShape=2\x7\<Esc>\\"
+let &t_EI = "\<Esc>Ptmux;\<Esc>\<Esc>]50;CursorShape=0\x7\<Esc>\\"
 
 "let g:easytags_async=1
 let g:neocomplete#enable_at_startup = 1
@@ -15,42 +15,63 @@ let g:neocomplete#enable_at_startup = 1
 set nocompatible              " be iMproved, required
 filetype off                  " required
 
-" set the runtime path to include Vundle and initialize
+"set the runtime path to include Vundle and initialize
 if has("win32")
   set rtp+=C:/Users/John/vimfiles/bundle/Vundle.vim
-  call vundle#begin('$USERPROFILE/vimfiles/bundle')
+  "call vundle#begin('$USERPROFILE/vimfiles/bundle')
+  call plug#begin()
 else
   set rtp+=~/.vim/bundle/Vundle.vim
-  call vundle#begin()
+  "call vundle#begin()
+  call plug#begin()
 endif
 
 " let Vundle manage Vundle, required
-Plugin 'VundleVim/Vundle.vim'
-Plugin 'tpope/vim-surround'
-Plugin 'derekwyatt/vim-fswitch'
-Plugin 'scrooloose/nerdcommenter'
-Plugin 'rust-lang/rust.vim'
-if has("gui_running")
-  Plugin 'scrooloose/syntastic'
-endif
+"Plugin 'VundleVim/Vundle.vim'
+Plug 'easymotion/vim-easymotion'
+Plug 'tpope/vim-surround'
+Plug 'tpope/vim-fugitive'
+Plug 'derekwyatt/vim-fswitch'
+Plug 'scrooloose/nerdcommenter'
+Plug 'rust-lang/rust.vim'
+Plug 'elzr/vim-json'
+Plug 'scrooloose/nerdtree'
+Plug 'posva/vim-vue'
+"Plug 'neoclide/coc.nvim', {'branch': 'release'}
+Plug 'autozimu/LanguageClient-neovim', {
+    \ 'branch': 'next',
+    \ 'do': 'bash install.sh',
+    \ }
 
-"Plugin 'vim-airline/vim-airline'
-"Plugin 'vim-airline/vim-airline-themes'
+set rtp+=/usr/local/opt/fzf
+Plug 'junegunn/fzf.vim'
 
-Plugin 'altercation/vim-colors-solarized'
+Plug 'altercation/vim-colors-solarized'
 
-Plugin 'majutsushi/tagbar'
+Plug 'majutsushi/tagbar'
 
 if has("lua")
-  Plugin 'Shougo/neocomplete.vim'
+  Plug 'Shougo/neocomplete.vim'
 endif
 
-Plugin 'supertab'
-Plugin 'TagHighlight'
-Plugin 'pangloss/vim-javascript'
+Plug 'ervandew/supertab'
+Plug 'vim-scripts/TagHighlight'
+Plug 'pangloss/vim-javascript'
 
 " All of your Plugins must be added before the following line
-call vundle#end()            " required
+" call vundle#end()            " required
+call plug#end()
+
+
+set hidden
+
+let g:LanguageClient_serverCommands = {
+    \ 'rust': ['~/.cargo/bin/rustup', 'run', 'stable', 'rls'],
+    \ }
+
+nnoremap K :call LanguageClient_contextMenu()<CR>
+
+
 filetype plugin indent on    " required
 
 nnoremap  ;  :
@@ -58,10 +79,11 @@ nnoremap  :  ;
 vnoremap  ;  :
 vnoremap  :  ;
 
-" set go -=m
 if has("gui_running")
-  set go -=T
-  set go -=r
+  set go -=m
+end
+
+if has("gui_running") || (has("unix") && system("uname -s") == "Darwin\n")
   call togglebg#map("<F4>")
   colo solarized
 else
@@ -69,25 +91,26 @@ else
 end
 let mapleader = ","
 let g:mapleader = ","
-if has("gui_running") "utf-8
-  set listchars=trail:·,nbsp:·,tab:\ \ ""
-else
-  set listchars=trail:-,nbsp:~,tab:\ \ ""
-endif
+
+set listchars=trail:-,nbsp:-,tab:\ \ ""
 set list
 
 set colorcolumn=81
 
-
 "set hlsearch / \+\ze\t
 set wildignore=*.o,~*,*.pyc,*.luac
 
-" Automatic reloading of .vimrc
+"" Automatic reloading of .vimrc
 autocmd! bufwritepost .vimrc source %
+au BufNewFile,BufRead *.jinja set ft=json syntax=json
+au BufNewFile,BufRead *.ts set ft=javascript syntax=javascript
 
-" Better copy & paste
+au! BufEnter */silo-presets/*  let b:fswitchdst = 'json' | let b:fswitchlocs = 'reg:/silo-presets/silo-metadata'
+au! BufEnter */silo-metadata/* let b:fswitchdst = 'yaml,py,txt,xml,json' | let b:fswitchlocs = 'reg:/silo-metadata/silo-presets'
+
+
+"" Better copy & paste
 set pastetoggle=<F2>
-set clipboard=unnamed
 
 " Options
 set backspace=indent,eol,start
@@ -118,7 +141,6 @@ set ai
 set laststatus=2
 set bs=2
 
-set noesckeys
 set ttimeout
 set ttimeoutlen=1
 
@@ -133,6 +155,7 @@ nnoremap <leader>cd :cd %:p:h<CR>:pwd<CR>
 inoremap <End> `
 
 au BufEnter *.c inoremap <buffer> ` ->
+au BufEnter *.json set conceallevel=0
 
 let @e='i%F.hcaw v0pI#ifndef A vF.s_Hyyplcawdefine o#endifO' "Header declare
 
@@ -140,14 +163,16 @@ inoremap <c-BS> vbc
 " Leader
  noremap <leader>. :TagbarToggle<CR>
  noremap <F8>      :TagbarToggle<CR>
- noremap <leader>/ :TagbarTogglePause<CR>
+ noremap <leader>/ :NERDTreeToggle<CR>
  "noremap <leader>. :TlistToggle<cr>
 nnoremap <leader>a maggVGy`azz
+nnoremap <silent> <leader>A :!pbcopy < "%"<CR>
 nnoremap <leader>w :w!<cr>
 nnoremap <leader>e :q<cr>
 nnoremap <leader>E :q!<cr>
 nnoremap <leader>v :vsplit ~/.vimrc<cr>
 nnoremap <leader>f :FSHere<cr>
+nnoremap <leader>j :!python3 -m json.tool<cr>
 nnoremap <leader>DD :call delete(expand('%'))
 "nnoremap <C-Q> NERDCommenterToggle
 noremap <c-Down> <c-w>j
@@ -180,6 +205,28 @@ hi User1 guifg=#ffdad8  guibg=#880c0e "Error text
 hi User2 guifg=#000000  guibg=#F4905C "Notify text
 hi User3 guifg=#268b52                "HI1
 
+nnoremap <leader><leader>u :!rally preset upload --file "%" -e UAT<cr>
+nnoremap <leader><leader>U :!rally preset upload --file "%" -e PROD --no-protect<cr>
+nnoremap <leader>u :!rally supply make --file "%" --to UAT<cr>
+nnoremap <leader>i :!rally supply make --file "%" --to QA<cr>
+nnoremap <leader>U :!rally supply make --file "%" --to PROD --no-protect<cr>
+nnoremap <leader>d :call Rallydiff("")<cr>
+nnoremap <leader>D :call Rallydiff("-e PROD")<cr>
+nnoremap <leader>c :call Rallydiff("-e QA")<cr>
+nnoremap <leader>C :call Rallydiff("-e DEV")<cr>
+nnoremap D :diffoff<cr>
+nnoremap <leader><leader>Q :%!node ~/node-rally-tools/util/addMIOSupport.js<cr>
+nnoremap <leader><leader>N :%!node ~/node-rally-tools/util/addDynamicNext.js<cr>
+
+set splitright
+
+function! Rallydiff(extra)
+    let file = system("rally preset diff --only-new --file '" . bufname("%") . "' --raw " . a:extra)
+    execute "silent vs" . file
+    execute "silent windo diffthis"
+    "echo file
+endfunction
+
 "set statusline =%t\                                 "Current file path
 "set statusline+=%2*%M%H%W%*                         "Flags->-+, HLP, PRV
 "set statusline+=\ [%{&spelllang}                    "Language
@@ -196,14 +243,15 @@ hi User3 guifg=#268b52                "HI1
 "set statusline+=%03l,%03c               "line,col
 
 "statusline setup
-set statusline =%3*
+set statusline=
+set statusline+=%3*
 set statusline+=%.30f\ %y    "tail of the filename
 set statusline+=%*
 
 "display a warning if fileformat isnt unix
 set statusline+=[%{&spelllang}                    "Language
 
-set statusline+=%{','.&ff.','.&enc}
+set statusline+=%{',\ '.&ff.',\ '.&enc}
 set statusline+=%*
 set statusline+=]
 
@@ -212,7 +260,7 @@ set statusline+=%h      "help file flag
 "read only flag
 set statusline+=%2*%m%h%h%*
 
-"set statusline+=%{fugitive#statusline()}
+set statusline+=%{FugitiveStatusline()}
 
 "display a warning if &et is wrong, or we have mixed-indenting
 set statusline+=%1*
@@ -273,7 +321,53 @@ function! NumberToggle()
   endif
 endfunc
 
+function! SpellToggle()
+  if(&spell == 1)
+    set nospell
+  else
+    set spell
+  endif
+endfunc
+
 nnoremap <leader>l :call NumberToggle()<cr>
 vnoremap <leader>l :call NumberToggle()<cr>
-au FocusLost * :set norelativenumber
-au BufNewFile,BufRead *.cu set ft=cu
+nnoremap <leader>s :call SpellToggle()<cr>
+vnoremap <leader>s :call SpellToggle()<cr>
+"au FocusLost * :set norelativenumber
+"au BufNewFile,BufRead *.cu set ft=cu
+
+"inoremap <silent><expr> <TAB>
+      "\ pumvisible() ? "\<C-n>" :
+      "\ <SID>check_back_space() ? "\<TAB>" :
+      "\ coc#refresh()
+"inoremap <expr><S-TAB> pumvisible() ? "\<C-p>" : "\<C-h>"
+
+"function! s:check_back_space() abort
+  "let col = col('.') - 1
+  "return !col || getline('.')[col - 1]  =~# '\s'
+"endfunction
+
+"inoremap <silent><expr> <c-space> coc#refresh()
+
+"nmap <silent> [c <Plug>(coc-diagnostic-prev)
+"nmap <silent> ]c <Plug>(coc-diagnostic-next)
+
+"" Remap keys for gotos
+"nmap <silent> gd <Plug>(coc-definition)
+"nmap <silent> gy <Plug>(coc-type-definition)
+"nmap <silent> gi <Plug>(coc-implementation)
+"nmap <silent> gr <Plug>(coc-references)
+
+"nnoremap <silent> K :call <SID>show_documentation()<CR>
+
+"function! s:show_documentation()
+  "if (index(['vim','help'], &filetype) >= 0)
+    "execute 'h '.expand('<cword>')
+  "else
+    "call CocAction('doHover')
+  "endif
+"endfunction
+
+"nmap <leader>rn <Plug>(coc-rename)
+
+"command! -nargs=? Fold :call     CocAction('fold', <f-args>)
