@@ -5,9 +5,11 @@ syntax on
 set background=dark
 set mouse=a
 
-let &t_SI = "\<Esc>Ptmux;\<Esc>\<Esc>]50;CursorShape=1\x7\<Esc>\\"
-let &t_SR = "\<Esc>Ptmux;\<Esc>\<Esc>]50;CursorShape=2\x7\<Esc>\\"
-let &t_EI = "\<Esc>Ptmux;\<Esc>\<Esc>]50;CursorShape=0\x7\<Esc>\\"
+if has("macunix")
+    let &t_SI = "\<Esc>Ptmux;\<Esc>\<Esc>]50;CursorShape=1\x7\<Esc>\\"
+    let &t_SR = "\<Esc>Ptmux;\<Esc>\<Esc>]50;CursorShape=2\x7\<Esc>\\"
+    let &t_EI = "\<Esc>Ptmux;\<Esc>\<Esc>]50;CursorShape=0\x7\<Esc>\\"
+endif
 
 "let g:easytags_async=1
 let g:neocomplete#enable_at_startup = 1
@@ -15,19 +17,8 @@ let g:neocomplete#enable_at_startup = 1
 set nocompatible              " be iMproved, required
 filetype off                  " required
 
-"set the runtime path to include Vundle and initialize
-if has("win32")
-  set rtp+=C:/Users/John/vimfiles/bundle/Vundle.vim
-  "call vundle#begin('$USERPROFILE/vimfiles/bundle')
-  call plug#begin()
-else
-  set rtp+=~/.vim/bundle/Vundle.vim
-  "call vundle#begin()
-  call plug#begin()
-endif
+call plug#begin()
 
-" let Vundle manage Vundle, required
-"Plugin 'VundleVim/Vundle.vim'
 Plug 'easymotion/vim-easymotion'
 Plug 'tpope/vim-surround'
 Plug 'tpope/vim-fugitive'
@@ -45,7 +36,11 @@ Plug 'posva/vim-vue'
 
 Plug 'neoclide/coc.nvim', {'branch': 'release'}
 
-set rtp+=/usr/local/opt/fzf
+if has("macunix")
+    set rtp+=/usr/local/opt/fzf
+end
+
+Plug 'junegunn/fzf', { 'do': { -> fzf#install() } }
 Plug 'junegunn/fzf.vim'
 
 Plug 'altercation/vim-colors-solarized'
@@ -60,10 +55,7 @@ endif
 Plug 'vim-scripts/TagHighlight'
 Plug 'pangloss/vim-javascript'
 
-" All of your Plugins must be added before the following line
-" call vundle#end()            " required
 call plug#end()
-
 
 set hidden
 
