@@ -38,10 +38,12 @@ Plug 'elzr/vim-json'
 Plug 'scrooloose/nerdtree'
 Plug 'posva/vim-vue'
 "Plug 'neoclide/coc.nvim', {'branch': 'release'}
-Plug 'autozimu/LanguageClient-neovim', {
-    \ 'branch': 'next',
-    \ 'do': 'bash install.sh',
-    \ }
+"Plug 'autozimu/LanguageClient-neovim', {
+    "\ 'branch': 'next',
+    "\ 'do': 'bash install.sh',
+    "\ }
+
+Plug 'neoclide/coc.nvim', {'branch': 'release'}
 
 set rtp+=/usr/local/opt/fzf
 Plug 'junegunn/fzf.vim'
@@ -54,7 +56,7 @@ if has("lua")
   Plug 'Shougo/neocomplete.vim'
 endif
 
-Plug 'ervandew/supertab'
+"Plug 'ervandew/supertab'
 Plug 'vim-scripts/TagHighlight'
 Plug 'pangloss/vim-javascript'
 
@@ -65,12 +67,57 @@ call plug#end()
 
 set hidden
 
-let g:LanguageClient_serverCommands = {
-    \ 'rust': ['~/.cargo/bin/rustup', 'run', 'stable', 'rls'],
-    \ }
+"let g:LanguageClient_serverCommands = {
+    "\ 'rust': ['~/.cargo/bin/rust-analyzer'],
+    "\ 'json': ['~/.nvm/versions/node/v13.5.0/bin/vscode-json-languageserver', '--stdio'],
+    "\ }
 
-nnoremap K :call LanguageClient_contextMenu()<CR>
+"nnoremap K :call LanguageClient_contextMenu()<CR>
+"nnoremap M :call LanguageClient_textDocument_hover()<CR>
 
+inoremap <silent><expr> <TAB>
+      \ pumvisible() ? "\<C-n>" :
+      \ <SID>check_back_space() ? "\<TAB>" :
+      \ coc#refresh()
+inoremap <expr><S-TAB> pumvisible() ? "\<C-p>" : "\<C-h>"
+
+function! s:check_back_space() abort
+  let col = col('.') - 1
+  return !col || getline('.')[col - 1]  =~# '\s'
+endfunction
+
+" Use <c-space> to trigger completion.
+inoremap <silent><expr> <c-space> coc#refresh()
+
+" Use <cr> to confirm completion, `<C-g>u` means break undo chain at current
+" position. Coc only does snippet and additional edit on confirm.
+" <cr> could be remapped by other vim plugin, try `:verbose imap <CR>`.
+if exists('*complete_info')
+  inoremap <expr> <cr> complete_info()["selected"] != "-1" ? "\<C-y>" : "\<C-g>u\<CR>"
+else
+  inoremap <expr> <cr> pumvisible() ? "\<C-y>" : "\<C-g>u\<CR>"
+endif
+
+" Use `[g` and `]g` to navigate diagnostics
+nmap <silent> [g <Plug>(coc-diagnostic-prev)
+nmap <silent> ]g <Plug>(coc-diagnostic-next)
+
+nmap <silent> gd <Plug>(coc-definition)
+nmap <silent> gy <Plug>(coc-type-definition)
+nmap <silent> gi <Plug>(coc-implementation)
+nmap <silent> gr <Plug>(coc-references)
+
+nnoremap <silent> K :call <SID>show_documentation()<CR>
+xmap <leader>M  <Plug>(coc-format-selected)
+nmap <leader>M  <Plug>(coc-format-selected)
+function! s:show_documentation()
+  if (index(['vim','help'], &filetype) >= 0)
+    execute 'h '.expand('<cword>')
+  else
+    call CocAction('doHover')
+  endif
+endfunction
+autocmd CursorHold * silent call CocActionAsync('highlight')
 
 filetype plugin indent on    " required
 
@@ -149,7 +196,7 @@ set nobackup
 set noswapfile
 
 " Macros
-nnoremap <C-L> :noh<CR><C-L>
+nnoremap <C-L> :noh<CR>:sign unplace *<CR><C-L>
 nnoremap <leader>cd :cd %:p:h<CR>:pwd<CR>
 
 inoremap <End> `
