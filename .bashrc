@@ -80,6 +80,7 @@ alias cd..='cd ..'
 alias rmr='rm -r'
 alias please='sudo !!'
 alias bashrc='source ~/.bashrc'
+alias ~w='cd /mnt/c/Users/John/'
 
 # some more ls aliases
 #alias ll='ls -l'
