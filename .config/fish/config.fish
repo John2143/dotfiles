@@ -13,3 +13,8 @@ alias rallyp="rally config project --set"
 alias rallytags="ctags --fields=+l --languages=python --python-kinds=-iv -R -f ./tags ./**/silo-presets/"
 
 set fish_greeting
+
+set PATH "$HOME/bin:$PATH"
+set PATH "$HOME/.cargo/bin:$PATH"
+
+set BAT_THEME "Solarized (dark)"

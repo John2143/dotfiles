@@ -28,6 +28,7 @@ Plug 'rust-lang/rust.vim'
 Plug 'elzr/vim-json'
 Plug 'scrooloose/nerdtree'
 Plug 'posva/vim-vue'
+Plug 'dag/vim-fish'
 "Plug 'neoclide/coc.nvim', {'branch': 'release'}
 "Plug 'autozimu/LanguageClient-neovim', {
     "\ 'branch': 'next',
@@ -143,6 +144,7 @@ set wildignore=*.o,~*,*.pyc,*.luac
 autocmd! bufwritepost .vimrc source %
 au BufNewFile,BufRead *.jinja set ft=json syntax=json
 au BufNewFile,BufRead *.ts set ft=javascript syntax=javascript
+au BufNewFile,BufRead .fishrc set ft=fish syntax=fish
 
 au! BufEnter */silo-presets/*  let b:fswitchdst = 'json' | let b:fswitchlocs = 'reg:/silo-presets/silo-metadata'
 au! BufEnter */silo-metadata/* let b:fswitchdst = 'yaml,py,txt,xml,json' | let b:fswitchlocs = 'reg:/silo-metadata/silo-presets'

@@ -36,6 +36,9 @@ linkConfig i3
 linkConfig i3status
 linkConfig fish
 
+# Add fishrc to edit fast
+ln -s $DIR/.config/fish/config.fish $HOME/.fishrc
+
 if [[ -s $ZSH ]]; then
     link .zshrc
     rm $HOME/.oh-my-zsh/custom/themes/john.zsh-theme
