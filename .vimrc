@@ -29,11 +29,18 @@ Plug 'elzr/vim-json'
 Plug 'scrooloose/nerdtree'
 Plug 'posva/vim-vue'
 Plug 'dag/vim-fish'
+Plug 'APZelos/blamer.nvim'
 "Plug 'neoclide/coc.nvim', {'branch': 'release'}
 "Plug 'autozimu/LanguageClient-neovim', {
     "\ 'branch': 'next',
     "\ 'do': 'bash install.sh',
     "\ }
+
+for key in ['<Up>', '<Down>', '<Left>', '<Right>']
+    exec 'nnoremap' key '<Nop>'
+    exec 'inoremap' key '<Nop>'
+    exec 'vnoremap' key '<Nop>'
+endfor
 
 Plug 'neoclide/coc.nvim', {'branch': 'release'}
 
@@ -59,6 +66,7 @@ Plug 'pangloss/vim-javascript'
 call plug#end()
 
 set hidden
+set pyxversion=3
 
 "let g:LanguageClient_serverCommands = {
     "\ 'rust': ['~/.cargo/bin/rust-analyzer'],
@@ -156,6 +164,9 @@ set pastetoggle=<F2>
 " Options
 set backspace=indent,eol,start
 set relativenumber
+set updatetime=300
+set cmdheight=1
+set signcolumn=number
 set history=700
 set undolevels=700
 set wildmenu
@@ -200,6 +211,11 @@ au BufEnter *.json set conceallevel=0
 
 let @e='i%F.hcaw v0pI#ifndef A vF.s_Hyyplcawdefine o#endifO' "Header declare
 
+let g:blamer_enabled = 0
+let g:blamer_delay = 300
+highlight Blamer guifg=lightgrey
+let g:blamer_relative_time = 1
+
 inoremap <c-BS> vbc
 " Leader
  noremap <leader>. :TagbarToggle<CR>
@@ -215,6 +231,7 @@ nnoremap <leader>v :vsplit ~/.vimrc<cr>
 nnoremap <leader>f :FSHere<cr>
 nnoremap <leader>j :!python3 -m json.tool<cr>
 nnoremap <leader>DD :call delete(expand('%'))
+ noremap <leader>b :BlamerToggle<CR>
 "nnoremap <C-Q> NERDCommenterToggle
 noremap <c-Down> <c-w>j
 noremap <c-Up> <c-w>k
@@ -321,6 +338,10 @@ set statusline+=%#error#
 set statusline+=%{&paste?'[paste]':''}
 set statusline+=%*
 
+set statusline+=%1*
+set statusline+=%{coc#status()}%{get(b:,'coc_current_function','')}
+set statusline+=%*
+
 set statusline+=%=      "left/right separator
 
 set statusline+=[%b]
@@ -336,7 +357,7 @@ function! StatuslineTabWarning()
     if !exists("b:statusline_tab_warning")
         let tabs = search('\t ', 'nw')
         let tspace = search('\s\+$', 'nw')
-        let espace = search('\($\n\s*\)\+\%$')
+        let espace = search('\($\n\s*\)\+\%$', "nw")
         let st = []
         if tabs > 0
             call add(st, 'MX>'.tabs)
@@ -411,6 +432,17 @@ vnoremap <leader>s :call SpellToggle()<cr>
   "endif
 "endfunction
 
-"nmap <leader>rn <Plug>(coc-rename)
+nmap <leader>rn <Plug>(coc-rename)
+
+" Remap for do codeAction of selected region
+function! s:cocActionsOpenFromSelected(type) abort
+  execute 'CocCommand actions.open ' . a:type
+endfunction
+xmap <leader>y <Plug>(coc-codeaction-selected)
+nmap <leader>y <Plug>(coc-codeaction-selected)w
+
+nmap <leader>ac  <Plug>(coc-codeaction)
+
+noremap <leader>rr :CocCommand rust-analyzer.toggleInlayHints<CR>
 
 "command! -nargs=? Fold :call     CocAction('fold', <f-args>)
