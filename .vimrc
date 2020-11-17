@@ -25,6 +25,7 @@ Plug 'tpope/vim-fugitive'
 Plug 'derekwyatt/vim-fswitch'
 Plug 'scrooloose/nerdcommenter'
 Plug 'rust-lang/rust.vim'
+Plug 'nvim-treesitter/nvim-treesitter'
 Plug 'elzr/vim-json'
 Plug 'scrooloose/nerdtree'
 Plug 'posva/vim-vue'
@@ -52,6 +53,14 @@ Plug 'junegunn/fzf', { 'do': { -> fzf#install() } }
 Plug 'junegunn/fzf.vim'
 
 Plug 'altercation/vim-colors-solarized'
+Plug 'sainnhe/sonokai'
+Plug 'sainnhe/gruvbox-material'
+Plug 'chriskempson/base16-vim'
+Plug 'lifepillar/vim-gruvbox8'
+
+let g:sonokai_style = 'shusia'
+let g:sonokai_enable_italic = 0
+let g:sonokai_disable_italic_comment = 1
 
 Plug 'majutsushi/tagbar'
 
@@ -231,7 +240,6 @@ nnoremap <leader>v :vsplit ~/.vimrc<cr>
 nnoremap <leader>f :FSHere<cr>
 nnoremap <leader>j :!python3 -m json.tool<cr>
 nnoremap <leader>DD :call delete(expand('%'))
- noremap <leader>b :BlamerToggle<CR>
 "nnoremap <C-Q> NERDCommenterToggle
 noremap <c-Down> <c-w>j
 noremap <c-Up> <c-w>k
@@ -435,14 +443,12 @@ vnoremap <leader>s :call SpellToggle()<cr>
 nmap <leader>rn <Plug>(coc-rename)
 
 " Remap for do codeAction of selected region
-function! s:cocActionsOpenFromSelected(type) abort
-  execute 'CocCommand actions.open ' . a:type
-endfunction
 xmap <leader>y <Plug>(coc-codeaction-selected)
 nmap <leader>y <Plug>(coc-codeaction-selected)w
 
 nmap <leader>ac  <Plug>(coc-codeaction)
 
 noremap <leader>rr :CocCommand rust-analyzer.toggleInlayHints<CR>
+noremap <leader>rb :BlamerToggle<CR>
 
 "command! -nargs=? Fold :call     CocAction('fold', <f-args>)
