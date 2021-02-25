@@ -49,6 +49,7 @@ if has("macunix")
     set rtp+=/usr/local/opt/fzf
 end
 
+Plug 'airblade/vim-rooter'
 Plug 'junegunn/fzf', { 'do': { -> fzf#install() } }
 Plug 'junegunn/fzf.vim'
 
@@ -73,6 +74,11 @@ Plug 'vim-scripts/TagHighlight'
 Plug 'pangloss/vim-javascript'
 
 call plug#end()
+
+if executable('rg')
+    set grepprg=rg\ --no-heading\ --vimgrep
+    set grepformat=%f:%l:%c:%m
+endif
 
 set hidden
 set pyxversion=3
@@ -160,7 +166,6 @@ set wildignore=*.o,~*,*.pyc,*.luac
 "" Automatic reloading of .vimrc
 autocmd! bufwritepost .vimrc source %
 au BufNewFile,BufRead *.jinja set ft=json syntax=json
-au BufNewFile,BufRead *.ts set ft=javascript syntax=javascript
 au BufNewFile,BufRead .fishrc set ft=fish syntax=fish
 
 au! BufEnter */silo-presets/*  let b:fswitchdst = 'json' | let b:fswitchlocs = 'reg:/silo-presets/silo-metadata'

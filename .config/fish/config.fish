@@ -12,6 +12,8 @@ alias rally@="git diff HEAD --name-only | rally @"
 alias rallyp="rally config project --set"
 alias rallytags="ctags --fields=+l --languages=python --python-kinds=-iv -R -f ./tags ./**/silo-presets/"
 
+alias launchdla="rally asset -e UAT --anon launch --job-name 'DLA Context Creator' --init-data "
+
 set fish_greeting
 
 set PATH "$HOME/bin:$PATH"
@@ -22,3 +24,9 @@ set BAT_THEME "Solarized (dark)"
 set SIGNING_KEY (gpg --list-secret-keys --keyid-format long | grep sec | string split "/" | tail -n 1 | string match -r '[0-9A-F]+')
 
 git config --global user.signingkey $SIGNING_KEY
+
+bind \u2022 'backward-kill-bigword'
+
+set -g fish_user_paths "/usr/local/sbin" $fish_user_paths
+
+nvm use node > /dev/null
