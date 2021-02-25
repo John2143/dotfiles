@@ -140,7 +140,9 @@ if has("gui_running")
   set go -=m
 end
 
-if has("gui_running") || (has("unix") && system("uname -s") == "Darwin\n")
+if has("unix") && system("uname -s") == "Linux\n"
+  colo sonokai
+elseif has("gui_running") || (has("unix") && system("uname -s") == "Darwin\n")
   call togglebg#map("<F4>")
   colo solarized
 else
@@ -451,4 +453,21 @@ nmap <leader>ac  <Plug>(coc-codeaction)
 noremap <leader>rr :CocCommand rust-analyzer.toggleInlayHints<CR>
 noremap <leader>rb :BlamerToggle<CR>
 
-"command! -nargs=? Fold :call     CocAction('fold', <f-args>)
+" Use system clipboards properly when yanking to '*'
+function! s:paste(event)
+    ":echom a:event
+    if(a:event.operator ==# 'y' && a:event.regname ==# '*')
+        if has("windows")
+            call system('/mnt/c/Windows/System32/clip.exe', a:event.regcontents)
+        else
+            call system('pbcopy', a:event.regcontents)
+        endif
+    endif
+endfunction
+
+if has("windows") || has("macos")
+    augroup YANK
+        autocmd!
+        autocmd TextYankPost * call s:paste(v:event)
+    augroup END
+endif
