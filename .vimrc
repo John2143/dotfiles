@@ -1,6 +1,14 @@
-let g:solarized_termcolors=256
-let g:solarized_italic=0
-let g:solarized_visibility="medium"
+" use this if you use vim
+for key in ['<Up>', '<Down>', '<Left>', '<Right>']
+    exec 'nnoremap' key '<Nop>'
+    exec 'inoremap' key '<Nop>'
+    exec 'vnoremap' key '<Nop>'
+endfor
+
+" skip clipboard.vim: its doesn't work on most computers I use so just have
+" overrides in my .vimrc
+let g:loaded_clipboard_provider=1
+
 syntax on
 set background=dark
 set mouse=a
@@ -11,67 +19,57 @@ if has("macunix")
     let &t_EI = "\<Esc>Ptmux;\<Esc>\<Esc>]50;CursorShape=0\x7\<Esc>\\"
 endif
 
-"let g:easytags_async=1
-let g:neocomplete#enable_at_startup = 1
-
 set nocompatible              " be iMproved, required
 filetype off                  " required
 
 call plug#begin()
 
+" full monitor-sized movements made easy
 Plug 'easymotion/vim-easymotion'
+" niche things I use once a year
 Plug 'tpope/vim-surround'
 Plug 'tpope/vim-fugitive'
+" useful for a work specific setup (metadata files + source files)
 Plug 'derekwyatt/vim-fswitch'
+" <leader>c<Space> is the only thing I know about this but it sure does work
 Plug 'scrooloose/nerdcommenter'
+" not sure what these two do /exactly/ just know they work
 Plug 'rust-lang/rust.vim'
 Plug 'nvim-treesitter/nvim-treesitter'
+" silent but deadly
+Plug 'airblade/vim-rooter'
+" kinda don't like this but I keep it around
 Plug 'elzr/vim-json'
+" better than the default, worse than fzf for browsing stuff
 Plug 'scrooloose/nerdtree'
+" just syntax highlighting for vue/js/c
 Plug 'posva/vim-vue'
+Plug 'pangloss/vim-javascript'
+Plug 'vim-scripts/TagHighlight'
+" fish told me to use this
 Plug 'dag/vim-fish'
+" useful for self-interrogation
 Plug 'APZelos/blamer.nvim'
-"Plug 'neoclide/coc.nvim', {'branch': 'release'}
-"Plug 'autozimu/LanguageClient-neovim', {
-    "\ 'branch': 'next',
-    "\ 'do': 'bash install.sh',
-    "\ }
+" make my tab do something useful when theres no LSP
+let g:neocomplete#enable_at_startup = 1
+Plug 'Shougo/neocomplete.vim'
 
-for key in ['<Up>', '<Down>', '<Left>', '<Right>']
-    exec 'nnoremap' key '<Nop>'
-    exec 'inoremap' key '<Nop>'
-    exec 'vnoremap' key '<Nop>'
-endfor
-
+" cast on crit
 Plug 'neoclide/coc.nvim', {'branch': 'release'}
 
+" fzf is very cool. Use a LOT of [:Files, :Buf, :Rg]
 if has("macunix")
     set rtp+=/usr/local/opt/fzf
 end
-
-Plug 'airblade/vim-rooter'
 Plug 'junegunn/fzf', { 'do': { -> fzf#install() } }
 Plug 'junegunn/fzf.vim'
 
+" colorschemes
 Plug 'altercation/vim-colors-solarized'
 Plug 'sainnhe/sonokai'
 Plug 'sainnhe/gruvbox-material'
 Plug 'chriskempson/base16-vim'
 Plug 'lifepillar/vim-gruvbox8'
-
-let g:sonokai_style = 'shusia'
-let g:sonokai_enable_italic = 0
-let g:sonokai_disable_italic_comment = 1
-
-Plug 'majutsushi/tagbar'
-
-if has("lua")
-  Plug 'Shougo/neocomplete.vim'
-endif
-
-"Plug 'ervandew/supertab'
-Plug 'vim-scripts/TagHighlight'
-Plug 'pangloss/vim-javascript'
 
 call plug#end()
 
@@ -80,21 +78,25 @@ if executable('rg')
     set grepformat=%f:%l:%c:%m
 endif
 
+" save my problems for future me
 set hidden
+
+" I think I wrote this in like 2010
 set pyxversion=3
 
-"let g:LanguageClient_serverCommands = {
-    "\ 'rust': ['~/.cargo/bin/rust-analyzer'],
-    "\ 'json': ['~/.nvm/versions/node/v13.5.0/bin/vscode-json-languageserver', '--stdio'],
-    "\ }
+" ==========================================================================
+" coc block starts here
+"
+" this is mostly standard bindings with a bit of flavor
+" ==========================================================================
 
-"nnoremap K :call LanguageClient_contextMenu()<CR>
-"nnoremap M :call LanguageClient_textDocument_hover()<CR>
-
+" if pop-up-menu then go to next selection else
 inoremap <silent><expr> <TAB>
       \ pumvisible() ? "\<C-n>" :
       \ <SID>check_back_space() ? "\<TAB>" :
       \ coc#refresh()
+" if shift pressed and pop-up-menu then go to prev selection else un-indent
+" NOTE: change this when they invent uppercase tab
 inoremap <expr><S-TAB> pumvisible() ? "\<C-p>" : "\<C-h>"
 
 function! s:check_back_space() abort
@@ -102,7 +104,7 @@ function! s:check_back_space() abort
   return !col || getline('.')[col - 1]  =~# '\s'
 endfunction
 
-" Use <c-space> to trigger completion.
+" Use <c-space> to trigger completion. I prefer tab but 1/1000 times I need this
 inoremap <silent><expr> <c-space> coc#refresh()
 
 " Use <cr> to confirm completion, `<C-g>u` means break undo chain at current
@@ -135,128 +137,156 @@ function! s:show_documentation()
 endfunction
 autocmd CursorHold * silent call CocActionAsync('highlight')
 
+nmap <leader>rn <Plug>(coc-rename)
+
+" Remap for do codeAction of selected region
+xmap <leader>y <Plug>(coc-codeaction-selected)
+nmap <leader>y <Plug>(coc-codeaction-selected)w
+
+nmap <leader>ac  <Plug>(coc-codeaction)
+
+" ==========================================================================
+" coc block end
+" ==========================================================================
+
 filetype plugin indent on    " required
 
+" the million dollar stock-vim mistake. I can't even tell you what ; does
+" normally
 nnoremap  ;  :
 nnoremap  :  ;
 vnoremap  ;  :
 vnoremap  :  ;
 
 if has("gui_running")
-  set go -=m
+    " disable menubar in a mode I never use
+    set guioptions -=m
 end
 
-if has("unix") && system("uname -s") == "Linux\n"
-  colo sonokai
-elseif has("gui_running") || (has("unix") && system("uname -s") == "Darwin\n")
-  call togglebg#map("<F4>")
-  colo solarized
-else
-  colo desert
-end
+" good shit
 let mapleader = ","
 let g:mapleader = ","
 
-set listchars=trail:-,nbsp:-,tab:\ \ ""
-set list
-
-set colorcolumn=81
-
-"set hlsearch / \+\ze\t
-set wildignore=*.o,~*,*.pyc,*.luac
-
 "" Automatic reloading of .vimrc
 autocmd! bufwritepost .vimrc source %
+
+" unsupported file types
 au BufNewFile,BufRead *.jinja set ft=json syntax=json
 au BufNewFile,BufRead .fishrc set ft=fish syntax=fish
-
-au! BufEnter */silo-presets/*  let b:fswitchdst = 'json' | let b:fswitchlocs = 'reg:/silo-presets/silo-metadata'
-au! BufEnter */silo-metadata/* let b:fswitchdst = 'yaml,py,txt,xml,json' | let b:fswitchlocs = 'reg:/silo-metadata/silo-presets'
-
 
 "" Better copy & paste
 set pastetoggle=<F2>
 
-" Options
+" ==========================================================================
+" random vim settings tweaks
+" A lot of these are carryovers from vim, not sure if they all matter for nvim
+" ==========================================================================
 set backspace=indent,eol,start
+
+" make questions like 'whats on line 15' impossible to answer
 set relativenumber
+" relativly fast updatetime, but I like it
 set updatetime=300
 set cmdheight=1
+" I use a lot of ':vs' and 'C-b %', so this makes it more comfortable
+" 'signcolumn=yes' is better for most people
 set signcolumn=number
+" when I make mistakes, I only do 699 in a row at most.
 set history=700
 set undolevels=700
+" not sure why this isn't default
 set wildmenu
+set wildignore=*.o,~*,*.pyc,*.luac
+" sorry torvalds, 80 columns still makes me happy
 set ruler
+set colorcolumn=81
+" ignorecases in '/' and highlight matches
 set ignorecase
 set hlsearch
+" no error bells and visual bells.
 set noeb
 set novb
 set t_vb=
-set tm=1000
+" leader cleared after 1000 ms. good balance.
+set timeoutlen=1000
+" esc works basically instantly
+set ttimeout
+set ttimeoutlen=5
+" thicc
 set nowrap
+" 4 spaces per tab. tabs are probably better, but pragmatic solutions prevail
+" 4shrug
 set tabstop=4
 set shiftwidth=4
 set expandtab
 set smarttab
-set scrolloff=5
-set nosmartindent
 
 set tabstop=4
 set shiftwidth=4
 set softtabstop=4
-
-set ai
+" my tab key works fine, thank you
+set nosmartindent
+" keep at least 5 lines of context above and below while scrolling
+set scrolloff=5
+" you're a monster if you leave this off. you're also a monster if you have
+" trailing newlines always on.
+set listchars=trail:-,nbsp:-,tab:\ \ ""
+set list
+" o/O auto indent
+set autoindent
+" my statusline has stuff like filetype and line endings, so always display it
 set laststatus=2
+" buffed backspace
 set bs=2
 
-set ttimeout
-set ttimeoutlen=1
-
-" Move swapfiles
+" move swapfiles
 set nobackup
 set noswapfile
 
-" Macros
-nnoremap <C-L> :noh<CR>:sign unplace *<CR><C-L>
-nnoremap <leader>cd :cd %:p:h<CR>:pwd<CR>
+" clear highlights with C-l and add "cd to current file" when vim-rooter doesn't
+nnoremap <c-l> :noh<cr>:sign unplace *<cr><c-l>
+nnoremap <leader>cd :cd %:p:h<cr>:pwd<cr>
 
-inoremap <End> `
-
+" ` = -> for c. might start using for rust but its much less common than in c
+inoremap <end> `
 au BufEnter *.c inoremap <buffer> ` ->
 au BufEnter *.json set conceallevel=0
 
+" cool for debugging: numbertoggle when losing focus
+au FocusLost * :set norelativenumber
+au FocusGained * :set relativenumber
+
+" take current filename and add include guards (for c/c++)
 let @e='i%F.hcaw v0pI#ifndef A vF.s_Hyyplcawdefine o#endifO' "Header declare
 
-let g:blamer_enabled = 0
-let g:blamer_delay = 300
-highlight Blamer guifg=lightgrey
-let g:blamer_relative_time = 1
-
+noremap <leader>t :!ctags -R .<cr>:UpdateTypesFileOnly<cr>:redr!<cr>
 inoremap <c-BS> vbc
-" Leader
- noremap <leader>. :TagbarToggle<CR>
- noremap <F8>      :TagbarToggle<CR>
- noremap <leader>/ :NERDTreeToggle<CR>
- "noremap <leader>. :TlistToggle<cr>
+nnoremap <leader>/ :NERDTreeToggle<CR>
 nnoremap <leader>a maggVGy`azz
-nnoremap <silent> <leader>A :!pbcopy < "%"<CR>
 nnoremap <leader>w :w!<cr>
 nnoremap <leader>e :q<cr>
 nnoremap <leader>E :q!<cr>
+" quick edit vimrc
 nnoremap <leader>v :vsplit ~/.vimrc<cr>
 nnoremap <leader>f :FSHere<cr>
+" maybe swap to jq; but I have python more often than I have jq
 nnoremap <leader>j :!python3 -m json.tool<cr>
+" delete current file (don't add <cr>)
 nnoremap <leader>DD :call delete(expand('%'))
 "nnoremap <C-Q> NERDCommenterToggle
-noremap <c-Down> <c-w>j
-noremap <c-Up> <c-w>k
-noremap <c-Right> <c-w>l
-noremap <c-Left> <c-w>h
+noremap <c-J> <c-w>j
+noremap <c-K> <c-w>k
+noremap <c-L> <c-w>l
+noremap <c-H> <c-w>h
 
-noremap <leader>L <c-w>l
-noremap <leader>H <c-w>h
-noremap <leader>K <c-w>k
-noremap <leader>J <c-w>j
+nnoremap <leader>l :call NumberToggle()<cr>
+vnoremap <leader>l :call NumberToggle()<cr>
+nnoremap <leader>s :call SpellToggle()<cr>
+vnoremap <leader>s :call SpellToggle()<cr>
+
+" inline hints
+noremap <leader>rr :CocCommand rust-analyzer.toggleInlayHints<CR>
+noremap <leader>rb :BlamerToggle<CR>
 
 noremap <Leader>n <esc>:tabprevious<CR>
 noremap <Leader>m <esc>:tabnext<CR>
@@ -273,51 +303,15 @@ let g:syntastic_auto_loc_list = 1
 let g:syntastic_check_on_open = 1
 let g:syntastic_check_on_wq = 0
 
+" ==========================================================================
 " Status Line
+" ==========================================================================
 hi User1 guifg=#ffdad8  guibg=#880c0e "Error text
 hi User2 guifg=#000000  guibg=#F4905C "Notify text
 hi User3 guifg=#268b52                "HI1
 
-nnoremap <leader><leader>u :!rally preset upload --file "%" -e UAT<cr>
-nnoremap <leader><leader>U :!rally preset upload --file "%" -e PROD --no-protect<cr>
-nnoremap <leader><leader>i :!rally preset upload --file "%" -e QA<cr>
-nnoremap <leader>u :!rally supply make --file "%" --to UAT<cr>
-nnoremap <leader>i :!rally supply make --file "%" --to QA<cr>
-nnoremap <leader>U :!rally supply make --file "%" --to PROD --no-protect<cr>
-nnoremap <leader>k :!rally preset info --file "%" --e UAT,PROD<cr>
-nnoremap <leader>d :call Rallydiff("")<cr>
-nnoremap <leader>D :call Rallydiff("-e PROD")<cr>
-nnoremap <leader>c :call Rallydiff("-e QA")<cr>
-nnoremap <leader>C :call Rallydiff("-e DEV")<cr>
-nnoremap D :diffoff<cr>
-nnoremap <leader><leader>Q :%!node ~/node-rally-tools/util/addMIOSupport.js<cr>
-nnoremap <leader><leader>N :%!node ~/node-rally-tools/util/addDynamicNext.js<cr>
-
 set splitright
 
-function! Rallydiff(extra)
-    let file = system("rally preset diff --only-new --file '" . bufname("%") . "' --raw " . a:extra)
-    execute "silent vs" . file
-    execute "silent windo diffthis"
-    "echo file
-endfunction
-
-"set statusline =%t\                                 "Current file path
-"set statusline+=%2*%M%H%W%*                         "Flags->-+, HLP, PRV
-"set statusline+=\ [%{&spelllang}                    "Language
-"set statusline+=%{','.(&fenc!=''?&fenc:&enc).']'}   "Encoding
-
-"set statusline+=%1*%{StatuslineTabWarning()}%*
-"set statusline+=%=
-
-"set statusline+=%#warningmsg#
-"set statusline+=%{SyntasticStatuslineFlag()}
-"set statusline+=%*
-
-"set statusline+=[%03b]\                 "ASCIsdfI val
-"set statusline+=%03l,%03c               "line,col
-
-"statusline setup
 set statusline=
 set statusline+=%3*
 set statusline+=%.30f\ %y    "tail of the filename
@@ -357,16 +351,20 @@ set statusline+=%1*
 set statusline+=%{coc#status()}%{get(b:,'coc_current_function','')}
 set statusline+=%*
 
+" ==========================================================================
 set statusline+=%=      "left/right separator
+" ==========================================================================
 
 set statusline+=[%b]
 set statusline+=\ %c,     "cursor column
 set statusline+=%l/%L   "cursor line/total lines
 set statusline+=\ %P    "percent through file
-set laststatus=2
 
-noremap <leader>t :!ctags -R .<cr>:UpdateTypesFileOnly<cr>:redr!<cr>
+" ==========================================================================
+" status line end
+" ==========================================================================
 
+" warn about mixed tabs/space, extra ending spaces, and more
 autocmd cursorhold,bufwritepost * unlet! b:statusline_tab_warning
 function! StatuslineTabWarning()
     if !exists("b:statusline_tab_warning")
@@ -391,6 +389,7 @@ function! StatuslineTabWarning()
     return b:statusline_tab_warning
 endfunction
 
+" toggle relativenumber
 set number
 function! NumberToggle()
   if(&relativenumber == 1)
@@ -400,6 +399,7 @@ function! NumberToggle()
   endif
 endfunc
 
+" toggle spellcheck
 function! SpellToggle()
   if(&spell == 1)
     set nospell
@@ -408,55 +408,10 @@ function! SpellToggle()
   endif
 endfunc
 
-nnoremap <leader>l :call NumberToggle()<cr>
-vnoremap <leader>l :call NumberToggle()<cr>
-nnoremap <leader>s :call SpellToggle()<cr>
-vnoremap <leader>s :call SpellToggle()<cr>
-"au FocusLost * :set norelativenumber
-"au BufNewFile,BufRead *.cu set ft=cu
-
-"inoremap <silent><expr> <TAB>
-      "\ pumvisible() ? "\<C-n>" :
-      "\ <SID>check_back_space() ? "\<TAB>" :
-      "\ coc#refresh()
-"inoremap <expr><S-TAB> pumvisible() ? "\<C-p>" : "\<C-h>"
-
-"function! s:check_back_space() abort
-  "let col = col('.') - 1
-  "return !col || getline('.')[col - 1]  =~# '\s'
-"endfunction
-
-"inoremap <silent><expr> <c-space> coc#refresh()
-
-"nmap <silent> [c <Plug>(coc-diagnostic-prev)
-"nmap <silent> ]c <Plug>(coc-diagnostic-next)
-
-"" Remap keys for gotos
-"nmap <silent> gd <Plug>(coc-definition)
-"nmap <silent> gy <Plug>(coc-type-definition)
-"nmap <silent> gi <Plug>(coc-implementation)
-"nmap <silent> gr <Plug>(coc-references)
-
-"nnoremap <silent> K :call <SID>show_documentation()<CR>
-
-"function! s:show_documentation()
-  "if (index(['vim','help'], &filetype) >= 0)
-    "execute 'h '.expand('<cword>')
-  "else
-    "call CocAction('doHover')
-  "endif
-"endfunction
-
-nmap <leader>rn <Plug>(coc-rename)
-
-" Remap for do codeAction of selected region
-xmap <leader>y <Plug>(coc-codeaction-selected)
-nmap <leader>y <Plug>(coc-codeaction-selected)w
-
-nmap <leader>ac  <Plug>(coc-codeaction)
-
-noremap <leader>rr :CocCommand rust-analyzer.toggleInlayHints<CR>
-noremap <leader>rb :BlamerToggle<CR>
+let g:blamer_enabled = 0
+let g:blamer_delay = 300
+let g:blamer_relative_time = 1
+highlight Blamer guifg=lightgrey
 
 " Use system clipboards properly when yanking to '*'
 function! s:paste(event)
@@ -476,3 +431,47 @@ if has("windows") || has("macos")
         autocmd TextYankPost * call s:paste(v:event)
     augroup END
 endif
+
+" ==========================================================================
+" colorscheme stuff
+" putting this at the top makes it break or something
+" ==========================================================================
+
+colo sonokai
+" colo solarized
+
+let g:solarized_termcolors=256
+let g:solarized_italic=0
+let g:solarized_visibility="medium"
+
+let g:sonokai_style = 'shusia'
+let g:sonokai_enable_italic = 0
+let g:sonokai_disable_italic_comment = 1
+
+call togglebg#map("<F4>")
+
+" work related internal bindings for common functions
+au! BufEnter */silo-presets/*  let b:fswitchdst = 'json' | let b:fswitchlocs = 'reg:/silo-presets/silo-metadata'
+au! BufEnter */silo-metadata/* let b:fswitchdst = 'yaml,py,txt,xml,json' | let b:fswitchlocs = 'reg:/silo-metadata/silo-presets'
+
+nnoremap <leader><leader>u :!rally preset upload --file "%" -e UAT<cr>
+nnoremap <leader><leader>U :!rally preset upload --file "%" -e PROD --no-protect<cr>
+nnoremap <leader><leader>i :!rally preset upload --file "%" -e QA<cr>
+nnoremap <leader>u :!rally supply make --file "%" --to UAT<cr>
+nnoremap <leader>i :!rally supply make --file "%" --to QA<cr>
+nnoremap <leader>U :!rally supply make --file "%" --to PROD --no-protect<cr>
+nnoremap <leader>k :!rally preset info --file "%" --e UAT,PROD<cr>
+nnoremap <leader>d :call Rallydiff("")<cr>
+nnoremap <leader>D :call Rallydiff("-e PROD")<cr>
+nnoremap <leader>c :call Rallydiff("-e QA")<cr>
+nnoremap <leader>C :call Rallydiff("-e DEV")<cr>
+nnoremap D :diffoff<cr>
+nnoremap <leader><leader>Q :%!node ~/node-rally-tools/util/addMIOSupport.js<cr>
+nnoremap <leader><leader>N :%!node ~/node-rally-tools/util/addDynamicNext.js<cr>
+
+function! Rallydiff(extra)
+    let file = system("rally preset diff --only-new --file '" . bufname("%") . "' --raw " . a:extra)
+    execute "silent vs" . file
+    execute "silent windo diffthis"
+    "echo file
+endfunction
