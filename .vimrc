@@ -419,15 +419,15 @@ highlight Blamer guifg=lightgrey
 function! s:paste(event)
     ":echom a:event
     if(a:event.operator ==# 'y' && a:event.regname ==# '*')
-        if has("windows") " includes WSL, where I use this
-            call system('/mnt/c/Windows/System32/clip.exe', a:event.regcontents)
-        else
+        if has("osx")
             call system('pbcopy', a:event.regcontents)
+        else
+            call system('/mnt/c/Windows/System32/clip.exe', a:event.regcontents)
         endif
     endif
 endfunction
 
-if has("windows") || has("macos")
+if has("windows") || has("osx")
     augroup YANK
         autocmd!
         autocmd TextYankPost * call s:paste(v:event)
