@@ -29,4 +29,4 @@ bind \u2022 'backward-kill-bigword'
 
 set -g fish_user_paths "/usr/local/sbin" $fish_user_paths
 
-nvm use node > /dev/null
+#nvm use node > /dev/null

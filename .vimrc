@@ -7,7 +7,7 @@ endfor
 
 " skip clipboard.vim: its doesn't work on most computers I use so just have
 " overrides in my .vimrc
-let g:loaded_clipboard_provider=1
+"let g:loaded_clipboard_provider=1
 
 syntax on
 set background=dark
@@ -51,8 +51,10 @@ Plug 'dag/vim-fish'
 " useful for self-interrogation
 Plug 'APZelos/blamer.nvim'
 " make my tab do something useful when theres no LSP
-let g:neocomplete#enable_at_startup = 1
-Plug 'Shougo/neocomplete.vim'
+" NOTE: don't use with neovim
+"let g:neocomplete#enable_at_startup = 1
+"Plug 'Shougo/neocomplete.vim'
+Plug 'Shougo/deoplete.nvim', { 'do': ':UpdateRemotePlugins' }
 
 " cast on crit
 Plug 'neoclide/coc.nvim', {'branch': 'release'}
@@ -126,7 +128,7 @@ nmap <silent> gi <Plug>(coc-implementation)
 nmap <silent> gr <Plug>(coc-references)
 
 nnoremap <silent> K :call <SID>show_documentation()<CR>
-xmap <leader>M  <Plug>(coc-format-selected)
+vmap <leader>M  <Plug>(coc-format-selected)
 nmap <leader>M  <Plug>(coc-format-selected)
 function! s:show_documentation()
   if (index(['vim','help'], &filetype) >= 0)
@@ -140,7 +142,7 @@ autocmd CursorHold * silent call CocActionAsync('highlight')
 nmap <leader>rn <Plug>(coc-rename)
 
 " Remap for do codeAction of selected region
-xmap <leader>y <Plug>(coc-codeaction-selected)
+vmap <leader>y <Plug>(coc-codeaction-selected)
 nmap <leader>y <Plug>(coc-codeaction-selected)w
 
 nmap <leader>ac  <Plug>(coc-codeaction)
@@ -262,7 +264,7 @@ let @e='i%F.hcaw v0pI#ifndef A vF.s_Hyyplcawdefine o#endifO' "Header dec
 noremap <leader>t :!ctags -R .<cr>:UpdateTypesFileOnly<cr>:redr!<cr>
 inoremap <c-BS> vbc
 nnoremap <leader>/ :NERDTreeToggle<CR>
-nnoremap <leader>a maggVGy`azz
+"nnoremap <leader>a maggVGy`azz
 nnoremap <leader>w :w!<cr>
 nnoremap <leader>e :q<cr>
 nnoremap <leader>E :q!<cr>
@@ -417,7 +419,7 @@ highlight Blamer guifg=lightgrey
 function! s:paste(event)
     ":echom a:event
     if(a:event.operator ==# 'y' && a:event.regname ==# '*')
-        if has("windows")
+        if has("windows") " includes WSL, where I use this
             call system('/mnt/c/Windows/System32/clip.exe', a:event.regcontents)
         else
             call system('pbcopy', a:event.regcontents)
@@ -475,3 +477,14 @@ function! Rallydiff(extra)
     execute "silent windo diffthis"
     "echo file
 endfunction
+
+" treesitter lua setup
+"lua <<EOF
+"require'nvim-treesitter.configs'.setup {
+  "ensure_installed = "maintained", -- one of "all", "maintained" (parsers with maintainers), or a list of languages
+  "highlight = {
+    "enable = true,              -- false will disable the whole extension
+    "disable = { },  -- list of language that will be disabled
+  "},
+"}
+"EOF
