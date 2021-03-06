@@ -13,7 +13,7 @@ syntax on
 set background=dark
 set mouse=a
 
-if has("macunix")
+if has("mac")
     let &t_SI = "\<Esc>Ptmux;\<Esc>\<Esc>]50;CursorShape=1\x7\<Esc>\\"
     let &t_SR = "\<Esc>Ptmux;\<Esc>\<Esc>]50;CursorShape=2\x7\<Esc>\\"
     let &t_EI = "\<Esc>Ptmux;\<Esc>\<Esc>]50;CursorShape=0\x7\<Esc>\\"
@@ -419,7 +419,7 @@ highlight Blamer guifg=lightgrey
 function! s:paste(event)
     ":echom a:event
     if(a:event.operator ==# 'y' && a:event.regname ==# '*')
-        if has("osx")
+        if has("mac")
             call system('pbcopy', a:event.regcontents)
         else
             call system('/mnt/c/Windows/System32/clip.exe', a:event.regcontents)
@@ -427,7 +427,7 @@ function! s:paste(event)
     endif
 endfunction
 
-if has("windows") || has("osx")
+if has("windows") || has("mac")
     augroup YANK
         autocmd!
         autocmd TextYankPost * call s:paste(v:event)
