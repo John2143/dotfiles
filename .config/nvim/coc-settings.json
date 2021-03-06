@@ -1,0 +1,13 @@
+{
+    "rust-analyzer": {
+        "updates": {
+            "channel": "nightly"
+        },
+        "cargo": {
+            "loadOutDirsFromCheck": true
+        },
+        "procMacro": {
+            "enable": true
+        }
+    }
+}
