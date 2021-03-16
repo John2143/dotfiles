@@ -283,6 +283,10 @@ noremap <c-K> <c-w>k
 noremap <c-L> <c-w>l
 noremap <c-H> <c-w>h
 
+nnoremap <leader>g :Buf<cr>
+nnoremap <leader>b :Files<cr>
+
+
 nnoremap <leader>l :call NumberToggle()<cr>
 vnoremap <leader>l :call NumberToggle()<cr>
 nnoremap <leader>s :call SpellToggle()<cr>
