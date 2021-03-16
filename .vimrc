@@ -286,6 +286,7 @@ noremap <c-H> <c-w>h
 nnoremap <leader>g :Buf<cr>
 nnoremap <leader>b :Files<cr>
 
+noremap <silent> H :nohl<cr>:redraw<cr>
 
 nnoremap <leader>l :call NumberToggle()<cr>
 vnoremap <leader>l :call NumberToggle()<cr>
