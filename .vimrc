@@ -281,6 +281,8 @@ noremap <c-K> <c-w>k
 noremap <c-L> <c-w>l
 noremap <c-H> <c-w>h
 
+noremap <silent> H :nohl<cr>:redraw<cr>
+
 nnoremap <leader>l :call NumberToggle()<cr>
 vnoremap <leader>l :call NumberToggle()<cr>
 nnoremap <leader>s :call SpellToggle()<cr>
