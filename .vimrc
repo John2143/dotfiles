@@ -1,3 +1,5 @@
+set nocompatible              " be iMproved, required
+
 " use this if you use vim
 for key in ['<Up>', '<Down>', '<Left>', '<Right>']
     exec 'nnoremap' key '<Nop>'
@@ -19,7 +21,6 @@ if has("mac")
     let &t_EI = "\<Esc>Ptmux;\<Esc>\<Esc>]50;CursorShape=0\x7\<Esc>\\"
 endif
 
-set nocompatible              " be iMproved, required
 filetype off                  " required
 
 call plug#begin()
@@ -57,10 +58,11 @@ Plug 'APZelos/blamer.nvim'
 Plug 'Shougo/deoplete.nvim', { 'do': ':UpdateRemotePlugins' }
 
 " cast on crit
-Plug 'neoclide/coc.nvim', {'branch': 'release'}
+" Plug 'neoclide/coc.nvim', {'branch': 'release'}
+Plug 'neoclide/coc.nvim', {'branch': 'master', 'do': 'yarn install --frozen-lockfile'}
 
 " fzf is very cool. Use a LOT of [:Files, :Buf, :Rg]
-if has("macunix")
+if has("mac")
     set rtp+=/usr/local/opt/fzf
 end
 Plug 'junegunn/fzf', { 'do': { -> fzf#install() } }
@@ -481,12 +483,12 @@ function! Rallydiff(extra)
 endfunction
 
 " treesitter lua setup
-"lua <<EOF
-"require'nvim-treesitter.configs'.setup {
-  "ensure_installed = "maintained", -- one of "all", "maintained" (parsers with maintainers), or a list of languages
-  "highlight = {
-    "enable = true,              -- false will disable the whole extension
-    "disable = { },  -- list of language that will be disabled
-  "},
-"}
-"EOF
+lua <<EOF
+require'nvim-treesitter.configs'.setup {
+  ensure_installed = "maintained", -- one of "all", "maintained" (parsers with maintainers), or a list of languages
+  highlight = {
+    enable = true,              -- false will disable the whole extension
+    disable = { },  -- list of language that will be disabled
+  },
+}
+EOF
