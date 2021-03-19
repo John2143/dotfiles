@@ -284,7 +284,7 @@ noremap <c-L> <c-w>l
 noremap <c-H> <c-w>h
 
 nnoremap <leader>g :Buf<cr>
-nnoremap <leader>b :Files<cr>
+nnoremap <leader>b :GFiles<cr>
 
 noremap <silent> H :nohl<cr>:redraw<cr>
 
