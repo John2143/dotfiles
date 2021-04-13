@@ -1,3 +1,4 @@
+# Defined in /var/folders/w4/v2kb4w2n6_gb8n05jk8z8v6jhlc_9c/T//fish.tYKLpd/fish_prompt.fish @ line 2
 function fish_prompt --description 'Informative prompt'
     #Save the return status of the previous command
     set -l last_pipestatus $pipestatus
@@ -20,5 +21,9 @@ function fish_prompt --description 'Informative prompt'
                 $USER (set_color black) (set_color white) (prompt_hostname) \
                 (set_color $fish_color_cwd) (dirs) (set_color white) (fish_git_prompt) $pipestatus_string \
                 (set_color green)
+    end
+
+    if set -q VIRTUAL_ENV
+        echo -n -s (set_color -b blue white) "(" (basename "$VIRTUAL_ENV") ")" (set_color normal) " "
     end
 end

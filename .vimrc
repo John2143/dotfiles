@@ -485,10 +485,19 @@ function! Rallydiff(extra)
     "echo file
 endfunction
 
+
+function! TSInstallAllF()
+  for s:ts_lang in ["rust", "json", "typescript", "javascript", "python", "c", "vue", "html", "latex", "lua"]
+    execute "TSInstallFromGrammar " . s:ts_lang
+  endfor
+endfunction
+
+command TSInstallAll :call TSInstallAllF()
+
 " treesitter lua setup
 lua <<EOF
 require'nvim-treesitter.configs'.setup {
-  ensure_installed = "maintained", -- one of "all", "maintained" (parsers with maintainers), or a list of languages
+  -- ensure_installed = { "rust", "json", "typescript", "javascript", "python", "c", "vue", "html", "latex", "lua", },
   highlight = {
     enable = true,              -- false will disable the whole extension
     disable = { },  -- list of language that will be disabled
