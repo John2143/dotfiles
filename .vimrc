@@ -7,6 +7,10 @@ for key in ['<Up>', '<Down>', '<Left>', '<Right>']
     exec 'vnoremap' key '<Nop>'
 endfor
 
+" good shit
+let mapleader = ","
+let g:mapleader = ","
+
 " skip clipboard.vim: its doesn't work on most computers I use so just have
 " overrides in my .vimrc
 "let g:loaded_clipboard_provider=1
@@ -144,8 +148,8 @@ autocmd CursorHold * silent call CocActionAsync('highlight')
 nmap <leader>rn <Plug>(coc-rename)
 
 " Remap for do codeAction of selected region
-vmap <leader>y <Plug>(coc-codeaction-selected)
-nmap <leader>y <Plug>(coc-codeaction-selected)w
+vnoremap <leader>y <Plug>(coc-codeaction-selected)
+nnoremap <leader>y <Plug>(coc-codeaction-selected)w
 
 nmap <leader>ac  <Plug>(coc-codeaction)
 
@@ -166,10 +170,6 @@ if has("gui_running")
     " disable menubar in a mode I never use
     set guioptions -=m
 end
-
-" good shit
-let mapleader = ","
-let g:mapleader = ","
 
 "" Automatic reloading of .vimrc
 autocmd! bufwritepost .vimrc source %
