@@ -148,10 +148,8 @@ autocmd CursorHold * silent call CocActionAsync('highlight')
 nmap <leader>rn <Plug>(coc-rename)
 
 " Remap for do codeAction of selected region
-vnoremap <silent> <leader>y :CocAction<cr>
-nnoremap <silent> <leader>y :CocAction<cr>
-
-nmap <leader>ac  <Plug>(coc-codeaction)
+xmap <leader>y <Plug>(coc-codeaction-selected)
+nmap <leader>y v<Plug>(coc-codeaction-selected)
 
 " ==========================================================================
 " coc block end
