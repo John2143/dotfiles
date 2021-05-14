@@ -11,7 +11,6 @@ endfor
 let mapleader = ","
 let g:mapleader = ","
 
-
 " skip clipboard.vim: its doesn't work on most computers I use so just have
 " overrides in my .vimrc
 "let g:loaded_clipboard_provider=1
@@ -151,10 +150,8 @@ autocmd CursorHold * silent call CocActionAsync('highlight')
 nmap <leader>rn <Plug>(coc-rename)
 
 " Remap for do codeAction of selected region
-vmap <leader>y <Plug>(coc-codeaction-selected)
-nmap <leader>y <Plug>(coc-codeaction-selected)w
-
-nmap <leader>ac  <Plug>(coc-codeaction)
+xmap <leader>y <Plug>(coc-codeaction-selected)
+nmap <leader>y v<Plug>(coc-codeaction-selected)
 
 " ==========================================================================
 " coc block end
