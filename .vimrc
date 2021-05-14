@@ -7,6 +7,11 @@ for key in ['<Up>', '<Down>', '<Left>', '<Right>']
     exec 'vnoremap' key '<Nop>'
 endfor
 
+" good shit
+let mapleader = ","
+let g:mapleader = ","
+
+
 " skip clipboard.vim: its doesn't work on most computers I use so just have
 " overrides in my .vimrc
 "let g:loaded_clipboard_provider=1
@@ -36,6 +41,8 @@ Plug 'derekwyatt/vim-fswitch'
 Plug 'scrooloose/nerdcommenter'
 " not sure what these two do /exactly/ just know they work
 Plug 'rust-lang/rust.vim'
+Plug 'mattn/webapi-vim'
+
 Plug 'nvim-treesitter/nvim-treesitter'
 " silent but deadly
 Plug 'airblade/vim-rooter'
@@ -167,10 +174,6 @@ if has("gui_running")
     set guioptions -=m
 end
 
-" good shit
-let mapleader = ","
-let g:mapleader = ","
-
 "" Automatic reloading of .vimrc
 autocmd! bufwritepost .vimrc source %
 
@@ -264,6 +267,7 @@ au FocusGained * :set relativenumber
 let @e='i%F.hcaw v0pI#ifndef A vF.s_Hyyplcawdefine o#endifO' "Header declare
 
 noremap <leader>t :!ctags -R .<cr>:UpdateTypesFileOnly<cr>:redr!<cr>
+au Filetype rust noremap <leader>t :RustTest<cr>
 inoremap <c-BS> vbc
 nnoremap <leader>/ :NERDTreeToggle<CR>
 "nnoremap <leader>a maggVGy`azz
@@ -311,6 +315,11 @@ let g:syntastic_always_populate_loc_list = 1
 let g:syntastic_auto_loc_list = 1
 let g:syntastic_check_on_open = 1
 let g:syntastic_check_on_wq = 0
+
+let g:rustfmt_autosave = 1
+if has('mac')
+    let g:rust_clip_command = "pbcopy"
+endif
 
 " ==========================================================================
 " Status Line
