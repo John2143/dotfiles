@@ -36,6 +36,7 @@ linkConfig i3
 linkConfig i3status
 linkConfig fish
 linkConfig nvim
+linkConfig alacritty
 
 # Add fishrc to edit fast
 ln -s $DIR/.config/fish/config.fish $HOME/.fishrc
