@@ -42,7 +42,7 @@ Plug 'scrooloose/nerdcommenter'
 Plug 'rust-lang/rust.vim'
 Plug 'nvim-treesitter/nvim-treesitter'
 " silent but deadly
-Plug 'airblade/vim-rooter'
+"Plug 'airblade/vim-rooter'
 " kinda don't like this but I keep it around
 Plug 'elzr/vim-json'
 " better than the default, worse than fzf for browsing stuff
