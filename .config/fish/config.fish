@@ -14,6 +14,8 @@ alias rallytags="ctags --fields=+l --languages=python --python-kinds=-iv -R -f .
 
 alias launchdla="rally asset -e UAT --anon launch --job-name 'DLA Context Creator' --init-data "
 
+alias efish="vim ~/.config/fish/config.fish"
+
 set fish_greeting
 
 set PATH "$HOME/bin:$PATH"
@@ -28,5 +30,6 @@ git config --global user.signingkey $SIGNING_KEY
 bind \u2022 'backward-kill-bigword'
 
 set -g fish_user_paths "/usr/local/sbin" $fish_user_paths
+
 
 #nvm use node > /dev/null

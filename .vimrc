@@ -63,6 +63,8 @@ Plug 'APZelos/blamer.nvim'
 "Plug 'Shougo/neocomplete.vim'
 Plug 'Shougo/deoplete.nvim', { 'do': ':UpdateRemotePlugins' }
 
+Plug 'AndrewRadev/linediff.vim'
+
 " cast on crit
 " Plug 'neoclide/coc.nvim', {'branch': 'release'}
 Plug 'neoclide/coc.nvim', {'branch': 'master', 'do': 'yarn install --frozen-lockfile'}
@@ -152,6 +154,7 @@ nmap <leader>rn <Plug>(coc-rename)
 " Remap for do codeAction of selected region
 xmap <leader>y <Plug>(coc-codeaction-selected)
 nmap <leader>y v<Plug>(coc-codeaction-selected)
+vmap <leader>Y <Plug>(coc-range-select)
 
 " ==========================================================================
 " coc block end
@@ -269,8 +272,9 @@ inoremap <c-BS> vbc
 nnoremap <leader>/ :NERDTreeToggle<CR>
 "nnoremap <leader>a maggVGy`azz
 nnoremap <leader>w :w!<cr>
-nnoremap <leader>e :q<cr>
-nnoremap <leader>E :q!<cr>
+nnoremap <leader>e :bd<cr>
+nnoremap <leader>E :bd!<cr>
+nnoremap <leader>3 :q!<cr>
 " quick edit vimrc
 nnoremap <leader>v :vsplit ~/.vimrc<cr>
 nnoremap <leader>f :FSHere<cr>
@@ -472,6 +476,7 @@ au! BufEnter */silo-metadata/* let b:fswitchdst = 'yaml,py,txt,xml,json' | let b
 nnoremap <leader><leader>u :!rally preset upload --file "%" -e UAT<cr>
 nnoremap <leader><leader>U :!rally preset upload --file "%" -e PROD --no-protect<cr>
 nnoremap <leader><leader>i :!rally preset upload --file "%" -e QA<cr>
+nnoremap <leader><leader>I :!rally preset upload --file "%" -e DEV<cr>
 nnoremap <leader>u :!rally supply make --file "%" --to UAT<cr>
 nnoremap <leader>i :!rally supply make --file "%" --to QA<cr>
 nnoremap <leader>U :!rally supply make --file "%" --to PROD --no-protect<cr>
