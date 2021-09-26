@@ -23,7 +23,7 @@ set PATH "$HOME/.cargo/bin:$PATH"
 
 set BAT_THEME "Solarized (dark)"
 
-set SIGNING_KEY (gpg --list-secret-keys --keyid-format long | grep sec | string split "/" | tail -n 1 | string match -r '[0-9A-F]+')
+set SIGNING_KEY (gpg --list-secret-keys --keyid-format long | grep john@john2143 -B 3 | grep sec | string split "/" | tail -n 1 | string match -r '[0-9A-F]+')
 
 git config --global user.signingkey $SIGNING_KEY
 
