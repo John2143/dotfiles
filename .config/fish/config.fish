@@ -14,7 +14,8 @@ alias rallytags="ctags --fields=+l --languages=python --python-kinds=-iv -R -f .
 
 alias launchdla="rally asset -e UAT --anon launch --job-name 'DLA Context Creator' --init-data "
 
-alias efish="vim ~/.config/fish/config.fish"
+alias efish="vim ~/.config/fish/config.fish; sfish"
+alias sfish=". ~/.config/fish/config.fish"
 
 set fish_greeting
 
@@ -25,11 +26,13 @@ set BAT_THEME "Solarized (dark)"
 
 set SIGNING_KEY (gpg --list-secret-keys --keyid-format long | grep john@john2143 -B 3 | grep sec | string split "/" | tail -n 1 | string match -r '[0-9A-F]+')
 
-git config --global user.signingkey $SIGNING_KEY
+git config --global user.signingkey $SIGNING_KEY > /dev/null
 
 bind \u2022 'backward-kill-bigword'
 
 set -g fish_user_paths "/usr/local/sbin" $fish_user_paths
 
-
-#nvm use node > /dev/null
+if [ (uname) = "Linux" ]
+    #nvm use node > /dev/null
+    alias p="paru"
+end

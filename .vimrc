@@ -13,7 +13,6 @@ let g:mapleader = ","
 
 " skip clipboard.vim: its doesn't work on most computers I use so just have
 " overrides in my .vimrc
-"let g:loaded_clipboard_provider=1
 
 syntax on
 set background=dark
@@ -438,8 +437,6 @@ function! s:paste(event)
     if(a:event.operator ==# 'y' && a:event.regname ==# '*')
         if has("mac")
             call system('pbcopy', a:event.regcontents)
-        else
-            call system('/mnt/c/Windows/System32/clip.exe', a:event.regcontents)
         endif
     endif
 endfunction
