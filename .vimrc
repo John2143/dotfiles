@@ -307,6 +307,9 @@ noremap <Leader>m <esc>:tabnext<CR>
 
 vnoremap <Leader>s :sort<CR>
 
+" search with Rg for selected text
+vnoremap <leader>x "ay:Rg a<cr>
+
 vnoremap < <gv
 vnoremap > >gv
 nnoremap > >>
@@ -477,9 +480,11 @@ nnoremap <leader><leader>u :!rally preset upload --file "%" -e UAT<cr>
 nnoremap <leader><leader>U :!rally preset upload --file "%" -e PROD --no-protect<cr>
 nnoremap <leader><leader>i :!rally preset upload --file "%" -e QA<cr>
 nnoremap <leader><leader>I :!rally preset upload --file "%" -e DEV<cr>
+"nnoremap <leader><leader>R :!rally preset upload --file "%" -e DEV<cr>
 nnoremap <leader>u :!rally supply make --file "%" --to UAT<cr>
 nnoremap <leader>i :!rally supply make --file "%" --to QA<cr>
 nnoremap <leader>U :!rally supply make --file "%" --to PROD --no-protect<cr>
+nnoremap <leader>I :!rally supply make --file "%" --to DEV<cr>
 nnoremap <leader>k :!rally preset info --file "%" --e UAT,PROD<cr>
 nnoremap <leader>d :call Rallydiff("")<cr>
 nnoremap <leader>D :call Rallydiff("-e PROD")<cr>
