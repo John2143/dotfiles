@@ -21,6 +21,7 @@ alias launchdla="rally asset -e UAT --anon launch --job-name 'DLA Context Creato
 alias efish="vim ~/.config/fish/config.fish ; rfish"
 alias rfish="source ~/.config/fish/config.fish"
 alias ath="alacritty-themes"
+alias nn="nvm use node"
 
 set fish_greeting
 

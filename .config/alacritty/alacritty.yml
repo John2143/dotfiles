@@ -12,7 +12,7 @@ font:
   use_thin_strokes: true
 live_config_reload: true
 colors:
-  name: Cloud
+  name: Erebus
   author: ""
   primary:
     background: "#000000"
@@ -21,20 +21,20 @@ colors:
     text: "#000000"
     cursor: "#ffffff"
   normal:
-    black: "#222827"
-    red: "#d5a8e3"
-    green: "#9c75dd"
-    yellow: "#9898ae"
-    blue: "#654a96"
-    magenta: "#625566"
-    cyan: "#a9d1df"
-    white: "#e6ebe5"
+    black: "#757575"
+    red: "#ff5f5f"
+    green: "#de8a36"
+    yellow: "#d78787"
+    blue: "#af5fd7"
+    magenta: "#ff87d7"
+    cyan: "#dea3e5"
+    white: "#b8b8b8"
   bright:
-    black: "#5d6f74"
-    red: "#cd749c"
-    green: "#63b0b0"
-    yellow: "#c0c0dd"
-    blue: "#5786bc"
-    magenta: "#3f3442"
-    cyan: "#849da2"
-    white: "#d9d6cf"
+    black: "#b8b8b8"
+    red: "#d78787"
+    green: "#ff9f6f"
+    yellow: "#ff5f5f"
+    blue: "#dea3e5"
+    magenta: "#d7afaf"
+    cyan: "#af5fd7"
+    white: "#757575"

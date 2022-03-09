@@ -307,7 +307,7 @@ noremap <Leader>m <esc>:tabnext<CR>
 vnoremap <Leader>s :sort<CR>
 
 " search with Rg for selected text
-vnoremap <leader>x "ay:Rg a<cr>
+vnoremap <leader>x "ay:Tags a<cr>
 
 vnoremap < <gv
 vnoremap > >gv
