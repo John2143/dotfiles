@@ -11,6 +11,7 @@ alias vimdiff="nvim -d"
 alias cat=bat
 alias ls=exa
 alias grep=rg
+alias nvm=fnm
 
 alias rally@="git diff HEAD --name-only | rally @"
 alias rallyp="rally config project --set"
@@ -30,6 +31,13 @@ end
 complete -c d -f
 complete -c d -a "(ls -D ~)"
 
+alias tmux_daily="daily \
+    ONRAMP_WORKFLOW_PYTHON:OWR:n \
+    node-rally-tools:rt:c \
+    rally-congere:congere:c \
+    :vault:n \
+| tail -n +2"
+
 set fish_greeting
 
 set PATH "$HOME/bin:$PATH"
@@ -46,6 +54,5 @@ bind \u2022 'backward-kill-bigword'
 set -g fish_user_paths "/usr/local/sbin" $fish_user_paths
 
 if [ (uname) = "Linux" ]
-    #nvm use node > /dev/null
     alias p="paru"
 end

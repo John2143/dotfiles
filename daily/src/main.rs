@@ -55,28 +55,31 @@ fn add_window(name: &str, window_name: &str, wtype: WindowType) -> TmuxScreen {
     TmuxScreen { commands }
 }
 
-fn parse_single_arg(arg: &str) -> Option<TmuxScreen> {
+fn parse_single_arg(arg: &str) -> Result<TmuxScreen, String> {
     let x: Vec<_> = arg.split(":").collect();
     match &*x {
-        [] => None,
-        [name] => Some(add_window(name, name, WindowType::Normal)),
+        [] => Err("No name given".into()),
+        [name] => Ok(add_window(name, name, WindowType::Normal)),
         [name, ptype] => match WindowType::from_str(ptype) {
-            Ok(w) => Some(add_window(name, name, w)),
-            _ => None,
+            Ok(w) => Ok(add_window(name, name, w)),
+            _ => Err(format!("invalid window type '{ptype}'")),
         },
         [name, window_name, ptype] => match WindowType::from_str(ptype) {
-            Ok(w) => Some(add_window(name, window_name, w)),
-            _ => None,
+            Ok(w) => Ok(add_window(name, window_name, w)),
+            _ => Err(format!("invalid window type '{ptype}'")),
         },
-        [..] => None,
+        [..] => Err("Too many args".into()),
     }
 }
 
 fn main() {
     for arg in std::env::args().skip(1) {
         let scren = match parse_single_arg(&arg) {
-            Some(s) => s,
-            None => continue,
+            Ok(s) => s,
+            Err(e) => {
+                eprintln!("Invalid session '{arg}': {e}");
+                continue;
+            }
         };
 
         for c in scren.commands {
