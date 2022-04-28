@@ -23,6 +23,13 @@ alias rfish="source ~/.config/fish/config.fish"
 alias ath="alacritty-themes"
 alias nn="nvm use node"
 
+function d
+    daily $argv | bash
+end
+
+complete -c d -f
+complete -c d -a "(ls -D ~)"
+
 set fish_greeting
 
 set PATH "$HOME/bin:$PATH"
