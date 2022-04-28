@@ -13,6 +13,7 @@
 	co = checkout
 	cod = checkout develop
 	com = checkout master
+	cos = checkout staging
 
 	bb = checkout -t -b
 	br = branch
@@ -30,8 +31,10 @@
 	cim = commit -S -m
 	cia = commit -S -a
 	ciam = commit -S -a -m
+	caim = commit -S -a -m
 
     pushb = push -u origin HEAD
+    psuh = push
 
 	dh = diff HEAD
 

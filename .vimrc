@@ -168,6 +168,9 @@ nnoremap  :  ;
 vnoremap  ;  :
 vnoremap  :  ;
 
+" leader p to paste w/o yank
+vnoremap <leader>p "_dP
+
 if has("gui_running")
     " disable menubar in a mode I never use
     set guioptions -=m
@@ -517,3 +520,6 @@ require'nvim-treesitter.configs'.setup {
   },
 }
 EOF
+
+" fix fish
+set shell=/bin/bash

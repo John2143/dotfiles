@@ -12,7 +12,7 @@ font:
   use_thin_strokes: true
 live_config_reload: true
 colors:
-  name: Erebus
+  name: Muse
   author: ""
   primary:
     background: "#000000"
@@ -21,20 +21,21 @@ colors:
     text: "#000000"
     cursor: "#ffffff"
   normal:
-    black: "#757575"
-    red: "#ff5f5f"
-    green: "#de8a36"
-    yellow: "#d78787"
-    blue: "#af5fd7"
-    magenta: "#ff87d7"
-    cyan: "#dea3e5"
-    white: "#b8b8b8"
+    black: "#2e3436"
+    red: "#a31604"
+    green: "#447241"
+    yellow: "#c1951a"
+    blue: "#425387"
+    magenta: "#965d98"
+    cyan: "#06989a"
+    white: "#d3d7cf"
   bright:
-    black: "#b8b8b8"
-    red: "#d78787"
-    green: "#ff9f6f"
-    yellow: "#ff5f5f"
-    blue: "#dea3e5"
-    magenta: "#d7afaf"
-    cyan: "#af5fd7"
-    white: "#757575"
+    black: "#555753"
+    red: "#c60001"
+    green: "#27a343"
+    yellow: "#d5a30e"
+    blue: "#4a5a8d"
+    magenta: "#893c8c"
+    cyan: "#12bccb"
+    white: "#eeeeec"
+theme: Muse
