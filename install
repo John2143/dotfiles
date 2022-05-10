@@ -27,6 +27,11 @@ linkConfig(){
     echo "Linked config $1"
 }
 
+buildRust(){
+    cd $DIR/$1
+    cargo install --path .
+}
+
 link .gitconfig
 link .tmux.conf
 link .vimrc
@@ -38,8 +43,8 @@ linkConfig fish
 linkConfig nvim
 linkConfig alacritty
 
-# Add fishrc to edit fast
-ln -s $DIR/.config/fish/config.fish $HOME/.fishrc
+buildRust daily
+buildRust awsctx
 
 if [[ -s $ZSH ]]; then
     link .zshrc

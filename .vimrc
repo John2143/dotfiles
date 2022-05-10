@@ -305,7 +305,7 @@ noremap <leader>rr :CocCommand rust-analyzer.toggleInlayHints<CR>
 noremap <leader>rb :BlamerToggle<CR>
 
 noremap <Leader>n <esc>:tabprevious<CR>
-noremap <Leader>m <esc>:tabnext<CR>
+noremap <Leader>m <esc>:b#<CR>
 
 vnoremap <Leader>s :sort<CR>
 
