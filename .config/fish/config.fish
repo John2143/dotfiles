@@ -38,6 +38,9 @@ alias tmux_daily="daily \
     :vault:n \
 | tail -n +2"
 
+alias vpnip='mullvad status | rg \'(\d[^ ]+):\' -o -r \'$1\' --color=never'
+alias watchleaks="sudo tcpdump -n -i 1 '(not host ' (vpnip) 'and not net 192.168.1.0/24 and not net 169.254.0.0/16)' | grep IP"
+
 set fish_greeting
 
 set PATH "$HOME/bin:$PATH"
