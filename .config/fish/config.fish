@@ -57,5 +57,7 @@ bind \u2022 'backward-kill-bigword'
 set -g fish_user_paths "/usr/local/sbin" $fish_user_paths
 
 if [ (uname) = "Linux" ]
+    set -g fish_user_paths "/home/john/.local/bin" $fish_user_paths
     alias p="paru"
+    set -x DISPLAY ":0"
 end
