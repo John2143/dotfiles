@@ -4,6 +4,7 @@ use std::str::FromStr;
 enum WindowType {
     Normal,
     Compiler,
+    CompilerDB,
 }
 
 impl FromStr for WindowType {
@@ -12,6 +13,7 @@ impl FromStr for WindowType {
         match s {
             "c" => Ok(Self::Compiler),
             "n" => Ok(Self::Normal),
+            "cd" => Ok(Self::CompilerDB),
             _ => Err(()),
         }
     }
@@ -45,6 +47,17 @@ fn add_window(name: &str, window_name: &str, wtype: WindowType) -> TmuxScreen {
     match wtype {
         WindowType::Normal => {}
         WindowType::Compiler => {
+            commands.push(format!("tmux split-window"));
+            commands.push(tm_run(&format!("nn")));
+            commands.push(tm_run(&format!("cd ~/{name}")));
+            commands.push(tm_run(&format!("clear")));
+        }
+        WindowType::CompilerDB => {
+            commands.push(format!("tmux split-window"));
+            commands.push(tm_run(&format!("nn")));
+            commands.push(tm_run(&format!("cd ~/{name}")));
+            commands.push(tm_run(&format!("clear")));
+
             commands.push(format!("tmux split-window"));
             commands.push(tm_run(&format!("nn")));
             commands.push(tm_run(&format!("cd ~/{name}")));

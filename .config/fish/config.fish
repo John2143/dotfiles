@@ -33,8 +33,8 @@ complete -c d -a "(ls -D ~)"
 
 alias tmux_daily="daily \
     ONRAMP_WORKFLOW_PYTHON:OWR:n \
-    node-rally-tools:rt:c \
-    rally-congere:congere:c \
+    node-rally-tools:rt:cd \
+    rally-congere:congere:cd \
     :vault:n \
 | tail -n +2"
 

@@ -214,23 +214,31 @@ lua << END
     local capabilities = vim.tbl_extend('keep', capabilities_cmp, lsp_status.capabilities)
 
     lspconfig.rust_analyzer.setup {
-      on_attach = on_attach,
-      flags = {
-        debounce_text_changes = 150,
-      },
-      settings = {
-        ["rust-analyzer"] = {
-          cargo = {
-            allFeatures = true,
-          },
-          completion = {
-        postfix = {
-          enable = false,
+        on_attach = on_attach,
+        flags = {
+            debounce_text_changes = 150,
         },
-          },
+        settings = {
+            ["rust-analyzer"] = {
+                cargo = {
+                    allFeatures = true,
+                },
+                completion = {
+                    postfix = {
+                        enable = false,
+                    },
+                },
+            },
         },
-      },
-      capabilities = capabilities,
+        capabilities = capabilities,
+    }
+
+    lspconfig.tsserver.setup {
+        on_attach = on_attach,
+        flags = {
+            debounce_text_changes = 150,
+        },
+        capabilities = capabilities,
     }
 
     vim.lsp.handlers["textDocument/publishDiagnostics"] = vim.lsp.with(
