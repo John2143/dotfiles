@@ -1,0 +1,25 @@
+#!/bin/bash
+
+if [[ $# -lt 3 ]]
+then
+    echo "usage: kubeworker <env> <service> <num> [cmd]"
+    exit 1
+fi
+
+CLUSTER=$(kubectl config get-contexts | grep cluster | grep $1 | choose 1)
+kubectl config use-context $CLUSTER
+echo "Set context to $CLUSTER"
+
+POD=$(kubectl get pods -n "rally" | grep "$2" | head -n "$3" | tail -n 1 | cut -d" " -f 1)
+echo "Selecting pod: $POD"
+if [[ $# -eq 3 ]]
+then
+    kubectl logs -n "rally" -f $POD --tail 100000 --follow
+elif [[ $# -eq 5 ]]
+then
+    kubectl logs -n "rally" -f $POD $4 $5
+else
+    kubectl exec -it -n "rally" $POD -- $4
+fi
+
+#TODO: kubectl scale deployment $full_service_name -n rally --replicas 2
