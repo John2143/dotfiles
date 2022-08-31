@@ -45,6 +45,7 @@ set fish_greeting
 
 set PATH "$HOME/bin:$PATH"
 set PATH "$HOME/.cargo/bin:$PATH"
+fnm env | source
 set -x HOMEBREW_NO_AUTO_UPDATE 1
 set BAT_THEME "Solarized (dark)"
 
