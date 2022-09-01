@@ -240,6 +240,14 @@ lua << END
         },
         capabilities = capabilities,
     }
+    lspconfig.pyright.setup{
+        on_attach = on_attach,
+        flags = {
+            debounce_text_changes = 150,
+        },
+        root_dir = lspconfig.util.find_git_ancestor,
+        capabilities = capabilities,
+    }
 
     vim.lsp.handlers["textDocument/publishDiagnostics"] = vim.lsp.with(
       vim.lsp.diagnostic.on_publish_diagnostics, {
