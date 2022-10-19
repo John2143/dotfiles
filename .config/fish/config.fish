@@ -62,3 +62,6 @@ if [ (uname) = "Linux" ]
     alias p="paru"
     set -x DISPLAY ":0"
 end
+if [ (uname) = "Darwin" ]
+    source ~/disco.fish
+end

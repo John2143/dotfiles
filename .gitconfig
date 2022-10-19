@@ -42,11 +42,6 @@
 	unignore = update-index --no-assume-unchanged
 	ignored = !git ls-files -v | grep "^[[:lower:]]"
 
-
-
-
-
-
 [core]
 	excludesfile = /Users/jschmidt/.gitignore
 [hub]

@@ -65,6 +65,7 @@ Plug 'APZelos/blamer.nvim'
 "Plug 'Shougo/deoplete.nvim', { 'do': ':UpdateRemotePlugins' }
 
 Plug 'AndrewRadev/linediff.vim'
+Plug 'puremourning/vimspector'
 
 " :Tab
 Plug 'godlygeek/tabular'
@@ -210,7 +211,7 @@ lua << END
       lsp_status.on_attach(client)
     end
 
-    local capabilities_cmp = require('cmp_nvim_lsp').update_capabilities(vim.lsp.protocol.make_client_capabilities())
+    local capabilities_cmp = require('cmp_nvim_lsp').default_capabilities()
     local capabilities = vim.tbl_extend('keep', capabilities_cmp, lsp_status.capabilities)
 
     lspconfig.rust_analyzer.setup {
@@ -493,6 +494,21 @@ vnoremap > >gv
 nnoremap > >>
 nnoremap < <<
 
+" vimspector
+nnoremap <Leader>qq :call vimspector#Launch()<CR>
+nnoremap <Leader>qe :call vimspector#Reset()<CR>
+nnoremap <Leader>qc :call vimspector#Continue()<CR>
+
+nnoremap <Leader>qt :call vimspector#ToggleBreakpoint()<CR>
+nnoremap <Leader>qT :call vimspector#ClearBreakpoints()<CR>
+
+nmap <Leader>qr <Plug>VimspectorRestart
+nmap <Leader>qh <Plug>VimspectorStepOut
+nmap <Leader>ql <Plug>VimspectorStepInto
+nmap <Leader>qj <Plug>VimspectorStepOver
+
+let g:vim_json_syntax_conceal = 0
+
 let g:syntastic_always_populate_loc_list = 1
 let g:syntastic_auto_loc_list = 1
 let g:syntastic_check_on_open = 1
@@ -685,6 +701,11 @@ nnoremap <leader>C :call Rallydiff("-e DEV")<cr>
 nnoremap D :diffoff<cr>
 nnoremap <leader><leader>Q :%!node ~/node-rally-tools/util/addMIOSupport.js<cr>
 nnoremap <leader><leader>N :%!node ~/node-rally-tools/util/addDynamicNext.js<cr>
+command! -bang -nargs=* SFiles
+  \ call fzf#vim#grep(
+  \   'git diff staging...HEAD --name-only', 0,
+  \   fzf#vim#with_preview({'dir': systemlist('git rev-parse --show-toplevel')[0]}), <bang>0)
+
 
 function! Rallydiff(extra)
     let file = system("rally preset diff --only-new --file '" . bufname("%") . "' --raw " . a:extra)
