@@ -9,7 +9,6 @@ font:
   offset:
     x: 0
     y: -3
-  use_thin_strokes: true
 live_config_reload: true
 colors:
   name: Muse

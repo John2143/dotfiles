@@ -1,3 +1,15 @@
+if [ (uname) = "Linux" ]
+    set -g fish_user_paths "/home/john/.local/bin" $fish_user_paths
+    alias p="paru"
+    set -x DISPLAY ":0"
+end
+if [ (uname) = "Darwin" ]
+    source ~/scripts/disco.fish
+    alias updatednode="npm i -g nyc rollup yarn neovim typescript pyright typescript-language-server"
+    fish_add_path /opt/homebrew/bin/
+    fish_add_path /opt/homebrew/sbin/
+end
+
 alias recent="git for-each-ref --color='always' --sort=committerdate refs/heads --format='%(HEAD)%(color:yellow)%(refname:short)|%(color:bold green)%(committerdate:relative)|%(color:magenta)%(authorname)%(color:reset)'|column -ts'|'"
 alias recenta="git for-each-ref --color='always' --sort=committerdate --format='%(HEAD)%(color:yellow)%(refname:short)|%(color:bold green)%(committerdate:relative)|%(color:magenta)%(authorname)%(color:reset)'|column -ts'|'"
 alias gb="git checkout (recent | nl | sort -nr | cut -f 2- | fzf --ansi | cut -d \" \" -f 2)"
@@ -56,12 +68,3 @@ git config --global user.signingkey $SIGNING_KEY > /dev/null
 bind \u2022 'backward-kill-bigword'
 
 set -g fish_user_paths "/usr/local/sbin" $fish_user_paths
-
-if [ (uname) = "Linux" ]
-    set -g fish_user_paths "/home/john/.local/bin" $fish_user_paths
-    alias p="paru"
-    set -x DISPLAY ":0"
-end
-if [ (uname) = "Darwin" ]
-    source ~/disco.fish
-end

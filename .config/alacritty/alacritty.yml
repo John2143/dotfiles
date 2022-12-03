@@ -9,33 +9,32 @@ font:
   offset:
     x: 0
     y: -3
-  use_thin_strokes: true
 live_config_reload: true
 colors:
-  name: Panels
-  author: dkeg
+  name: Muse
+  author: ""
   primary:
     background: "#000000"
-    foreground: "#d3d3d3"
+    foreground: "#ffffff"
   cursor:
     text: "#000000"
-    cursor: "#d3d3d3"
+    cursor: "#ffffff"
   normal:
-    black: "#191927"
-    red: "#282f5e"
-    green: "#2b4593"
-    yellow: "#344276"
-    blue: "#4e3a4f"
-    magenta: "#61372f"
-    cyan: "#6b484c"
-    white: "#744537"
+    black: "#2e3436"
+    red: "#a31604"
+    green: "#447241"
+    yellow: "#c1951a"
+    blue: "#425387"
+    magenta: "#965d98"
+    cyan: "#06989a"
+    white: "#d3d7cf"
   bright:
-    black: "#905749"
-    red: "#94431c"
-    green: "#9f582a"
-    yellow: "#a38687"
-    blue: "#e1750f"
-    magenta: "#eaaf25"
-    cyan: "#fa8e08"
-    white: "#fca806"
-theme: Dkeg - panels
+    black: "#555753"
+    red: "#c60001"
+    green: "#27a343"
+    yellow: "#d5a30e"
+    blue: "#4a5a8d"
+    magenta: "#893c8c"
+    cyan: "#12bccb"
+    white: "#eeeeec"
+theme: Muse
