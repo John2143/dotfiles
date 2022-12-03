@@ -9,6 +9,7 @@ font:
   offset:
     x: 0
     y: -3
+  AppleFontSmooting: true
 live_config_reload: true
 colors:
   name: Muse
