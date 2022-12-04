@@ -1,0 +1,43 @@
+use crate::{rp, rpn, CommandLineError, KeyType};
+
+pub(crate) fn go(args: crate::Args) -> anyhow::Result<()> {
+    use KeyType::*;
+    match (args.key_type, &*args.key_name) {
+        (Tap, "1") => rp("xdotool click --repeat 10 --delay 100 1")?,
+        (Hold, "1") => rp("xdotool click --repeat 100 --delay 100 1")?,
+
+        (Tap, "2") => rp("xdotool click --repeat 10 --delay 100 3")?,
+        (Hold, "2") => rp("xdotool click --repeat 100 --delay 100 3")?,
+
+        (Tap, "3") => rpn("xdotool click --repeat 1000 --delay 200 1")?,
+        (Hold, "3") => rpn("xdotool click --repeat 1000 --delay 200 3")?,
+
+        (Tap, "4") => rpn("echo unbound")?,
+        (Hold, "4") => rpn("echo unbound")?,
+
+        (Tap, "5") => rpn("killall xdotool")?,
+        (Hold, "5") => rpn("alacritty -e /home/john/ts/dotfiles/macros/edit.fish")?,
+
+        (Tap, "z") => rpn("echo unbound")?,
+        (Hold, "z") => rpn("echo unbound")?,
+
+        (Tap, "x") => rpn("echo unbound")?,
+        (Hold, "x") => rpn("echo unbound")?,
+
+        (Tap, "c") => rpn("echo unbound")?,
+        (Hold, "c") => rpn("echo unbound")?,
+
+        (Tap, "space") => rp("oil sort")?,
+        (Hold, "space") => rp("oil reset_inv")?,
+
+        (kt, kn) => {
+            return Err(CommandLineError::InvalidKeyCombo {
+                kt,
+                kn: kn.to_string(),
+            }
+            .into())
+        }
+    };
+
+    Ok(())
+}

@@ -1,7 +1,13 @@
 if [ (uname) = "Linux" ]
     set -g fish_user_paths "/home/john/.local/bin" $fish_user_paths
+    set -g fish_user_paths "/opt/miniconda3/bin/" $fish_user_paths
     alias p="paru"
     set -x DISPLAY ":0"
+
+    # >>> conda initialize >>>
+    # !! Contents within this block are managed by 'conda init' !!
+    alias gconda='eval /opt/miniconda3/bin/conda "shell.fish" "hook" $argv | source'
+    # <<< conda initialize <<<
 end
 if [ (uname) = "Darwin" ]
     source ~/scripts/disco.fish
@@ -55,8 +61,8 @@ alias watchleaks="sudo tcpdump -n -i 1 '(not host ' (vpnip) 'and not net 192.168
 
 set fish_greeting
 
-set PATH "$HOME/bin:$PATH"
-set PATH "$HOME/.cargo/bin:$PATH"
+fish_add_path "$HOME/bin"
+fish_add_path "$HOME/.cargo/bin"
 fnm env | source
 set -x HOMEBREW_NO_AUTO_UPDATE 1
 set BAT_THEME "Solarized (dark)"
@@ -68,3 +74,4 @@ git config --global user.signingkey $SIGNING_KEY > /dev/null
 bind \u2022 'backward-kill-bigword'
 
 set -g fish_user_paths "/usr/local/sbin" $fish_user_paths
+
