@@ -1,4 +1,4 @@
-use std::process::Command;
+use std::{process::Command, time::Duration};
 
 use clap::{Parser, ValueEnum};
 
@@ -47,6 +47,11 @@ pub fn rpn(text: &str) -> anyhow::Result<()> {
 
     run_program_simple_no_send(&*format!("notify-send {}", stdout.trim()))?;
     Ok(())
+}
+
+pub fn rpn_wait(delay_ms: u64, text: &str) -> anyhow::Result<()> {
+    std::thread::sleep(Duration::from_millis(delay_ms));
+    rpn(text)
 }
 
 /// Short for "run program".
