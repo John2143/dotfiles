@@ -64,6 +64,9 @@ Plug 'APZelos/blamer.nvim'
 "Plug 'Shougo/neocomplete.vim'
 "Plug 'Shougo/deoplete.nvim', { 'do': ':UpdateRemotePlugins' }
 
+" Images in terminal?
+" Plug 'edluffy/hologram.nvim'
+
 Plug 'AndrewRadev/linediff.vim'
 Plug 'puremourning/vimspector'
 
