@@ -2,7 +2,9 @@ if [ (uname) = "Linux" ]
     set -g fish_user_paths "/home/john/.local/bin" $fish_user_paths
     set -g fish_user_paths "/opt/miniconda3/bin/" $fish_user_paths
     alias p="paru"
-    set -x DISPLAY ":0"
+    if [ $TMUX ]
+        set -x DISPLAY ":0"
+    end
 
     # >>> conda initialize >>>
     # !! Contents within this block are managed by 'conda init' !!
@@ -42,6 +44,8 @@ alias rfish="source ~/.config/fish/config.fish"
 alias ath="alacritty-themes"
 alias nn="nvm use node"
 
+set -x CARGO_UNSTABLE_SPARSE_REGISTRY "true"
+
 function d
     daily $argv | bash
 end
@@ -63,6 +67,7 @@ set fish_greeting
 
 fish_add_path "$HOME/bin"
 fish_add_path "$HOME/.cargo/bin"
+
 fnm env | source
 set -x HOMEBREW_NO_AUTO_UPDATE 1
 set BAT_THEME "Solarized (dark)"
