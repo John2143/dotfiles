@@ -114,3 +114,5 @@ export NVM_DIR="$HOME/.nvm"
 [ -f ~/.fzf.bash ] && source ~/.fzf.bash
 
 complete -C /usr/local/bin/vault vault
+
+source /Users/jschmidt/.docker/init-bash.sh || true # Added by Docker Desktop

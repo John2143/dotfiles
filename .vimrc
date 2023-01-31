@@ -1,3 +1,4 @@
+" https://devhints.io/tabular
 set nocompatible              " be iMproved, required
 
 let nvimlsp = 1
