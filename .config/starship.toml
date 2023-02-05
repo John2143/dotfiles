@@ -24,7 +24,6 @@ truncate_to_repo = false
 fish_style_pwd_dir_length = 2
 style = "green"
 
-
 [git_branch]
 format = '[$symbol$branch(:$remote_branch)]($style) '
 style = 'purple'
@@ -36,6 +35,7 @@ style = 'purple'
 
 [git_status]
 style = 'purple'
+stashed = ''
 
 [hostname]
 ssh_only = false
