@@ -16,6 +16,7 @@ if [ (uname) = "Darwin" ]
     alias updatednode="npm i -g nyc rollup yarn neovim typescript pyright typescript-language-server"
     fish_add_path /opt/homebrew/bin/
     fish_add_path /opt/homebrew/sbin/
+    source /Users/jschmidt/.docker/init-fish.sh || true # Added by Docker Desktop
 end
 
 alias recent="git for-each-ref --color='always' --sort=committerdate refs/heads --format='%(HEAD)%(color:yellow)%(refname:short)|%(color:bold green)%(committerdate:relative)|%(color:magenta)%(authorname)%(color:reset)'|column -ts'|'"
@@ -40,6 +41,7 @@ alias rallytags="ctags --fields=+l --languages=python --python-kinds=-iv -R -f .
 alias launchdla="rally asset -e UAT --anon launch --job-name 'DLA Context Creator' --init-data "
 
 alias efish="vim ~/.config/fish/config.fish ; rfish"
+alias eprompt="vim ~/.config/starship.toml"
 alias rfish="source ~/.config/fish/config.fish"
 alias ath="alacritty-themes"
 alias nn="nvm use node"
@@ -80,5 +82,6 @@ bind \u2022 'backward-kill-bigword'
 
 set -g fish_user_paths "/usr/local/sbin" $fish_user_paths
 
-
-source /Users/jschmidt/.docker/init-fish.sh || true # Added by Docker Desktop
+if [ (uname) = "Linux" ]
+    starship init fish | source
+end

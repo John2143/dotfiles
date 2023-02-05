@@ -42,6 +42,7 @@ linkConfig i3status
 linkConfig fish
 linkConfig nvim
 linkConfig alacritty
+linkConfig starship.toml
 
 buildRust daily
 buildRust awsctx

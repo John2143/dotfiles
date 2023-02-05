@@ -1,0 +1,62 @@
+"$schema" = 'https://starship.rs/config-schema.json'
+format = """
+$shell\
+$username$hostname\
+$directory\
+$git_branch$git_commit$git_state$git_status\
+$python\
+$status$cmd_duration\
+$line_break\
+$character
+"""
+
+#add_newline = true
+
+# Replace the '❯' symbol in the prompt with '➜'
+[character] # The name of the module we are configuring is 'character'
+success_symbol = '[\$](bold green)' # The 'success_symbol' segment is being set to '➜' with the color 'bold green'
+error_symbol = '[\$](bold red)' # The 'success_symbol' segment is being set to '➜' with the color 'bold green'
+vimcmd_symbol = '[\$](bold white bg:#ff1493)' 
+
+[directory]
+truncation_length = 3
+truncate_to_repo = false
+fish_style_pwd_dir_length = 2
+style = "green"
+
+
+[git_branch]
+format = '[$symbol$branch(:$remote_branch)]($style) '
+style = 'purple'
+ignore_branches = []
+
+[git_commit]
+format = '[#$hash$tag]($style) '
+style = 'purple'
+
+[git_status]
+style = 'purple'
+
+[hostname]
+ssh_only = false
+format = '[@](fg:#666666)[$hostname](bold white) '
+trim_at = ''
+
+[status]
+disabled = false
+
+[username]
+style_user = 'bold white'
+format = '[$user]($style)'
+show_always = true
+
+[python]
+format = '([🐍$virtualenv]($style))'
+
+[shell]
+disabled = true
+fish_indicator = ''
+format = '[$indicator ]($style)'
+
+[cmd_duration]
+min_time = 5000
