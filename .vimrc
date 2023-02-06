@@ -74,6 +74,8 @@ Plug 'puremourning/vimspector'
 " :Tab
 Plug 'godlygeek/tabular'
 
+Plug 'ctrlpvim/ctrlp.vim'
+
 " cast on crit
 if !nvimlsp
     " Plug 'neoclide/coc.nvim', {'branch': 'release'}

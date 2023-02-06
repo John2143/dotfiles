@@ -1,7 +1,7 @@
 [user]
 	email = john@john2143.com
 	name = John Schmidt
-	signingkey = 283D2B816C3C63C2
+	signingkey = 1C273BC2D939E6E4
 [push]
 	default = upstream
 [color]
@@ -38,7 +38,7 @@
 
 	dh = diff HEAD
 
-	ignore = update-index --assume-unchanged
+	ignore = !nvim .git/info/exclude
 	unignore = update-index --no-assume-unchanged
 	ignored = !git ls-files -v | grep "^[[:lower:]]"
 
