@@ -1,11 +1,12 @@
+# https://starship.rs/config
 "$schema" = 'https://starship.rs/config-schema.json'
 format = """
-$shell\
+$shell$time\
 $username$hostname\
 $directory\
 $git_branch$git_commit$git_state$git_status\
 $python\
-$status$cmd_duration\
+$status$cmd_duration$jobs\
 $line_break\
 $character
 """
@@ -28,9 +29,12 @@ style = "green"
 format = '[$symbol$branch(:$remote_branch)]($style) '
 style = 'purple'
 ignore_branches = []
+#symbol = ' '
+symbol = ''
 
 [git_commit]
-format = '[#$hash$tag]($style) '
+format = '[#$hash$tag]($style) '
+tag_symbol = ''
 style = 'purple'
 
 [git_status]
@@ -59,4 +63,13 @@ fish_indicator = ''
 format = '[$indicator ]($style)'
 
 [cmd_duration]
+format = '[$duration]($style) '
 min_time = 5000
+
+[jobs]
+number_threshold = 1
+
+[time]
+disabled = false
+style = "fg:#777777"
+format = '[$time]($style) '

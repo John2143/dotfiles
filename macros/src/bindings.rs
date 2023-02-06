@@ -12,7 +12,7 @@ pub(crate) fn go(args: crate::Args) -> anyhow::Result<()> {
         (Tap, "3") => rpn_wait(1000, "xdotool click --repeat 1000 --delay 200 1")?,
         (Hold, "3") => rpn("xdotool click --repeat 1000 --delay 200 3")?,
 
-        (Tap, "4") => rpn("echo asdfasdf")?,
+        (Tap, "4") => rpn("xset dpms force off")?,
         (Hold, "4") => rpn("echo unbound")?,
 
         (Tap, "5") => rpn("killall xdotool")?,
