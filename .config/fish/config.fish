@@ -82,6 +82,4 @@ bind \u2022 'backward-kill-bigword'
 
 set -g fish_user_paths "/usr/local/sbin" $fish_user_paths
 
-if [ (uname) = "Linux" ]
-    starship init fish | source
-end
+starship init fish | source
