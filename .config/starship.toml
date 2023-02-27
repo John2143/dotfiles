@@ -47,6 +47,7 @@ format = '[@](fg:#666666)[$hostname](bold white) '
 trim_at = ''
 
 [status]
+format = '[$status](bold red) '
 disabled = false
 
 [username]
@@ -55,7 +56,8 @@ format = '[$user]($style)'
 show_always = true
 
 [python]
-format = '([🐍$virtualenv]($style))'
+format = '([🐍](yellow)[$virtualenv]($style) )'
+style = "cyan"
 
 [shell]
 disabled = true

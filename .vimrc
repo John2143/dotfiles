@@ -1,4 +1,18 @@
+" I have a key to open my vimrc, so i put notes at the top for me to remember
+" rare commands
 " https://devhints.io/tabular
+"
+" tpope/vim-abolish:
+"     snake_case (crs),
+"     camelCase (crc),
+"     UPPER_CASE (cru),
+"
+"     MixedCase (crm),
+"     dash-case (cr-),
+"     dot.case (cr.),
+"     space case (cr<space>),
+"     Title Case (crt).
+"
 set nocompatible              " be iMproved, required
 
 let nvimlsp = 1
@@ -36,6 +50,7 @@ Plug 'easymotion/vim-easymotion'
 " niche things I use once a year
 Plug 'tpope/vim-surround'
 Plug 'tpope/vim-fugitive'
+Plug 'tpope/vim-abolish'
 " useful for a work specific setup (metadata files + source files)
 Plug 'derekwyatt/vim-fswitch'
 " <leader>c<Space> is the only thing I know about this but it sure does work
@@ -113,6 +128,7 @@ if nvimlsp
     Plug 'stephpy/vim-yaml'
     Plug 'rust-lang/rust.vim'
     Plug 'rhysd/vim-clang-format'
+    Plug 'mfussenegger/nvim-jdtls' "java
     "Plug 'fatih/vim-go'
     Plug 'plasticboy/vim-markdown'
     Plug 'nvim-lua/lsp-status.nvim'
@@ -237,6 +253,7 @@ lua << END
                 },
             },
         },
+        root_dir = lspconfig.util.root_pattern('src'),
         capabilities = capabilities,
     }
 
@@ -253,6 +270,13 @@ lua << END
             debounce_text_changes = 150,
         },
         root_dir = lspconfig.util.find_git_ancestor,
+        capabilities = capabilities,
+    }
+    lspconfig.jdtls.setup{
+        on_attach = on_attach,
+        flags = {
+            debounce_text_changes = 150,
+        },
         capabilities = capabilities,
     }
 

@@ -116,3 +116,5 @@ export NVM_DIR="$HOME/.nvm"
 complete -C /usr/local/bin/vault vault
 
 eval "$(starship init bash)"
+
+source /Users/jschmidt/.docker/init-bash.sh || true # Added by Docker Desktop

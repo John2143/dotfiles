@@ -10,14 +10,22 @@ if [ (uname) = "Linux" ]
     # !! Contents within this block are managed by 'conda init' !!
     alias gconda='eval /opt/miniconda3/bin/conda "shell.fish" "hook" $argv | source'
     # <<< conda initialize <<<
+    set -x EMAIL_NAME "john"
+    set -x EMAIL_DOMAIN "john2143.com"
 end
 if [ (uname) = "Darwin" ]
     source ~/scripts/disco.fish
     alias updatednode="npm i -g nyc rollup yarn neovim typescript pyright typescript-language-server"
     fish_add_path /opt/homebrew/bin/
     fish_add_path /opt/homebrew/sbin/
+    fish_add_path /opt/homebrew/opt/openjdk/bin
+    fish_add_path /Users/jschmidt/Downloads/jdt-language-server-1.20.0-202302161915/bin/
     source /Users/jschmidt/.docker/init-fish.sh || true # Added by Docker Desktop
+    set -x EMAIL_NAME "john_schmidt"
+    set -x EMAIL_DOMAIN "discovery.com"
 end
+
+set -x EMAIL "$EMAIL_NAME@$EMAIL_DOMAIN"
 
 alias recent="git for-each-ref --color='always' --sort=committerdate refs/heads --format='%(HEAD)%(color:yellow)%(refname:short)|%(color:bold green)%(committerdate:relative)|%(color:magenta)%(authorname)%(color:reset)'|column -ts'|'"
 alias recenta="git for-each-ref --color='always' --sort=committerdate --format='%(HEAD)%(color:yellow)%(refname:short)|%(color:bold green)%(committerdate:relative)|%(color:magenta)%(authorname)%(color:reset)'|column -ts'|'"
@@ -74,9 +82,10 @@ fnm env | source
 set -x HOMEBREW_NO_AUTO_UPDATE 1
 set BAT_THEME "Solarized (dark)"
 
-set SIGNING_KEY (gpg --list-secret-keys --keyid-format long | grep john@john2143 -B 3 | grep sec | string split "/" | tail -n 1 | string match -r '[0-9A-F]+')
+set SIGNING_KEY (gpg --list-secret-keys --keyid-format long | grep $EMAIL -B 3 | grep sec | string split "/" | tail -n 1 | string match -r '[0-9A-F]+')
 
 git config --global user.signingkey $SIGNING_KEY > /dev/null
+git config --global user.email $EMAIL > /dev/null
 
 bind \u2022 'backward-kill-bigword'
 
