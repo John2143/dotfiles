@@ -2,4 +2,6 @@ Dev/*
 Makefile
 vimfiles/*
 .dropbox*
-.config/nvim/plugged/
+.config/fish/fish_history
+.config/fish/fishd.*
+.config/fish/fish_variables
