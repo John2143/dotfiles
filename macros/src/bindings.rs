@@ -18,11 +18,11 @@ pub(crate) fn go(args: crate::Args) -> anyhow::Result<()> {
         (Tap, "5") => rpn("killall xdotool")?,
         (Hold, "5") => rpn("alacritty -e /home/john/ts/dotfiles/macros/edit.fish")?,
 
-        (Tap, "z") => rpn("echo unbound")?,
-        (Hold, "z") => rpn("echo unbound")?,
+        (Tap, "z") => rpn("audio Schii")?,
+        (Hold, "z") => rpn("audio Qude")?,
 
-        (Tap, "x") => rpn("echo unbound")?,
-        (Hold, "x") => rpn("echo unbound")?,
+        (Tap, "x") => rpn("redshift -x")?,
+        (Hold, "x") => rpn("redshift -P -O 4000")?,
 
         (Tap, "c") => rpn_wait(1000, "oil sort")?,
         (Hold, "c") => rpn_wait(1000, "oil sort 600")?,
