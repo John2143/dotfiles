@@ -82,7 +82,7 @@ fnm env | source
 set -x HOMEBREW_NO_AUTO_UPDATE 1
 set BAT_THEME "Solarized (dark)"
 
-set SIGNING_KEY (gpg --list-secret-keys --keyid-format long | grep $EMAIL -B 3 | grep sec | string split "/" | tail -n 1 | string match -r '[0-9A-F]+')
+set -x SIGNING_KEY (gpg --list-secret-keys --keyid-format long | grep $EMAIL -B 3 | grep "(work|github)" -B 3 | grep sec | string split "/" | tail -n 1 | string match -r '[0-9A-F]+')
 
 git config --global user.signingkey $SIGNING_KEY > /dev/null
 git config --global user.email $EMAIL > /dev/null
