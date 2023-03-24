@@ -29,8 +29,8 @@ set -x EMAIL "$EMAIL_NAME@$EMAIL_DOMAIN"
 
 alias recent="git for-each-ref --color='always' --sort=committerdate refs/heads --format='%(HEAD)%(color:yellow)%(refname:short)|%(color:bold green)%(committerdate:relative)|%(color:magenta)%(authorname)%(color:reset)'|column -ts'|'"
 alias recenta="git for-each-ref --color='always' --sort=committerdate --format='%(HEAD)%(color:yellow)%(refname:short)|%(color:bold green)%(committerdate:relative)|%(color:magenta)%(authorname)%(color:reset)'|column -ts'|'"
-alias gb="git checkout (recent | nl | sort -nr | cut -f 2- | fzf --ansi | cut -d \" \" -f 2)"
-alias gba="git checkout (recenta | nl | sort -nr | cut -f 2- | fzf --ansi | cut -d \" \" -f 2 | tr '/' '\n' | tail -n 1)"
+alias gb="git checkout (recent | sort -nr | cut -f 2- | fzf --ansi | cut -d \" \" -f 2)"
+alias gba="git checkout (recenta | sort -nr | cut -f 2- | fzf --ansi | cut -d \" \" -f 2 | tr '/' '\n' | tail -n 1)"
 
 export EDITOR="nvim"
 
@@ -53,6 +53,9 @@ alias eprompt="vim ~/.config/starship.toml"
 alias rfish="source ~/.config/fish/config.fish"
 alias ath="alacritty-themes"
 alias nn="nvm use node"
+
+alias a8=". ./venv/bin/activate.fish"
+alias ctx="awsctx -g | ."
 
 set -x CARGO_UNSTABLE_SPARSE_REGISTRY "true"
 
@@ -92,3 +95,5 @@ bind \u2022 'backward-kill-bigword'
 set -g fish_user_paths "/usr/local/sbin" $fish_user_paths
 
 starship init fish | source
+
+source /Users/jschmidt/.docker/init-fish.sh || true # Added by Docker Desktop

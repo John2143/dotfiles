@@ -497,7 +497,7 @@ noremap <c-L> <c-w>l
 noremap <c-H> <c-w>h
 
 nnoremap <leader>g :Buf<cr>
-nnoremap <leader>b :GFiles<cr>
+nnoremap <leader>b :Files<cr>
 
 noremap <silent> H :nohl<cr>:redraw<cr>
 
@@ -537,6 +537,10 @@ nmap <Leader>qh <Plug>VimspectorStepOut
 nmap <Leader>ql <Plug>VimspectorStepInto
 nmap <Leader>qj <Plug>VimspectorStepOver
 
+nmap <Leader>di <Plug>VimspectorBalloonEval
+" for visual mode, the visually selected text
+xmap <Leader>di <Plug>VimspectorBalloonEval
+
 let g:vim_json_syntax_conceal = 0
 
 let g:syntastic_always_populate_loc_list = 1
@@ -544,10 +548,12 @@ let g:syntastic_auto_loc_list = 1
 let g:syntastic_check_on_open = 1
 let g:syntastic_check_on_wq = 0
 
-let g:rustfmt_autosave = 1
+let g:rustfmt_autosave = 0
 if has('mac')
     let g:rust_clip_command = "pbcopy"
 endif
+
+let NERDTreeShowHidden=1
 
 " ==========================================================================
 " Status Line
@@ -733,9 +739,8 @@ nnoremap <leader><leader>Q :%!node ~/node-rally-tools/util/addMIOSupport.js<cr>
 nnoremap <leader><leader>N :%!node ~/node-rally-tools/util/addDynamicNext.js<cr>
 command! -bang -nargs=* SFiles
   \ call fzf#vim#grep(
-  \   'git diff staging...HEAD --name-only', 0,
-  \   fzf#vim#with_preview({'dir': systemlist('git rev-parse --show-toplevel')[0]}), <bang>0)
-
+  \   'git diff staging...HEAD --name-only ', 0,
+  \   fzf#vim#with_preview(), 0)
 
 function! Rallydiff(extra)
     let file = system("rally preset diff --only-new --file '" . bufname("%") . "' --raw " . a:extra)
