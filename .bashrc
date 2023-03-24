@@ -117,4 +117,5 @@ complete -C /usr/local/bin/vault vault
 
 eval "$(starship init bash)"
 
-source /Users/jschmidt/.docker/init-bash.sh || true # Added by Docker Desktop
+. "$HOME/.cargo/env"
+echo "yep"

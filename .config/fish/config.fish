@@ -1,4 +1,6 @@
-if [ (uname) = "Linux" ]
+set -x EMAIL_NAME "john"
+set -x EMAIL_DOMAIN "john2143.com"
+if [ (uname) = "Linux2" ]
     set -g fish_user_paths "/home/john/.local/bin" $fish_user_paths
     set -g fish_user_paths "/opt/miniconda3/bin/" $fish_user_paths
     alias p="paru"
@@ -10,12 +12,9 @@ if [ (uname) = "Linux" ]
     # !! Contents within this block are managed by 'conda init' !!
     alias gconda='eval /opt/miniconda3/bin/conda "shell.fish" "hook" $argv | source'
     # <<< conda initialize <<<
-    set -x EMAIL_NAME "john"
-    set -x EMAIL_DOMAIN "john2143.com"
 end
 if [ (uname) = "Darwin" ]
     source ~/scripts/disco.fish
-    alias updatednode="npm i -g nyc rollup yarn neovim typescript pyright typescript-language-server"
     fish_add_path /opt/homebrew/bin/
     fish_add_path /opt/homebrew/sbin/
     fish_add_path /opt/homebrew/opt/openjdk/bin
@@ -26,6 +25,7 @@ if [ (uname) = "Darwin" ]
 end
 
 set -x EMAIL "$EMAIL_NAME@$EMAIL_DOMAIN"
+alias updatednode="npm i -g nyc rollup yarn neovim typescript pyright typescript-language-server"
 
 alias recent="git for-each-ref --color='always' --sort=committerdate refs/heads --format='%(HEAD)%(color:yellow)%(refname:short)|%(color:bold green)%(committerdate:relative)|%(color:magenta)%(authorname)%(color:reset)'|column -ts'|'"
 alias recenta="git for-each-ref --color='always' --sort=committerdate --format='%(HEAD)%(color:yellow)%(refname:short)|%(color:bold green)%(committerdate:relative)|%(color:magenta)%(authorname)%(color:reset)'|column -ts'|'"
@@ -95,5 +95,3 @@ bind \u2022 'backward-kill-bigword'
 set -g fish_user_paths "/usr/local/sbin" $fish_user_paths
 
 starship init fish | source
-
-source /Users/jschmidt/.docker/init-fish.sh || true # Added by Docker Desktop
