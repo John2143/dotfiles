@@ -80,6 +80,8 @@ Plug 'APZelos/blamer.nvim'
 "Plug 'Shougo/neocomplete.vim'
 "Plug 'Shougo/deoplete.nvim', { 'do': ':UpdateRemotePlugins' }
 
+Plug 'mihaifm/bufstop'
+
 " Images in terminal?
 " Plug 'edluffy/hologram.nvim'
 
@@ -496,7 +498,7 @@ noremap <c-K> <c-w>k
 noremap <c-L> <c-w>l
 noremap <c-H> <c-w>h
 
-nnoremap <leader>g :Buf<cr>
+nnoremap <leader>g :Bufstop<cr>
 nnoremap <leader>b :Files<cr>
 
 noremap <silent> H :nohl<cr>:redraw<cr>
@@ -518,6 +520,8 @@ vnoremap <Leader>s :sort<CR>
 " search with Rg for selected text
 vnoremap <leader>x "ay:Rg a<cr>
 vnoremap <leader>X "ay:Tags a<cr>
+
+nnoremap gb :Bufstop<cr>
 
 vnoremap < <gv
 vnoremap > >gv

@@ -1,5 +1,5 @@
 [user]
-	email = john@john2143.com
+	email = john_schmidt@discovery.com
 	name = John Schmidt
 	signingkey = 948048F965CC2765
 [push]
@@ -49,3 +49,5 @@
 	host = github.discovery.com
 [pull]
 	ff = only
+[merge]
+	tool = nvimdiff
