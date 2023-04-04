@@ -112,6 +112,7 @@ Plug 'sainnhe/sonokai'
 Plug 'sainnhe/gruvbox-material'
 Plug 'chriskempson/base16-vim'
 Plug 'lifepillar/vim-gruvbox8'
+Plug 'folke/tokyonight.nvim', { 'branch': 'main' }
 
 if nvimlsp
     " Semantic language support
@@ -135,6 +136,8 @@ if nvimlsp
     Plug 'plasticboy/vim-markdown'
     Plug 'nvim-lua/lsp-status.nvim'
 endif
+
+Plug 'https://git.sr.ht/~whynothugo/lsp_lines.nvim'
 
 call plug#end()
 
@@ -281,6 +284,13 @@ lua << END
         },
         capabilities = capabilities,
     }
+    lspconfig.ccls.setup{
+        on_attach = on_attach,
+        flags = {
+            debounce_text_changes = 150,
+        },
+        capabilities = capabilities,
+    }
 
     vim.lsp.handlers["textDocument/publishDiagnostics"] = vim.lsp.with(
       vim.lsp.diagnostic.on_publish_diagnostics, {
@@ -289,6 +299,12 @@ lua << END
         update_in_insert = true,
       }
     )
+
+    require("lsp_lines").setup()
+
+    vim.diagnostic.config({
+        virtual_text = false,
+    })
 END
 
 endif

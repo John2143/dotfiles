@@ -1,6 +1,6 @@
 set -x EMAIL_NAME "john"
 set -x EMAIL_DOMAIN "john2143.com"
-if [ (uname) = "Linux2" ]
+if [ (uname) = "Linux" ]
     set -g fish_user_paths "/home/john/.local/bin" $fish_user_paths
     set -g fish_user_paths "/opt/miniconda3/bin/" $fish_user_paths
     alias p="paru"
