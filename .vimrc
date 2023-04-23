@@ -135,6 +135,10 @@ if nvimlsp
     "Plug 'fatih/vim-go'
     Plug 'plasticboy/vim-markdown'
     Plug 'nvim-lua/lsp-status.nvim'
+
+    Plug 'nvim-lua/plenary.nvim'
+    Plug 'jose-elias-alvarez/null-ls.nvim'
+    Plug 'saecki/crates.nvim', { 'tag': 'v0.3.0' }
 endif
 
 Plug 'https://git.sr.ht/~whynothugo/lsp_lines.nvim'
@@ -182,6 +186,8 @@ lua << END
         { name = 'nvim_lsp' },
       }, {
         { name = 'path' },
+      }, {
+        { name = 'crates' },
       }),
       experimental = {
         ghost_text = true,
@@ -256,6 +262,9 @@ lua << END
                         enable = false,
                     },
                 },
+                diagnostics = {
+                    disabled = { "unresolved-proc-macro" },
+                },
             },
         },
         root_dir = lspconfig.util.root_pattern('src'),
@@ -289,6 +298,7 @@ lua << END
         flags = {
             debounce_text_changes = 150,
         },
+        root_dir = lspconfig.util.find_git_ancestor,
         capabilities = capabilities,
     }
 
@@ -301,13 +311,23 @@ lua << END
     )
 
     require("lsp_lines").setup()
+    require("crates").setup()
 
     vim.diagnostic.config({
         virtual_text = false,
     })
+
+    vim.keymap.set(
+        "",
+        "<Leader>rg",
+        require("lsp_lines").toggle,
+        { desc = "Toggle lsp_lines" }
+    )
 END
 
 endif
+
+nnoremap <silent> <leader>cA :lua require('crates').upgrade_all_crates()<cr>
 
 " save my problems for future me
 set hidden
@@ -723,8 +743,9 @@ endif
 " putting this at the top makes it break or something
 " ==========================================================================
 
-colo sonokai
+" colo sonokai
 " colo solarized
+colo tokyonight
 
 let g:solarized_termcolors=256
 let g:solarized_italic=0

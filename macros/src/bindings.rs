@@ -24,7 +24,7 @@ pub(crate) fn go(args: crate::Args) -> anyhow::Result<()> {
         (Tap, "x") => rpn("redshift -x")?,
         (Hold, "x") => rpn("redshift -P -O 4000")?,
 
-        (Tap, "c") => rpn_wait(1000, "oil sort")?,
+        (Tap, "c") => rpn_wait(1000, "oil sort 600")?,
         (Hold, "c") => rpn_wait(1000, "oil sort 600")?,
 
         (Tap, "space") => rp("oil empty")?,
