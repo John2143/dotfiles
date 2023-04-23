@@ -13,7 +13,7 @@ pub(crate) fn go(args: crate::Args) -> anyhow::Result<()> {
         (Hold, "3") => rpn("xdotool click --repeat 1000 --delay 200 3")?,
 
         (Tap, "4") => rpn("xset dpms force off")?,
-        (Hold, "4") => rpn("echo unbound")?,
+        (Hold, "4") => rpn("playerctl next")?,
 
         (Tap, "5") => rpn("killall xdotool")?,
         (Hold, "5") => rpn("alacritty -e /home/john/ts/dotfiles/macros/edit.fish")?,

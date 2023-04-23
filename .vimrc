@@ -82,6 +82,8 @@ Plug 'APZelos/blamer.nvim'
 
 Plug 'mihaifm/bufstop'
 
+Plug 'itchyny/lightline.vim'
+
 " Images in terminal?
 " Plug 'edluffy/hologram.nvim'
 
@@ -230,6 +232,7 @@ lua << END
       buf_set_keymap('n', ",q", "<cmd>lua vim.lsp.buf.formatting()<CR>", opts)
       buf_set_keymap('n', ',rz', '<cmd>lua vim.diagnostic.set_loclist()<CR>', opts)
 
+
       -- buf_set_keymap('n', '<C-k>', '<cmd>lua vim.lsp.buf.signature_help()<CR>', opts)
       -- buf_set_keymap('n', ',D', '<cmd>lua vim.lsp.buf.type_definition()<CR>', opts)
 
@@ -311,7 +314,28 @@ lua << END
     )
 
     require("lsp_lines").setup()
-    require("crates").setup()
+
+    local crates = require('crates')
+    vim.keymap.set('n', ',Ct', crates.toggle, opts)
+    vim.keymap.set('n', ',Cr', crates.reload, opts)
+
+    vim.keymap.set('n', ',Cv', crates.show_versions_popup, opts)
+    vim.keymap.set('n', ',Cf', crates.show_features_popup, opts)
+    vim.keymap.set('n', ',Cd', crates.show_dependencies_popup, opts)
+
+    vim.keymap.set('n', ',Cu', crates.update_crate, opts)
+    vim.keymap.set('v', ',Cu', crates.update_crates, opts)
+    vim.keymap.set('n', ',Ca', crates.update_all_crates, opts)
+    vim.keymap.set('n', ',CU', crates.upgrade_crate, opts)
+    vim.keymap.set('v', ',CU', crates.upgrade_crates, opts)
+    vim.keymap.set('n', ',CA', crates.upgrade_all_crates, opts)
+
+    vim.keymap.set('n', ',CH', crates.open_homepage, opts)
+    vim.keymap.set('n', ',CR', crates.open_repository, opts)
+    vim.keymap.set('n', ',CD', crates.open_documentation, opts)
+    vim.keymap.set('n', ',CC', crates.open_crates_io, opts)
+
+    crates.setup()
 
     vim.diagnostic.config({
         virtual_text = false,
@@ -326,8 +350,6 @@ lua << END
 END
 
 endif
-
-nnoremap <silent> <leader>cA :lua require('crates').upgrade_all_crates()<cr>
 
 " save my problems for future me
 set hidden
@@ -489,6 +511,7 @@ set list
 set autoindent
 " my statusline has stuff like filetype and line endings, so always display it
 set laststatus=2
+"set noshowmode
 " buffed backspace
 set bs=2
 
@@ -604,61 +627,27 @@ hi User3 guifg=#268b52                "HI1
 
 set splitright
 
-set statusline=
-set statusline+=%3*
-set statusline+=%.30f\ %y    "tail of the filename
-set statusline+=%*
+let g:lightline = {
+      \ 'colorscheme': 'wombat',
+      \ 'active': {
+      \   'left': [ [ 'mode', 'paste' ],
+      \             [ 'gitbranch', 'readonly', 'filename', 'stw', 'modified' ] ],
+      \   'right': [ [ 'lsp' ] ]
+      \ },
+      \ 'component_function': {
+      \   'gitbranch': 'FugitiveStatusline',
+      \   'stw': 'StatuslineTabWarning',
+      \   'lsp': 'LspStatus'
+      \ },
+      \ }
 
-"display a warning if fileformat isnt unix
-set statusline+=[%{&spelllang}                    "Language
+function! LightlineReadonly()
+  return &readonly && &filetype !=# 'help' ? 'RO' : ''
+endfunction
 
-set statusline+=%{',\ '.&ff.',\ '.&enc}
-set statusline+=%*
-set statusline+=]
-
-set statusline+=%h      "help file flag
-
-"read only flag
-set statusline+=%2*%m%h%h%*
-
-set statusline+=%{FugitiveStatusline()}
-
-"display a warning if &et is wrong, or we have mixed-indenting
-set statusline+=%1*
-set statusline+=%{StatuslineTabWarning()}
-set statusline+=%*
-
-if has("gui_running")
-  set statusline+=%#warningmsg#
-  set statusline+=%{SyntasticStatuslineFlag()}
-  set statusline+=%*
-endif
-
-"display a warning if &paste is set
-set statusline+=%#error#
-set statusline+=%{&paste?'[paste]':''}
-set statusline+=%*
-
-if !nvimlsp
-    set statusline+=%1*
-    set statusline+=%{coc#status()}%{get(b:,'coc_current_function','')}
-    set statusline+=%*
-endif
-
-" ==========================================================================
-set statusline+=%=      "left/right separator
-" ==========================================================================
-"
-if nvimlsp
-    set statusline+=%1*
-    set statusline+=%{LspStatus()}
-    set statusline+=%*
-endif
-
-set statusline+=[%b]
-set statusline+=\ %c,     "cursor column
-set statusline+=%l/%L   "cursor line/total lines
-set statusline+=\ %P    "percent through file
+function! LightlineLsp()
+  return LspStatus()
+endfunction
 
 " ==========================================================================
 " status line end
@@ -766,15 +755,15 @@ nnoremap <leader><leader>U :!rally preset upload --file "%" -e PROD --no-protec
 nnoremap <leader><leader>i :!rally preset upload --file "%" -e QA<cr>
 nnoremap <leader><leader>I :!rally preset upload --file "%" -e DEV<cr>
 "nnoremap <leader><leader>R :!rally preset upload --file "%" -e DEV<cr>
-nnoremap <leader>u :!rally supply make --file "%" --to UAT<cr>
-nnoremap <leader>i :!rally supply make --file "%" --to QA<cr>
-nnoremap <leader>U :!rally supply make --file "%" --to PROD --no-protect<cr>
-nnoremap <leader>I :!rally supply make --file "%" --to DEV<cr>
-nnoremap <leader>k :!rally preset info --file "%" --e UAT,PROD<cr>
-nnoremap <leader>d :call Rallydiff("")<cr>
-nnoremap <leader>D :call Rallydiff("-e PROD")<cr>
-nnoremap <leader>c :call Rallydiff("-e QA")<cr>
-nnoremap <leader>C :call Rallydiff("-e DEV")<cr>
+nnoremap <leader>ru :!rally supply make --file "%" --to UAT<cr>
+nnoremap <leader>ri :!rally supply make --file "%" --to QA<cr>
+nnoremap <leader>rU :!rally supply make --file "%" --to PROD --no-protect<cr>
+nnoremap <leader>rI :!rally supply make --file "%" --to DEV<cr>
+nnoremap <leader>rk :!rally preset info --file "%" --e UAT,PROD<cr>
+nnoremap <leader>rd :call Rallydiff("")<cr>
+nnoremap <leader>rD :call Rallydiff("-e PROD")<cr>
+nnoremap <leader>rc :call Rallydiff("-e QA")<cr>
+nnoremap <leader>rC :call Rallydiff("-e DEV")<cr>
 nnoremap D :diffoff<cr>
 nnoremap <leader><leader>Q :%!node ~/node-rally-tools/util/addMIOSupport.js<cr>
 nnoremap <leader><leader>N :%!node ~/node-rally-tools/util/addDynamicNext.js<cr>
