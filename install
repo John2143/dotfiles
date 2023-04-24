@@ -43,9 +43,13 @@ linkConfig fish
 linkConfig nvim
 linkConfig alacritty
 linkConfig starship.toml
+linkConfig binds.txt
 
 buildRust daily
 buildRust awsctx
+buildRust macros
+buildRust binder
+
 
 if [[ -s $ZSH ]]; then
     link .zshrc

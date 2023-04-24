@@ -53,6 +53,8 @@ alias eprompt="vim ~/.config/starship.toml"
 alias rfish="source ~/.config/fish/config.fish"
 alias ath="alacritty-themes"
 alias nn="nvm use node"
+alias ebinds="vim ~/.config/binds.txt ; rbinds"
+alias rbinds="binder | dconf load /org/cinnamon/desktop/keybindings/"
 
 alias a8=". ./venv/bin/activate.fish"
 alias ctx="awsctx -g | ."
