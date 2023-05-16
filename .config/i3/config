@@ -12,14 +12,21 @@
 floating_modifier Mod1
 
 # start a terminal
-bindsym Mod1+Return exec i3-sensible-terminal
+bindsym Mod4+Return exec alacritty
 
 # kill focused window
 bindsym Mod1+Shift+q kill
+bindsym Prior kill
+bindsym Next floating toggle
+
+bindsym Mod1+Shift+greater move workspace to output right
+bindsym Mod1+Shift+less move workspace to output left
 
 # start dmenu (a program launcher)
-bindsym Mod1+d exec dmenu_run
-bindsym Mod4+d exec dmenu_run
+bindsym Mod4+Space exec rofi -show drun
+bindsym Mod1+Tab exec rofi -show window
+bindsym Mod1+Shift+e move scratchpad
+bindsym Mod1+e scratchpad show
 # There also is the (new) i3-dmenu-desktop which only displays applications
 # shipping a .desktop file. It is a wrapper around dmenu, so you need that
 # installed.
@@ -59,15 +66,6 @@ bindsym Mod1+v split v
 bindsym Mod1+f fullscreen
 bindsym F4 fullscreen
 
-bindsym Mod1+F10       exec "~/.config/i3status/volume vol 2"
-bindsym      F10       exec "~/.config/i3status/volume vol 2"
-bindsym Mod1+F9        exec "~/.config/i3status/volume vol -2"
-bindsym      F9        exec "~/.config/i3status/volume vol -2"
-bindsym Mod1+Shift+F8  exec "~/.config/i3status/volume setvol 100"
-bindsym      Shift+F8  exec "~/.config/i3status/volume setvol 100"
-bindsym Mod1+F8        exec "~/.config/i3status/volume mute"
-bindsym      F8        exec "~/.config/i3status/volume mute"
-
 bindsym Mod1+F7  exec "sudo $HOME/.config/i3status/brightness intel_backlight 25"
 bindsym Mod1+F6  exec "sudo $HOME/.config/i3status/brightness intel_backlight -25"
 
@@ -89,19 +87,12 @@ bindsym Mod4+F3 exec "sp play"
 # change container layout (stacked, tabbed, toggle split)
 bindsym Mod1+s layout stacking
 bindsym Mod1+w layout tabbed
-bindsym Mod1+e layout toggle split
 
 # toggle tiling / floating
 bindsym Mod1+Shift+space floating toggle
 
 # change focus between tiling / floating windows
 bindsym Mod1+space focus mode_toggle
-
-# focus the parent container
-bindsym Mod1+a focus parent
-
-# focus the child container
-#bindsym Mod1+d focus child
 
 # move the currently focused window to the scratchpad
 bindsym Mod1+Shift+minus move scratchpad
@@ -135,11 +126,9 @@ bindsym Mod1+Shift+9 move container to workspace 9
 bindsym Mod1+Shift+0 move container to workspace 10
 
 # reload the configuration file
-bindsym Mod1+Shift+c reload
+bindsym Mod4+r reload
 # restart i3 inplace (preserves your layout/session, can be used to upgrade i3)
-bindsym Mod1+Shift+r restart
-# exit i3 (logs you out of your X session)
-bindsym Mod1+Shift+e exec "i3-nagbar -t warning -m 'You pressed the exit shortcut. Do you really want to exit i3? This will end your X session.' -b 'Yes, exit i3' 'i3-msg exit'"
+bindsym Mod4+Shift+r restart
 
 # resize window (you can also use the mouse for that)
 mode "resize" {
@@ -149,17 +138,10 @@ mode "resize" {
         # Pressing right will grow the window’s width.
         # Pressing up will shrink the window’s height.
         # Pressing down will grow the window’s height.
-        bindsym j           resize shrink width 10 px or 10 ppt
-        bindsym k           resize grow height 10 px or 10 ppt
-        bindsym l           resize shrink height 10 px or 10 ppt
-        bindsym semicolon   resize grow width 10 px or 10 ppt
-
-        # same bindings, but for the arrow keys
-        bindsym Left        resize shrink width 10 px or 10 ppt
-        bindsym Down        resize grow height 10 px or 10 ppt
-        bindsym Up          resize shrink height 10 px or 10 ppt
-        bindsym Right       resize grow width 10 px or 10 ppt
-
+        bindsym h resize shrink width 10 px or 10 ppt
+        bindsym k resize grow height 10 px or 10 ppt
+        bindsym j resize shrink height 10 px or 10 ppt
+        bindsym l resize grow width 10 px or 10 ppt
         # back to normal: Enter or Escape
         bindsym Return mode "default"
         bindsym Escape mode "default"
@@ -169,47 +151,72 @@ bindsym Mod1+r mode "resize"
 
 # Start i3bar to display a workspace bar (plus the system information i3status
 # finds out, if available)
-bar {
-    font pango:Ubuntu, Awesome 13
-    status_command i3blocks -c ~/.config/i3status/blocks.conf
+#bar {
+    #font pango:Ubuntu, Awesome 13
+    #status_command i3blocks -c ~/.config/i3status/blocks.conf
 
-    mode hide
-    modifier Mod1
+    #mode hide
+    #modifier Mod1
 
-    colors {
-        separator #268bd2
-        background #002b36
-        statusline #839496
-        focused_workspace #fdf6e3 #6c71c4 #fdf6e3
-        active_workspace #fdf6e3 #6c71c4 #fdf6e3
-        inactive_workspace #002b36 #586e75 #002b36
-        urgent_workspace #d33682 #d33682 #fdf6e3
-    }
-}
+    #colors {
+        #separator #268bd2
+        #background #002b36
+        #statusline #839496
+        #focused_workspace #fdf6e3 #6c71c4 #fdf6e3
+        #active_workspace #fdf6e3 #6c71c4 #fdf6e3
+        #inactive_workspace #002b36 #586e75 #002b36
+        #urgent_workspace #d33682 #d33682 #fdf6e3
+    #}
+#}
 
 client.focused #6c71c4 #6c71c4 #fdf6e3 #6c71c4
 client.focused_inactive #073642 #073642 #eee8d5 #6c71c4
 client.unfocused #073642 #073642 #93a1a1 #586e75
 client.urgent #d33682 #d33682 #fdf6e3 #dc322f
 
+focus_follows_mouse no
 
-#######################################################################
-# automatically start i3-config-wizard to offer the user to create a
-# keysym-based config which used his favorite modifier (alt or windows)
-#
-# i3-config-wizard will not launch if there already is a config file
-# in ~/.i3/config.
-#
-# Please remove the following exec line:
-#######################################################################
+default_border pixel 10
 
 new_float normal
 new_window none
 hide_edge_borders both
 
-bindsym Mod1+m exec xdotool mousemove_relative 10000 -10000
-bindsym Mod1+Mod4+l exec i3lock -i /home/john/mandel/cool/1514253926-mbrot-17-12-25_09-05-26PM.png
+#bindsym Mod1+m exec xdotool mousemove_relative 10000 -10000
+#bindsym Mod1+Mod4+l exec i3lock -i /home/john/mandel/cool/1514253926-mbrot-17-12-25_09-05-26PM.png
 # Apply background
-exec --no-startup-id /home/john/.fehbg
 # Allow for 3 finger taps
-exec synclient TapButton3=2
+
+gaps inner 5
+gaps outer 3
+
+exec --no-startup-id /home/john/.fehbg
+exec_always --no-startup-id killall polybar; true; sleep .1; polybar 1; polybar 2
+
+bindsym Mod4+Shift+4 exec --no-startup-id ~/bin/sts
+bindsym Ctrl+Shift+Escape exec alacritty -e bpytop
+bindsym Ctrl+grave exec alacritty
+bindsym Ctrl+Mod4+s exec sudo s2ram --force
+bindsym Ctrl+Mod1+l exec i3lock -c 000000
+bindsym Ctrl+Mod1+k exec sh /home/john/.xprofile
+bindsym Ctrl+Shift+Mod1+4 exec sts
+bindsym Mod1+Mod4+a exec macros 1
+bindsym Mod1+Mod4+b exec macros 1 -k hold
+bindsym Mod1+Mod4+c exec macros 2
+bindsym Mod1+Mod4+d exec macros 2 -k hold
+bindsym Mod1+Mod4+e exec macros 3
+bindsym Mod1+Mod4+f exec macros 3 -k hold
+bindsym Mod1+Mod4+g exec macros 4
+bindsym Mod1+Mod4+h exec macros 4 -k hold
+bindsym Mod1+Mod4+i exec macros 5
+bindsym Mod1+Mod4+j exec macros 5 -k hold
+bindsym Mod1+Mod4+o exec macros c
+bindsym Mod1+Mod4+p exec macros c -k hold
+bindsym Mod1+Mod4+1 exec macros space
+bindsym Mod1+Mod4+2 exec macros space -l hold
+bindsym Mod1+Mod4+m exec macros x
+bindsym Mod1+Mod4+n exec macros x -k hold
+bindsym Mod1+Mod4+k exec macros z
+bindsym Mod1+Mod4+l exec macros z -k hold
+#bindsym End exec oil empty
+bindsym Ctrl+Shift+asciitilde exec logout_macro.sh

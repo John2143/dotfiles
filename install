@@ -19,12 +19,18 @@ link(){
 linkConfig(){
     mkdir -p "$HOME/.config"
 
-    if [[ -e $HOME/.config/$1 ]]; then
-        mv $HOME/.config/$1 $HOME/.config/$1.old
-        echo "moved old config $1"
+    FILE="$HOME/.config/$1"
+    if [[ -e "$FILE" ]]; then
+        if [[ -L "$FILE" ]]; then
+            echo "Deleting symbolic link $FILE"
+            rm $FILE
+        else
+            cp -r "$FILE" "$FILE.old"
+            echo "moved old config $1: created $FILE.old"
+        fi
     fi
-    ln -s $DIR/.config/$1 $HOME/.config/$1
-    echo "Linked config $1"
+    ln -s $DIR/.config/$1 $FILE
+    echo "ln -s $DIR/.config/$1 $FILE"
 }
 
 buildRust(){
@@ -35,21 +41,26 @@ buildRust(){
 link .gitconfig
 link .tmux.conf
 link .vimrc
+link .xprofile
 
 linkConfig htop
 linkConfig i3
 linkConfig i3status
 linkConfig fish
 linkConfig nvim
+linkConfig picom
+linkConfig polybar
 linkConfig alacritty
 linkConfig starship.toml
-linkConfig binds.txt
+#linkConfig binds.txt
+linkConfig bspwm
+linkConfig sxhkd
+linkConfig dunst
 
 buildRust daily
 buildRust awsctx
 buildRust macros
 buildRust binder
-
 
 if [[ -s $ZSH ]]; then
     link .zshrc

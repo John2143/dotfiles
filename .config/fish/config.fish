@@ -12,6 +12,8 @@ if [ (uname) = "Linux" ]
     # !! Contents within this block are managed by 'conda init' !!
     alias gconda='eval /opt/miniconda3/bin/conda "shell.fish" "hook" $argv | source'
     # <<< conda initialize <<<
+    alias ea="fish -c \"cd ~/ts/dotfiles/.config/; vim .\""
+
 end
 if [ (uname) = "Darwin" ]
     source ~/scripts/disco.fish
@@ -22,6 +24,7 @@ if [ (uname) = "Darwin" ]
     source /Users/jschmidt/.docker/init-fish.sh || true # Added by Docker Desktop
     set -x EMAIL_NAME "john_schmidt"
     set -x EMAIL_DOMAIN "discovery.com"
+    alias ea="fish -c \"cd ~/dotfiles/.config/; vim .\""
 end
 
 set -x EMAIL "$EMAIL_NAME@$EMAIL_DOMAIN"
@@ -30,7 +33,7 @@ alias updatednode="npm i -g nyc rollup yarn neovim typescript pyright typescript
 alias recent="git for-each-ref --color='always' --sort=committerdate refs/heads --format='%(HEAD)%(color:yellow)%(refname:short)|%(color:bold green)%(committerdate:relative)|%(color:magenta)%(authorname)%(color:reset)'|column -ts'|'"
 alias recenta="git for-each-ref --color='always' --sort=committerdate --format='%(HEAD)%(color:yellow)%(refname:short)|%(color:bold green)%(committerdate:relative)|%(color:magenta)%(authorname)%(color:reset)'|column -ts'|'"
 alias gb="git checkout (recent | nl | sort -nr | cut -f 2- | fzf --ansi | cut -d \" \" -f 2)"
-alias gba="git checkout (recenta | nl | sort -nr | cut -f 2- | fzf --ansi | cut -d \" \" -f 2 | tr '/' '\n' | tail -n 1)"
+alias gba="git checkout (recenta | nl | sort -nr | cut -f 2- | fzf --ansi | cut -d \" \" -f 2 | sed -e \"s/origin\\///g\")"
 
 export EDITOR="nvim"
 
@@ -53,8 +56,9 @@ alias eprompt="vim ~/.config/starship.toml"
 alias rfish="source ~/.config/fish/config.fish"
 alias ath="alacritty-themes"
 alias nn="nvm use node"
-alias ebinds="vim ~/.config/binds.txt ; rbinds"
-alias rbinds="binder | dconf load /org/cinnamon/desktop/keybindings/"
+alias ebinds="vim ~/.config/sxhkd/sxhkdrc; rbinds"
+alias rbinds="pkill -USR1 -x sxhkd"
+alias rbg="feh --bg-scale ~/Downloads/*FullRes.png"
 
 alias a8=". ./venv/bin/activate.fish"
 alias ctx="awsctx -g | ."

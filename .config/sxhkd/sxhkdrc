@@ -1,0 +1,62 @@
+super + space
+	rofi -show drun
+super + alt + space
+    thunar
+super + Return
+    alacritty
+alt + Tab
+    rofi -show window
+super + r
+    pkill -USR1 -x sxhkd
+super + alt + r
+    bspc wm -r
+ctrl + w
+    bspc node -c
+Prior
+    bspc node -c
+super + ctrl + {m,x,y,z}
+	bspc node -g {marked,locked,sticky,private}
+super + {d,shift + t,s,f}
+	bspc node -t {tiled,pseudo_tiled,floating,fullscreen}
+super + alt + {a,c,e,g,i,o,1,m,z}
+    macros {1,2,3,4,5,c,space,x,z}
+super + alt + {b,d,f,h,j,p,2,n,l}
+    macros {1,2,3,4,5,c,space,x,z} -k hold
+ctrl + shift + 4
+    sts
+ctrl + alt + shift + 4
+    sts
+super + a
+    bash -c "id=$(bspc query --nodes --node);bspc node --to-desktop next; bspc desktop --focus next; bspc node --focus ${id}"
+ctrl + alt + k
+    fish -c "notify-send (sh /home/john/.xprofile)"
+super + bracket{left,right}
+	bspc desktop -f {prev,next}
+
+super + ctrl + {h,j,k,l}
+	bspc node -p {west,south,north,east}
+
+super + ctrl + {w,a,s,d}
+	bspc node -p {north,west,south,east}
+
+super + ctrl + {1-9}
+	bspc node -o 0.{1-9}
+
+super + ctrl + Escape
+	bspc node -p cancel
+
+super + ctrl + {b,g}
+	bspc node first_ancestor {-B,-E}
+
+super + p
+	playerctl play-pause
+
+super + i
+	playerctl next
+
+super + u
+	playerctl previous
+
+super + {_,shift + }{1-5}
+	bspc desktop -f {A, B}{1-5}
+

@@ -1,5 +1,11 @@
 use crate::{rp, rpn, rpn_wait, CommandLineError, KeyType};
 
+fn brightness(rest: &str) -> anyhow::Result<()>{
+    rpn("redshift -x")?;
+    rpn(&format!("redshift -P {rest}"))?;
+    Ok(())
+}
+
 pub(crate) fn go(args: crate::Args) -> anyhow::Result<()> {
     use KeyType::*;
     match (args.key_type, &*args.key_name) {
@@ -18,11 +24,11 @@ pub(crate) fn go(args: crate::Args) -> anyhow::Result<()> {
         (Tap, "5") => rpn("killall xdotool")?,
         (Hold, "5") => rpn("alacritty -e /home/john/ts/dotfiles/macros/edit.fish")?,
 
-        (Tap, "z") => rpn("audio Schii")?,
-        (Hold, "z") => rpn("audio Qude")?,
+        (Tap, "x") => brightness("-b 0.5 -O 6500")?,
+        (Hold, "x") => brightness("-b 0.5 -O 4500")?,
 
-        (Tap, "x") => rpn("redshift -x")?,
-        (Hold, "x") => rpn("redshift -P -O 4000")?,
+        (Tap, "z") => brightness("")?,
+        (Hold, "z") => brightness("-O 4500")?,
 
         (Tap, "c") => rpn_wait(1000, "oil sort 600")?,
         (Hold, "c") => rpn_wait(1000, "oil sort 600")?,
