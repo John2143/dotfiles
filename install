@@ -43,19 +43,9 @@ link .tmux.conf
 link .vimrc
 link .xprofile
 
-linkConfig htop
-linkConfig i3
-linkConfig i3status
-linkConfig fish
-linkConfig nvim
-linkConfig picom
-linkConfig polybar
-linkConfig alacritty
-linkConfig starship.toml
-#linkConfig binds.txt
-linkConfig bspwm
-linkConfig sxhkd
-linkConfig dunst
+for file in "./.config/"/*; do
+    linkConfig $(basename "$file")
+done
 
 buildRust daily
 buildRust awsctx

@@ -1,13 +1,17 @@
 super + space
-	rofi -show drun
+	fish -c "rofi -show drun > ~/drun_logs/(date)"
+ctrl + super + space
+	fish -c "rofi -show run > ~/drun_logs/(date)"
 super + alt + space
     thunar
 super + Return
+    alacritty -e tmux
+ctrl + super + Return
     alacritty
 alt + Tab
     rofi -show window
 super + r
-    pkill -USR1 -x sxhkd
+    fish -c "killall sxhkd || true; killall dunst || true; fish -c 'sxhkd' &; dunstify reloaded binds"
 super + alt + r
     bspc wm -r
 ctrl + w
@@ -32,6 +36,9 @@ ctrl + alt + k
     fish -c "notify-send (sh /home/john/.xprofile)"
 super + bracket{left,right}
 	bspc desktop -f {prev,next}
+
+super + ctrl + shift + 0
+    fish /mnt/d/bfdl/run.fish
 
 super + ctrl + {h,j,k,l}
 	bspc node -p {west,south,north,east}
@@ -60,3 +67,23 @@ super + u
 super + {_,shift + }{1-5}
 	bspc desktop -f {A, B}{1-5}
 
+XF86AudioRaiseVolume
+    pactl set-sink-volume @DEFAULT_SINK@ +5%
+
+XF86AudioLowerVolume
+    pactl set-sink-volume @DEFAULT_SINK@ -5%
+
+XF86AudioMute
+    pactl set-sink-mute @DEFAULT_SINK@ toggle
+
+XF86AudioPlay
+    playerctl play-pause
+
+XF86AudioNext
+    playerctl next
+
+XF86AudioPrev
+    playerctl previous
+
+XF86AudioStop
+    playerctl stop
