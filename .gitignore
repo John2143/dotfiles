@@ -5,3 +5,7 @@ vimfiles/*
 .config/fish/fish_history
 .config/fish/fishd.*
 .config/fish/fish_variables
+
+.DS_Store
+*/.DS_Store
+.config/**/*.bak
