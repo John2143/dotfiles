@@ -76,6 +76,8 @@ alias tmux_daily="daily \
     ONRAMP_WORKFLOW_PYTHON:OWR:n \
     node-rally-tools:rt:cd \
     rally-congere:congere:cd \
+    cjarvis-api:cj-api:cd \
+    unified-qc-ui:cj-ui:n \
     :vault:n \
 | tail -n +2"
 
