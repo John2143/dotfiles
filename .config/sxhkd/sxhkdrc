@@ -16,8 +16,6 @@ super + alt + r
     bspc wm -r
 ctrl + w
     bspc node -c
-Prior
-    bspc node -c
 super + ctrl + {m,x,y,z}
 	bspc node -g {marked,locked,sticky,private}
 super + {d,shift + t,s,f}
