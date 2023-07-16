@@ -1,6 +1,8 @@
 " I have a key to open my vimrc, so i put notes at the top for me to remember
 " rare commands
 " https://devhints.io/tabular
+" :Tab /|
+" :Tab /=
 "
 " tpope/vim-abolish:
 "     snake_case (crs),
@@ -139,7 +141,7 @@ if nvimlsp
     Plug 'rhysd/vim-clang-format'
     Plug 'mfussenegger/nvim-jdtls' "java
     "Plug 'fatih/vim-go'
-    Plug 'plasticboy/vim-markdown'
+    "Plug 'plasticboy/vim-markdown'
     Plug 'nvim-lua/lsp-status.nvim'
 
     Plug 'nvim-lua/plenary.nvim'
