@@ -20,10 +20,12 @@ super + ctrl + {m,x,y,z}
 	bspc node -g {marked,locked,sticky,private}
 super + {d,shift + t,s,f}
 	bspc node -t {tiled,pseudo_tiled,floating,fullscreen}
-super + alt + {a,c,e,g,i,o,1,m,z}
+
+super + ctrl + alt + {a,c,e,g,i,o,1,m,k}
     macros {1,2,3,4,5,c,space,x,z}
-super + alt + {b,d,f,h,j,p,2,n,l}
+super + ctrl + alt + {b,d,f,h,j,p,2,n,l}
     macros {1,2,3,4,5,c,space,x,z} -k hold
+
 ctrl + shift + 4
     sts
 ctrl + alt + shift + 4
@@ -36,7 +38,7 @@ super + bracket{left,right}
 	bspc desktop -f {prev,next}
 
 super + ctrl + shift + 0
-    fish /mnt/d/bfdl/run.fish
+    fish /mnt/d/bfdl/run.fish > /dev/null
 
 super + ctrl + {h,j,k,l}
 	bspc node -p {west,south,north,east}
@@ -70,9 +72,18 @@ XF86AudioRaiseVolume
 
 XF86AudioLowerVolume
     pactl set-sink-volume @DEFAULT_SINK@ -5%
-
 XF86AudioMute
     pactl set-sink-mute @DEFAULT_SINK@ toggle
+
+shift + XF86AudioRaiseVolume
+    fish -c "wpctl set-volume (wpctl status | grep -B 1 Schiit | grep TeamSpeak3 | choose 0 | math) 5%+"
+shift + XF86AudioLowerVolume
+    fish -c "wpctl set-volume (wpctl status | grep -B 1 Schiit | grep TeamSpeak3 | choose 0 | math) 5%-"
+
+ctrl + XF86AudioRaiseVolume
+    fish -c "wpctl set-volume (wpctl status | grep -B 1 Schiit | grep spotify | head -n 1 | choose 0 | math) 5%+"
+ctrl + XF86AudioLowerVolume
+    fish -c "wpctl set-volume (wpctl status | grep -B 1 Schiit | grep spotify | head -n 1 | choose 0 | math) 5%-"
 
 XF86AudioPlay
     playerctl play-pause
@@ -85,3 +96,16 @@ XF86AudioPrev
 
 XF86AudioStop
     playerctl stop
+
+super + v
+    killall minicom
+
+ctrl + alt + l
+    fish -c "i3lock -c 000000; sleep 1; xset dpms force off;"
+
+super + z
+    ~/.config/sxhkd/monocle.fish
+super + x
+    bspc node -f prev.local
+super + c
+    bspc node -f next.local

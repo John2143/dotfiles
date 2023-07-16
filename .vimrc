@@ -271,9 +271,9 @@ lua << END
                         enable = false,
                     },
                 },
-                -- diagnostics = {
-                    -- disabled = { "unresolved-proc-macro" },
-                -- },
+                diagnostics = {
+                    disabled = { "unresolved-proc-macro" },
+                },
             },
         },
         root_dir = lspconfig.util.root_pattern('src'),
@@ -576,7 +576,7 @@ vnoremap <leader>s :call SpellToggle()<cr>
 " inline hints
 noremap <leader>rr :CocCommand rust-analyzer.toggleInlayHints<CR>
 noremap <leader>rb :BlamerToggle<CR>
-noremap <leader>rn :RainbowToggle<CR>
+noremap <leader>rm :RainbowToggle<CR>
 
 noremap <Leader>n <esc>:tabprevious<CR>
 noremap <Leader>m <esc>:b#<CR>
