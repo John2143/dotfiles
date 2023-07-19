@@ -30,6 +30,8 @@ ctrl + shift + 4
     sts
 ctrl + alt + shift + 4
     sts
+ctrl + shift + 5
+    fish -c "scrot -z -f -s -e 'xclip -selection clipboard -t image/png -i $f'; dunstify 'Copied screenshot to clipboard'"
 super + a
     bash -c "id=$(bspc query --nodes --node);bspc node --to-desktop next; bspc desktop --focus next; bspc node --focus ${id}"
 ctrl + alt + k
@@ -74,6 +76,8 @@ XF86AudioLowerVolume
     pactl set-sink-volume @DEFAULT_SINK@ -5%
 XF86AudioMute
     pactl set-sink-mute @DEFAULT_SINK@ toggle
+F12
+    ~/.config/polybar/scripts/sinks.fish toggle
 
 shift + XF86AudioRaiseVolume
     fish -c "wpctl set-volume (wpctl status | grep -B 1 Schiit | grep TeamSpeak3 | choose 0 | math) 5%+"

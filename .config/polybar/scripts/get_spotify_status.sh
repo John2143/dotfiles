@@ -17,6 +17,7 @@ PLAYER="spotify"
 
 # Sends $2 as message to all polybar PIDs that are part of $1
 update_hooks() {
+  return #TODO: This was cuasing errors, all it does is update if it is paused
   while IFS= read -r id; do
     polybar-msg -p "$id" hook spotify-play-pause $2 1>/dev/null 2>&1
   done < <(echo "$1")

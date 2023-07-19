@@ -24,11 +24,11 @@ pub(crate) fn go(args: crate::Args) -> anyhow::Result<()> {
         (Tap, "5") => rpn("killall xdotool")?,
         (Hold, "5") => rpn("alacritty -e /home/john/ts/dotfiles/macros/edit.fish")?,
 
-        (Tap, "x") => brightness("-b 0.5 -O 6500")?,
-        (Hold, "x") => brightness("-b 0.5 -O 4500")?,
+        (Tap, "x") => brightness("-O 2500")?,
+        (Hold, "x") => brightness("-O 2000")?,
 
         (Tap, "z") => brightness("")?,
-        (Hold, "z") => brightness("-O 4500")?,
+        (Hold, "z") => brightness("-O 3500")?,
 
         (Tap, "c") => rpn_wait(1000, "oil sort 600")?,
         (Hold, "c") => rpn_wait(1000, "oil sort 600")?,

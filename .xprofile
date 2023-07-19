@@ -1,9 +1,10 @@
 #!/bin/bash
-xrandr --output DP-4 --mode 1920x1080 --rate 144.0
-xrandr --output DP-0 --mode 2560x1440 --rate 239.96 --right-of DP-4 --primary
+xrandr --output DP-4 --mode 2560x1440 --rate 144.0 --primary
+xrandr --output DP-0 --mode 2560x1440 --rate 144.0 --right-of DP-4
 xrandr --output DP-2 --off
 setxkbmap -option "ctrl:nocaps"
 dbus-update-activation-environment --systemd DBUS_SESSION_BUS_ADDRESS DISPLAY XAUTHORITY
+kdeconnect-cli --refresh
 
 killall polybar
 killall sxhkd
@@ -34,10 +35,15 @@ bspc config gapless_monocle      false
 #bspc rule -a ulauncher focus=on
 #bspc rule -a sxiv state=floating center=true
 bspc rule -a polybar border=off manage=off
-bspc rule -a Steam floating=on follow=no
+bspc rule -a steam floating=on follow=no desktop='steam'
+bspc rule -a steamwebhelper floating=on follow=no desktop='steam'
+bspc rule -a Spotify desktop='spotify'
+bspc rule -a discord desktop='disc'
+bspc rule -a obsidian desktop='obsidian'
+bspc rule -a "TeamSpeak 3" desktop='ts'
 
-bspc monitor DP-0 -d A1 A2 A3 A4 A5 A6 A7 A8 A9
-bspc monitor DP-4 -d B1 B2 B3 B4 B5 B6 B7 B8 B9
+bspc monitor DP-4 -d A1 A2 A3 A4 A5 A6 A7 A8 A9
+bspc monitor DP-0 -d B1 B2 B3 B4 B5 B6 B7 ts spotify disc steam obsidian
 
 sleep 1
 sudo systemctl restart dnscrypt-proxy

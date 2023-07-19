@@ -14,6 +14,9 @@ if [ (uname) = "Linux" ]
     # <<< conda initialize <<<
     alias ea="fish -c \"cd ~/ts/dotfiles/.config/; vim .\""
 
+
+    alias pbcopy="xclip -sel clip"
+    alias pbpaste="xclip -sel clip -o"
 end
 if [ (uname) = "Darwin" ]
     source ~/scripts/disco.fish
