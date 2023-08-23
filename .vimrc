@@ -97,6 +97,9 @@ Plug 'godlygeek/tabular'
 
 Plug 'ctrlpvim/ctrlp.vim'
 
+Plug 'christoomey/vim-tmux-navigator'
+Plug 'nvim-tree/nvim-tree.lua'
+
 " cast on crit
 if !nvimlsp
     " Plug 'neoclide/coc.nvim', {'branch': 'release'}
@@ -353,6 +356,47 @@ lua << END
         require("lsp_lines").toggle,
         { desc = "Toggle lsp_lines" }
     )
+
+    vim.g.loaded_netrw = 1
+    vim.g.loaded_netrwPlugin = 1
+
+    -- set termguicolors to enable highlight groups
+    vim.opt.termguicolors = true
+
+      -- empty setup using defaults
+    require("nvim-tree").setup()
+
+    local function my_on_attach(bufnr)
+        local api = require "nvim-tree.api"
+
+        local function opts(desc)
+            return { desc = "nvim-tree: " .. desc, buffer = bufnr, noremap = true, silent = true, nowait = true }
+        end
+
+        -- default mappings
+        api.config.mappings.default_on_attach(bufnr)
+
+        -- custom mappings
+        vim.keymap.set('n', '<C-t>', api.tree.change_root_to_parent,        opts('Up'))
+        vim.keymap.set('n', '?',     api.tree.toggle_help,                  opts('Help'))
+    end
+
+    -- OR setup with some options
+    require("nvim-tree").setup({
+        -- sort = {
+            -- sorter = "case_sensitive",
+        -- },
+        view = {
+            width = 30,
+        },
+        renderer = {
+            group_empty = false,
+        },
+        filters = {
+            dotfiles = true,
+        },
+        on_attach = my_on_attach,
+    })
 END
 
 endif
@@ -578,7 +622,7 @@ noremap <leader>rr :CocCommand rust-analyzer.toggleInlayHints<CR>
 noremap <leader>rb :BlamerToggle<CR>
 noremap <leader>rm :RainbowToggle<CR>
 
-noremap <Leader>n <esc>:tabprevious<CR>
+noremap <Leader>n <esc>:NvimTreeToggle<CR>
 noremap <Leader>m <esc>:b#<CR>
 
 vnoremap <Leader>s :sort<CR>
@@ -599,8 +643,10 @@ nnoremap <Leader>qq :call vimspector#Launch()<CR>
 nnoremap <Leader>qe :call vimspector#Reset()<CR>
 nnoremap <Leader>qc :call vimspector#Continue()<CR>
 
+nnoremap <Leader>qb :call vimspector#ListBreakpoints()<CR>
 nnoremap <Leader>qt :call vimspector#ToggleBreakpoint()<CR>
 nnoremap <Leader>qT :call vimspector#ClearBreakpoints()<CR>
+nnoremap <leader>qy <Plug>VimspectorToggleConditionalBreakpoint
 
 nmap <Leader>qr <Plug>VimspectorRestart
 nmap <Leader>qh <Plug>VimspectorStepOut
@@ -793,7 +839,7 @@ function! TSInstallAllF()
   endfor
 endfunction
 
-command TSInstallAll :call TSInstallAllF()
+command! TSInstallAll :call TSInstallAllF()
 
 " treesitter lua setup
 lua <<EOF

@@ -1,7 +1,7 @@
 [user]
-	email = john@john2143.com
+	email = john_schmidt@discovery.com
 	name = John Schmidt
-	signingkey = D60C10ADAEFAF3D8
+	signingkey = 4D20411A5145D9F7
 [push]
 	default = upstream
 [color]

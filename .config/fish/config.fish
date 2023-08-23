@@ -28,6 +28,8 @@ if [ (uname) = "Darwin" ]
     set -x EMAIL_NAME "john_schmidt"
     set -x EMAIL_DOMAIN "discovery.com"
     alias ea="fish -c \"cd ~/dotfiles/.config/; vim .\""
+    alias lll="~/scripts/launch.fish; exit"
+    alias ptt="pytest -m quick -n 5"
 end
 
 set -x EMAIL "$EMAIL_NAME@$EMAIL_DOMAIN"
@@ -96,7 +98,7 @@ fnm env | source
 set -x HOMEBREW_NO_AUTO_UPDATE 1
 set BAT_THEME "Solarized (dark)"
 
-set -x SIGNING_KEY (gpg --list-secret-keys --keyid-format long | grep $EMAIL -B 3 | grep "(work|github)" -B 3 | grep sec | string split "/" | tail -n 1 | string match -r '[0-9A-F]+')
+set -x SIGNING_KEY (gpg --list-secret-keys --keyid-format long | grep $EMAIL -B 3 | grep "(work|github|disco)" -B 3 | grep sec | string split "/" | tail -n 1 | string match -r '[0-9A-F]+')
 
 git config --global user.signingkey $SIGNING_KEY > /dev/null
 git config --global user.email $EMAIL > /dev/null
