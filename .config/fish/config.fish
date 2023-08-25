@@ -17,6 +17,8 @@ if [ (uname) = "Linux" ]
 
     alias pbcopy="xclip -sel clip"
     alias pbpaste="xclip -sel clip -o"
+
+    alias cronerrors="sudo systemctl status cronie"
 end
 if [ (uname) = "Darwin" ]
     source ~/scripts/disco.fish

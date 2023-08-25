@@ -30,7 +30,7 @@ pub(crate) fn go(args: crate::Args) -> anyhow::Result<()> {
         (Tap, "z") => brightness("")?,
         (Hold, "z") => brightness("-O 3500")?,
 
-        (Tap, "c") => rpn_wait(1000, "oil sort 600")?,
+        (Tap, "c") => rpn_wait(1000, "oil sort 60")?,
         (Hold, "c") => rpn_wait(1000, "oil sort 600")?,
 
         (Tap, "space") => rp("oil empty")?,

@@ -1,10 +1,11 @@
 use std::str::FromStr;
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 enum WindowType {
     Normal,
     Compiler,
     CompilerDB,
+    Custom(String),
 }
 
 impl FromStr for WindowType {
@@ -14,6 +15,7 @@ impl FromStr for WindowType {
             "c" => Ok(Self::Compiler),
             "n" => Ok(Self::Normal),
             "cd" => Ok(Self::CompilerDB),
+            s if s.starts_with("cmd ") => Ok(Self::Custom(s.split_at(4).1.into())),
             _ => Err(()),
         }
     }
@@ -37,15 +39,20 @@ fn add_window(name: &str, window_name: &str, wtype: WindowType) -> TmuxScreen {
     commands.push(tm_run(&format!("nn")));
     commands.push(tm_run(&format!("cd ~/{name}")));
     commands.push(tm_run(&format!("clear")));
-    commands.push(tm_run(&format!("vim .")));
+    if let WindowType::Custom(cmd) = &wtype {
+        commands.push(tm_run(cmd));
+    }else{
+        commands.push(tm_run(&format!("vim .")));
 
-    commands.push(format!("tmux split-window -h"));
-    commands.push(tm_run(&format!("nn")));
-    commands.push(tm_run(&format!("cd ~/{name}")));
-    commands.push(tm_run(&format!("clear")));
+        commands.push(format!("tmux split-window -h"));
+        commands.push(tm_run(&format!("nn")));
+        commands.push(tm_run(&format!("cd ~/{name}")));
+        commands.push(tm_run(&format!("clear")));
+    }
+
 
     match wtype {
-        WindowType::Normal => {}
+        WindowType::Normal | WindowType::Custom(_) => {}
         WindowType::Compiler => {
             commands.push(format!("tmux split-window"));
             commands.push(tm_run(&format!("nn")));

@@ -11,10 +11,15 @@ ctrl + super + Return
 alt + Tab
     rofi -show window
 super + r
-    fish -c "killall sxhkd || true; killall dunst || true; fish -c 'sxhkd' &; dunstify reloaded binds"
+    fish -c "killall sxhkd || true; killall dunst || true; fish -c 'sxhkd' &; setxkbmap -option 'ctrl:nocaps'; dunstify reloaded binds;"
 super + alt + r
     bspc wm -r
-ctrl + w
+/*ctrl + w*/
+    /*bspc node -c*/
+End
+    oil empty
+
+alt + F4
     bspc node -c
 super + ctrl + {m,x,y,z}
 	bspc node -g {marked,locked,sticky,private}
@@ -27,11 +32,11 @@ super + ctrl + alt + {b,d,f,h,j,p,2,n,l}
     macros {1,2,3,4,5,c,space,x,z} -k hold
 
 ctrl + shift + 4
-    sts
+    sts juush
 ctrl + alt + shift + 4
-    sts
+    sts juush
 ctrl + shift + 5
-    fish -c "scrot -z -f -s -e 'xclip -selection clipboard -t image/png -i $f'; dunstify 'Copied screenshot to clipboard'"
+    sts cb
 super + a
     bash -c "id=$(bspc query --nodes --node);bspc node --to-desktop next; bspc desktop --focus next; bspc node --focus ${id}"
 ctrl + alt + k
