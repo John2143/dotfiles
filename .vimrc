@@ -17,8 +17,6 @@
 "
 set nocompatible              " be iMproved, required
 
-let nvimlsp = 1
-
 " use this if you use vim
 for key in ['<Up>', '<Down>', '<Left>', '<Right>']
     exec 'nnoremap' key '<Nop>'
@@ -91,20 +89,18 @@ Plug 'itchyny/lightline.vim'
 
 Plug 'AndrewRadev/linediff.vim'
 Plug 'puremourning/vimspector'
+Plug 'sagi-z/vimspectorpy', { 'do': { -> vimspectorpy#update() } }
 
 " :Tab
 Plug 'godlygeek/tabular'
 
 Plug 'ctrlpvim/ctrlp.vim'
 
+" allows ctrl hjkl to work between both vim and tmux (also install tmux plugin)
 Plug 'christoomey/vim-tmux-navigator'
-Plug 'nvim-tree/nvim-tree.lua'
 
-" cast on crit
-if !nvimlsp
-    " Plug 'neoclide/coc.nvim', {'branch': 'release'}
-    Plug 'neoclide/coc.nvim', {'branch': 'master', 'do': 'yarn install --frozen-lockfile'}
-endif
+" file explorer (:NvimTreeToggle)
+Plug 'nvim-tree/nvim-tree.lua'
 
 " fzf is very cool. Use a LOT of [:Files, :Buf, :Rg]
 if has("mac")
@@ -120,37 +116,36 @@ Plug 'sainnhe/gruvbox-material'
 Plug 'chriskempson/base16-vim'
 Plug 'lifepillar/vim-gruvbox8'
 Plug 'folke/tokyonight.nvim', { 'branch': 'main' }
+Plug 'catppuccin/nvim', { 'as': 'catppuccin' }
 
 " rainbow parens
 Plug 'luochen1990/rainbow'
 let g:rainbow_active = 1
 
-if nvimlsp
-    " Semantic language support
-    Plug 'neovim/nvim-lspconfig'
-    Plug 'nvim-lua/lsp_extensions.nvim'
-    Plug 'hrsh7th/cmp-nvim-lsp', {'branch': 'main'}
-    Plug 'hrsh7th/cmp-buffer', {'branch': 'main'}
-    Plug 'hrsh7th/cmp-path', {'branch': 'main'}
-    Plug 'hrsh7th/nvim-cmp', {'branch': 'main'}
-    Plug 'ray-x/lsp_signature.nvim'
-    " Only because nvim-cmp _requires_ snippets
-    Plug 'hrsh7th/cmp-vsnip', {'branch': 'main'}
-    Plug 'hrsh7th/vim-vsnip'
-    " Syntactic language support
-    Plug 'cespare/vim-toml', {'branch': 'main'}
-    Plug 'stephpy/vim-yaml'
-    Plug 'rust-lang/rust.vim'
-    Plug 'rhysd/vim-clang-format'
-    Plug 'mfussenegger/nvim-jdtls' "java
-    "Plug 'fatih/vim-go'
-    "Plug 'plasticboy/vim-markdown'
-    Plug 'nvim-lua/lsp-status.nvim'
+" Semantic language support
+Plug 'neovim/nvim-lspconfig'
+Plug 'nvim-lua/lsp_extensions.nvim'
+Plug 'hrsh7th/cmp-nvim-lsp', {'branch': 'main'}
+Plug 'hrsh7th/cmp-buffer', {'branch': 'main'}
+Plug 'hrsh7th/cmp-path', {'branch': 'main'}
+Plug 'hrsh7th/nvim-cmp', {'branch': 'main'}
+Plug 'ray-x/lsp_signature.nvim'
+" Only because nvim-cmp _requires_ snippets
+Plug 'hrsh7th/cmp-vsnip', {'branch': 'main'}
+Plug 'hrsh7th/vim-vsnip'
+" Syntactic language support
+Plug 'cespare/vim-toml', {'branch': 'main'}
+Plug 'stephpy/vim-yaml'
+Plug 'rust-lang/rust.vim'
+Plug 'rhysd/vim-clang-format'
+Plug 'mfussenegger/nvim-jdtls' "java
+"Plug 'fatih/vim-go'
+"Plug 'plasticboy/vim-markdown'
+Plug 'nvim-lua/lsp-status.nvim'
 
-    Plug 'nvim-lua/plenary.nvim'
-    Plug 'jose-elias-alvarez/null-ls.nvim'
-    Plug 'saecki/crates.nvim', { 'tag': 'v0.3.0' }
-endif
+Plug 'nvim-lua/plenary.nvim'
+Plug 'jose-elias-alvarez/null-ls.nvim'
+Plug 'saecki/crates.nvim', { 'tag': 'v0.3.0' }
 
 Plug 'https://git.sr.ht/~whynothugo/lsp_lines.nvim'
 
@@ -160,8 +155,6 @@ if executable('rg')
     set grepprg=rg\ --no-heading\ --vimgrep
     set grepformat=%f:%l:%c:%m
 endif
-
-if nvimlsp
 
 lua << END
     local cmp = require'cmp'
@@ -397,83 +390,57 @@ lua << END
         },
         on_attach = my_on_attach,
     })
+
+    require("catppuccin").setup({
+        flavour = "mocha", -- latte, frappe, macchiato, mocha
+        background = { -- :h background
+            light = "latte",
+            dark = "mocha",
+        },
+        transparent_background = false, -- disables setting the background color.
+        show_end_of_buffer = false, -- shows the '~' characters after the end of buffers
+        term_colors = false, -- sets terminal colors (e.g. `g:terminal_color_0`)
+        dim_inactive = {
+            enabled = false, -- dims the background color of inactive window
+            shade = "dark",
+            percentage = 0.15, -- percentage of the shade to apply to the inactive window
+        },
+        no_italic = false, -- Force no italic
+        no_bold = false, -- Force no bold
+        no_underline = false, -- Force no underline
+        styles = { -- Handles the styles of general hi groups (see `:h highlight-args`):
+            comments = { "italic" }, -- Change the style of comments
+            conditionals = { "italic" },
+            loops = {},
+            functions = {},
+            keywords = {},
+            strings = {},
+            variables = {},
+            numbers = {},
+            booleans = {},
+            properties = {},
+            types = {},
+            operators = {},
+        },
+        color_overrides = {},
+        custom_highlights = {},
+        integrations = {
+            -- (https://github.com/catppuccin/nvim#integrations)
+            cmp = true,
+            nvimtree = true,
+            treesitter = true,
+        },
+    })
+
+    require("nvim-treesitter.configs").setup({
+        highlight = {
+            enable = true,
+            additional_vim_regex_highlighting = false
+        },
+    })
+
+    vim.cmd.colorscheme "catppuccin"
 END
-
-endif
-
-" save my problems for future me
-set hidden
-
-" I think I wrote this in like 2010
-set pyxversion=3
-
-" ==========================================================================
-" coc block starts here
-"
-" this is mostly standard bindings with a bit of flavor
-" ==========================================================================
-
-if !nvimlsp
-
-    " if pop-up-menu then go to next selection else
-    inoremap <silent><expr> <TAB>
-          \ pumvisible() ? "\<C-n>" :
-          \ <SID>check_back_space() ? "\<TAB>" :
-          \ coc#refresh()
-    " if shift pressed and pop-up-menu then go to prev selection else un-indent
-    " NOTE: change this when they invent uppercase tab
-    inoremap <expr><S-TAB> pumvisible() ? "\<C-p>" : "\<C-h>"
-
-    function! s:check_back_space() abort
-      let col = col('.') - 1
-      return !col || getline('.')[col - 1]  =~# '\s'
-    endfunction
-
-    " Use <c-space> to trigger completion. I prefer tab but 1/1000 times I need this
-    inoremap <silent><expr> <c-space> coc#refresh()
-
-    " Use <cr> to confirm completion, `<C-g>u` means break undo chain at current
-    " position. Coc only does snippet and additional edit on confirm.
-    " <cr> could be remapped by other vim plugin, try `:verbose imap <CR>`.
-    if exists('*complete_info')
-      inoremap <expr> <cr> complete_info()["selected"] != "-1" ? "\<C-y>" : "\<C-g>u\<CR>"
-    else
-      inoremap <expr> <cr> pumvisible() ? "\<C-y>" : "\<C-g>u\<CR>"
-    endif
-
-    " Use `[g` and `]g` to navigate diagnostics
-    nmap <silent> [g <Plug>(coc-diagnostic-prev)
-    nmap <silent> ]g <Plug>(coc-diagnostic-next)
-
-    nmap <silent> gd <Plug>(coc-definition)
-    nmap <silent> gy <Plug>(coc-type-definition)
-    nmap <silent> gi <Plug>(coc-implementation)
-    nmap <silent> gr <Plug>(coc-references)
-
-    nnoremap <silent> K :call <SID>show_documentation()<CR>
-    vmap <leader>M  <Plug>(coc-format-selected)
-    nmap <leader>M  <Plug>(coc-format-selected)
-    function! s:show_documentation()
-      if (index(['vim','help'], &filetype) >= 0)
-        execute 'h '.expand('<cword>')
-      else
-        call CocAction('doHover')
-      endif
-    endfunction
-    autocmd CursorHold * silent call CocActionAsync('highlight')
-
-    nmap <leader>rn <Plug>(coc-rename)
-
-    " Remap for do codeAction of selected region
-    xmap <leader>y <Plug>(coc-codeaction-selected)
-    nmap <leader>y v<Plug>(coc-codeaction-selected)
-    vmap <leader>Y <Plug>(coc-range-select)
-
-endif
-
-" ==========================================================================
-" coc block end
-" ==========================================================================
 
 filetype plugin indent on    " required
 
@@ -506,6 +473,9 @@ set pastetoggle=<F2>
 " random vim settings tweaks
 " A lot of these are carryovers from vim, not sure if they all matter for nvim
 " ==========================================================================
+
+set hidden
+set pyxversion=3
 set backspace=indent,eol,start
 
 " make questions like 'whats on line 15' impossible to answer
@@ -787,7 +757,9 @@ endif
 
 " colo sonokai
 " colo solarized
-colo tokyonight
+" colo tokyonight
+" colorscheme catppuccin-mocha " catppuccin catppuccin-latte, catppuccin-frappe, catppuccin-macchiato, catppuccin-mocha
+" (handled in lua section now)
 
 let g:solarized_termcolors=256
 let g:solarized_italic=0

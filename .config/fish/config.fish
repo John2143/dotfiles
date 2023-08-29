@@ -26,6 +26,7 @@ if [ (uname) = "Darwin" ]
     fish_add_path /opt/homebrew/sbin/
     fish_add_path /opt/homebrew/opt/openjdk/bin
     fish_add_path /Users/jschmidt/Downloads/jdt-language-server-1.20.0-202302161915/bin/
+    fish_add_path ~/.docker/bin/
     source /Users/jschmidt/.docker/init-fish.sh || true # Added by Docker Desktop
     set -x EMAIL_NAME "john_schmidt"
     set -x EMAIL_DOMAIN "discovery.com"
