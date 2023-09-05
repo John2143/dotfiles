@@ -18,3 +18,4 @@ bspc config gapless_monocle      false
 # bspc rule -a polybar border=off manage=off
 bspc rule -a Steam state=floating
 sh ~/.xprofile
+fish ~/.config/startup.fish

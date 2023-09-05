@@ -21,7 +21,7 @@ pub(crate) fn go(args: crate::Args) -> anyhow::Result<()> {
         (Tap, "4") => rpn("xset dpms force off")?,
         (Hold, "4") => rpn("playerctl next")?,
 
-        (Tap, "5") => rpn("killall xdotool")?,
+        (Tap, "5") => rpn("killall xdotool || true ; killall little_oil || true")?,
         (Hold, "5") => rpn("alacritty -e /home/john/ts/dotfiles/macros/edit.fish")?,
 
         (Tap, "x") => brightness("-O 2500")?,

@@ -5,7 +5,7 @@ ctrl + super + space
 super + alt + space
     thunar
 super + Return
-    alacritty -e tmux
+    alacritty -e "tmux attach"
 ctrl + super + Return
     alacritty
 alt + Tab
@@ -74,6 +74,13 @@ super + u
 super + {_,shift + }{1-5}
 	bspc desktop -f {A, B}{1-5}
 
+super + shift + q
+	bspc desktop -f ts
+super + shift + w
+	bspc desktop -f disc
+super + shift + e
+	bspc desktop -f obsidian
+
 XF86AudioRaiseVolume
     pactl set-sink-volume @DEFAULT_SINK@ +5%
 
@@ -105,6 +112,9 @@ XF86AudioPrev
 
 XF86AudioStop
     playerctl stop
+
+XF86HomePage
+    fish -c "i3lock -c 000000; sleep 1; xset dpms force off;"
 
 super + v
     killall minicom
