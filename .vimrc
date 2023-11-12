@@ -139,6 +139,15 @@ Plug 'stephpy/vim-yaml'
 Plug 'rust-lang/rust.vim'
 Plug 'rhysd/vim-clang-format'
 Plug 'mfussenegger/nvim-jdtls' "java
+if has("mac")
+    Plug 'tpope/vim-dispatch'
+    Plug 'Shougo/vimproc.vim', {'do' : 'make'}
+    Plug 'OmniSharp/omnisharp-vim' " c#
+    let g:OmniSharp_selector_ui = 'fzf'
+    let g:OmniSharp_server_stdio = 1
+    let g:OmniSharp_popup = 0
+    "let g:OmniSharp_server_path = 
+endif
 "Plug 'fatih/vim-go'
 "Plug 'plasticboy/vim-markdown'
 Plug 'nvim-lua/lsp-status.nvim'
@@ -440,6 +449,34 @@ lua << END
     })
 
     vim.cmd.colorscheme "catppuccin"
+
+    -- Command to toggle inline diagnostics
+    vim.api.nvim_create_user_command(
+      'DiagnosticsToggleVirtualText',
+      function()
+        local current_value = vim.diagnostic.config().virtual_text
+        if current_value then
+          vim.diagnostic.config({virtual_text = false})
+        else
+          vim.diagnostic.config({virtual_text = true})
+        end
+      end,
+      {}
+    )
+
+    -- Command to toggle diagnostics
+    vim.api.nvim_create_user_command(
+      'DiagnosticsToggle',
+      function()
+        local current_value = vim.diagnostic.is_disabled()
+        if current_value then
+          vim.diagnostic.enable()
+        else
+          vim.diagnostic.disable()
+        end
+      end,
+      {}
+    )
 END
 
 filetype plugin indent on    " required

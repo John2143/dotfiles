@@ -111,3 +111,5 @@ bind \u2022 'backward-kill-bigword'
 set -g fish_user_paths "/usr/local/sbin" $fish_user_paths
 
 starship init fish | source
+
+[ -f ~/.inshellisense/key-bindings.fish ] && source ~/.inshellisense/key-bindings.fish
