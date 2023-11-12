@@ -1,8 +1,10 @@
 " I have a key to open my vimrc, so i put notes at the top for me to remember
+" crates
 " rare commands
 " https://devhints.io/tabular
 " :Tab /|
 " :Tab /=
+"
 "
 " tpope/vim-abolish:
 "     snake_case (crs),
@@ -100,7 +102,7 @@ Plug 'ctrlpvim/ctrlp.vim'
 Plug 'christoomey/vim-tmux-navigator'
 
 " file explorer (:NvimTreeToggle)
-Plug 'nvim-tree/nvim-tree.lua'
+"Plug 'nvim-tree/nvim-tree.lua'
 
 " fzf is very cool. Use a LOT of [:Files, :Buf, :Rg]
 if has("mac")
@@ -156,7 +158,7 @@ Plug 'nvim-lua/plenary.nvim'
 Plug 'jose-elias-alvarez/null-ls.nvim'
 Plug 'saecki/crates.nvim', { 'tag': 'v0.3.0' }
 
-Plug 'https://git.sr.ht/~whynothugo/lsp_lines.nvim'
+"Plug 'https://git.sr.ht/~whynothugo/lsp_lines.nvim'
 
 call plug#end()
 
@@ -324,7 +326,7 @@ lua << END
       }
     )
 
-    require("lsp_lines").setup()
+    -- require("lsp_lines").setup()
 
     local crates = require('crates')
     vim.keymap.set('n', ',Ct', crates.toggle, opts)
@@ -352,12 +354,12 @@ lua << END
         virtual_text = false,
     })
 
-    vim.keymap.set(
-        "",
-        "<Leader>rg",
-        require("lsp_lines").toggle,
-        { desc = "Toggle lsp_lines" }
-    )
+    -- vim.keymap.set(
+    --     "",
+    --     "<Leader>rg",
+    --     require("lsp_lines").toggle,
+    --     { desc = "Toggle lsp_lines" }
+    -- )
 
     vim.g.loaded_netrw = 1
     vim.g.loaded_netrwPlugin = 1
@@ -366,8 +368,9 @@ lua << END
     vim.opt.termguicolors = true
 
       -- empty setup using defaults
-    require("nvim-tree").setup()
+    -- require("nvim-tree").setup()
 
+    --[[
     local function my_on_attach(bufnr)
         local api = require "nvim-tree.api"
 
@@ -399,6 +402,8 @@ lua << END
         },
         on_attach = my_on_attach,
     })
+
+    --]]
 
     require("catppuccin").setup({
         flavour = "mocha", -- latte, frappe, macchiato, mocha

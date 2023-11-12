@@ -16,8 +16,8 @@ super + alt + r
     bspc wm -r
 /*ctrl + w*/
     /*bspc node -c*/
-End
-    oil empty
+/*End*/
+    /*oil empty*/
 
 alt + F4
     bspc node -c
