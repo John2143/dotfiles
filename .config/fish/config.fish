@@ -3,7 +3,8 @@ set -x EMAIL_DOMAIN "john2143.com"
 if [ (uname) = "Linux" ]
     set -g fish_user_paths "/home/john/.local/bin" $fish_user_paths
     set -g fish_user_paths "/opt/miniconda3/bin/" $fish_user_paths
-    alias p="paru"
+    alias pp="paru"
+    alias p="sudo pacman -Syu"
     if [ $TMUX ]
         set -x DISPLAY ":0"
     end
@@ -13,6 +14,7 @@ if [ (uname) = "Linux" ]
     alias gconda='eval /opt/miniconda3/bin/conda "shell.fish" "hook" $argv | source'
     # <<< conda initialize <<<
     alias ea="fish -c \"cd ~/ts/dotfiles/.config/; vim .\""
+    alias ea2="fish -c \"cd ~/dotfiles/.config/; vim .\""
 
 
     alias pbcopy="xclip -sel clip"
@@ -101,7 +103,7 @@ fnm env | source
 set -x HOMEBREW_NO_AUTO_UPDATE 1
 set BAT_THEME "Solarized (dark)"
 
-set -x SIGNING_KEY (gpg --list-secret-keys --keyid-format long | grep $EMAIL -B 3 | grep "(work|github|disco)" -B 3 | grep sec | string split "/" | tail -n 1 | string match -r '[0-9A-F]+')
+set -x SIGNING_KEY (gpg --list-secret-keys --keyid-format long | grep $EMAIL -B 3 | grep "(work|github|disco|1E7452EAEE)" -B 3 | grep sec | string split "/" | tail -n 1 | string match -r '[0-9A-F]+')
 
 git config --global user.signingkey $SIGNING_KEY > /dev/null
 git config --global user.email $EMAIL > /dev/null

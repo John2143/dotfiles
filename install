@@ -42,6 +42,7 @@ link .gitconfig
 link .tmux.conf
 link .vimrc
 link .xprofile
+link .xprofile.fish
 
 for file in "./.config/"/*; do
     linkConfig $(basename "$file")

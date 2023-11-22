@@ -5,7 +5,7 @@ ctrl + super + space
 super + alt + space
     thunar
 super + Return
-    alacritty -e "tmux attach"
+    alacritty
 ctrl + super + Return
     alacritty
 alt + Tab
