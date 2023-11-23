@@ -7,6 +7,9 @@ if test "$HOST" = "downstairs"
     sudo ip addr add 192.168.1.9/24 dev enp6s0
     sudo ip ro add 192.168.1.1 dev enp6s0
     sudo ip ro add 0.0.0.0/0 via 192.168.1.1
+
+    killall spotifyd || true
+    spotifyd -p $SPOTIFY_PASSWORD -u $SPOTIFY_USERNAME --device-name downstairs --device-type computer --bitrate 320 --backend pulseaudio &
 else # arch
     xrandr --output DP-4 --mode 2560x1440 --rate 144.0 --primary
     xrandr --output DP-0 --mode 2560x1440 --rate 144.0 --right-of DP-4
@@ -74,3 +77,4 @@ if test "$HOST" = "arch"
 end
 
 notify-send "Desktop ready"
+
