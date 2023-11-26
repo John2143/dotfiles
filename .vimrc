@@ -629,6 +629,8 @@ vnoremap <leader>l :call NumberToggle()<cr>
 nnoremap <leader>s :call SpellToggle()<cr>
 vnoremap <leader>s :call SpellToggle()<cr>
 
+cmap w!! w !sudo tee > /dev/null %
+
 " inline hints
 noremap <leader>rr :CocCommand rust-analyzer.toggleInlayHints<CR>
 noremap <leader>rb :BlamerToggle<CR>
