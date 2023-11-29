@@ -2,7 +2,11 @@
 set HOST (cat /etc/hostname)
 
 if test "$HOST" = "downstairs"
-    xrandr --output HDMI-A-0 --mode 1920x1080 --rate 60 --primary
+    xrandr --output DisplayPort-1 --mode 2560x1440 --rate 239.97 --primary
+    xrandr --output DisplayPort-0 --mode 1920x1080 --rate 144.00 --right-of DisplayPort-1
+    xrandr --output HDMI-A-0 --off
+    xrandr --output HDMI-A-1 --off
+
     sudo ip link set dev enp6s0 up
     sudo ip addr add 192.168.1.9/24 dev enp6s0
     sudo ip ro add 192.168.1.1 dev enp6s0
@@ -27,6 +31,7 @@ sleep .1
 
 if test "$HOST" = "downstairs"
     polybar -r 3 &
+    polybar -r 4 &
 else # arch
     polybar -r 1 &
     polybar -r 2 &
@@ -36,6 +41,7 @@ sxhkd &
 #killall nitrogen
 #nitrogen --restore &
 
+# how long until hibernate, screen off, etc
 xset dpms 6000 6000 12000
 
 bspc config border_width         0
@@ -62,7 +68,8 @@ bspc rule -a obsidian desktop='obsidian'
 bspc rule -a "TeamSpeak 3" desktop='ts'
 
 if test "$HOST" = "downstairs"
-    bspc monitor HDMI-A-0 -d A1 A2 A3 A4 A5 B1 B2 B3 B4 ts spotify disc steam obsidian
+    bspc monitor DisplayPort-1 -d A1 A2 A3 A4 A5 A6 A7 A8 A9
+    bspc monitor DisplayPort-0 -d B1 B2 B3 B4 B5 B6 B7 ts disc steam obsidian
 else
     bspc monitor DP-4 -d A1 A2 A3 A4 A5 A6 A7 A8 A9
     bspc monitor DP-0 -d B1 B2 B3 B4 B5 B6 B7 ts spotify disc steam obsidian
