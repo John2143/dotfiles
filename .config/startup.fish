@@ -1,6 +1,4 @@
 #!/usr/bin/env fish
-tmux new-session
-
 sleep 0.1
 tmux new-window '/usr/bin/monerod --block-sync-size 100 --data-dir /mnt/other/monero/ --max-concurrency 4 --db-sync-mode=safe:sync'
 tmux rename-window 'monero'

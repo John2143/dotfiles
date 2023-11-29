@@ -4,7 +4,7 @@ window:
     y: 5
 font:
   normal:
-    family: JetBrainsMono
+    family: JetBrainsMono Nerd Font
   size: 12
   offset:
     x: 0
