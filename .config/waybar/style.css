@@ -192,3 +192,7 @@
     border-color: #c9545d;
     color: #c9545d;
 }
+
+#workspaces button.active {
+    color: @green;
+}

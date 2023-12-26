@@ -9,9 +9,6 @@ if [ (uname) = "Linux" ]
     set -g fish_user_paths "/opt/miniconda3/bin/" $fish_user_paths
     alias pp="paru"
     alias p="sudo pacman -Syu"
-    if [ $TMUX ]
-        set -x DISPLAY ":0"
-    end
 
     # >>> conda initialize >>>
     # !! Contents within this block are managed by 'conda init' !!
