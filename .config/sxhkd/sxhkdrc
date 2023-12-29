@@ -70,6 +70,9 @@ super + u
 super + {_,shift + }{1-5}
 	bspc desktop -f {A, B}{1-5}
 
+super + {h,j,k,l}
+    bspc node -f {west,south,north,east}
+
 super + shift + q
 	bspc desktop -f ts
 super + shift + w
