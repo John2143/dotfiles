@@ -1,9 +1,4 @@
 live_config_reload = true
-theme = "Tokyonight_Night"
-
-[colors]
-author = "Folke"
-name = "TokyoNight Night"
 
 [[colors.indexed_colors]]
 color = "0xff9e64"
@@ -38,7 +33,6 @@ background = "0x1a1b26"
 foreground = "0xc0caf5"
 
 [font]
-AppleFontSmooting = true
 size = 12
 
 [font.normal]

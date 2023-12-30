@@ -23,8 +23,8 @@ if test "$HOST" = "downstairs"
 end
 
 if test "$HOST" = "arch"
-    xrandr --output DP-4 --mode 2560x1440 --rate 144.0 --primary
-    xrandr --output DP-0 --mode 2560x1440 --rate 144.0 --right-of DP-4
+    xrandr --output DP-0 --mode 2560x1440 --rate 144.0 --primary
+    xrandr --output DP-4 --mode 2560x1440 --rate 144.0 --right-of DP-0
     xrandr --output DP-2 --off
 
     echo "power on" > bluetoothctl
@@ -73,8 +73,8 @@ if test "$HOST" = "arch"
     polybar -r 2 &
 
 
-    bspc monitor DP-4 -d A1 A2 A3 A4 A5 A6 A7 A8 A9
-    bspc monitor DP-0 -d B1 B2 B3 B4 B5 B6 B7 ts spotify disc steam obsidian
+    bspc monitor DP-0 -d A1 A2 A3 A4 A5 A6 A7 A8 A9
+    bspc monitor DP-4 -d B1 B2 B3 B4 B5 B6 B7 ts spotify disc steam obsidian
 
     sudo systemctl restart dnscrypt-proxy
     sudo modprobe i2c-dev
