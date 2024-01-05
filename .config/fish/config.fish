@@ -5,6 +5,8 @@ if [ (uname) = "Linux" ]
         date "+$HOME/screenshots/%Yy-%mm-%dd_%0Hh-%Mm-%Ss_.png"
     end
 
+    set -x TERM "alacritty"
+
     set -g fish_user_paths "/home/john/.local/bin" $fish_user_paths
     set -g fish_user_paths "/opt/miniconda3/bin/" $fish_user_paths
     alias pp="paru"
