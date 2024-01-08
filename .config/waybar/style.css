@@ -50,8 +50,8 @@
 #waybar {
     background: #323232;
     color: white;
-    font-family: Cantarell, Noto Sans, sans-serif;
-    font-size: 13px;
+    font-family: Scientifica, Cantarell, Noto Sans Symbols, Jetbrains Nerd Mono, sans-serif;
+    font-size: 16px;
 }
 
 /* Each module */
@@ -99,7 +99,7 @@
 }
 
 #clock {
-    font-weight: bold;
+    /*font-weight: bold;*/
 }
 
 #cpu {

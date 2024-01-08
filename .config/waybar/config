@@ -31,6 +31,7 @@
         "temperature",
         "battery",
         "tray",
+        "pulseaudio",
         "clock#date",
         "clock#time"
     ],
@@ -68,13 +69,13 @@
 
     "clock#date": {
       "interval": 10,
-      "format": "  {:%e %b %Y}", // Icon: calendar-alt
+      "format": "", // Icon: calendar-alt
       "tooltip-format": "{:%e %B %Y}"
     },
 
     "cpu": {
         "interval": 5,
-        "format": "  {usage}% ({load})", // Icon: microchip
+        "format": "󰍛 {usage}%",
         "states": {
           "warning": 70,
           "critical": 90
@@ -83,7 +84,7 @@
 
     "memory": {
         "interval": 5,
-        "format": "  {}%", // Icon: memory
+        "format": " {used}Gb",
         "states": {
             "warning": 70,
             "critical": 90
@@ -92,10 +93,10 @@
 
     "network": {
         "interval": 5,
-        "format-wifi": "  {essid} ({signalStrength}%)", // Icon: wifi
-        "format-ethernet": "  {ifname}: {ipaddr}/{cidr}", // Icon: ethernet
-        "format-disconnected": "⚠  Disconnected",
-        "tooltip-format": "{ifname}: {ipaddr}"
+        "format-wifi": " {essid}", // Icon: wifi
+        "format-ethernet": "󰈀 {ifname}", // Icon: ethernet
+        "format-disconnected": "󰈂 Disconnected",
+        "tooltip-format": "[{ifname}] - {ipaddr}/{cidr} - ({signalStrength}%)"
     },
 
     "hyperland/windows": {
@@ -113,26 +114,27 @@
     },
 
     "pulseaudio": {
-        //"scroll-step": 1,
-        "format": "{icon}  {volume}%",
-        "format-bluetooth": "{icon}  {volume}%",
+        "scroll-step": 3,
+        "format": "{icon} {volume}%",
+        "format-bluetooth": "{icon} {volume}%",
         "format-muted": "",
         "format-icons": {
             "headphones": "",
-            "handsfree": "",
-            "headset": "",
+            "handsfree": "",
+            "headset": "",
             "phone": "",
             "portable": "",
             "car": "",
             "default": ["", ""]
         },
+        "on-click-right": "pavucontrol",
         "on-click": "pavucontrol"
     },
 
     "temperature": {
       "critical-threshold": 80,
       "interval": 5,
-      "format": "{icon}  {temperatureC}°C",
+      "format": "{icon} {temperatureC}°C",
       "format-icons": [
           "", // Icon: temperature-empty
           "", // Icon: temperature-quarter
