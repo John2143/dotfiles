@@ -9,11 +9,15 @@ PARENT_BAR_PID=$(pgrep -a "polybar" | grep "$PARENT_BAR" | cut -d" " -f1)
 # Examples: spotify, vlc, chrome, mpv and others.
 # Use `playerctld` to always detect the latest player.
 # See more here: https://github.com/altdesktop/playerctl/#selecting-players-to-control
-PLAYER="spotify"
 
-# Format of the information displayed
-# Eg. {{ artist }} - {{ album }} - {{ title }}
-# See more attributes here: https://github.com/altdesktop/playerctl/#printing-properties-and-metadata
+hostname_path="/etc/hostname"
+pc_name="downstairs"
+
+if [ -f "$hostname_path" ] && [ -r "$hostname_path" ] && [ "$(cat "$hostname_path")" = "$pc_name" ]; then
+    PLAYER="spotifyd"
+else
+    PLAYER="spotify"
+fi
 
 # Sends $2 as message to all polybar PIDs that are part of $1
 update_hooks() {
@@ -24,24 +28,26 @@ update_hooks() {
 }
 
 PLAYERCTL_STATUS=$(playerctl --player=$PLAYER status 2>/dev/null)
-EXIT_CODE=$?
 
-if [ $EXIT_CODE -eq 0 ]; then
+if [ $? -eq 0 ]; then
   STATUS=$PLAYERCTL_STATUS
 else
-  STATUS="No player is running"
+  STATUS="[No Player]"
 fi
 
-FORMAT="$STATUS :: {{ title }} :: {{ artist }}"
+# Format of the information displayed
+# Eg. {{ artist }} - {{ album }} - {{ title }}
+# See more attributes here: https://github.com/altdesktop/playerctl/#printing-properties-and-metadata
+FORMAT="{{ title }} :: {{ artist }}"
 if [ "$1" == "--status" ]; then
   echo "$STATUS"
 else
   if [ "$STATUS" = "Stopped" ]; then
-    echo "No music is playing"
+    echo "[No Music]"
   elif [ "$STATUS" = "Paused" ]; then
     update_hooks "$PARENT_BAR_PID" 2
     playerctl --player=$PLAYER metadata --format "$FORMAT"
-  elif [ "$STATUS" = "No player is running" ]; then
+  elif [ "$STATUS" = "[No Player]" ]; then
     echo "$STATUS"
   else
     update_hooks "$PARENT_BAR_PID" 1

@@ -423,8 +423,8 @@ lua << END
         no_bold = false, -- Force no bold
         no_underline = false, -- Force no underline
         styles = { -- Handles the styles of general hi groups (see `:h highlight-args`):
-            comments = { "italic" }, -- Change the style of comments
-            conditionals = { "italic" },
+            comments = {}, -- Change the style of comments
+            conditionals = {},
             loops = {},
             functions = {},
             keywords = {},
@@ -628,6 +628,8 @@ nnoremap <leader>l :call NumberToggle()<cr>
 vnoremap <leader>l :call NumberToggle()<cr>
 nnoremap <leader>s :call SpellToggle()<cr>
 vnoremap <leader>s :call SpellToggle()<cr>
+
+cmap w!! w !sudo tee > /dev/null %
 
 " inline hints
 noremap <leader>rr :CocCommand rust-analyzer.toggleInlayHints<CR>

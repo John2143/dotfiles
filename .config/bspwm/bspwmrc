@@ -17,5 +17,9 @@ bspc config gapless_monocle      false
 # bspc rule -a sxiv state=floating center=true
 # bspc rule -a polybar border=off manage=off
 bspc rule -a Steam state=floating
-sh ~/.xprofile
-fish ~/.config/startup.fish
+
+fish ~/.xprofile.fish &
+
+sleep 3
+
+fish -c "tmux new-session -d ; sleep 1; fish ~/.config/startup.fish"

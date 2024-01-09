@@ -14,10 +14,6 @@ super + r
     fish -c "killall sxhkd || true; killall dunst || true; fish -c 'sxhkd' &; setxkbmap -option 'ctrl:nocaps'; dunstify reloaded binds;"
 super + alt + r
     bspc wm -r
-/*ctrl + w*/
-    /*bspc node -c*/
-/*End*/
-    /*oil empty*/
 
 alt + F4
     bspc node -c
@@ -74,6 +70,9 @@ super + u
 super + {_,shift + }{1-5}
 	bspc desktop -f {A, B}{1-5}
 
+super + {h,j,k,l}
+    bspc node -f {west,south,north,east}
+
 super + shift + q
 	bspc desktop -f ts
 super + shift + w
@@ -101,6 +100,7 @@ ctrl + XF86AudioRaiseVolume
 ctrl + XF86AudioLowerVolume
     fish -c "wpctl set-volume (wpctl status | grep -B 1 Schiit | grep spotify | head -n 1 | choose 0 | math) 5%-"
 
+
 XF86AudioPlay
     playerctl play-pause
 
@@ -113,8 +113,6 @@ XF86AudioPrev
 XF86AudioStop
     playerctl stop
 
-XF86HomePage
-    fish -c "i3lock -c 000000; sleep 1; xset dpms force off;"
 
 super + v
     killall minicom

@@ -10,7 +10,7 @@ pub(crate) fn go(args: crate::Args) -> anyhow::Result<()> {
     use KeyType::*;
     match (args.key_type, &*args.key_name) {
         (Tap, "1") => rp("xdotool click --repeat 10 --delay 100 1")?,
-        (Hold, "1") => rp("xdotool click --repeat 100 --delay 100 1")?,
+        (Hold, "1") => rp("xdotool key --repeat 1000 --delay 100 g")?,
 
         (Tap, "2") => rp("xdotool click --repeat 10 --delay 100 3")?,
         (Hold, "2") => rp("xdotool click --repeat 100 --delay 100 3")?,

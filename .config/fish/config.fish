@@ -1,13 +1,16 @@
 set -x EMAIL_NAME "john"
 set -x EMAIL_DOMAIN "john2143.com"
 if [ (uname) = "Linux" ]
+    function screenshot_location
+        date "+$HOME/screenshots/%Yy-%mm-%dd_%0Hh-%Mm-%Ss_.png"
+    end
+
+    set -x TERM "alacritty"
+
     set -g fish_user_paths "/home/john/.local/bin" $fish_user_paths
     set -g fish_user_paths "/opt/miniconda3/bin/" $fish_user_paths
     alias pp="paru"
     alias p="sudo pacman -Syu"
-    if [ $TMUX ]
-        set -x DISPLAY ":0"
-    end
 
     # >>> conda initialize >>>
     # !! Contents within this block are managed by 'conda init' !!
