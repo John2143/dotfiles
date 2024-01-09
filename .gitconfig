@@ -33,6 +33,7 @@
 	cia = commit -S -a
 	ciam = commit -S -a -m
 	caim = commit -S -a -m
+	cima = commit -S --amend -m
 
     pushb = push -u origin HEAD
     psuh = push

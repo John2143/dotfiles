@@ -817,20 +817,20 @@ call togglebg#map("<F4>")
 au! BufEnter */silo-presets/*  let b:fswitchdst = 'json' | let b:fswitchlocs = 'reg:/silo-presets/silo-metadata'
 au! BufEnter */silo-metadata/* let b:fswitchdst = 'yaml,py,txt,xml,json' | let b:fswitchlocs = 'reg:/silo-metadata/silo-presets'
 
-nnoremap <leader><leader>u :!rally preset upload --file "%" -e UAT<cr>
-nnoremap <leader><leader>U :!rally preset upload --file "%" -e PROD --no-protect<cr>
-nnoremap <leader><leader>i :!rally preset upload --file "%" -e QA<cr>
-nnoremap <leader><leader>I :!rally preset upload --file "%" -e DEV<cr>
+"nnoremap <leader><leader>u :!rally preset upload --file "%" -e UAT<cr>
+"nnoremap <leader><leader>U :!rally preset upload --file "%" -e PROD --no-protect<cr>
+"nnoremap <leader><leader>i :!rally preset upload --file "%" -e QA<cr>
+"nnoremap <leader><leader>I :!rally preset upload --file "%" -e DEV<cr>
 "nnoremap <leader><leader>R :!rally preset upload --file "%" -e DEV<cr>
-nnoremap <leader>ru :!rally supply make --file "%" --to UAT<cr>
-nnoremap <leader>ri :!rally supply make --file "%" --to QA<cr>
-nnoremap <leader>rU :!rally supply make --file "%" --to PROD --no-protect<cr>
-nnoremap <leader>rI :!rally supply make --file "%" --to DEV<cr>
-nnoremap <leader>rk :!rally preset info --file "%" --e UAT,PROD<cr>
-nnoremap <leader>rd :call Rallydiff("")<cr>
-nnoremap <leader>rD :call Rallydiff("-e PROD")<cr>
-nnoremap <leader>rc :call Rallydiff("-e QA")<cr>
-nnoremap <leader>rC :call Rallydiff("-e DEV")<cr>
+nnoremap <leader>ru :!rally supply make --file "%" --to MSDEV<cr>
+"nnoremap <leader>ri :!rally supply make --file "%" --to QA<cr>
+"nnoremap <leader>rU :!rally supply make --file "%" --to PROD --no-protect<cr>
+"nnoremap <leader>rI :!rally supply make --file "%" --to DEV<cr>
+"nnoremap <leader>rk :!rally preset info --file "%" --e UAT,PROD<cr>
+"nnoremap <leader>rd :call Rallydiff("")<cr>
+"nnoremap <leader>rD :call Rallydiff("-e PROD")<cr>
+"nnoremap <leader>rc :call Rallydiff("-e QA")<cr>
+"nnoremap <leader>rC :call Rallydiff("-e DEV")<cr>
 nnoremap D :diffoff<cr>
 nnoremap <leader><leader>Q :%!node ~/node-rally-tools/util/addMIOSupport.js<cr>
 nnoremap <leader><leader>N :%!node ~/node-rally-tools/util/addDynamicNext.js<cr>
