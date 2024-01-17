@@ -25,6 +25,7 @@ if [ (uname) = "Linux" ]
 
     alias cronerrors="sudo systemctl status cronie"
 end
+
 if [ (uname) = "Darwin" ]
     source ~/scripts/disco.fish
     fish_add_path /opt/homebrew/bin/
@@ -118,3 +119,14 @@ set -g fish_user_paths "/usr/local/sbin" $fish_user_paths
 starship init fish | source
 
 [ -f ~/.inshellisense/key-bindings.fish ] && source ~/.inshellisense/key-bindings.fish
+
+
+if [ (uname) = "Linux" ]
+    # if we are tty 1
+    if [ (tty) = "/dev/tty1" ];
+        # and hyprland is not running (the search will count itsself in ps so add +1)
+        if [ (ps aux | grep Hyprland | wc -l) = "1" ];
+            Hyprland &;
+        end
+    end
+end
