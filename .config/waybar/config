@@ -114,6 +114,7 @@
     },
 
     "pulseaudio": {
+        "interval": 5,
         "scroll-step": 3,
         "format": "{icon} {volume}%",
         "format-bluetooth": "{icon} {volume}%",
@@ -128,13 +129,16 @@
             "default": ["", ""]
         },
         "on-click-right": "pavucontrol",
-        "on-click": "pavucontrol"
+        "on-click-middle": "fish -c '/home/john/.config/polybar/scripts/sinks.fish bluetooth'",
+        "on-click": "fish -c '/home/john/.config/polybar/scripts/sinks.fish scarlett'"
     },
 
     "temperature": {
+      "rotate": 90,
       "critical-threshold": 80,
-      "interval": 5,
-      "format": "{icon} {temperatureC}°C",
+      "interval": 1,
+      "format": "{temperatureC}°",
+      "thermal-zone": "thermal_zone2",
       "format-icons": [
           "", // Icon: temperature-empty
           "", // Icon: temperature-quarter

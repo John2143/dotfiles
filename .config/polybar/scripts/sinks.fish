@@ -6,6 +6,7 @@ end
 
 set sinks (getsinks)
 set speakers (echo $sinks | grep analog | grep pci)
+set scarlett (echo $sinks | grep Focusrite)
 set headphones (echo $sinks | grep Schiit)
 set bluetooth_headphones (echo $sinks | grep "bluez_output.AC_80_0A_37_DD_0C")
 
@@ -13,6 +14,8 @@ echo $speakers | not grep RUNNING > /dev/null
 set s_active $status
 echo $headphones | not grep RUNNING > /dev/null
 set h_active $status
+echo $scarlett | not grep RUNNING > /dev/null
+set sc_active $status
 echo $bluetooth_headphones | not grep RUNNING > /dev/null
 set bt_active $status
 
@@ -39,7 +42,7 @@ function setsink
     echo $argv
     pactl set-default-sink (echo $argv[1] | choose 0) || true
     sleep .1
-    polybar-msg action "#audio-output.hook.0"
+    # polybar-msg action "#audio-output.hook.0"
 end
 
 switch $action
@@ -47,6 +50,8 @@ switch $action
         setsink $headphones 1
     case s speakers
         setsink $speakers 1
+    case sc scarlett
+        setsink $scarlett 1
     case b bluetooth
         # connect to headphones
         setsinkloop
