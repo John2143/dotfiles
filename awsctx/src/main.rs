@@ -4,7 +4,7 @@ use anyhow::bail;
 use clap::Parser;
 use nom::{
     bytes::complete::{tag, take_until},
-    character::complete::{space0},
+    character::complete::space0,
     sequence::delimited,
     Finish,
 };
