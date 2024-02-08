@@ -3,10 +3,11 @@
 use anyhow::bail;
 use clap::Parser;
 use nom::{
-    bytes::complete::{tag, take_while, take_until},
+    bytes::complete::{tag, take_until, take_while},
     character::complete::{anychar, space0},
     combinator::not,
-    sequence::delimited, Finish,
+    sequence::delimited,
+    Finish,
 };
 
 /// Simple program change environment varables for AWS
@@ -41,7 +42,7 @@ struct Cred {
     x_security_token_expires: Option<String>,
 }
 
-use chrono::{DateTime, Duration, ParseError, TimeZone, Utc, NaiveDateTime};
+use chrono::{Duration, NaiveDateTime, ParseError, Utc};
 impl Cred {
     fn parse_date_string(date_str: &str) -> Result<NaiveDateTime, ParseError> {
         let format = "%Y-%m-%dT%H:%M:%S%z";
@@ -141,7 +142,6 @@ async fn rm() -> anyhow::Result<()> {
                 if cli.gimme_only && !group.contains("/") {
                     continue;
                 }
-
 
                 // Show the remaining duration as a value at the start
                 let fzf_line = match creds.is_expired() {
