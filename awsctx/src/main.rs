@@ -17,6 +17,11 @@ struct Args {
     #[clap(short, long)]
     gimme_only: bool,
 
+    /// Normally, expired credentials are hidden. Add this flag to show all your profiles from
+    /// ~/.aws/credentials
+    #[clap(short, long)]
+    show_expired: bool,
+
     /// Skip fzf and select the closest match
     /// if env = `-`, then stdin will be read.
     #[clap(short, long)]
@@ -36,11 +41,11 @@ struct Cred {
     x_security_token_expires: Option<String>,
 }
 
-use chrono::{DateTime, Duration, ParseError, TimeZone, Utc};
+use chrono::{DateTime, Duration, ParseError, TimeZone, Utc, NaiveDateTime};
 impl Cred {
-    fn parse_date_string(date_str: &str) -> Result<DateTime<Utc>, ParseError> {
+    fn parse_date_string(date_str: &str) -> Result<NaiveDateTime, ParseError> {
         let format = "%Y-%m-%dT%H:%M:%S%z";
-        Utc.datetime_from_str(date_str, format)
+        NaiveDateTime::parse_from_str(date_str, format)
     }
 
     fn is_expired(&self) -> Option<Duration> {
@@ -49,7 +54,7 @@ impl Cred {
             .map(Self::parse_date_string)
             .map(|x| x.expect("Invalid Datestring in Credentials"))
             .map(|x| {
-                let now = Utc::now();
+                let now = Utc::now().naive_utc();
                 if x > now {
                     Some(x - now)
                 } else {
@@ -137,13 +142,20 @@ async fn rm() -> anyhow::Result<()> {
                     continue;
                 }
 
+
+                // Show the remaining duration as a value at the start
                 let fzf_line = match creds.is_expired() {
                     Some(x) => {
                         let dur = format_duration(x);
                         format!("[{dur}] {group}\n")
                     }
                     None => {
-                        format!("[Expired] {group}\n")
+                        if cli.show_expired {
+                            format!("[Expired] {group}\n")
+                        } else {
+                            // If don't have the -e flag, hide the expired ones.
+                            continue;
+                        }
                     }
                 };
 
