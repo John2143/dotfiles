@@ -3,9 +3,8 @@
 use anyhow::bail;
 use clap::Parser;
 use nom::{
-    bytes::complete::{tag, take_until, take_while},
-    character::complete::{anychar, space0},
-    combinator::not,
+    bytes::complete::{tag, take_until},
+    character::complete::{space0},
     sequence::delimited,
     Finish,
 };
