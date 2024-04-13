@@ -19,6 +19,7 @@ if [ (uname) = "Linux" ]
     alias ea="fish -c \"cd ~/ts/dotfiles/.config/; vim .\""
     alias ea2="fish -c \"cd ~/dotfiles/.config/; vim .\""
 
+    alias oil="little_oil"
 
     alias pbcopy="xclip -sel clip"
     alias pbpaste="xclip -sel clip -o"
