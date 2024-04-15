@@ -1,9 +1,9 @@
 [user]
-	email = john@john2143.com
+	email = john_schmidt@discovery.com
 	name = John Schmidt
-	signingkey = 57002824054579A5
+	signingkey = 4D20411A5145D9F7
 [push]
-	default = upstream
+	default = current
 [color]
     ui = always
 [alias]
@@ -44,11 +44,29 @@
 	unignore = update-index --no-assume-unchanged
 	ignored = !git ls-files -v | grep "^[[:lower:]]"
 
+[url "git@github.com:"]
+	insteadOf = "https://github.com/"
+[url "git@github.com"]
+	insteadOf = "gh"
+
+
 [core]
 	excludesfile = /Users/jschmidt/.gitignore
+	pager = delta
 [hub]
 	host = github.discovery.com
 [pull]
 	ff = only
 [merge]
 	tool = nvimdiff
+	conflictstyle = zdiff3
+[rerere]
+	enabled = true
+[column]
+	ui = auto
+[branch]
+	sort = -committerdate
+[maintenance]
+	repo = /Users/jschmidt/neo-event-bus-monitor-deploy
+[commit]
+	verbose = true

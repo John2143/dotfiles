@@ -25,6 +25,7 @@ if [ (uname) = "Linux" ]
     alias pbpaste="xclip -sel clip -o"
 
     alias cronerrors="sudo systemctl status cronie"
+    alias ls=exa
 end
 
 if [ (uname) = "Darwin" ]
@@ -40,6 +41,7 @@ if [ (uname) = "Darwin" ]
     alias ea="fish -c \"cd ~/dotfiles/.config/; vim .\""
     alias lll="~/scripts/launch.fish; exit"
     alias ptt="pytest -m quick -n 5"
+    alias ls=eza
 end
 
 set -x EMAIL "$EMAIL_NAME@$EMAIL_DOMAIN"
@@ -56,7 +58,6 @@ alias vim=nvim
 alias vi=nvim
 alias vimdiff="nvim -d"
 alias cat=bat
-alias ls=exa
 alias grep=rg
 alias nvm=fnm
 
@@ -103,6 +104,7 @@ set fish_greeting
 
 fish_add_path "$HOME/bin"
 fish_add_path "$HOME/.cargo/bin"
+fish_add_path "$HOME/go/bin/"
 
 fnm env | source
 set -x HOMEBREW_NO_AUTO_UPDATE 1

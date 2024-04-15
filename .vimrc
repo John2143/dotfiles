@@ -824,7 +824,7 @@ au! BufEnter */silo-metadata/* let b:fswitchdst = 'yaml,py,txt,xml,json' | let b
 "nnoremap <leader><leader>i :!rally preset upload --file "%" -e QA<cr>
 "nnoremap <leader><leader>I :!rally preset upload --file "%" -e DEV<cr>
 "nnoremap <leader><leader>R :!rally preset upload --file "%" -e DEV<cr>
-nnoremap <leader>ru :!rally supply make --file "%" --to MSDEV<cr>
+nnoremap <leader>ru :!/Users/jschmidt/Library/Caches/fnm_multishells/11071_1708938644231/bin/rally supply make --file "%" --to MSDEV<cr>
 "nnoremap <leader>ri :!rally supply make --file "%" --to QA<cr>
 "nnoremap <leader>rU :!rally supply make --file "%" --to PROD --no-protect<cr>
 "nnoremap <leader>rI :!rally supply make --file "%" --to DEV<cr>
