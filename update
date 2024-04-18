@@ -1,5 +1,10 @@
 #!/bin/bash
 
+which crontab >/dev/null
+if [[ $? == 0 ]]; then
+    crontab -l > ./crontabs/$(cat /etc/hostname).cron
+fi
+
 git adl
 git ss
 

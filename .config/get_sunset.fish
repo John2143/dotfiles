@@ -3,11 +3,10 @@
 # First obtain a location code from: https://weather.codes/search/
 
 # Insert your location. For example LOXX0001 is a location code for Bratislava, Slovakia
-location="USMD0602"
-tmpfile=/tmp/$location.out
+tmpfile=/tmp/sunrise.json
 
 get_weather() {
-    wget -q "https://weather.com/weather/today/l/$location" -O "$tmpfile"
+    wget -q "https://api.sunrise-sunset.org/json?lat=38&lng=-77&tzid=America/New_York" -O "$tmpfile"
 }
 
 
@@ -22,12 +21,11 @@ fi
 
 # Obtain sunrise and sunset raw data from weather.com
 
-SUNR=$(grep SunriseSunset "$tmpfile" | grep -oE '((1[0-2]|0?[1-9]):([0-5][0-9]) ?([AaPp][Mm]))' | head -1)
-SUNS=$(grep SunriseSunset "$tmpfile" | grep -oE '((1[0-2]|0?[1-9]):([0-5][0-9]) ?([AaPp][Mm]))' | tail -1)
+SUNR=$(jq -r .results.sunrise $tmpfile)
+SUNS=$(jq -r .results.sunset $tmpfile)
 
-
-sunrise=$(date --date="$SUNR" +%R)
-sunset=$(date --date="$SUNS" +%R)
+sunrise=$(date --date="$SUNR" +%R%P)
+sunset=$(date --date="$SUNS" +%R%P)
 
 # Use $sunrise and $sunset variables to fit your needs. Example:
 echo -n $sunrise > $HOME/data/sunrise
