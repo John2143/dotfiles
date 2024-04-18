@@ -1,6 +1,9 @@
 #!/usr/bin/env fish
 set HOST (cat /etc/hostname)
 
+# This file is executed on every reload of the x/wayland server.
+# Every command should be repeatable or idempotent
+
 # Set up monitorss
 if test "$HOST" = "downstairs"
     xrandr --output DP-1 --mode 2560x1440 --rate 239.97 --primary
@@ -27,6 +30,7 @@ if test "$HOST" = "arch"
     xrandr --output DP-4 --mode 2560x1440 --rate 144.0 --right-of DP-0
     xrandr --output DP-2 --off
 
+    # TODO also select the right device by default
     echo "power on" > bluetoothctl
     sleep .1
 
@@ -69,9 +73,8 @@ if test "$HOST" = "arch"
 
     xset dpms 6000 6000 12000
 
-    polybar -r 1 &
-    polybar -r 2 &
-
+    fish -c "polybar -r 1 &"
+    fish -c "polybar -r 2 &"
 
     bspc monitor DP-0 -d A1 A2 A3 A4 A5 A6 A7 A8 A9
     bspc monitor DP-4 -d B1 B2 B3 B4 B5 B6 B7 ts spotify disc steam obsidian
@@ -81,8 +84,8 @@ if test "$HOST" = "arch"
     sudo modprobe i2c-i801
 end
 
+if test "$HOST" = "office"
 
-if test "$HOST" = "downstairs"
 end
 
 notify-send "Desktop ready"
