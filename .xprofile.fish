@@ -2,12 +2,19 @@
 set HOST (cat /etc/hostname)
 
 # This file is executed on every reload of the x/wayland server.
-# Every command should be repeatable or idempotent
+# Every command should be repeatable.
+set color_temp_day 6500
+set color_temp_night 3000
+set brightness_day 1.0
+set brightness_night 0.5
+set loc "38.897916:-77.035476"
 
 # Set up monitorss
 if test "$HOST" = "downstairs"
-    xrandr --output DP-1 --mode 2560x1440 --rate 239.97 --primary
-    xrandr --output DP-2 --mode 1920x1080 --rate 144.00 --right-of DisplayPort-1
+    set left_mon "DP-1"
+    set right_mon "DP-2"
+    xrandr --output $left_mon --mode 2560x1440 --rate 239.97 --primary
+    xrandr --output $right_mon --mode 1920x1080 --rate 144.00 --right-of $left_mon
 
     # WAN
     #sudo ip link set dev enp6s0 up
@@ -20,15 +27,15 @@ if test "$HOST" = "downstairs"
     #sudo ip addr add 192.168.1.9/24 dev wlp2s0f0u3
     #sudo ip ro add 192.168.1.0/24 dev wlp2s0f0u3
     #sudo ip ro add 0.0.0.0/0 via 192.168.1.1
-
-    killall spotifyd || true
-    spotifyd -p $SPOTIFY_PASSWORD -u $SPOTIFY_USERNAME --device-name downstairs --device-type computer --bitrate 320 --backend pulseaudio &
 end
 
 if test "$HOST" = "arch"
-    xrandr --output DP-0 --mode 2560x1440 --rate 144.0 --primary
-    xrandr --output DP-4 --mode 2560x1440 --rate 144.0 --right-of DP-0
-    xrandr --output DP-2 --off
+    set left_mon "DP-2"
+    set right_mon "DP-4"
+    set third_port "DP-0"
+    xrandr --output $left_mon --mode 2560x1440 --rate 144.0 --primary
+    xrandr --output $right_mon --mode 2560x1440 --rate 144.0 --right-of $left_mon
+    xrandr --output $third_port --off
 
     # TODO also select the right device by default
     echo "power on" > bluetoothctl
@@ -76,16 +83,23 @@ if test "$HOST" = "arch"
     fish -c "polybar -r 1 &"
     fish -c "polybar -r 2 &"
 
-    bspc monitor DP-0 -d A1 A2 A3 A4 A5 A6 A7 A8 A9
-    bspc monitor DP-4 -d B1 B2 B3 B4 B5 B6 B7 ts spotify disc steam obsidian
+    bspc monitor $left_mon -d A1 A2 A3 A4 A5 A6 A7 A8 A9
+    bspc monitor $right_mon -d B1 B2 B3 B4 B5 B6 B7 ts spotify disc steam obsidian
 
     sudo systemctl restart dnscrypt-proxy
-    sudo modprobe i2c-dev
-    sudo modprobe i2c-i801
+    #sudo modprobe i2c-dev
+    #sudo modprobe i2c-i801
+
+    killall redshift || true
+    redshift -l $loc -b $brightness_day:$brightness_night -t $color_temp_day:$color_temp_night &
 end
 
 if test "$HOST" = "office"
+    killall spotifyd || true
+    spotifyd -p $SPOTIFY_PASSWORD -u $SPOTIFY_USERNAME --device-name office --device-type computer --bitrate 320 --backend pulseaudio &
 
+    killall gammastep || true
+    gammastep -l $loc -b $brightness_day:$brightness_night -t $color_temp_day:$color_temp_night &
 end
 
 notify-send "Desktop ready"
