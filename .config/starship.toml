@@ -6,6 +6,7 @@ $username$hostname\
 $directory\
 $git_branch$git_commit$git_state$git_status\
 $python\
+$kubernetes\
 $status$cmd_duration$jobs\
 $line_break\
 $character
@@ -75,3 +76,31 @@ number_threshold = 1
 disabled = false
 style = "fg:#777777"
 format = '[$time]($style) '
+
+[kubernetes]
+format = '[⛵$context](dimmed cyan) '
+disabled = false
+#contexts_aliases = [
+  #{ context_pattern = "dev.local.cluster.k8s", style = "green", symbol = "💔 " },
+#]
+
+#[[kubernetes.contexts]]
+# "bold red" style + default symbol when Kubernetes current context name equals "production" *and* the current user
+# equals "admin_user"
+#context_pattern = "production"
+#user_pattern = "admin_user"
+#style = "bold red"
+#context_alias = "prod"
+#user_alias = "admin"
+
+[[kubernetes.contexts]]
+context_pattern = "kind-(?P<cluster>.+)"
+context_alias = "kind-$cluster"
+
+[[kubernetes.contexts]]
+context_pattern = "(?P<cluster>[\\w-]+):(?P<account>\\d+):(?P<name>[\\w-]+)"
+context_alias = "aws-$cluster"
+
+#[[kubernetes.contexts]]
+#context_pattern = ".+"
+#context_alias = "yipee"
