@@ -67,7 +67,8 @@ alias rallytags="ctags --fields=+l --languages=python --python-kinds=-iv -R -f .
 
 alias launchdla="rally asset -e UAT --anon launch --job-name 'DLA Context Creator' --init-data "
 
-alias efish="vim ~/.config/fish/config.fish ; rfish"
+alias efish="fish -c 'cd ~/.config/fish/config.fish ; vim .; rfish'"
+alias efunc="fish -c 'cd ~/.config/fish/functions/; vim .'"
 alias eprompt="vim ~/.config/starship.toml"
 alias rfish="source ~/.config/fish/config.fish"
 alias ath="alacritty-themes"
