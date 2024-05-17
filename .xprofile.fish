@@ -30,12 +30,11 @@ if test "$HOST" = "downstairs"
 end
 
 if test "$HOST" = "arch"
-    set left_mon "DP-2"
-    set right_mon "DP-4"
-    set third_port "DP-0"
-    xrandr --output $left_mon --mode 2560x1440 --rate 144.0 --primary
+    set left_mon "DP-0"
+    set right_mon "HDMI-1"
+
+    xrandr --output $left_mon --mode 2560x1440 --rate 239.97 --primary
     xrandr --output $right_mon --mode 2560x1440 --rate 144.0 --right-of $left_mon
-    xrandr --output $third_port --off
 
     # TODO also select the right device by default
     echo "power on" > bluetoothctl
