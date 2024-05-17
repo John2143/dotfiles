@@ -3,12 +3,9 @@
 set HOST (cat /etc/hostname)
 
 sleep 0.1
-tmux new-window 'while true; steam; read; end'
-tmux rename-window 'steam'
+tmux new-window 'bpytop'
+tmux rename-window 'bpytop'
 
-sleep 0.1
-tmux new-window 'while true; obsidian; read; end'
-tmux rename-window 'obsidian'
 if test "$HOST" = "arch"
     sleep 0.1
     tmux new-window 'while true; teamspeak3; read; end'
@@ -33,9 +30,21 @@ end
 
 if test "$HOST" = "office"
     sleep 0.1
+    tmux new-window 'amdgpu_top'
+    tmux rename-window 'gpu top'
+
+    sleep 0.1
     tmux new-window 'qpwgraph'
     tmux rename-window 'qpwgraph'
 end
+
+sleep 0.1
+tmux new-window 'while true; steam; read; end'
+tmux rename-window 'steam'
+
+sleep 0.1
+tmux new-window 'while true; obsidian; read; end'
+tmux rename-window 'obsidian'
 
 sleep 0.1
 tmux new-window 'discord'

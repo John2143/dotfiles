@@ -4,7 +4,7 @@ set HOST (cat /etc/hostname)
 # This file is executed on every reload of the x/wayland server.
 # Every command should be repeatable.
 set color_temp_day 6500
-set color_temp_night 3500
+set color_temp_night 3000
 set brightness_day 1.0
 set brightness_night 0.75
 set loc "38.897916:-77.035476"
