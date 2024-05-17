@@ -67,15 +67,15 @@ alias rallytags="ctags --fields=+l --languages=python --python-kinds=-iv -R -f .
 
 alias launchdla="rally asset -e UAT --anon launch --job-name 'DLA Context Creator' --init-data "
 
-alias efish="fish -c 'cd ~/.config/fish/config.fish ; vim .; rfish'"
+alias efish="fish -c 'cd ~/.config/fish/; vim config.fish; rfish'"
 alias efunc="fish -c 'cd ~/.config/fish/functions/; vim .'"
 alias eprompt="vim ~/.config/starship.toml"
+alias exprofile="vim ~/.xprofile"
+alias etmux="vim ~/.tmux.conf"
 alias rfish="source ~/.config/fish/config.fish"
 alias ath="alacritty-themes"
-alias nn="nvm use node"
 alias ebinds="vim ~/.config/sxhkd/sxhkdrc; rbinds"
 alias rbinds="pkill -USR1 -x sxhkd"
-alias rbg="feh --bg-scale ~/Downloads/*FullRes.png"
 
 alias a8=". ./venv/bin/activate.fish"
 alias ctx="awsctx -g | ."
@@ -88,6 +88,7 @@ end
 
 complete -c d -f
 complete -c d -a "(ls -D ~)"
+complete --command aws --no-files --arguments '(begin; set --local --export COMP_SHELL fish; set --local --export COMP_LINE (commandline); aws_completer | sed \'s/ $//\'; end)'
 
 alias tmux_daily="daily \
     ONRAMP_WORKFLOW_PYTHON:OWR:n \

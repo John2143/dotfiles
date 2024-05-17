@@ -175,7 +175,8 @@ async fn rm() -> anyhow::Result<()> {
         }
     };
 
-    let profile = match s.get(profile_to_check.trim()) {
+    let profile_to_check = profile_to_check.trim();
+    let profile = match s.get(profile_to_check) {
         Some(s) => s,
         None => bail!(
             "Profile {} does not exist in {}",
@@ -187,6 +188,8 @@ async fn rm() -> anyhow::Result<()> {
         .map(|x| x.parse().unwrap())
         .unwrap_or(ShellOutput::Plain);
 
+
+    shell.print_set("AWS_PROFILE", &profile_to_check);
     profile
         .aws_access_key_id
         .as_deref()

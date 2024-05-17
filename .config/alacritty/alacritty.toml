@@ -1,4 +1,7 @@
 live_config_reload = true
+import = [
+  "/Users/jschmidt/Library/Application Support/fnm/node-versions/v20.5.1/installation/lib/node_modules/alacritty-themes/themes/Monokai.dark.toml"
+]
 
 [[colors.indexed_colors]]
 color = "0xff9e64"
@@ -35,12 +38,12 @@ foreground = "0xc0caf5"
 [font]
 size = 12
 
-[font.normal]
-family = "JetBrainsMono Nerd Font"
+  [font.normal]
+  family = "JetBrainsMono Nerd Font"
 
-[font.offset]
-x = 0
-y = -3
+  [font.offset]
+  x = 0
+  y = -3
 
 [window.padding]
 x = 5
