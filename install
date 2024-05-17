@@ -41,7 +41,7 @@ linkEtc(){
             echo "Deleting symbolic link $ETC"
             sudo rm $ETC
         else
-            sudo cp -r "$ETC" "$ETC.old"
+            sudo mv "$ETC" "$ETC.old"
             echo "moved old config $1: created $ETC.old"
         fi
     fi
