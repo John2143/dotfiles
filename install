@@ -33,6 +33,22 @@ linkConfig(){
     echo "ln -s $DIR/.config/$1 $FILE"
 }
 
+linkEtc(){
+    FILE="$HOME/.config/$1"
+    ETC="/etc/$1"
+    if [[ -e "$ETC" ]]; then
+        if [[ -L "$ETC" ]]; then
+            echo "Deleting symbolic link $ETC"
+            sudo rm $ETC
+        else
+            sudo cp -r "$ETC" "$ETC.old"
+            echo "moved old config $1: created $ETC.old"
+        fi
+    fi
+    sudo ln -s $FILE $ETC
+    echo "sudo ln -s $FILE $ETC"
+}
+
 buildRust(){
     cd $DIR/$1
     cargo install --path .
@@ -52,6 +68,11 @@ buildRust daily
 buildRust awsctx
 buildRust macros
 buildRust binder
+
+if [[ "$(uname)" = "Linux" ]]; then
+    linkEtc paru.conf
+    linkEtc pacman.conf
+fi
 
 if [[ -s $ZSH ]]; then
     link .zshrc
