@@ -158,6 +158,8 @@ Plug 'nvim-lua/plenary.nvim'
 Plug 'jose-elias-alvarez/null-ls.nvim'
 Plug 'saecki/crates.nvim', { 'tag': 'v0.3.0' }
 
+Plug 'github/copilot.vim'
+
 "Plug 'https://git.sr.ht/~whynothugo/lsp_lines.nvim'
 
 call plug#end()
