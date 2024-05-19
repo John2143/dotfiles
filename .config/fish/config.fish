@@ -44,6 +44,8 @@ if [ (uname) = "Darwin" ]
     alias ls=eza
 end
 
+bind \cq history-pager
+
 set -x EMAIL "$EMAIL_NAME@$EMAIL_DOMAIN"
 alias updatednode="npm i -g nyc rollup yarn neovim typescript pyright typescript-language-server"
 
