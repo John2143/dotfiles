@@ -46,7 +46,7 @@ endif
 
 filetype off                  " required
 
-if trim(system('hostname -s')) == "arch"
+if system('hostname -s') != "office"
 
     call plug#begin()
 
