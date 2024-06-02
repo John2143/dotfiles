@@ -36,10 +36,11 @@ background = "0x1a1b26"
 foreground = "0xc0caf5"
 
 [font]
-size = 12
+size = 14
 
   [font.normal]
   family = "JetBrainsMono Nerd Font"
+  style = "Regular"
 
   [font.offset]
   x = 0

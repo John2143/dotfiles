@@ -65,19 +65,6 @@
     # useXkbConfig = true; # use xkb.options in tty.
   };
 
-  # Enable the X11 windowing system.
-  # services.xserver.enable = true;
-
-
-  
-
-  # Configure keymap in X11
-  # services.xserver.xkb.layout = "us";
-  # services.xserver.xkb.options = "eurosign:e,caps:escape";
-
-  # Enable CUPS to print documents.
-  # services.printing.enable = true;
-
   # Enable sound.
   sound.enable = true;
   # hardware.pulseaudio.enable = true;
@@ -92,43 +79,26 @@
     initialPassword = "john";
     shell = pkgs.fish;
     packages = with pkgs; [
-      firefox # browser
-      jetbrains-mono # font
-  
-      udiskie # disks
-      neovim
-  
       # cli
       fish # shell
-      git 
-      starship #prompt
-      bat # cat replacement
-      eza # ls replacement
-      ripgrep # grep replacement
-      btop # btop++ > bpytop > htop > top
-      choose # awk replacement
-      wl-clipboard # copy-paste via cli
-      du-dust # df/du replacement
-  
+
       # graphical
       waybar # status bar
       wofi # "start menu" / program browser
       dolphin # file browser
       alacritty # terminal
-  
+
+      wl-clipboard # copy-paste via cli
       nerdfonts # fonts, idk how many this is
-  
-      fnm # node version manager # TODO switch to nixos
-      clang # compiler
-      rustup # rust compiler
-  
+      jetbrains-mono # font
+
       # === BEGIN NONFREE ===
-  
+    
       obsidian # note-taking software
       teamspeak_client
-  
-  
+    
       # === END NONFREE ===
+
     ];
   };
   security.sudo.wheelNeedsPassword = false;
@@ -136,18 +106,21 @@
   # List packages installed in system profile. To search, run:
   # $ nix search wget
   environment.systemPackages = with pkgs; [
+    git
+    fish
     wget
     curl
     tmux
     hyprland
-    # home-manager
+    home-manager
     os-prober
     vim
+    btop
+
+    k3s # kubernetes k8s node
 
     pavucontrol # audio
     qpwgraph
-
-    mullvad-vpn
   ];
 
   # Some programs need SUID wrappers, can be configured further or are
@@ -205,12 +178,26 @@
     #jack.enable = true;
   };
 
+  services.udisks2.enable = true;
+
   systemd.user.services.office-bad-cpu = {
     description = "CPU perf core 8 is bad on my office comp";
     script = ''
       echo 0 > /sys/devices/system/cpu/cpu8/online
     '';
     wantedBy = [ "multi-user.target" ];
+  };
+
+  # Enable CUPS to print documents.
+  services.printing.enable = true;
+
+  # services.udiskie.enable = true;
+
+  services.k3s = {
+    enable = true;
+    role = "agent";
+    serverAddr = "https://192.168.1.2:6443";
+    token = "K109bf3d3db3a886f74e3b580da672b54e15f0197c0d922c5f3186a8abd2ba36b00::server:cc13ddec0fa20ac3f2c1b3912dab21fb";
   };
 
   # # Open ports in the firewall.

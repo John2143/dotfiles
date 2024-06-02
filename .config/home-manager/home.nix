@@ -29,7 +29,24 @@ in
   # The home.packages option allows you to install Nix packages into your
   # environment.
   home.packages = with pkgs; [
-    # firefox # browser
+    firefox # browser
+
+    udiskie # disks
+    # neovim
+
+    # cli
+    starship #prompt
+    bat # cat replacement
+    eza # ls replacement
+    ripgrep # grep replacement
+    # btop # btop++ > bpytop > htop > top
+    choose # awk replacement
+    du-dust # df/du replacement
+
+    fnm # node version manager # TODO switch to nixos
+    clang # compiler
+    rustup # rust compiler
+
   ];
 
   # Home Manager is pretty good at managing dotfiles. The primary way to manage
@@ -66,10 +83,31 @@ in
   };
 
   # Let Home Manager install and manage itself.
-  programs.home-manager.enable = true;
+  # programs.home-manager.enable = true;
 
   programs.fish = {
     plugins = [
+    ];
+  };
+
+
+
+  programs.tmux = {
+    enable = true;
+    plugins = with pkgs.tmuxPlugins; [
+      sensible
+      tmux-colors-solarized
+      # tokyo-night-tmux
+      catppuccin
+      # tmux-battery
+      vim-tmux-navigator
+      # set -g @plugin 'tmux-plugins/tmux-sensible'
+      # set -g @plugin 'seebi/tmux-colors-solarized'
+      # #set -g @plugin 'janoamaral/tokyo-night-tmux'
+      # set -g @plugin 'catppuccin/tmux'
+      # set -g @plugin 'tmux-plugins/tmux-battery'
+      # set -g @plugin 'christoomey/vim-tmux-navigator'
+
     ];
   };
 
