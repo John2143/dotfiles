@@ -46,7 +46,8 @@ endif
 
 filetype off                  " required
 
-if trim(system('hostname -s')) == "arch"
+" office computer uses NixOS to manage packages
+if trim(system('hostname -s')) != "office"
 
     call plug#begin()
 
