@@ -55,6 +55,10 @@ in
     choose # awk replacement
     du-dust # df/du replacement
 
+    # k8s
+    kubectl
+    k9s
+
     # fnm # node version manager # TODO switch to nixos
     clang # compiler
     rustup # rust compiler

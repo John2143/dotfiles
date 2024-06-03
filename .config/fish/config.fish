@@ -13,7 +13,7 @@ if [ (uname) = "Linux" ]
     set -g fish_user_paths "/opt/miniconda3/bin/" $fish_user_paths
     if test "$HOST" = "office"
         alias pp="nix-env -iA"
-        alias p="history | grep nix-env | choose 2 | grep nixos | head -n 10 | sort | uniq"
+        alias p="nix-env -q"
         alias en="sudo vim /etc/nixos/configuration.nix"
         alias enh="sudo vim /etc/nixos/hardware-configuration.nix"
         alias enf="sudo vim /etc/nixos/flake.nix"

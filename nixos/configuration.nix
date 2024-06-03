@@ -39,7 +39,7 @@
   networking.networkmanager.enable = true;  # Easiest to use and most distros use this by default.
   networking.interfaces = {
     wlp0s20f3.ipv4.addresses = [{
-      address = "192.168.1.4";
+      address = "192.168.1.36";
       prefixLength = 24;
     }];
   };
