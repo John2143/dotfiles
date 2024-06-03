@@ -19,7 +19,11 @@ if [ (uname) = "Linux" ]
         alias enf="sudo vim /etc/nixos/flake.nix"
 
         alias ehm="fish -c 'cd ~/.config/home-manager/ ; nvim .'"
+        alias pbcopy="wl-copy"
+        alias pbpaste="wl-paste"
     else
+        alias pbcopy="xclip -sel clip"
+        alias pbpaste="xclip -sel clip -o"
         alias pp="paru"
         alias p="sudo pacman -Syu"
     end
@@ -32,9 +36,6 @@ if [ (uname) = "Linux" ]
     alias ea2="fish -c \"cd ~/dotfiles/.config/; vim .\""
 
     alias oil="little_oil"
-
-    alias pbcopy="xclip -sel clip"
-    alias pbpaste="xclip -sel clip -o"
 
     alias cronerrors="sudo systemctl status cronie"
     alias ls=exa

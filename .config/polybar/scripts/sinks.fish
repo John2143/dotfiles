@@ -1,4 +1,4 @@
-#!/bin/env fish
+#!/usr/bin/env fish
 
 function getsinks
     pactl list short sinks | string split0

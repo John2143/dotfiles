@@ -153,14 +153,14 @@
     alsa.enable = true;
     alsa.support32Bit = true;
     pulse.enable = true;
-#     wireplumber.extraConfig = {
-#       "monitor.bluez.properties" = {
-#         "bluez5.enable-sbc-xq" = true;
-#         "bluez5.enable-msbc" = true;
-#         "bluez5.enable-hw-volume" = true;
-#         "bluez5.roles" = [ "hsp_hs" "hsp_ag" "hfp_hf" "hfp_ag" ];
-#       };
-#     };
+    wireplumber.extraConfig = {
+      "monitor.bluez.properties" = {
+        "bluez5.enable-sbc-xq" = true;
+        "bluez5.enable-msbc" = true;
+        "bluez5.enable-hw-volume" = true;
+        "bluez5.roles" = [ "hsp_hs" "hsp_ag" "hfp_hf" "hfp_ag" ];
+      };
+    };
     # If you want to use JACK applications, uncomment this
     #jack.enable = true;
   };
@@ -186,6 +186,9 @@
     serverAddr = "https://192.168.1.2:6443";
     token = "K109bf3d3db3a886f74e3b580da672b54e15f0197c0d922c5f3186a8abd2ba36b00::server:cc13ddec0fa20ac3f2c1b3912dab21fb";
   };
+
+  services.blueman.enable = true;
+
 
   # # Open ports in the firewall.
   # networking.firewall.allowedTCPPorts = [ 

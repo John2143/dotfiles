@@ -54,6 +54,9 @@ in
     # btop # btop++ > bpytop > htop > top
     choose # awk replacement
     du-dust # df/du replacement
+    fzf
+
+    pulseaudio # pactl
 
     # k8s
     kubectl
@@ -134,6 +137,26 @@ in
     vimAlias = true;
     extraConfig = ''
       source ~/.vimrc
+
+      " yramagicman on reddit:
+      " https://www.reddit.com/r/neovim/comments/qh7f3u/fzf_integration_on_nix_os_solution/
+      function! NixosPluginPath()
+        let seen = {}
+        for p in reverse(split($NIX_PROFILES))
+            for d in split(glob(p . '/share/vim-plugins/*'))
+                let pluginname = substitute(d, ".*/", "", "")
+                if !has_key(seen, pluginname)
+                    exec 'set runtimepath^='.d
+                    let after = d."/after"
+                    if isdirectory(after)
+                        exec 'set runtimepath^='.after
+                    endif
+                    let seen[pluginname] = 1
+                endif
+            endfor
+        endfor
+      endfunction
+      execute NixosPluginPath()
     '';
     plugins = with pkgs.vimPlugins; [
       nvim-lspconfig
