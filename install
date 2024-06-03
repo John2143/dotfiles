@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 echo $DIR
 
@@ -70,8 +70,8 @@ buildRust macros
 buildRust binder
 
 if [[ "$(uname)" = "Linux" ]]; then
-    linkEtc paru.conf
-    linkEtc pacman.conf
+    #linkEtc paru.conf
+    #linkEtc pacman.conf
 fi
 
 if [[ -s $ZSH ]]; then

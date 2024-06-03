@@ -5,12 +5,24 @@ if [ (uname) = "Linux" ]
         date "+$HOME/screenshots/%Yy-%mm-%dd_%0Hh-%Mm-%Ss_.png"
     end
 
+    set HOST (cat /etc/hostname)
+
     set -x TERM "alacritty"
 
     set -g fish_user_paths "/home/john/.local/bin" $fish_user_paths
     set -g fish_user_paths "/opt/miniconda3/bin/" $fish_user_paths
-    alias pp="paru"
-    alias p="sudo pacman -Syu"
+    if test "$HOST" = "office"
+        alias pp="nix-env -iA"
+        alias p="history | grep nix-env | choose 2 | grep nixos | head -n 10 | sort | uniq"
+        alias en="sudo vim /etc/nixos/configuration.nix"
+        alias enh="sudo vim /etc/nixos/hardware-configuration.nix"
+        alias enf="sudo vim /etc/nixos/flake.nix"
+
+        alias ehm="fish -c 'cd ~/.config/home-manager/ ; nvim .'"
+    else
+        alias pp="paru"
+        alias p="sudo pacman -Syu"
+    end
 
     # >>> conda initialize >>>
     # !! Contents within this block are managed by 'conda init' !!
