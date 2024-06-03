@@ -1,11 +1,11 @@
 set -x EMAIL_NAME "john"
 set -x EMAIL_DOMAIN "john2143.com"
+set HOST (hostname -s)
+
 if [ (uname) = "Linux" ]
     function screenshot_location
         date "+$HOME/screenshots/%Yy-%mm-%dd_%0Hh-%Mm-%Ss_.png"
     end
-
-    set HOST (cat /etc/hostname)
 
     set -x TERM "alacritty"
 
@@ -56,6 +56,11 @@ if [ (uname) = "Darwin" ]
     alias ls=eza
 end
 
+if test "$HOST" != "office"
+    alias nvm=fnm
+    fnm env | source
+end
+
 bind \cq history-pager
 
 set -x EMAIL "$EMAIL_NAME@$EMAIL_DOMAIN"
@@ -73,7 +78,6 @@ alias vi=nvim
 alias vimdiff="nvim -d"
 alias cat=bat
 alias grep=rg
-alias nvm=fnm
 
 alias rally@="git diff HEAD --name-only | rally @"
 alias rallyp="rally config project --set"
@@ -125,7 +129,6 @@ fish_add_path "$HOME/bin"
 fish_add_path "$HOME/.cargo/bin"
 fish_add_path "$HOME/go/bin/"
 
-fnm env | source
 set -x HOMEBREW_NO_AUTO_UPDATE 1
 set BAT_THEME "Solarized (dark)"
 

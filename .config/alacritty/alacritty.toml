@@ -39,8 +39,7 @@ foreground = "0xc0caf5"
 size = 14
 
   [font.normal]
-  family = "JetBrainsMono Nerd Font"
-  style = "Regular"
+  family = "JetBrainsMono"
 
   [font.offset]
   x = 0

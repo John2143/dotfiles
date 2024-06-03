@@ -79,18 +79,6 @@
     initialPassword = "john";
     shell = pkgs.fish;
     packages = with pkgs; [
-      # cli
-      fish # shell
-
-      # graphical
-      waybar # status bar
-      wofi # "start menu" / program browser
-      dolphin # file browser
-      alacritty # terminal
-
-      wl-clipboard # copy-paste via cli
-      nerdfonts # fonts, idk how many this is
-      jetbrains-mono # font
 
       # === BEGIN NONFREE ===
     
@@ -111,7 +99,6 @@
     wget
     curl
     tmux
-    hyprland
     home-manager
     os-prober
     vim

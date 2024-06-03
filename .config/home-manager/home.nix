@@ -31,6 +31,18 @@ in
   home.packages = with pkgs; [
     firefox # browser
 
+    # graphical
+    hyprland
+    waybar # status bar
+    wofi # "start menu" / program browser
+    dolphin # file browser
+    alacritty # terminal
+
+    wl-clipboard # copy-paste via cli
+    nerdfonts # fonts, idk how many this is
+    jetbrains-mono # font
+
+
     udiskie # disks
     # neovim
 
@@ -43,7 +55,7 @@ in
     choose # awk replacement
     du-dust # df/du replacement
 
-    fnm # node version manager # TODO switch to nixos
+    # fnm # node version manager # TODO switch to nixos
     clang # compiler
     rustup # rust compiler
 
@@ -116,6 +128,9 @@ in
     defaultEditor = true;
     viAlias = true;
     vimAlias = true;
+    extraConfig = ''
+      source ~/.vimrc
+    '';
     plugins = with pkgs.vimPlugins; [
       nvim-lspconfig
       nvim-treesitter.withAllGrammars
