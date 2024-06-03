@@ -79,6 +79,9 @@ alias ath="alacritty-themes"
 alias ebinds="vim ~/.config/sxhkd/sxhkdrc; rbinds"
 alias rbinds="pkill -USR1 -x sxhkd"
 
+alias note="fish -c 'cd ~/Work/ ; vim ~/Work/Periodic/Daily/(date \"+%Y-%m-%d\").md'"
+alias notep="fish -c 'cd ~/Personal/ ; vim ~/Personal/Periodic/Daily/(date \"+%Y-%m-%d\").md'"
+
 alias a8=". ./venv/bin/activate.fish"
 alias ctx="awsctx -g | ."
 

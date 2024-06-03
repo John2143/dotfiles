@@ -286,7 +286,7 @@ lua << END
                 },
             },
         },
-        root_dir = lspconfig.util.root_pattern('src'),
+        root_dir = lspconfig.util.root_pattern("src"),
         capabilities = capabilities,
     }
 
@@ -664,6 +664,8 @@ nnoremap <Leader>qb :call vimspector#ListBreakpoints()<CR>
 nnoremap <Leader>qt :call vimspector#ToggleBreakpoint()<CR>
 nnoremap <Leader>qT :call vimspector#ClearBreakpoints()<CR>
 nnoremap <leader>qy <Plug>VimspectorToggleConditionalBreakpoint
+
+inoremap <silent><script><expr> <C-J> copilot#Accept("\<CR>")
 
 nmap <Leader>qr <Plug>VimspectorRestart
 nmap <Leader>qh <Plug>VimspectorStepOut
