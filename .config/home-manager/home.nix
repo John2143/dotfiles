@@ -38,6 +38,10 @@ in
     dolphin # file browser
     alacritty # terminal
 
+    mullvad-vpn # vpn
+
+
+
     wl-clipboard # copy-paste via cli
     nerdfonts # fonts, idk how many this is
     jetbrains-mono # font
@@ -65,6 +69,21 @@ in
     # fnm # node version manager # TODO switch to nixos
     clang # compiler
     rustup # rust compiler
+
+    # screenshots
+    slurp
+    grim
+    file
+    bind
+
+    # Other
+    pwvucontrol
+    cliphist
+    wl-clipboard-x11
+    dunst
+    libnotify
+    gthumb
+
 
   ];
 

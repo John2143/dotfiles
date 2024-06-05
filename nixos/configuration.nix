@@ -6,9 +6,9 @@
 
 {
   imports =
-    [ # Include the results of the hardware scan.
+    [
       ./hardware-configuration.nix
-      # <home-manager/nixos>
+      # inputs.home-manager.nixosModules.default
     ];
 
   # === BEGIN NONFREE ===
@@ -48,7 +48,7 @@
     jimmys_2G.psk = "@PSK_HOME@";
   }; 
   networking.defaultGateway = "192.168.1.1";
-  networking.nameservers = [ "192.168.1.1" ];
+  networking.nameservers = [ "192.168.1.2" "192.168.1.35" ];
 
   # Set your time zone.
   time.timeZone = "America/New_York";
@@ -84,12 +84,50 @@
     
       obsidian # note-taking software
       teamspeak_client
+      discord
     
       # === END NONFREE ===
+
+      # === COSMIC ===	
+      cosmic-applets
+      cosmic-applibrary
+      cosmic-bg
+      cosmic-comp
+      cosmic-design-demo
+      cosmic-edit
+      cosmic-emoji-picker
+      cosmic-files
+      cosmic-greeter
+      cosmic-icons
+      cosmic-launcher
+      cosmic-notifications
+      cosmic-osd
+      cosmic-panel
+      cosmic-protocols
+      cosmic-randr
+      cosmic-screenshot
+      cosmic-session
+      cosmic-settings-daemon
+      cosmic-settings
+      cosmic-store
+      cosmic-tasks
+      cosmic-term
+      cosmic-workspaces-epoch
+      libcosmicAppHook
+      xdg-desktop-portal-cosmic
+
+
+      # === END COSMIC ===
 
     ];
   };
   security.sudo.wheelNeedsPassword = false;
+
+  home-manager = {
+    users = {
+      "john" = import ../.config/home-manager/home.nix;
+    };
+  };
 
   # List packages installed in system profile. To search, run:
   # $ nix search wget
@@ -99,7 +137,6 @@
     wget
     curl
     tmux
-    home-manager
     os-prober
     vim
     btop

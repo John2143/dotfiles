@@ -149,7 +149,9 @@ if [ (uname) = "Linux" ]
     if [ (tty) = "/dev/tty1" ];
         # and hyprland is not running (the search will count itsself in ps so add +1)
         if [ (ps aux | grep Hyprland | wc -l) = "1" ];
-            Hyprland &;
+            if test "$HOST" = "office"
+                # Hyprland &;
+            end
         end
     end
 end
