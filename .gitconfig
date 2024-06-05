@@ -44,8 +44,8 @@
 	unignore = update-index --no-assume-unchanged
 	ignored = !git ls-files -v | grep "^[[:lower:]]"
 
-[url "git@github.com:"]
-	insteadOf = "https://github.com/"
+;[url "git@github.com:"]
+	;insteadOf = "https://github.com/"
 [url "git@github.com"]
 	insteadOf = "gh"
 
