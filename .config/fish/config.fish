@@ -7,8 +7,6 @@ if [ (uname) = "Linux" ]
         date "+$HOME/screenshots/%Yy-%mm-%dd_%0Hh-%Mm-%Ss_.png"
     end
 
-    set -x TERM "alacritty"
-
     set -g fish_user_paths "/home/john/.local/bin" $fish_user_paths
     set -g fish_user_paths "/opt/miniconda3/bin/" $fish_user_paths
     if test "$HOST" = "office"
@@ -79,6 +77,8 @@ alias vi=nvim
 alias vimdiff="nvim -d"
 alias cat=bat
 alias grep=rg
+
+alias ls=sl
 
 alias rally@="git diff HEAD --name-only | rally @"
 alias rallyp="rally config project --set"
