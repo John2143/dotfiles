@@ -81,42 +81,38 @@
     packages = with pkgs; [
 
       # === BEGIN NONFREE ===
-    
       obsidian # note-taking software
       teamspeak_client
       discord
-    
       # === END NONFREE ===
 
       # === COSMIC ===	
-      cosmic-applets
-      cosmic-applibrary
-      cosmic-bg
-      cosmic-comp
-      cosmic-design-demo
-      cosmic-edit
-      cosmic-emoji-picker
-      cosmic-files
-      cosmic-greeter
-      cosmic-icons
-      cosmic-launcher
-      cosmic-notifications
-      cosmic-osd
-      cosmic-panel
-      cosmic-protocols
-      cosmic-randr
-      cosmic-screenshot
-      cosmic-session
-      cosmic-settings-daemon
-      cosmic-settings
-      cosmic-store
-      cosmic-tasks
-      cosmic-term
-      cosmic-workspaces-epoch
-      libcosmicAppHook
-      xdg-desktop-portal-cosmic
-
-
+      # cosmic-applets
+      # cosmic-applibrary
+      # cosmic-bg
+      # cosmic-comp
+      # cosmic-design-demo
+      # cosmic-edit
+      # cosmic-emoji-picker
+      # cosmic-files
+      # cosmic-greeter
+      # cosmic-icons
+      # cosmic-launcher
+      # cosmic-notifications
+      # cosmic-osd
+      # cosmic-panel
+      # cosmic-protocols
+      # cosmic-randr
+      # cosmic-screenshot
+      # cosmic-session
+      # cosmic-settings-daemon
+      # cosmic-settings
+      # cosmic-store
+      # cosmic-tasks
+      # cosmic-term
+      # cosmic-workspaces-epoch
+      # libcosmicAppHook
+      # xdg-desktop-portal-cosmic
       # === END COSMIC ===
 
     ];
