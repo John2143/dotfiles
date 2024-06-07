@@ -17,6 +17,8 @@ if [ (uname) = "Linux" ]
         alias enf="sudo vim /etc/nixos/flake.nix"
 
         alias ehm="fish -c 'cd ~/.config/home-manager/ ; nvim .'"
+
+        alias build="sudo nixos-rebuild switch -v --flake ~/dotfiles/nixos/"
         alias pbcopy="wl-copy"
         alias pbpaste="wl-paste"
     else
