@@ -80,7 +80,7 @@ alias vimdiff="nvim -d"
 alias cat=bat
 alias grep=rg
 
-alias ls=sl
+alias sl=ls
 
 alias rally@="git diff HEAD --name-only | rally @"
 alias rallyp="rally config project --set"
