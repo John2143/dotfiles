@@ -84,6 +84,9 @@ if test "$HOST" = "office"
 
     killall gammastep || true
     gammastep -l $loc -b $brightness_day:$brightness_night -t $color_temp_day:$color_temp_night &
+
+    echo 0 | sudo tee /sys/devices/system/cpu/cpu8/online
+    echo 0 | sudo tee /sys/devices/system/cpu/cpu9/online
 end
 if test "$HOST" = "downstairs"
     # WAN
