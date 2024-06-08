@@ -14,9 +14,10 @@
   nix.settings.experimental-features = [ "nix-command" "flakes" ];
 
   # Use the systemd-boot EFI boot loader.
-  boot.loader.systemd-boot.enable = true;
-  # boot.loader = {
-  #   efi.canTouchEfiVariables = true;
+  boot.loader = {
+    systemd-boot.enable = true;
+    efi.canTouchEfiVariables = true;
+  };
   #   grub = {
   #     useOSProber = true;
   #     extraEntries = ''
@@ -74,11 +75,11 @@
   };
   security.sudo.wheelNeedsPassword = false;
 
-  home-manager = {
-    users = {
-      "john" = import ./home.nix;
-    };
-  };
+  # home-manager = {
+  #   users = {
+  #     "john" = import ./home.nix;
+  #   };
+  # };
 
   # List packages installed in system profile. To search, run:
   # $ nix search wget
