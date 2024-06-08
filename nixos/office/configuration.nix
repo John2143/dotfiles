@@ -121,7 +121,7 @@
 
   home-manager = {
     users = {
-      "john" = import ../.config/home-manager/home.nix;
+      "john" = import ./home.nix;
     };
   };
 

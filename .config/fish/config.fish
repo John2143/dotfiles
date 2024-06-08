@@ -1,6 +1,16 @@
 set -x EMAIL_NAME "john"
 set -x EMAIL_DOMAIN "john2143.com"
 set HOST (hostname -s)
+set NIX false
+if test "$HOST" = "office"
+    alias build="sudo nixos-rebuild switch -v --flake ~/dotfiles/nixos/office/"
+    set NIX true
+end
+if test "$HOST" = "closet"
+    alias build="sudo nixos-rebuild switch -v --flake ~/dotfiles/nixos/closet/"
+    set NIX true
+end
+
 
 if [ (uname) = "Linux" ]
     function screenshot_location
@@ -9,16 +19,14 @@ if [ (uname) = "Linux" ]
 
     set -g fish_user_paths "/home/john/.local/bin" $fish_user_paths
     set -g fish_user_paths "/opt/miniconda3/bin/" $fish_user_paths
-    if test "$HOST" = "office"
+    if $NIX
         alias pp="nix-env -iA"
         alias p="nix-env -q"
-        alias en="sudo vim /etc/nixos/configuration.nix"
-        alias enh="sudo vim /etc/nixos/hardware-configuration.nix"
-        alias enf="sudo vim /etc/nixos/flake.nix"
+        alias en="fish -c 'cd /etc/nixos/ ; nvim configuration.nix'"
+        alias enh="fish -c 'cd /etc/nixos/ ; nvim hardware-configuration.nix'"
+        alias enf="fish -c 'cd /etc/nixos/ ; nvim flake.nix'"
+        alias ehm="fish -c 'cd /etc/nixos/ ; nvim home.nix'"
 
-        alias ehm="fish -c 'cd ~/.config/home-manager/ ; nvim .'"
-
-        alias build="sudo nixos-rebuild switch -v --flake ~/dotfiles/nixos/"
         alias pbcopy="wl-copy"
         alias pbpaste="wl-paste"
     else
