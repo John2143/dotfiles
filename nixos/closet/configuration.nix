@@ -40,7 +40,7 @@
     # jimmys_2G.psk = "@PSK_HOME@";
   # }; 
   networking.defaultGateway = "192.168.1.1";
-  # networking.nameservers = [ "192.168.1.2" "192.168.1.35" ];
+  networking.nameservers = [ "1.1.1.1" "8.8.8.8" ];
 
   # Set your time zone.
   time.timeZone = "America/New_York";
@@ -75,11 +75,11 @@
   };
   security.sudo.wheelNeedsPassword = false;
 
-  # home-manager = {
-  #   users = {
-  #     "john" = import ./home.nix;
-  #   };
-  # };
+  home-manager = {
+    users = {
+      "john" = import ./home.nix;
+    };
+  };
 
   # List packages installed in system profile. To search, run:
   # $ nix search wget

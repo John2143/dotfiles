@@ -56,9 +56,9 @@ in
     # # Building this configuration will create a copy of 'dotfiles/screenrc' in
     # # the Nix store. Activating the configuration will then make '~/.screenrc' a
     # # symlink to the Nix store copy.
-    # ".vimrc".source = /home/john/dotfiles/.vimrc;
-    # ".tmux.conf".source = /home/john/dotfiles/.tmux.conf;
-    # ".gitconfig".source = ../../.gitconfig;
+    ".vimrc".source = ../../.vimrc;
+    ".tmux.conf".source = ../../.tmux.conf;
+    ".gitconfig".source = ../../.gitconfig;
     # ".xprofile.fish".source = ../../.xprofile.fish;
     # ".xprofile".source = ../../.xprofile;
 

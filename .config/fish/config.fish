@@ -65,7 +65,7 @@ if [ (uname) = "Darwin" ]
     alias ls=eza
 end
 
-if test "$HOST" != "office"
+if not $NIX
     alias nvm=fnm
     fnm env | source
 end
@@ -143,7 +143,7 @@ fish_add_path "$HOME/go/bin/"
 set -x HOMEBREW_NO_AUTO_UPDATE 1
 set BAT_THEME "Solarized (dark)"
 
-git config --global user.email $EMAIL > /dev/null
+# git config --global user.email $EMAIL > /dev/null
 
 bind \u2022 'backward-kill-bigword'
 
