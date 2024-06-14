@@ -78,11 +78,11 @@
   };
   security.sudo.wheelNeedsPassword = false;
 
-  home-manager = {
-    users = {
-      "john" = import ./home.nix;
-    };
-  };
+  # home-manager = {
+  #   users = {
+  #     "john" = import ./home.nix;
+  #   };
+  # };
 
   # List packages installed in system profile. To search, run:
   # $ nix search wget
