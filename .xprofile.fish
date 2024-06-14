@@ -10,7 +10,7 @@ set brightness_night 0.75
 set loc "38.897916:-77.035476"
 
 if test "$HOST" = "arch"
-    set left_mon "DP-0"
+    set left_mon "DP-4"
     set right_mon "HDMI-1"
 
     xrandr --output $left_mon --mode 2560x1440 --rate 239.97 --primary
