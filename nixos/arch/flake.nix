@@ -14,7 +14,7 @@
       pkgs = nixpkgs.legacyPackages.${system};
     in
     {
-      nixosConfigurations.office = nixpkgs.lib.nixosSystem {
+      nixosConfigurations.arch = nixpkgs.lib.nixosSystem {
         system = "${system}";
         # extraSpecialArgs = {inherit inputs;};
         modules = [
