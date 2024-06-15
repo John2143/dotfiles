@@ -73,6 +73,7 @@
   # services.xserver.libinput.enable = true;
 
   # Define a user account. Don't forget to set a password with ‘passwd’.
+  programs.fish.enable = true;
   users.users.john = {
     isNormalUser = true;
     extraGroups = [ "wheel" "networkmanager" ]; # Enable ‘sudo’ for the user.
@@ -129,7 +130,6 @@
   # $ nix search wget
   environment.systemPackages = with pkgs; [
     git
-    fish
     wget
     curl
     tmux
@@ -154,8 +154,6 @@
   programs.hyprland = {
     enable = true;
   };
-
-  programs.fish.enable = true;
 
   programs.steam.enable = true;
 

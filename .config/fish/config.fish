@@ -100,15 +100,14 @@ alias rallytags="ctags --fields=+l --languages=python --python-kinds=-iv -R -f .
 
 alias launchdla="rally asset -e UAT --anon launch --job-name 'DLA Context Creator' --init-data "
 
-alias efish="fish -c 'cd ~/.config/fish/; vim config.fish; rfish'"
-alias efunc="fish -c 'cd ~/.config/fish/functions/; vim .'"
-alias eprompt="vim ~/.config/starship.toml"
-alias exprofile="vim ~/.xprofile"
-alias etmux="vim ~/.tmux.conf"
-alias rfish="source ~/.config/fish/config.fish"
-alias ath="alacritty-themes"
-alias ebinds="vim ~/.config/sxhkd/sxhkdrc; rbinds"
-alias rbinds="pkill -USR1 -x sxhkd"
+alias efish="fish -c 'cd ~/dotfiles/.config/fish/; vim config.fish; rfish'"
+alias eprompt="vim ~/dotfiles/.config/starship.toml"
+alias exprofile="vim ~/dotfiles/.xprofile.fish"
+alias etmux="vim ~/dotfiles/.tmux.conf"
+alias rfish="source ~/dotfiles/.config/fish/config.fish"
+# alias ath="alacritty-themes"
+# alias ebinds="vim ~/.config/sxhkd/sxhkdrc; rbinds"
+# alias rbinds="pkill -USR1 -x sxhkd"
 
 alias note="fish -c 'cd ~/Work/ ; vim ~/Work/Periodic/Daily/(date \"+%Y-%m-%d\").md'"
 alias notep="fish -c 'cd ~/Personal/ ; vim ~/Personal/Periodic/Daily/(date \"+%Y-%m-%d\").md'"

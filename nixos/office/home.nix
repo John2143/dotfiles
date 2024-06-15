@@ -124,6 +124,74 @@ in
   };
 
   programs.fish = {
+    enable = true;
+    shellInit = builtins.readFile ../../.config/fish/config.fish;
+    interactiveShellInit = ''
+      function __get_program_names
+          ps aux | choose 10 | sort | uniq
+      end
+
+      complete -r -c mullvad-split-tunnel -a "(__get_program_names)"
+    '';
+    functions = {
+      hostname.body = "/usr/bin/env cat /etc/hostname";
+      kc.body = ''
+        set -f new_env (kubectl config get-contexts -o name | fzf)
+        if test "A$new_env" = "A"
+            exit 1
+        end
+        kubectl config use-context $new_env
+      '';
+      mullvad-split-tunnel.body = ''
+        set appname "$argv[1]";
+        set procs (ps aux | grep $appname | grep -v "0:00 rg" | choose 0)
+        set num_procs (echo $procs | wc -l)
+
+        # Echo to stderr so that other scripts can use this command
+        echo 1>&2 "Ignoring $appname ($num_procs matches)";
+        for pid in $procs;
+            echo -n "Split-tunneling $pid ... ";
+            mullvad split-tunnel add $pid;
+        end
+        echo 1>&2 "Done"
+      '';
+      replace-all.body = ''
+        set -f find $argv[1]
+        set -f rep $argv[2]
+        set -f filter $argv[3]
+        if test $filter
+            echo "Replacing /$find/ with /$rep/ with extra $filter"
+            rg --files-with-matches $filter | rg $find --files-with-matches | xargs sed -i "s/$find/$rep/g"
+        else
+            echo "Replacing /$find/ with /$rep/"
+            rg $find --files-with-matches | xargs sed -i "s/$find/$rep/g"
+        end
+      '';
+      sk.body = ''
+        set -x SIGNING_KEY (gpg --list-secret-keys --keyid-format long | grep $EMAIL -B 3 | grep "(work|github|disco|1E7452EAEE)" -B 3 | grep sec | string split "/" | tail -n 1 | string match -r '[0-9A-F]+')
+        echo "Set Signing key to $SIGNING_KEY"
+        git config --global user.signingkey $SIGNING_KEY > /dev/null
+      '';
+      envsource.body = ''
+        set -f envfile "$argv"
+        if not test -f "$envfile"
+            echo "Unable to load $envfile"
+            return 1
+        end
+        while read line
+            if not string match -qr '^#|^$' "$line" # skip empty lines and comments
+                if string match -qr '=' "$line" # if `=` in line assume we are setting variable.
+                    set item (string split -m 1 '=' $line)
+                    set item[2] (eval echo $item[2]) # expand any variables in the value
+                    set -gx $item[1] $item[2]
+                    echo "Exported key: $item[1]" # could say with $item[2] but that might be a secret
+                else
+                    eval $line # allow for simple commands to be run e.g. cd dir/mamba activate env
+                end
+            end
+        end < "$envfile"
+      '';
+    };
     plugins = [
     ];
   };
