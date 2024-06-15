@@ -618,7 +618,7 @@ nnoremap <leader>e :bd<cr>
 nnoremap <leader>E :bd!<cr>
 nnoremap <leader>3 :q!<cr>
 " quick edit vimrc
-nnoremap <leader>v :vsplit ~/.vimrc<cr>
+nnoremap <leader>v :vsplit ~/dotfiles/.vimrc<cr>
 nnoremap <leader>f :FSHere<cr>
 " maybe swap to jq; but I have python more often than I have jq
 nnoremap <leader>j :!python3 -m json.tool<cr>
