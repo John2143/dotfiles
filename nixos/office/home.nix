@@ -89,6 +89,16 @@ in
 
   ];
 
+  xdg.configFile = {
+    "alacritty".source = config.lib.file.mkOutOfStoreSymlink ../../.config/alacritty;
+    "dunst".source = config.lib.file.mkOutOfStoreSymlink ../../.config/dunst;
+    "hypr".source = config.lib.file.mkOutOfStoreSymlink ../../.config/hypr;
+    "waybar".source = config.lib.file.mkOutOfStoreSymlink ../../.config/waybar;
+
+    "get_sunset.fish".source = config.lib.file.mkOutOfStoreSymlink ../../.config/get_sunset.fish;
+    "starship.toml".source = config.lib.file.mkOutOfStoreSymlink ../../.config/starship.toml;
+  };
+
   # Home Manager is pretty good at managing dotfiles. The primary way to manage
   # plain files is through 'home.file'.
   home.file = {
