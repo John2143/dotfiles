@@ -8,13 +8,18 @@
     [ (modulesPath + "/installer/scan/not-detected.nix")
     ];
 
-  boot.initrd.availableKernelModules = [ "xhci_pci" "ahci" "usbhid" ];
+  boot.initrd.availableKernelModules = [ "xhci_pci" "usbhid" ];
   boot.initrd.kernelModules = [ ];
   boot.kernelModules = [ ];
   boot.extraModulePackages = [ ];
 
   fileSystems."/" =
-    { device = "/dev/disk/by-uuid/66a05afb-847c-4d0f-be77-d19f842cab53";
+    { device = "/dev/disk/by-label/NIX";
+      fsType = "ext4";
+    };
+
+  fileSystems."/mnt" =
+    { device = "/dev/disk/by-label/ARCH";
       fsType = "ext4";
     };
 
@@ -37,7 +42,7 @@
   # networking.interfaces.wlp0s20f3.useDHCP = lib.mkDefault true;
 
   nixpkgs.hostPlatform = lib.mkDefault "x86_64-linux";
-  # hardware.cpu.intel.updateMicrocode = lib.mkDefault config.hardware.enableRedistributableFirmware;
+  hardware.cpu.amd.updateMicrocode = lib.mkDefault config.hardware.enableRedistributableFirmware;
 
   # hardware.bluetooth.enable = true; # enables support for Bluetooth
   # ardware.bluetooth.powerOnBoot = true; # powers up the default Bluetooth controller on boot

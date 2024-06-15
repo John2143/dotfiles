@@ -3,11 +3,15 @@ set -x EMAIL_DOMAIN "john2143.com"
 set HOST (hostname -s)
 set NIX false
 if test "$HOST" = "office"
-    alias build="sudo nixos-rebuild switch -v --flake ~/dotfiles/nixos/office/"
+    alias build="sudo nixos-rebuild switch -v --flake ~/dotfiles/nixos/office/#office"
     set NIX true
 end
 if test "$HOST" = "closet"
-    alias build="sudo nixos-rebuild switch -v --flake ~/dotfiles/nixos/closet/"
+    alias build="sudo nixos-rebuild switch -v --flake ~/dotfiles/nixos/closet/#closet"
+    set NIX true
+end
+if test "$HOST" = "arch"
+    alias build="sudo nixos-rebuild switch -v --flake ~/dotfiles/nixos/arch/#arch"
     set NIX true
 end
 
@@ -65,7 +69,7 @@ if [ (uname) = "Darwin" ]
     alias ls=eza
 end
 
-if test "$HOST" != "office"
+if not $NIX
     alias nvm=fnm
     fnm env | source
 end
@@ -143,7 +147,7 @@ fish_add_path "$HOME/go/bin/"
 set -x HOMEBREW_NO_AUTO_UPDATE 1
 set BAT_THEME "Solarized (dark)"
 
-git config --global user.email $EMAIL > /dev/null
+# git config --global user.email $EMAIL > /dev/null
 
 bind \u2022 'backward-kill-bigword'
 

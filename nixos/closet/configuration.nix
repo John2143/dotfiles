@@ -14,9 +14,10 @@
   nix.settings.experimental-features = [ "nix-command" "flakes" ];
 
   # Use the systemd-boot EFI boot loader.
-  boot.loader.systemd-boot.enable = true;
-  # boot.loader = {
-  #   efi.canTouchEfiVariables = true;
+  boot.loader = {
+    systemd-boot.enable = true;
+    efi.canTouchEfiVariables = true;
+  };
   #   grub = {
   #     useOSProber = true;
   #     extraEntries = ''
@@ -39,7 +40,7 @@
     # jimmys_2G.psk = "@PSK_HOME@";
   # }; 
   networking.defaultGateway = "192.168.1.1";
-  # networking.nameservers = [ "192.168.1.2" "192.168.1.35" ];
+  networking.nameservers = [ "1.1.1.1" "8.8.8.8" ];
 
   # Set your time zone.
   time.timeZone = "America/New_York";

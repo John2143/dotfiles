@@ -47,8 +47,11 @@ endif
 filetype off                  " required
 
 " office computer uses NixOS to manage packages
-if trim(system('hostname -s')) != "office"
+let hostname = trim(system('hostname -s'))
+if hostname ==# "office" || hostname ==# "closet"
+    " Nixos setup here
 
+else
     call plug#begin()
 
     " full monitor-sized movements made easy

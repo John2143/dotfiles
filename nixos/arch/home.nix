@@ -24,11 +24,30 @@ in
   # You should not change this value, even if you update Home Manager. If you do
   # want to update the value, then make sure to first check the Home Manager
   # release notes.
-  home.stateVersion = "23.11"; # Please read the comment before changing.
+  home.stateVersion = "24.11"; # Please read the comment before changing.
 
   # The home.packages option allows you to install Nix packages into your
   # environment.
   home.packages = with pkgs; [
+    firefox # browser
+
+    # graphical
+    hyprland
+    waybar # status bar
+    wofi # "start menu" / program browser
+    dolphin # file browser
+    alacritty # terminal
+
+    mullvad-vpn # vpn
+
+    wl-clipboard # copy-paste via cli
+    nerdfonts # fonts, idk how many this is
+    jetbrains-mono # font
+
+
+    udiskie # disks
+    # neovim
+
     # cli
     starship #prompt
     bat # cat replacement
@@ -38,7 +57,8 @@ in
     choose # awk replacement
     du-dust # df/du replacement
     fzf
-    killall
+
+    pulseaudio # pactl
 
     # k8s
     kubectl
@@ -48,6 +68,25 @@ in
     clang # compiler
     rustup # rust compiler
 
+    # screenshots
+    slurp
+    grim
+    file
+    bind
+
+    # Other / unsorted
+    pwvucontrol
+    cliphist
+    wl-clipboard-x11
+    dunst
+    libnotify
+    gthumb
+
+    spotifyd
+    gammastep
+    killall
+
+
   ];
 
   # Home Manager is pretty good at managing dotfiles. The primary way to manage
@@ -56,11 +95,11 @@ in
     # # Building this configuration will create a copy of 'dotfiles/screenrc' in
     # # the Nix store. Activating the configuration will then make '~/.screenrc' a
     # # symlink to the Nix store copy.
-    ".vimrc".source = ../../.vimrc;
-    ".tmux.conf".source = ../../.tmux.conf;
-    ".gitconfig".source = ../../.gitconfig;
-    # ".xprofile.fish".source = ../../.xprofile.fish;
-    # ".xprofile".source = ../../.xprofile;
+    # ".vimrc".source = /home/john/dotfiles/.vimrc;
+    # ".tmux.conf".source = /home/john/dotfiles/.tmux.conf;
+    # ".gitconfig".source = ../../.gitconfig;
+    ".xprofile.fish".source = ../../.xprofile.fish;
+    ".xprofile".source = ../../.xprofile;
 
     # # You can also set the file content immediately.
     # ".gradle/gradle.properties".text = ''
