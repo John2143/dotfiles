@@ -132,6 +132,7 @@ in
 
   programs.tmux = {
     enable = true;
+    extraConfig = builtins.readFile ../../.tmux.conf;
     plugins = with pkgs.tmuxPlugins; [
       sensible
       tmux-colors-solarized
@@ -145,7 +146,6 @@ in
       # set -g @plugin 'catppuccin/tmux'
       # set -g @plugin 'tmux-plugins/tmux-battery'
       # set -g @plugin 'christoomey/vim-tmux-navigator'
-
     ];
   };
 

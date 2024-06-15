@@ -14,9 +14,9 @@
   # === BEGIN NONFREE ===
   nixpkgs.config = {
     allowUnfree = true;
-    permittedInsecurePackages = [
-      "electron-25.9.0"
-    ];
+    # permittedInsecurePackages = [
+    #   "electron-25.9.0"
+    # ];
   };
   # === END NONFREE ===
 
@@ -48,7 +48,7 @@
     jimmys_2G.psk = "@PSK_HOME@";
   }; 
   networking.defaultGateway = "192.168.1.1";
-  networking.nameservers = [ "192.168.1.2" "192.168.1.35" ];
+  networking.nameservers = [ "192.168.1.35" "192.168.1.3"  ];
 
   # Set your time zone.
   time.timeZone = "America/New_York";
@@ -81,7 +81,7 @@
     packages = with pkgs; [
 
       # === BEGIN NONFREE ===
-      obsidian # note-taking software
+      # obsidian # note-taking software
       teamspeak_client
       discord
       # === END NONFREE ===

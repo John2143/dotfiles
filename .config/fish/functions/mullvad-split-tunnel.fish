@@ -1,6 +1,6 @@
 function mullvad-split-tunnel --description 'Add split-tunneling for a single application'
     set appname "$argv[1]";
-    set procs (ps aux | grep $appname | grep -v "0:00 rg" | choose 1)
+    set procs (ps aux | grep $appname | grep -v "0:00 rg" | choose 0)
     set num_procs (echo $procs | wc -l)
 
     # Echo to stderr so that other scripts can use this command
