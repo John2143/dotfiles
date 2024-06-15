@@ -3,11 +3,15 @@ set -x EMAIL_DOMAIN "john2143.com"
 set HOST (hostname -s)
 set NIX false
 if test "$HOST" = "office"
-    alias build="sudo nixos-rebuild switch -v --flake ~/dotfiles/nixos/office/"
+    alias build="sudo nixos-rebuild switch -v --flake ~/dotfiles/nixos/office/#office"
     set NIX true
 end
 if test "$HOST" = "closet"
-    alias build="sudo nixos-rebuild switch -v --flake ~/dotfiles/nixos/closet/"
+    alias build="sudo nixos-rebuild switch -v --flake ~/dotfiles/nixos/closet/#closet"
+    set NIX true
+end
+if test "$HOST" = "arch"
+    alias build="sudo nixos-rebuild switch -v --flake ~/dotfiles/nixos/arch/#arch"
     set NIX true
 end
 

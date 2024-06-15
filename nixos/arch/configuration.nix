@@ -35,7 +35,7 @@
   networking.hostName = "arch"; # Define your hostname.
   networking.networkmanager.enable = true;  # Easiest to use and most distros use this by default.
   networking.interfaces = {
-    wlp0s20f3.ipv4.addresses = [{
+    enp6s0.ipv4.addresses = [{
       address = "192.168.1.3";
       prefixLength = 24;
     }];
@@ -78,11 +78,11 @@
   };
   security.sudo.wheelNeedsPassword = false;
 
-  # home-manager = {
-  #   users = {
-  #     "john" = import ./home.nix;
-  #   };
-  # };
+  home-manager = {
+    users = {
+      "john" = import ./home.nix;
+    };
+  };
 
   # List packages installed in system profile. To search, run:
   # $ nix search wget
@@ -204,6 +204,7 @@
   # and migrated your data accordingly.
   #
   # For more information, see `man configuration.nix` or https://nixos.org/manual/nixos/stable/options#opt-system.stateVersion .
+  system.stateVersion = "24.11";
   
   boot.loader.grub.extraEntries = ''
     #
