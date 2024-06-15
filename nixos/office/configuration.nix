@@ -214,8 +214,8 @@
   services.k3s = {
     enable = true;
     role = "agent";
-    serverAddr = "https://192.168.1.2:6443";
-    token = "K109bf3d3db3a886f74e3b580da672b54e15f0197c0d922c5f3186a8abd2ba36b00::server:cc13ddec0fa20ac3f2c1b3912dab21fb";
+    serverAddr = "https://192.168.1.35:6443";
+    token = "K10c19a7646d1e7136cc58d26d01b44ca809b0c2efed76bed7b1612f7c01e41f616::xv480x.847d9pubg1qnqif5";
   };
 
   services.blueman.enable = true;
