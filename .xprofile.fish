@@ -17,7 +17,7 @@ if test "$HOST" = "arch"
     #xrandr --output $left_mon --mode 2560x1440 --rate 239.97 --primary
     #xrandr --output $right_mon --mode 1920x1080 --rate 144.00 --right-of $left_mon
     killall spotifyd || true
-    spotifyd -p $SPOTIFY_PASSWORD -u $SPOTIFY_USERNAME --device-name office --device-type computer --bitrate 320 --backend pulseaudio &
+    spotifyd -p $SPOTIFY_PASSWORD -u $SPOTIFY_USERNAME --device-name $HOST --device-type computer --bitrate 320 --backend pulseaudio &
 
     killall gammastep || true
     gammastep -l $loc -b $brightness_day:$brightness_night -t $color_temp_day:$color_temp_night &
@@ -30,7 +30,7 @@ if test "$HOST" = "office"
     #xrandr --output $left_mon --mode 2560x1440 --rate 239.97 --primary
     #xrandr --output $right_mon --mode 1920x1080 --rate 144.00 --right-of $left_mon
     killall spotifyd || true
-    spotifyd -p $SPOTIFY_PASSWORD -u $SPOTIFY_USERNAME --device-name office --device-type computer --bitrate 320 --backend pulseaudio &
+    spotifyd -p $SPOTIFY_PASSWORD -u $SPOTIFY_USERNAME --device-name $HOST --device-type computer --bitrate 320 --backend pulseaudio &
 
     killall gammastep || true
     gammastep -l $loc -b $brightness_day:$brightness_night -t $color_temp_day:$color_temp_night &
