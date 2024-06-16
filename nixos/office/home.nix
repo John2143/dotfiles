@@ -17,6 +17,10 @@ in
   home.username = "john";
   home.homeDirectory = "/home/john";
 
+  nixpkgs.config = {
+    allowUnfree = true;
+  };
+
   # This value determines the Home Manager release that your configuration is
   # compatible with. This helps avoid breakage when a new Home Manager release
   # introduces backwards incompatible changes.
@@ -58,6 +62,8 @@ in
     du-dust # df/du replacement
     fzf
 
+    gh # github
+
     pulseaudio # pactl
 
     # k8s
@@ -87,6 +93,20 @@ in
     killall
 
 
+    amdgpu_top
+    bacon
+    cargo-generate
+    fd
+    gcc-arm-embedded
+    hyprlock
+    mpv
+    openocd
+    probe-rs
+    spotify
+    stlink
+
+    temurin-jre-bin-21
+    wine-wayland
   ];
 
   xdg.configFile = {
@@ -373,7 +393,7 @@ in
       null-ls-nvim
       crates-nvim
 
-      # copilot-vim-nvim
+      copilot-vim
 
     ];
   };
