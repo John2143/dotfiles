@@ -23,6 +23,11 @@
       fsType = "ext4";
     };
 
+  fileSystems."/mnt/other" =
+    { device = "/dev/disk/by-label/OTHER";
+      fsType = "ext4";
+    };
+
   fileSystems."/boot" =
     { device = "/dev/disk/by-uuid/FD0B-76B7";
       fsType = "vfat";
