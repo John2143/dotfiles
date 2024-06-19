@@ -34,7 +34,7 @@ in
     bat # cat replacement
     eza # ls replacement
     ripgrep # grep replacement
-    # btop # btop++ > bpytop > htop > top
+    btop # btop++ > bpytop > htop > top
     choose # awk replacement
     du-dust # df/du replacement
     fzf
@@ -45,8 +45,8 @@ in
     k9s
 
     # fnm # node version manager # TODO switch to nixos
-    clang # compiler
-    rustup # rust compiler
+    # clang # compiler
+    # rustup # rust compiler
 
   ];
 

@@ -1,7 +1,9 @@
 [user]
 	email = john@john2143.com
 	name = John Schmidt
-	signingkey = EBA38A96A33F1BB9
+	signingkey = /home/john/.ssh/id_ed25519.pub
+[gpg]
+    format = ssh
 [push]
 	default = current
 [color]
@@ -70,3 +72,6 @@
 	repo = /Users/jschmidt/neo-event-bus-monitor-deploy
 [commit]
 	verbose = true
+    gpgsign = true
+[tag]
+    gpgsign = true

@@ -86,10 +86,10 @@
   environment.systemPackages = with pkgs; [
     git
     fish
-    wget
+    # wget
     curl
     tmux
-    vim
+    # vim
     btop
 
     k3s # kubernetes k8s node
@@ -130,13 +130,7 @@
   services.k3s = {
     enable = true;
     role = "server";
-    # role = "agent";
-    # serverAddr = "https://192.168.1.2:6443";
-    # token = "K109bf3d3db3a886f74e3b580da672b54e15f0197c0d922c5f3186a8abd2ba36b00::server:cc13ddec0fa20ac3f2c1b3912dab21fb";
   };
-
-  # services.blueman.enable = true;
-
 
   # # Open ports in the firewall.
   # networking.firewall.allowedTCPPorts = [ 
