@@ -81,9 +81,6 @@ format = '[$time]($style) '
 [kubernetes]
 format = '[⛵$context](dimmed cyan) '
 disabled = false
-#contexts_aliases = [
-  #{ context_pattern = "dev.local.cluster.k8s", style = "green", symbol = "💔 " },
-#]
 
 [aws]
 format = '[$symbol($profile )(\($region\) )]($style)'
@@ -105,6 +102,10 @@ context_alias = "kind-$cluster"
 [[kubernetes.contexts]]
 context_pattern = "(?P<cluster>[\\w-]+):(?P<account>\\d+):(?P<name>[\\w-]+)"
 context_alias = "aws-$cluster"
+
+[[kubernetes.contexts]]
+context_pattern = "default"
+context_alias = "home"
 
 #[[kubernetes.contexts]]
 #context_pattern = ".+"
