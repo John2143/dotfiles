@@ -22,6 +22,8 @@
 
   nix.settings.experimental-features = [ "nix-command" "flakes" ];
 
+  services.getty.autologinUser = "john";
+
   # Use the systemd-boot EFI boot loader.
   #boot.loader.systemd-boot.enable = true;
   boot.loader = {
@@ -138,6 +140,9 @@
     btop
 
     k3s # kubernetes k8s node
+
+    xdg-desktop-portal-gtk
+    xdg-desktop-portal-hyprland
 
     pavucontrol # audio
     qpwgraph

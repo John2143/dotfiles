@@ -26,6 +26,18 @@ if test "$HOST" = "arch"
     sleep 0.1
     tmux new-window 'spotify-launcher'
     tmux rename-window 'spotify'
+
+    sleep 0.1
+    tmux new-window 'while true; steam; read; end'
+    tmux rename-window 'steam'
+
+    sleep 0.1
+    tmux new-window 'while true; obsidian; read; end'
+    tmux rename-window 'obsidian'
+
+    sleep 0.1
+    tmux new-window 'discord'
+    tmux rename-window 'discord'
 end
 
 if test "$HOST" = "office"
@@ -37,17 +49,5 @@ if test "$HOST" = "office"
     tmux new-window 'qpwgraph'
     tmux rename-window 'qpwgraph'
 end
-
-sleep 0.1
-tmux new-window 'while true; steam; read; end'
-tmux rename-window 'steam'
-
-sleep 0.1
-tmux new-window 'while true; obsidian; read; end'
-tmux rename-window 'obsidian'
-
-sleep 0.1
-tmux new-window 'discord'
-tmux rename-window 'discord'
 
 tmux rename-session monitor
