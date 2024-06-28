@@ -19,7 +19,16 @@
         # extraSpecialArgs = {inherit inputs;};
         modules = [
           inputs.home-manager.nixosModules.default
-          ./configuration.nix
+          ./nixos/office-configuration.nix
+        ];
+      };
+
+      nixosConfigurations.arch = nixpkgs.lib.nixosSystem {
+        system = "${system}";
+        # extraSpecialArgs = {inherit inputs;};
+        modules = [
+          inputs.home-manager.nixosModules.default
+          ./nixos/arch-configuration.nix
         ];
       };
     };

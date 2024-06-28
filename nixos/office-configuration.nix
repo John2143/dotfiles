@@ -7,7 +7,7 @@
 {
   imports =
     [
-      ./hardware-configuration.nix
+      ./office-hardware-configuration.nix
       # inputs.home-manager.nixosModules.default
     ];
 
