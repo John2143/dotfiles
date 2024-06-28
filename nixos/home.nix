@@ -110,13 +110,13 @@ in
   ];
 
   xdg.configFile = {
-    "alacritty".source = config.lib.file.mkOutOfStoreSymlink ../../.config/alacritty;
-    "dunst".source = config.lib.file.mkOutOfStoreSymlink ../../.config/dunst;
-    "hypr".source = config.lib.file.mkOutOfStoreSymlink ../../.config/hypr;
-    "waybar".source = config.lib.file.mkOutOfStoreSymlink ../../.config/waybar;
+    "alacritty".source = config.lib.file.mkOutOfStoreSymlink ../.config/alacritty;
+    "dunst".source = config.lib.file.mkOutOfStoreSymlink ../.config/dunst;
+    "hypr".source = config.lib.file.mkOutOfStoreSymlink ../.config/hypr;
+    "waybar".source = config.lib.file.mkOutOfStoreSymlink ../.config/waybar;
 
-    "get_sunset.fish".source = config.lib.file.mkOutOfStoreSymlink ../../.config/get_sunset.fish;
-    "starship.toml".source = config.lib.file.mkOutOfStoreSymlink ../../.config/starship.toml;
+    "get_sunset.fish".source = config.lib.file.mkOutOfStoreSymlink ../.config/get_sunset.fish;
+    "starship.toml".source = config.lib.file.mkOutOfStoreSymlink ../.config/starship.toml;
   };
 
   # Home Manager is pretty good at managing dotfiles. The primary way to manage
@@ -125,11 +125,11 @@ in
     # # Building this configuration will create a copy of 'dotfiles/screenrc' in
     # # the Nix store. Activating the configuration will then make '~/.screenrc' a
     # # symlink to the Nix store copy.
-    ".vimrc".source = ../../.vimrc;
+    ".vimrc".source = ../.vimrc;
     # ".tmux.conf".source = /home/john/dotfiles/.tmux.conf;
-    # ".gitconfig".source = ../../.gitconfig;
-    ".xprofile.fish".source = ../../.xprofile.fish;
-    ".xprofile".source = ../../.xprofile;
+    # ".gitconfig".source = ../.gitconfig;
+    ".xprofile.fish".source = ../.xprofile.fish;
+    ".xprofile".source = ../.xprofile;
 
     # # You can also set the file content immediately.
     # ".gradle/gradle.properties".text = ''
@@ -155,7 +155,7 @@ in
 
   programs.fish = {
     enable = true;
-    shellInit = builtins.readFile ../../.config/fish/config.fish;
+    shellInit = builtins.readFile ../.config/fish/config.fish;
     interactiveShellInit = ''
       function __get_program_names
           ps aux | choose 10 | sort | uniq
@@ -228,7 +228,7 @@ in
 
   programs.tmux = {
     enable = true;
-    extraConfig = builtins.readFile ../../.tmux.conf;
+    extraConfig = builtins.readFile ../.tmux.conf;
     plugins = with pkgs.tmuxPlugins; [
       sensible
       tmux-colors-solarized
