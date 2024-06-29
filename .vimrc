@@ -48,7 +48,7 @@ filetype off                  " required
 
 " office computer uses NixOS to manage packages
 let hostname = trim(system('hostname -s'))
-if hostname ==# "office" || hostname ==# "closet"
+if hostname ==# "office" || hostname ==# "closet" || hostname ==# "arch"
     " Nixos setup here
 
 else

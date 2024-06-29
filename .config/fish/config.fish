@@ -26,10 +26,10 @@ if [ (uname) = "Linux" ]
     if $NIX
         alias pp="nix-env -iA"
         alias p="nix-env -q"
-        alias en="fish -c 'cd /etc/nixos/ ; nvim configuration.nix'"
-        alias enh="fish -c 'cd /etc/nixos/ ; nvim hardware-configuration.nix'"
-        alias enf="fish -c 'cd /etc/nixos/ ; nvim flake.nix'"
-        alias ehm="fish -c 'cd /etc/nixos/ ; nvim home.nix'"
+        alias en="fish -c 'cd ~/dotfiles/nixos/ ; nvim configuration.nix'"
+        alias enh="fish -c 'cd ~/dotfiles/nixos/ ; nvim hardware-configuration.nix'"
+        alias ehm="fish -c 'cd ~/dotfiles/nixos/ ; nvim home.nix'"
+        alias enf="fish -c 'cd ~/dotfiles/ ; nvim flake.nix'"
 
         alias pbcopy="wl-copy"
         alias pbpaste="wl-paste"
