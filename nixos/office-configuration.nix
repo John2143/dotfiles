@@ -214,7 +214,7 @@
   # Enable CUPS to print documents.
   services.printing.enable = true;
 
-  services.udev.extraRules = builtins.readFile ../udev_embedded.rules;
+  services.udev.extraRules = builtins.readFile ./udev_embedded.rules;
 
   # services.udiskie.enable = true;
 
