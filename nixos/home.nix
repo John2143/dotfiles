@@ -107,6 +107,13 @@ in
 
     temurin-jre-bin-21
     wine-wayland
+
+
+    stm32cubemx
+    kicad
+
+    chatgpt-cli
+    plex-media-player
   ];
 
   xdg.configFile = {
