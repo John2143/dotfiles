@@ -32,9 +32,9 @@
     };
   };
 
-  boot.extraModprobeConfig = ''
-    
-  '';
+  fonts.packages = with pkgs; [
+    scientifica
+  ];
 
   networking.hostName = "arch"; # Define your hostname.
   networking.networkmanager.enable = true;  # Easiest to use and most distros use this by default.
@@ -77,10 +77,40 @@
       obsidian # note-taking software
       teamspeak_client
       discord
+
+      # ======== X =========
+      # bspwm
+      # xorg.xinit
+      # polybarFull
+      # ======== X =========
+
+
+      # nvidia_x11
+      # nvidia_settings
+      # nvidia_persistenced
       # === END NONFREE ===
     ];
   };
   security.sudo.wheelNeedsPassword = false;
+
+
+  # ======== X =========
+
+  # services.xserver = {
+  #   enable = true;
+  #   layout = "us";
+  #   xkbOptions = "ctrl:nocaps";
+  #   windowManager = {
+  #     bspwm.enable = true;
+  #     # default = "bspwm";
+  #     bspwm = {
+  #       configFile = ../.config/bspwm/bspwmrc;
+  #       sxhkd.configFile = ../.config/sxhkd/sxhkdrc;
+  #     };
+  #   };
+  # };
+
+  # ======== X =========
 
   home-manager = {
     users = {

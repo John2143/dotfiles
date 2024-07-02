@@ -26,7 +26,7 @@ if [ (uname) = "Linux" ]
     if $NIX
         alias pp="nix-env -iA"
         alias p="nix-env -q"
-        alias en="fish -c 'cd ~/dotfiles/nixos/ ; nvim configuration.nix'"
+        alias en="fish -c 'cd ~/dotfiles/nixos/ ; nvim "$HOST"-configuration.nix'"
         alias enh="fish -c 'cd ~/dotfiles/nixos/ ; nvim "$HOST"-hardware-configuration.nix'"
         alias ehm="fish -c 'cd ~/dotfiles/nixos/ ; nvim home.nix'"
         alias enf="fish -c 'cd ~/dotfiles/ ; nvim flake.nix'"

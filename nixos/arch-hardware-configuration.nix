@@ -16,6 +16,10 @@
     "video=HDMI-A-2:2560x1440@144"
   ];
   boot.extraModulePackages = [ ];
+  boot.extraModprobeConfig = ''
+  '';
+    #blacklist nouveau
+    #options nouveauu modeset=0
 
   fileSystems."/" =
     { device = "/dev/disk/by-label/NIX";
@@ -69,6 +73,12 @@
 
   nixpkgs.hostPlatform = lib.mkDefault "x86_64-linux";
   hardware.cpu.intel.updateMicrocode = lib.mkDefault config.hardware.enableRedistributableFirmware;
+  hardware.nvidia = {
+    package = config.boot.kernelPackages.nvidiaPackages.stable;
+    open = false;
+    modesetting.enable = true;
+    nvidiaSettings = true;
+  };
 
   hardware.bluetooth.enable = true; # enables support for Bluetooth
   hardware.bluetooth.powerOnBoot = true; # powers up the default Bluetooth controller on boot
