@@ -114,6 +114,7 @@ in
 
     chatgpt-cli
     plex-media-player
+    normcap
   ];
 
   xdg.configFile = {
