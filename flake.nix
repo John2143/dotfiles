@@ -19,6 +19,7 @@
         # extraSpecialArgs = {inherit inputs;};
         modules = [
           inputs.home-manager.nixosModules.default
+          ./nixos/shared-configuration.nix
           ./nixos/office-configuration.nix
         ];
       };
@@ -28,6 +29,7 @@
         # extraSpecialArgs = {inherit inputs;};
         modules = [
           inputs.home-manager.nixosModules.default
+          ./nixos/shared-configuration.nix
           ./nixos/arch-configuration.nix
         ];
       };
