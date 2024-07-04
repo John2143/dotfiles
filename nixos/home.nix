@@ -115,6 +115,7 @@ in
     chatgpt-cli
     plex-media-player
     normcap
+    prismlauncher
   ];
 
   xdg.configFile = {
