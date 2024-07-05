@@ -20,6 +20,7 @@
       device = "nodev";
     };
   };
+  boot.supportedFilesystems = [ "ntfs" ];
 
   networking.hostName = "arch"; # Define your hostname.
   networking.networkmanager.enable = true;  # Easiest to use and most distros use this by default.
