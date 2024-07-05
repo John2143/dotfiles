@@ -332,7 +332,7 @@ in
       # Plug 'sagi-z/vimspectorpy', { 'do': { -> vimspectorpy#update() } }
 
       # " :Tab
-      tabular
+      # tabular
 
       ctrlp
 
