@@ -116,6 +116,8 @@ in
     plex-media-player
     normcap
     prismlauncher
+
+    vesktop
   ];
 
   xdg.configFile = {
