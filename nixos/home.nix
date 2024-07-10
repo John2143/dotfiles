@@ -128,6 +128,12 @@ in
 
     "get_sunset.fish".source = config.lib.file.mkOutOfStoreSymlink ../.config/get_sunset.fish;
     "starship.toml".source = config.lib.file.mkOutOfStoreSymlink ../.config/starship.toml;
+
+    "focussed-vol-adjust.sh".source = builtins.fetchGit {
+      url = "https://github.com/Orbsa/hyprland-pipewire-focused-volume-adjust";
+      ref = "master";
+      rev = "c268b0269617c5109585044ef6eac8623090891f";
+    } + "/hpfva.sh";
   };
 
   # Home Manager is pretty good at managing dotfiles. The primary way to manage
