@@ -10,12 +10,6 @@ set brightness_night 0.75
 set loc "38.897916:-77.035476"
 
 if test "$HOST" = "arch"
-    set left_mon "DP-4"
-    set right_mon "HDMI-1"
-
-    # TODO setup monitors
-    #xrandr --output $left_mon --mode 2560x1440 --rate 239.97 --primary
-    #xrandr --output $right_mon --mode 1920x1080 --rate 144.00 --right-of $left_mon
     killall spotifyd || true
     spotifyd -p $SPOTIFY_PASSWORD -u $SPOTIFY_USERNAME --device-name $HOST --device-type computer --bitrate 320 --backend pulseaudio &
 
