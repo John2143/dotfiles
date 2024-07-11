@@ -118,6 +118,11 @@ in
     prismlauncher
 
     vesktop
+
+    ffmpeg
+    hyprpicker
+    update-nix-fetchgit
+    wf-recorder
   ];
 
   xdg.configFile = {
