@@ -134,7 +134,7 @@ in
   xdg.configFile = {
     "alacritty".source = config.lib.file.mkOutOfStoreSymlink ../.config/alacritty;
     "dunst".source = config.lib.file.mkOutOfStoreSymlink ../.config/dunst;
-    # "hypr".source = config.lib.file.mkOutOfStoreSymlink ../.config/hypr;
+    "hypr/hyprlock.conf".source = config.lib.file.mkOutOfStoreSymlink ../.config/hypr/hyprlock.conf;
     "waybar".source = config.lib.file.mkOutOfStoreSymlink ../.config/waybar;
 
     "get_sunset.fish".source = config.lib.file.mkOutOfStoreSymlink ../.config/get_sunset.fish;
