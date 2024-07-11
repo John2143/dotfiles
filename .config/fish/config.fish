@@ -104,7 +104,7 @@ alias rallytags="ctags --fields=+l --languages=python --python-kinds=-iv -R -f .
 alias launchdla="rally asset -e UAT --anon launch --job-name 'DLA Context Creator' --init-data "
 
 alias efish="fish -c 'cd ~/dotfiles/.config/fish/; vim config.fish; rfish'"
-alias ehypr="fish -c 'cd ~/dotfiles/.config/hypr/; vim hypr.conf'; hyprctl reload"
+alias ehypr="fish -c 'cd ~/dotfiles/.config/hypr/; vim hyprland.conf'; hyprctl reload"
 alias eprompt="vim ~/dotfiles/.config/starship.toml"
 alias exprofile="vim ~/dotfiles/.xprofile.fish"
 alias etmux="vim ~/dotfiles/.tmux.conf"
