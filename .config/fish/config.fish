@@ -3,15 +3,12 @@ set -x EMAIL_DOMAIN "john2143.com"
 set HOST (hostname -s)
 set NIX false
 if test "$HOST" = "office"
-    alias build="sudo nixos-rebuild switch -v --flake ~/dotfiles"
     set -x NIX true
 end
 if test "$HOST" = "closet"
-    alias build="sudo nixos-rebuild switch -v --flake ~/dotfiles/nixos/closet/#closet"
     set -x NIX true
 end
 if test "$HOST" = "arch"
-    alias build="sudo nixos-rebuild switch -v --flake ~/dotfiles"
     set -x NIX true
 end
 
@@ -24,12 +21,18 @@ if [ (uname) = "Linux" ]
     set -g fish_user_paths "/home/john/.local/bin" $fish_user_paths
     set -g fish_user_paths "/opt/miniconda3/bin/" $fish_user_paths
     if $NIX
-        alias pp="nix-env -iA"
-        alias p="nix-env -q"
+        alias nixi="nix-env -iA"
+        alias nixq="nix-env -q"
+        alias nixe="nix-env -e"
+
         alias en="fish -c 'cd ~/dotfiles/nixos/ ; nvim "$HOST"-configuration.nix'"
         alias enh="fish -c 'cd ~/dotfiles/nixos/ ; nvim "$HOST"-hardware-configuration.nix'"
+
+        alias ens="fish -c 'cd ~/dotfiles/nixos/ ; nvim shared-configuration.nix'"
         alias ehm="fish -c 'cd ~/dotfiles/nixos/ ; nvim home.nix'"
         alias enf="fish -c 'cd ~/dotfiles/ ; nvim flake.nix'"
+
+        alias build="sudo nixos-rebuild switch -v --flake ~/dotfiles"
 
         alias pbcopy="wl-copy"
         alias pbpaste="wl-paste"
@@ -101,6 +104,7 @@ alias rallytags="ctags --fields=+l --languages=python --python-kinds=-iv -R -f .
 alias launchdla="rally asset -e UAT --anon launch --job-name 'DLA Context Creator' --init-data "
 
 alias efish="fish -c 'cd ~/dotfiles/.config/fish/; vim config.fish; rfish'"
+alias ehypr="fish -c 'cd ~/dotfiles/.config/hypr/; vim hypr.conf'; hyprctl reload"
 alias eprompt="vim ~/dotfiles/.config/starship.toml"
 alias exprofile="vim ~/dotfiles/.xprofile.fish"
 alias etmux="vim ~/dotfiles/.tmux.conf"
