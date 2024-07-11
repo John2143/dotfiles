@@ -36,7 +36,6 @@ in
     firefox # browser
 
     # graphical
-    hyprland
     waybar # status bar
     wofi # "start menu" / program browser
     dolphin # file browser
@@ -108,7 +107,6 @@ in
     temurin-jre-bin-21
     wine-wayland
 
-
     stm32cubemx
     kicad
 
@@ -125,10 +123,18 @@ in
     wf-recorder
   ];
 
+  wayland.windowManager.hyprland = {
+    enable = true;
+    package = pkgs.hyprland;
+    xwayland.enable = true;
+    systemd.enable = true;
+    extraConfig = builtins.readFile ../.config/hypr/hyprland.conf;
+  };
+
   xdg.configFile = {
     "alacritty".source = config.lib.file.mkOutOfStoreSymlink ../.config/alacritty;
     "dunst".source = config.lib.file.mkOutOfStoreSymlink ../.config/dunst;
-    "hypr".source = config.lib.file.mkOutOfStoreSymlink ../.config/hypr;
+    # "hypr".source = config.lib.file.mkOutOfStoreSymlink ../.config/hypr;
     "waybar".source = config.lib.file.mkOutOfStoreSymlink ../.config/waybar;
 
     "get_sunset.fish".source = config.lib.file.mkOutOfStoreSymlink ../.config/get_sunset.fish;
