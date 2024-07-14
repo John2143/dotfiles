@@ -64,7 +64,7 @@
     description = "CPU perf core 8 is bad on my office comp";
 
     serviceConfig = {
-      ExecStart = ''${pkgs.fish}/bin/fish -c "/home/john/bin/office.fish"'';
+      ExecStart = ''${pkgs.fish}/bin/fish /home/john/bin/office.fish'';
       Type = "oneshot";
       RemainAfterExit = true;
     };
