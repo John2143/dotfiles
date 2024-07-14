@@ -16,6 +16,10 @@
   };
   # === END NONFREE ===
 
+  systemd.extraConofig = ''
+    DefaultTimeoutStopSec=10s
+  '';
+
   fonts.packages = with pkgs; [
     scientifica
   ];
