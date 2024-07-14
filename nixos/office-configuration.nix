@@ -18,7 +18,6 @@
   boot.loader = {
     efi.canTouchEfiVariables = true;
     grub = {
-      useOSProber = true;
       extraEntries = ''
       '';
       enable = true;
