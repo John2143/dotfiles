@@ -127,6 +127,7 @@ in
     kdeconnect
 
     krita
+    yt-dlp
   ];
 
   wayland.windowManager.hyprland = {
