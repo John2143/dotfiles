@@ -61,11 +61,20 @@
   # hardware.pulseaudio.enable = true;
 
   systemd.user.services.office-bad-cpu = {
-    description = "CPU perf core 8 is bad on my office comp";
-    script = ''
-      echo 0 > /sys/devices/system/cpu/cpu8/online
-    '';
     wantedBy = [ "multi-user.target" ];
+    description = "CPU perf core 8 is bad on my office comp";
+
+    serviceConfig = {
+      ExecStart = ''
+        #!/run/current-system/sw/bin/bash
+        echo 0 | tee /sys/devices/system/cpu/cpu8/online
+        echo 0 | tee /sys/devices/system/cpu/cpu9/online
+        date > /home/john/test.txt
+        echo "yeehaw"
+      '';
+      Type = "oneshot";
+      RemainAfterExit = true;
+    };
   };
 
   services.udev.extraRules = builtins.readFile ./udev_embedded.rules;
