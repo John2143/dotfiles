@@ -121,6 +121,10 @@ in
     hyprpicker
     update-nix-fetchgit
     wf-recorder
+
+    kdenlive
+
+    kdeconnect
   ];
 
   wayland.windowManager.hyprland = {
