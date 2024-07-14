@@ -16,7 +16,7 @@
   };
   # === END NONFREE ===
 
-  systemd.extraConofig = ''
+  systemd.extraConfig = ''
     DefaultTimeoutStopSec=10s
   '';
 
