@@ -125,6 +125,8 @@ in
     kdenlive
 
     kdeconnect
+
+    krita
   ];
 
   wayland.windowManager.hyprland = {
