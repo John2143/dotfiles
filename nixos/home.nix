@@ -128,6 +128,9 @@ in
 
     krita
     yt-dlp
+
+    parsec-bin
+
   ];
 
   wayland.windowManager.hyprland = {

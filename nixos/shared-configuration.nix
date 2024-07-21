@@ -42,7 +42,7 @@
   # Define a user account. Don't forget to set a password with ‘passwd’.
   users.users.john = {
     isNormalUser = true;
-    extraGroups = [ "wheel" "networkmanager" "input" ]; # Enable ‘sudo’ for the user.
+    extraGroups = [ "wheel" "networkmanager" "input" "dialout" ]; # Enable ‘sudo’ for the user.
     initialPassword = "john";
     shell = pkgs.fish;
     packages = with pkgs; [

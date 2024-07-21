@@ -75,3 +75,5 @@
     gpgsign = true
 [tag]
     gpgsign = true
+[http]
+	sslVerify = false

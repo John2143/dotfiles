@@ -81,6 +81,8 @@
     token = "K10c19a7646d1e7136cc58d26d01b44ca809b0c2efed76bed7b1612f7c01e41f616::xv480x.847d9pubg1qnqif5";
   };
 
+  # drones
+  services.upower.enable = true;
 
   # # Open ports in the firewall.
   # networking.firewall.allowedTCPPorts = [ 

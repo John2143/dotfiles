@@ -14,6 +14,11 @@ SUBSYSTEM=="gpio", MODE="0660", GROUP="plugdev", TAG+="uaccess"
 SUBSYSTEM!="usb|tty|hidraw", GOTO="probe_rs_rules_end"
 
 # Please keep this list sorted by VID:PID
+#
+# DFU (Internal bootloader for STM32 and AT32 MCUs)
+SUBSYSTEM=="usb", ATTRS{idVendor}=="2e3c", ATTRS{idProduct}=="df11", MODE="0664", GROUP="dialout"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="0483", ATTRS{idProduct}=="df11", MODE="0664", GROUP="dialout"
+
 
 # STMicroelectronics ST-LINK V1
 ATTRS{idVendor}=="0483", ATTRS{idProduct}=="3744", MODE="660", GROUP="plugdev", TAG+="uaccess"
