@@ -56,7 +56,7 @@
   };
 
   # Enable sound.
-  sound.enable = true;
+  # sound.enable = true;
   # hardware.pulseaudio.enable = true;
 
   systemd.user.services.office-bad-cpu = {

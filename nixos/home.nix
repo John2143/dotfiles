@@ -129,8 +129,9 @@ in
     krita
     yt-dlp
 
-    parsec-bin
-
+    v4l-utils
+    obs-studio
+    # obs-v4l2sink
   ];
 
   wayland.windowManager.hyprland = {

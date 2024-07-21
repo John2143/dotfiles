@@ -9,11 +9,18 @@
     ];
 
   boot.initrd.availableKernelModules = [ "vmd" "xhci_pci" "ahci" "nvme" "usbhid" "amdgpu" ];
-  boot.initrd.kernelModules = [ ];
+  boot.supportedFilesystems = [ "ntfs" "vfat" "ext4" ];
+  boot.initrd.kernelModules = [
+    # "vfio_pci"
+    # "vfio"
+    # "vfio_iommu_type1"
+  ];
   boot.kernelModules = [ "kvm-intel" ];
   boot.kernelParams = [
-    "video=DP-2:2560x1440@240"
-    "video=DP-1:1920x1080@144"
+    # "video=DP-2:2560x1440@240"
+    # "video=DP-1:1920x1080@144"
+    # "intel_iommu=on"
+    # "iommu=pt"
   ];
   boot.extraModulePackages = [ ];
 
