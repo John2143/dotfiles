@@ -145,7 +145,16 @@
   services.udisks2.enable = true;
 
   # Enable CUPS to print documents.
-  services.printing.enable = true;
+  services.printing = {
+    enable = true;
+    drivers = with pkgs; [
+      brlaser
+    ];
+    listenAddresses = [ "*:631" ];
+    allowFrom = [ "all" ];
+    browsing = true;
+    defaultShared = true;
+  };
 
   # TODO udiskie
   # services.udiskie.enable = true;

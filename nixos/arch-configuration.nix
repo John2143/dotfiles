@@ -49,9 +49,6 @@
     # useXkbConfig = true; # use xkb.options in tty.
   };
 
-  # Enable sound.
-  sound.enable = true;
-
   # # Open ports in the firewall.
   # networking.firewall.allowedTCPPorts = [ 
   #   5353 # avahi

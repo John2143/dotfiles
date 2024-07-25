@@ -36,8 +36,8 @@ if test "$HOST" = "arch"
     tmux rename-window 'obsidian'
 
     sleep 0.1
-    tmux new-window 'discord'
-    tmux rename-window 'vesktop'
+    tmux new-window 'vesktop'
+    tmux rename-window 'discord'
 end
 
 if test "$HOST" = "office"

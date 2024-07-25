@@ -132,6 +132,7 @@ in
     v4l-utils
     obs-studio
     # obs-v4l2sink
+    delta
   ];
 
   wayland.windowManager.hyprland = {
