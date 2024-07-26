@@ -37,19 +37,20 @@
 
     pavucontrol # audio
     qpwgraph
+
+    ydotool
   ];
 
   # Define a user account. Don't forget to set a password with ‘passwd’.
   users.users.john = {
     isNormalUser = true;
-    extraGroups = [ "wheel" "networkmanager" "input" "dialout" ]; # Enable ‘sudo’ for the user.
+    extraGroups = [ "wheel" "networkmanager" "input" "dialout" "docker" ]; # Enable ‘sudo’ for the user.
     initialPassword = "john";
     shell = pkgs.fish;
     packages = with pkgs; [
       # === BEGIN NONFREE ===
       obsidian # note-taking software
       teamspeak_client
-      discord
       # ======== X =========
       # bspwm
       # xorg.xinit
@@ -177,4 +178,7 @@
   # networking.firewall.allowedUDPPorts = [  ];
   # Or disable the firewall altogether.
   networking.firewall.enable = false;
+
+
+  virtualisation.docker.enable = true;
 }
