@@ -125,6 +125,11 @@ in
     wev # wayland event viewer
 
     # Other / unsorted
+    appimage-run
+    unzip
+    unrar
+    betaflight-configurator
+    lshw
   ];
 
   wayland.windowManager.hyprland = {
