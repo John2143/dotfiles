@@ -33,21 +33,6 @@ in
   # The home.packages option allows you to install Nix packages into your
   # environment.
   home.packages = with pkgs; [
-    firefox # browser
-
-    # graphical
-    waybar # status bar
-    wofi # "start menu" / program browser
-    dolphin # file browser
-    alacritty # terminal
-
-    mullvad-vpn # vpn
-
-    wl-clipboard # copy-paste via cli
-    nerdfonts # fonts, idk how many this is
-    jetbrains-mono # font
-
-
     udiskie # disks
     # neovim
 
@@ -60,10 +45,16 @@ in
     choose # awk replacement
     du-dust # df/du replacement
     fzf
-
+    amdgpu_top # gpu stats
+    fd # find replacement
+    chatgpt-cli # yessir
+    ffmpeg
+    update-nix-fetchgit # update fetchgit urls
+    yt-dlp # youtube-dl
+    delta # pager
+    gptfdisk # disk partitioning tool
+    killall # like pkill
     gh # github
-
-    pulseaudio # pactl
 
     # k8s
     kubectl
@@ -72,68 +63,68 @@ in
     # fnm # node version manager # TODO switch to nixos
     clang # compiler
     rustup # rust compiler
+    bacon # rust build tool
+    cargo-generate # rust project generator
 
     # screenshots
-    slurp
-    grim
-    file
-    bind
+    slurp # use mouse to get a point on screen
+    grim # minimal screenshot program
+    file # file info
+    bind # network utilities
+    wf-recorder # screen recording
+    normcap # OCR screen recognition
+    hyprpicker # color picker
+
+    # embedded programming
+    gcc-arm-embedded # arm compiler
+    openocd # open debugger
+    probe-rs # rust <-> stm32
+    stlink # stm32 programmer
+    stm32cubemx # stm32 ide
+    kicad # PCB Hardware Layout
+
+    # desktop tools (bars, clipbaords, notifications, etc)
+    pulseaudio # pactl (audio)
+    waybar # status bar
+    wofi # "start menu" / program browser
+    dolphin # file browser
+    wl-clipboard # copy-paste via cli
+    nerdfonts # fonts, idk how many this is
+    jetbrains-mono # font
+    alacritty # terminal
+    pwvucontrol # volume control
+    cliphist # clipboard history
+    wl-clipboard-x11 # clipboard compatibility for some apps
+    dunst # desktop alert notificaitons
+    libnotify # notifications cli
+    gammastep # redshift / f.lux / night light
+    spotifyd # play to spotify device if needed
+
+    temurin-jre-bin-21 # java
+    wine-wayland # wine
+
+    hyprlock # screen locker
+
+    # desktop programs (programs you can open)
+    firefox # browser
+    mullvad-vpn # vpn
+    gthumb # image viewer
+    plex-media-player # plex
+    spotify # music
+    prismlauncher # minecraft
+    vesktop # discord
+    krita
+    kdenlive # video editor
+    kdeconnect # phone sync
+    v4l-utils # video inputs for linux (obs)
+    obs-studio # streaming
+    path-of-building # Path of Exile build planner
+    bitwarden-desktop # password manager
+    vlc # video player
+    mpv # video player
+    wev # wayland event viewer
 
     # Other / unsorted
-    pwvucontrol
-    cliphist
-    wl-clipboard-x11
-    dunst
-    libnotify
-    gthumb
-
-    spotifyd
-    gammastep
-    killall
-
-
-    amdgpu_top
-    bacon
-    cargo-generate
-    fd
-    gcc-arm-embedded
-    hyprlock
-    mpv
-    openocd
-    probe-rs
-    spotify
-    stlink
-
-    temurin-jre-bin-21
-    wine-wayland
-
-    stm32cubemx
-    kicad
-
-    chatgpt-cli
-    plex-media-player
-    normcap
-    prismlauncher
-
-    vesktop
-
-    ffmpeg
-    hyprpicker
-    update-nix-fetchgit
-    wf-recorder
-
-    kdenlive
-
-    kdeconnect
-
-    krita
-    yt-dlp
-
-    v4l-utils
-    obs-studio
-    # obs-v4l2sink
-    delta
-    path-of-building
   ];
 
   wayland.windowManager.hyprland = {
