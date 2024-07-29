@@ -81,7 +81,7 @@ in
     probe-rs # rust <-> stm32
     stlink # stm32 programmer
     stm32cubemx # stm32 ide
-    kicad # PCB Hardware Layout
+    # kicad # PCB Hardware Layout
 
     # desktop tools (bars, clipbaords, notifications, etc)
     pulseaudio # pactl (audio)
