@@ -130,6 +130,9 @@ in
     unrar
     betaflight-configurator
     lshw
+
+
+    darktable
   ];
 
   wayland.windowManager.hyprland = {
