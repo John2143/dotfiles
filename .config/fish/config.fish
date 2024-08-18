@@ -32,7 +32,8 @@ if [ (uname) = "Linux" ]
         alias ehm="fish -c 'cd ~/dotfiles/nixos/ ; nvim home.nix'"
         alias enf="fish -c 'cd ~/dotfiles/ ; nvim flake.nix'"
 
-        alias build="sudo nixos-rebuild switch -v --flake ~/dotfiles"
+        alias build="sudo nixos-rebuild -v --flake ~/dotfiles"
+        alias update="fish -c 'cd ~/dotfiles/; nix flake update ; update-nix-fetchgit **/*.nix'"
 
         alias pbcopy="wl-copy"
         alias pbpaste="wl-paste"
