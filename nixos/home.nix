@@ -133,6 +133,8 @@ in
 
 
     darktable
+    nixd
+    hyprpaper
   ];
 
   wayland.windowManager.hyprland = {
@@ -147,6 +149,10 @@ in
     "alacritty".source = config.lib.file.mkOutOfStoreSymlink ../.config/alacritty;
     "dunst".source = config.lib.file.mkOutOfStoreSymlink ../.config/dunst;
     "hypr/hyprlock.conf".source = config.lib.file.mkOutOfStoreSymlink ../.config/hypr/hyprlock.conf;
+    "hypr/hyprpaper.conf".text = "
+      preload = /home/john/backgrounds/luna_1.png
+      wallpaper = , /home/john/backgrounds/luna_1.png
+    ";
     "waybar".source = config.lib.file.mkOutOfStoreSymlink ../.config/waybar;
 
     "get_sunset.fish".source = config.lib.file.mkOutOfStoreSymlink ../.config/get_sunset.fish;
