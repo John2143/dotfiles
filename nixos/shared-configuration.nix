@@ -37,8 +37,6 @@
 
     pavucontrol # audio
     qpwgraph
-
-    ydotool
   ];
 
   # Define a user account. Don't forget to set a password with ‘passwd’.
@@ -97,6 +95,8 @@
     enable = true;
     enableSSHSupport = true;
   };
+
+  programs.ydotool.enable = true;
 
   programs.hyprland = {
     enable = true;
