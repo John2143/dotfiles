@@ -328,6 +328,13 @@ lua << END
         root_dir = lspconfig.util.find_git_ancestor,
         capabilities = capabilities,
     }
+    lspconfig.nixd.setup{
+        on_attach = on_attach,
+        flags = {
+            debounce_text_changes = 150,
+        },
+        capabilities = capabilities,
+    }
 
     vim.lsp.handlers["textDocument/publishDiagnostics"] = vim.lsp.with(
       vim.lsp.diagnostic.on_publish_diagnostics, {
