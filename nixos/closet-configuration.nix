@@ -7,7 +7,7 @@
 {
   imports =
     [
-      ./hardware-configuration.nix
+      ./closet-hardware-configuration.nix
       # inputs.home-manager.nixosModules.default
     ];
 
@@ -18,14 +18,6 @@
     systemd-boot.enable = true;
     efi.canTouchEfiVariables = true;
   };
-  #   grub = {
-  #     useOSProber = true;
-  #     extraEntries = ''
-  #     '';
-  #     enable = true;
-  #     device = "nodev";
-  #   };
-  # };
 
   networking.hostName = "closet"; # Define your hostname.
   networking.networkmanager.enable = true;  # Easiest to use and most distros use this by default.
@@ -35,10 +27,12 @@
       prefixLength = 24;
     }];
   };
+
   # networking.wireless.environmentFile = "/run/secrets/wireless.env";
   # networking.wireless.networks = {
     # jimmys_2G.psk = "@PSK_HOME@";
-  # }; 
+  # };
+
   networking.defaultGateway = "192.168.1.1";
   networking.nameservers = [ "1.1.1.1" "8.8.8.8" ];
 
@@ -56,56 +50,6 @@
     keyMap = "us";
     # useXkbConfig = true; # use xkb.options in tty.
   };
-
-  # Enable sound.
-  # sound.enable = true;
-  # hardware.pulseaudio.enable = true;
-
-  # Enable touchpad support (enabled default in most desktopManager).
-  # services.xserver.libinput.enable = true;
-
-  # Define a user account. Don't forget to set a password with ‘passwd’.
-  users.users.john = {
-    isNormalUser = true;
-    extraGroups = [ "wheel" "networkmanager" ]; # Enable ‘sudo’ for the user.
-    initialPassword = "john";
-    shell = pkgs.fish;
-    packages = with pkgs; [
-    ];
-  };
-  security.sudo.wheelNeedsPassword = false;
-
-  home-manager = {
-    users = {
-      "john" = import ./home.nix;
-    };
-  };
-
-  # List packages installed in system profile. To search, run:
-  # $ nix search wget
-  environment.systemPackages = with pkgs; [
-    git
-    fish
-    # wget
-    curl
-    tmux
-    # vim
-    btop
-
-    k3s # kubernetes k8s node
-  ];
-
-  # Some programs need SUID wrappers, can be configured further or are
-  # started in user sessions.
-  # programs.mtr.enable = true;
-  programs.gnupg.agent = {
-    enable = true;
-    enableSSHSupport = true;
-  };
-
-  programs.fish.enable = true;
-
-  # List services that you want to enable:
 
   # Enable the OpenSSH daemon.
   services.openssh.enable = true;
