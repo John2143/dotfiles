@@ -37,6 +37,8 @@
 
     pavucontrol # audio
     qpwgraph
+
+    kdeconnect
   ];
 
   # Define a user account. Don't forget to set a password with ‘passwd’.
@@ -46,18 +48,8 @@
     initialPassword = "john";
     shell = pkgs.fish;
     packages = with pkgs; [
-      # === BEGIN NONFREE ===
       obsidian # note-taking software
       teamspeak_client
-      # ======== X =========
-      # bspwm
-      # xorg.xinit
-      # polybarFull
-      # ======== X =========
-      # nvidia_x11
-      # nvidia_settings
-      # nvidia_persistenced
-      # === END NONFREE ===
     ];
   };
   security.sudo.wheelNeedsPassword = false;
@@ -181,4 +173,23 @@
 
 
   virtualisation.docker.enable = true;
+
+  systemd.timers."kdeconnect-refresh" = {
+    wantedBy = [ "timers.target" ];
+    timerConfig = {
+      OnBootSec = "5m";
+      OnUnitActiveSec = "5m";
+      Unit = "kdeconnect-refresh.service";
+    };
+  };
+
+  systemd.services."kdeconnect-refresh" = {
+    script = ''
+      ${pkgs.fish}/bin/fish -c "kdeconnect-cli --refresh"
+    '';
+    serviceConfig = {
+      Type = "oneshot";
+      User = "john";
+    };
+  };
 }

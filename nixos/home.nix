@@ -115,7 +115,7 @@ in
     vesktop # discord
     krita
     kdenlive # video editor
-    kdeconnect # phone sync
+    # kdeconnect # phone sync (now in main settings)
     v4l-utils # video inputs for linux (obs)
     obs-studio # streaming
     path-of-building # Path of Exile build planner
