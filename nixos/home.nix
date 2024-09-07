@@ -135,6 +135,7 @@ in
     darktable
     nixd
     hyprpaper
+    systemctl-tui
   ];
 
   wayland.windowManager.hyprland = {
