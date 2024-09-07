@@ -33,5 +33,15 @@
           ./nixos/arch-configuration.nix
         ];
       };
+
+      nixosConfigurations.closet = nixpkgs.lib.nixosSystem {
+        system = "${system}";
+        # extraSpecialArgs = {inherit inputs;};
+        modules = [
+          inputs.home-manager.nixosModules.default
+          ./nixos/shared-configuration.nix
+          ./nixos/closet-configuration.nix
+        ];
+      };
     };
 }
