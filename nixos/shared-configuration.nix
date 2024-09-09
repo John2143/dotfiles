@@ -185,7 +185,7 @@
 
   systemd.services."kdeconnect-refresh" = {
     script = ''
-      ${pkgs.fish}/bin/fish -c "kdeconnect-cli --refresh"
+      ${pkgs.fish}/bin/fish -c "DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus kdeconnect-cli --refresh"
     '';
     serviceConfig = {
       Type = "oneshot";

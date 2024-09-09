@@ -136,6 +136,7 @@ in
     nixd
     hyprpaper
     systemctl-tui
+    kind
   ];
 
   wayland.windowManager.hyprland = {
