@@ -32,22 +32,22 @@
   };
   networking.defaultGateway = "192.168.1.1";
   networking.nameservers = [ "1.1.1.1" ];
-  # networking.nameservers = [ "192.168.1.2" "192.168.1.35" ];
 
   # Set your time zone.
   time.timeZone = "America/New_York";
-
-  # Configure network proxy if necessary
-  # networking.proxy.default = "http://user:password@proxy:port/";
-  # networking.proxy.noProxy = "127.0.0.1,localhost,internal.domain";
-
-  # Select internationalisation properties.
   i18n.defaultLocale = "en_US.UTF-8";
   console = {
     font = "Lat2-Terminus16";
     keyMap = "us";
-    # useXkbConfig = true; # use xkb.options in tty.
   };
+
+  services.k3s = {
+    enable = true;
+    role = "agent";
+    serverAddr = "https://192.168.1.35:6443";
+    token = "K10c19a7646d1e7136cc58d26d01b44ca809b0c2efed76bed7b1612f7c01e41f616::xv480x.847d9pubg1qnqif5";
+  };
+
 
   # # Open ports in the firewall.
   # networking.firewall.allowedTCPPorts = [ 
