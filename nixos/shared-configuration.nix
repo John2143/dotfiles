@@ -2,20 +2,26 @@
 # your system. Help is available in the configuration.nix(5) man page, on
 # https://search.nixos.org/options and in the NixOS manual (`nixos-help`).
 
-{ config, lib, pkgs, ... }:
+{ config, lib, pkgs, pkgs-stable, inputs, ... }:
 
 {
+  # flakes
   nix.settings.experimental-features = [ "nix-command" "flakes" ];
 
-  # === BEGIN NONFREE ===
+  # setup my two input channels
   nixpkgs.config = {
     allowUnfree = true;
     permittedInsecurePackages = [
       "electron-25.9.0"
     ];
   };
-  # === END NONFREE ===
 
+  _module.args.pkgs-stable = import inputs.nixpkgs-stable {
+    inherit (pkgs.stdenv.hostPlatform) system;
+    inherit (config.nixpkgs) config;
+  };
+
+  # shutdown faster
   systemd.extraConfig = ''
     DefaultTimeoutStopSec=10s
   '';
@@ -55,48 +61,21 @@
   security.sudo.wheelNeedsPassword = false;
 
   home-manager = {
+    # home-manager uses extraSpecialArgs instead of specialArgs, but it does the same thing
+    extraSpecialArgs = {
+      pkgs-stable = pkgs-stable;
+    };
     users = {
       "john" = import ./home.nix;
     };
   };
 
-  # ======== X =========
-
-  # services.xserver = {
-  #   enable = true;
-  #   layout = "us";
-  #   xkbOptions = "ctrl:nocaps";
-  #   windowManager = {
-  #     bspwm.enable = true;
-  #     # default = "bspwm";
-  #     bspwm = {
-  #       configFile = ../.config/bspwm/bspwmrc;
-  #       sxhkd.configFile = ../.config/sxhkd/sxhkdrc;
-  #     };
-  #   };
-  # };
-
-  # ======== X =========
-
-  # List packages installed in system profile. To search, run:
-  # $ nix search wget
-  # Some programs need SUID wrappers, can be configured further or are
-  # started in user sessions.
-  # programs.mtr.enable = true;
   programs.gnupg.agent = {
     enable = true;
     enableSSHSupport = true;
   };
 
-  programs.ydotool.enable = true;
-
-  programs.hyprland = {
-    enable = true;
-  };
-
   programs.fish.enable = true;
-
-  programs.steam.enable = true;
 
   # Enable the OpenSSH daemon.
   services.openssh.enable = true;
@@ -113,11 +92,15 @@
     };
   };
 
+  security.rtkit.enable = true;
+  services.udisks2.enable = true;
+
+  # VPN
   services.mullvad-vpn = {
     enable = true;
   };
 
-  security.rtkit.enable = true;
+  # audio
   services.pipewire = {
     enable = true;
     alsa.enable = true;
@@ -131,11 +114,17 @@
         "bluez5.roles" = [ "hsp_hs" "hsp_ag" "hfp_hf" "hfp_ag" ];
       };
     };
-    # If you want to use JACK applications, uncomment this
     #jack.enable = true;
   };
 
-  services.udisks2.enable = true;
+  # graphical
+  programs.hyprland = {
+    enable = true;
+    #enableNvidiaPatches = true;
+  };
+  # games
+  programs.steam.enable = true;
+
 
   # Enable CUPS to print documents.
   services.printing = {
@@ -149,16 +138,7 @@
     defaultShared = true;
   };
 
-  # TODO udiskie
-  # services.udiskie.enable = true;
-
-  # services.k3s = {
-  #   enable = true;
-  #   role = "agent";
-  #   serverAddr = "https://192.168.1.2:6443";
-  #   token = "K109bf3d3db3a886f74e3b580da672b54e15f0197c0d922c5f3186a8abd2ba36b00::server:cc13ddec0fa20ac3f2c1b3912dab21fb";
-  # };
-
+  # bluetooth
   services.blueman.enable = true;
 
 

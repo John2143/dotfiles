@@ -1,6 +1,7 @@
 {
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
+    nixpkgs-stable.url = "github:NixOS/nixpkgs/nixos-24.05";
 
     home-manager = {
       url = "github:nix-community/home-manager";
@@ -8,15 +9,14 @@
     };
   };
 
-  outputs = { self, nixpkgs, ... }@inputs:
+  outputs = { nixpkgs, ... }@inputs:
     let
       system = "x86_64-linux";
-      pkgs = nixpkgs.legacyPackages.${system};
     in
     {
       nixosConfigurations.office = nixpkgs.lib.nixosSystem {
-        system = "${system}";
-        # extraSpecialArgs = {inherit inputs;};
+        inherit system;
+        specialArgs = { inherit inputs; };
         modules = [
           inputs.home-manager.nixosModules.default
           ./nixos/shared-configuration.nix
@@ -25,8 +25,8 @@
       };
 
       nixosConfigurations.arch = nixpkgs.lib.nixosSystem {
-        system = "${system}";
-        # extraSpecialArgs = {inherit inputs;};
+        inherit system;
+        specialArgs = { inherit inputs; };
         modules = [
           inputs.home-manager.nixosModules.default
           ./nixos/shared-configuration.nix
@@ -35,8 +35,7 @@
       };
 
       nixosConfigurations.closet = nixpkgs.lib.nixosSystem {
-        system = "${system}";
-        # extraSpecialArgs = {inherit inputs;};
+        inherit system;
         modules = [
           inputs.home-manager.nixosModules.default
           ./nixos/shared-configuration.nix

@@ -1,4 +1,4 @@
-{ config, pkgs, lib, ... }:
+{ config, inputs, pkgs, lib, pkgs-stable, ... }:
 
 let
   fromGitHub = ref: repo: pkgs.vimUtils.buildVimPlugin {
@@ -12,6 +12,11 @@ let
 in
 
 {
+  _module.args.pkgs-stable = import inputs.nixpkgs-stable {
+    inherit (pkgs.stdenv.hostPlatform) system;
+    inherit (config.nixpkgs) config;
+  };
+
   # Home Manager needs a bit of information about you and the paths it should
   # manage.
   home.username = "john";
@@ -51,7 +56,7 @@ in
     ffmpeg
     update-nix-fetchgit # update fetchgit urls
     yt-dlp # youtube-dl
-    delta # pager
+    pkgs-stable.delta # pager
     gptfdisk # disk partitioning tool
     killall # like pkill
     gh # github
