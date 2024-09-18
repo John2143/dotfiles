@@ -56,7 +56,7 @@ in
     ffmpeg
     update-nix-fetchgit # update fetchgit urls
     yt-dlp # youtube-dl
-    pkgs-stable.delta # pager
+    delta # pager
     gptfdisk # disk partitioning tool
     killall # like pkill
     gh # github
