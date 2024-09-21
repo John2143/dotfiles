@@ -298,7 +298,7 @@ lua << END
         capabilities = capabilities,
     }
 
-    lspconfig.tsserver.setup {
+    lspconfig.ts_ls.setup {
         on_attach = on_attach,
         flags = {
             debounce_text_changes = 150,

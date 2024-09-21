@@ -65,7 +65,7 @@ in
     kubectl
     k9s
 
-    # fnm # node version manager # TODO switch to nixos
+    direnv # nixos env manager: see also (direnv hook fish)
     clang # compiler
     rustup # rust compiler
     bacon # rust build tool
@@ -210,6 +210,7 @@ in
     enable = true;
     shellInit = builtins.readFile ../.config/fish/config.fish;
     interactiveShellInit = ''
+      eval (direnv hook fish)
       function __get_program_names
           ps aux | choose 10 | sort | uniq
       end
