@@ -142,6 +142,7 @@ in
     hyprpaper
     systemctl-tui
     kind
+    mongodb-compass
   ];
 
   wayland.windowManager.hyprland = {
