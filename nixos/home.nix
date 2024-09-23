@@ -60,9 +60,12 @@ in
     gptfdisk # disk partitioning tool
     killall # like pkill
     gh # github
+    timg # image viewer
+    jq
 
     # k8s
     kubectl
+    kubecolor # kubectl color
     k9s
 
     direnv # nixos env manager: see also (direnv hook fish)
@@ -291,6 +294,7 @@ in
       catppuccin
       # tmux-battery
       vim-tmux-navigator
+      resurrect
       # set -g @plugin 'tmux-plugins/tmux-sensible'
       # set -g @plugin 'seebi/tmux-colors-solarized'
       # #set -g @plugin 'janoamaral/tokyo-night-tmux'

@@ -20,6 +20,7 @@ if [ (uname) = "Linux" ]
 
     set -g fish_user_paths "/home/john/.local/bin" $fish_user_paths
     set -g fish_user_paths "/opt/miniconda3/bin/" $fish_user_paths
+    alias k="kubecolor"
     if $NIX
         alias nixi="nix-env -iA"
         alias nixq="nix-env -q"
