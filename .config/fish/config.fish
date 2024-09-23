@@ -98,6 +98,8 @@ alias cat=bat
 alias grep=rg
 
 alias sl=ls
+alias rn="tmux rename-window (basename (pwd))"
+alias rnn="tmux rename-window "
 
 alias rally@="git diff HEAD --name-only | rally @"
 alias rallyp="rally config project --set"
