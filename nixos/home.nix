@@ -1,16 +1,16 @@
 { config, inputs, pkgs, lib, pkgs-stable, ... }:
 
 let
-  fromGitHub = ref: repo: pkgs.vimUtils.buildVimPlugin {
+  fromGitHub = repo: rev: pkgs.vimUtils.buildVimPlugin {
     pname = "${lib.strings.sanitizeDerivationName repo}";
-    version = ref;
+    version = "HEAD";
     src = builtins.fetchGit {
       url = "https://github.com/${repo}.git";
-      ref = ref;
+      ref = "HEAD";
+      rev = rev;
     };
   };
 in
-
 {
   _module.args.pkgs-stable = import inputs.nixpkgs-stable {
     inherit (pkgs.stdenv.hostPlatform) system;
@@ -138,8 +138,6 @@ in
     unrar
     betaflight-configurator
     lshw
-
-
     darktable
     nixd
     hyprpaper
@@ -370,16 +368,7 @@ in
       # "let g:neocomplete#enable_at_startup = 1
       # "Plug 'Shougo/neocomplete.vim'
       # "Plug 'Shougo/deoplete.nvim', { 'do': ':UpdateRemotePlugins' }
-
-      (pkgs.vimUtils.buildVimPlugin {
-        pname = "${lib.strings.sanitizeDerivationName "mihaifm/bufstop"}";
-        version = "HEAD";
-        src = builtins.fetchGit {
-          url = "https://github.com/mihaifm/bufstop.git";
-          ref = "HEAD";
-          rev = "9ae087c74e3f184192c55c8d6bbba3a33e1d8dd6";
-        };
-      })
+      (fromGitHub "mihaifm/bufstop" "9ae087c74e3f184192c55c8d6bbba3a33e1d8dd6")
 
       lightline-vim
 
