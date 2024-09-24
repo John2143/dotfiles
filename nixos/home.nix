@@ -46,7 +46,7 @@ in
     bat # cat replacement
     eza # ls replacement
     ripgrep # grep replacement
-    # btop # btop++ > bpytop > htop > top
+    btop # btop++ > bpytop > htop > top
     choose # awk replacement
     du-dust # df/du replacement
     fzf
@@ -159,6 +159,7 @@ in
   xdg.configFile = {
     "alacritty".source = config.lib.file.mkOutOfStoreSymlink ../.config/alacritty;
     "dunst".source = config.lib.file.mkOutOfStoreSymlink ../.config/dunst;
+    "btop".source = config.lib.file.mkOutOfStoreSymlink ../.config/btop;
     "hypr/hyprlock.conf".source = config.lib.file.mkOutOfStoreSymlink ../.config/hypr/hyprlock.conf;
     "hypr/hyprpaper.conf".text = "
       preload = /home/john/backgrounds/luna_1.png
@@ -370,7 +371,15 @@ in
       # "Plug 'Shougo/neocomplete.vim'
       # "Plug 'Shougo/deoplete.nvim', { 'do': ':UpdateRemotePlugins' }
 
-      # Plug 'mihaifm/bufstop'
+      (pkgs.vimUtils.buildVimPlugin {
+        pname = "${lib.strings.sanitizeDerivationName "mihaifm/bufstop"}";
+        version = "HEAD";
+        src = builtins.fetchGit {
+          url = "https://github.com/mihaifm/bufstop.git";
+          ref = "HEAD";
+          rev = "9ae087c74e3f184192c55c8d6bbba3a33e1d8dd6";
+        };
+      })
 
       lightline-vim
 
