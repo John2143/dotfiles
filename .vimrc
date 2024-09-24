@@ -640,7 +640,8 @@ noremap <c-L> <c-w>l
 noremap <c-H> <c-w>h
 
 nnoremap <leader>g :Bufstop<cr>
-nnoremap <leader>b :Files<cr>
+nnoremap <Leader>b :FZF<CR>
+"nnoremap <leader>b :Files<cr>
 
 noremap <silent> H :nohl<cr>:redraw<cr>
 
@@ -656,7 +657,6 @@ noremap <leader>rr :CocCommand rust-analyzer.toggleInlayHints<CR>
 noremap <leader>rb :BlamerToggle<CR>
 noremap <leader>rm :RainbowToggle<CR>
 
-noremap <Leader>n <esc>:NvimTreeToggle<CR>
 noremap <Leader>m <esc>:b#<CR>
 
 vnoremap <Leader>s :sort<CR>

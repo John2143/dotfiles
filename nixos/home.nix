@@ -341,7 +341,8 @@ in
       vim-fugitive
       vim-abolish
       # " useful for a work specific setup (metadata files + source files)
-      # (fromGitHub "HEAD" "derekwyatt/vim-fswitch")
+      # use fake shaHash for initial checkout
+      (fromGitHub "derekwyatt/vim-fswitch" "94acdd8bc92458d3bf7e6557df8d93b533564491")
       # " <leader>c<Space> is the only thing I know about this but it sure does work
       nerdcommenter
       # " not sure what these two do /exactly/ just know they work
