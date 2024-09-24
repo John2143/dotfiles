@@ -1,7 +1,7 @@
 [user]
 	email = john_schmidt@discovery.com
 	name = John Schmidt
-	signingkey = /home/john/.ssh/id_ed25519.pub
+	signingkey = /home/john/.ssh/id_github_sign.pub
 [gpg]
     format = ssh
 [push]
