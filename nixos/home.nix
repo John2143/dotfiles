@@ -1,7 +1,7 @@
 { config, inputs, pkgs, lib, pkgs-stable, ... }:
 
 let
-  fromGitHub = repo: rev: pkgs.vimUtils.buildVimPlugin {
+  vimPluginFromGithub = repo: rev: pkgs.vimUtils.buildVimPlugin {
     pname = "${lib.strings.sanitizeDerivationName repo}";
     version = "HEAD";
     src = builtins.fetchGit {
@@ -69,9 +69,9 @@ in
     k9s
 
     direnv # nixos env manager: see also (direnv hook fish)
-    clang # compiler
-    rustup # rust compiler
-    bacon # rust build tool
+    # clang # compiler
+    # rustup # rust compiler
+    # bacon # rust build tool
     cargo-generate # rust project generator
 
     # screenshots
@@ -84,11 +84,11 @@ in
     hyprpicker # color picker
 
     # embedded programming
-    gcc-arm-embedded # arm compiler
-    openocd # open debugger
-    probe-rs # rust <-> stm32
-    stlink # stm32 programmer
-    stm32cubemx # stm32 ide
+    # gcc-arm-embedded # arm compiler
+    # openocd # open debugger
+    # probe-rs # rust <-> stm32
+    # stlink # stm32 programmer
+    # stm32cubemx # stm32 ide
     # kicad # PCB Hardware Layout
 
     # desktop tools (bars, clipbaords, notifications, etc)
@@ -144,6 +144,9 @@ in
     systemctl-tui
     kind
     mongodb-compass
+    doctl
+
+    # kubernetes-helm
   ];
 
   wayland.windowManager.hyprland = {
@@ -294,6 +297,7 @@ in
       # tmux-battery
       vim-tmux-navigator
       resurrect
+      continuum
       # set -g @plugin 'tmux-plugins/tmux-sensible'
       # set -g @plugin 'seebi/tmux-colors-solarized'
       # #set -g @plugin 'janoamaral/tokyo-night-tmux'
@@ -342,7 +346,7 @@ in
       vim-abolish
       # " useful for a work specific setup (metadata files + source files)
       # use fake shaHash for initial checkout
-      (fromGitHub "derekwyatt/vim-fswitch" "94acdd8bc92458d3bf7e6557df8d93b533564491")
+      (vimPluginFromGithub "derekwyatt/vim-fswitch" "94acdd8bc92458d3bf7e6557df8d93b533564491")
       # " <leader>c<Space> is the only thing I know about this but it sure does work
       nerdcommenter
       # " not sure what these two do /exactly/ just know they work
@@ -369,7 +373,7 @@ in
       # "let g:neocomplete#enable_at_startup = 1
       # "Plug 'Shougo/neocomplete.vim'
       # "Plug 'Shougo/deoplete.nvim', { 'do': ':UpdateRemotePlugins' }
-      (fromGitHub "mihaifm/bufstop" "9ae087c74e3f184192c55c8d6bbba3a33e1d8dd6")
+      (vimPluginFromGithub "mihaifm/bufstop" "9ae087c74e3f184192c55c8d6bbba3a33e1d8dd6")
 
       lightline-vim
 

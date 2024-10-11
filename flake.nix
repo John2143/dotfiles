@@ -12,8 +12,7 @@
   outputs = { nixpkgs, ... }@inputs:
     let
       system = "x86_64-linux";
-    in
-    {
+    in rec {
       nixosConfigurations.office = nixpkgs.lib.nixosSystem {
         inherit system;
         specialArgs = { inherit inputs; };
@@ -42,5 +41,18 @@
           ./nixos/closet-configuration.nix
         ];
       };
+
+      nixosConfigurations.rpi1 = nixpkgs.lib.nixosSystem {
+        modules = [
+          "${nixpkgs}/nixos/modules/installer/sd-card/sd-image-raspberrypi.nix"
+          {
+            nixpkgs.config.allowUnsupportedSystem = true;
+            nixpkgs.hostPlatform.system = "armv7l-linux";
+            nixpkgs.buildPlatform.system = "${system}";
+          }
+        ];
+      };
+
+      images.rpi1 = nixosConfigurations.rpi1.config.system.build.sdImage;
     };
 }
