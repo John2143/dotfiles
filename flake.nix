@@ -47,7 +47,7 @@
           "${nixpkgs}/nixos/modules/installer/sd-card/sd-image-raspberrypi.nix"
           {
             nixpkgs.config.allowUnsupportedSystem = true;
-            nixpkgs.hostPlatform.system = "armv7l-linux";
+            nixpkgs.hostPlatform.system = "aarch64-linux";
             nixpkgs.buildPlatform.system = "${system}";
           }
         ];
