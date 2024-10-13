@@ -30,7 +30,8 @@ if [ (uname) = "Linux" ]
         alias enh="fish -c 'cd ~/dotfiles/nixos/ ; nvim "$HOST"-hardware-configuration.nix'"
 
         alias ens="fish -c 'cd ~/dotfiles/nixos/ ; nvim shared-configuration.nix'"
-        alias ehm="fish -c 'cd ~/dotfiles/nixos/ ; nvim home.nix'"
+        alias ehm="fish -c 'cd ~/dotfiles/nixos/ ; nvim home-cli.nix'"
+        alias ehmg="fish -c 'cd ~/dotfiles/nixos/ ; nvim home.nix'"
         alias enf="fish -c 'cd ~/dotfiles/ ; nvim flake.nix'"
 
         alias build="sudo nixos-rebuild -v --flake ~/dotfiles"
