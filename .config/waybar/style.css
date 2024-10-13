@@ -55,7 +55,7 @@ window#waybar {
     background-size: 400% 400%;
 }
 
-#tray, #pulseaudio, #network, #battery,
+#tray, #pulseaudio, #network, #battery, #temperature, 
 #custom-playerctl.backward, #custom-playerctl.play, #custom-playerctl.foward{
     background: #25253a;
     font-weight: bold;
