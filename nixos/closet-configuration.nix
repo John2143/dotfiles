@@ -29,7 +29,7 @@
   };
 
   networking.defaultGateway = "192.168.1.1";
-  networking.nameservers = [ "1.1.1.1" "8.8.8.8" ];
+  networking.nameservers = [ "192.168.1.12" "1.1.1.1" ];
 
   time.timeZone = "America/New_York";
   i18n.defaultLocale = "en_US.UTF-8";
@@ -45,13 +45,15 @@
     initialPassword = "john";
     shell = pkgs.fish;
     packages = with pkgs; [
+      fish
     ];
   };
   security.sudo.wheelNeedsPassword = false;
 
   home-manager = {
     users = {
-      "john" = import ./home.nix;
+      # only need the cli packages
+      "john" = import ./home-cli.nix;
     };
   };
 
@@ -60,13 +62,7 @@
   environment.systemPackages = with pkgs; [
     git
     fish
-    # wget
     curl
-    tmux
-    # vim
-    btop
-
-    k3s # kubernetes k8s node
   ];
 
   programs.gnupg.agent = {
@@ -81,7 +77,15 @@
   # ================
 
   # Enable the OpenSSH daemon.
-  services.openssh.enable = true;
+  services.openssh = {
+    enable = true;
+    settings.PasswordAuthentication = false;
+    permitRootLogin = "no";
+  };
+  users.users."john".openssh.authorizedKeys.keys = [
+    "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOktI2Vry/5fbhZiG35o5mf7w3dnaTEDqkRJVM07cu3a john@arch"
+    "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIEQTnsGZnbDgz6aY4O15lVybDwkaGJlIUmYO75gyLVds john@office"
+  ];
   services.avahi = {
     enable = true;
     nssmdns4 = true;
