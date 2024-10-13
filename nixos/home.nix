@@ -93,7 +93,7 @@ in
 
     # desktop tools (bars, clipbaords, notifications, etc)
     pulseaudio # pactl (audio)
-    waybar # status bar
+    #waybar # status bar
     wofi # "start menu" / program browser
     dolphin # file browser
     wl-clipboard # copy-paste via cli
@@ -166,7 +166,6 @@ in
       preload = /home/john/backgrounds/luna_1.png
       wallpaper = , /home/john/backgrounds/luna_1.png
     ";
-    "waybar".source = config.lib.file.mkOutOfStoreSymlink ../.config/waybar;
 
     "get_sunset.fish".source = config.lib.file.mkOutOfStoreSymlink ../.config/get_sunset.fish;
     "starship.toml".source = config.lib.file.mkOutOfStoreSymlink ../.config/starship.toml;
@@ -210,6 +209,39 @@ in
   #
   home.sessionVariables = {
     EDITOR = "nvim";
+  };
+
+  imports = [
+    ./waybar/hyprland.nix
+    ./waybar/stats.nix
+    ./waybar/recorder.nix
+    ./waybar/backlight.nix
+    ./waybar/audio.nix
+    ./waybar/notification.nix
+    ./waybar/network.nix
+    ./waybar/general.nix
+    ./waybar/power.nix
+
+    ./waybar/style.nix
+  ];
+
+  stylix.targets.waybar.enable = false;
+  wayland.windowManager.hyprland.settings = {
+    bind = [ "SUPER,b,exec,killall -SIGUSR1 .waybar-wrapped" ];
+    exec = [ "systemctl --user restart waybar" ];
+  };
+
+  programs.waybar = {
+    enable = true;
+    systemd.enable = true;
+    settings = {
+      mainBar = {
+        layer = "top";
+        position = "right";
+        margin = "5 2 5 0";
+        reload_style_on_change = true;
+      };
+    };
   };
 
   programs.fish = {
