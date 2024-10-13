@@ -455,6 +455,8 @@ in
 
       copilot-vim
 
+      refactoring-nvim
+      plenary-nvim
     ];
   };
 }

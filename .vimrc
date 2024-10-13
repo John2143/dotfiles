@@ -473,6 +473,11 @@ lua << END
         },
     })
 
+    require("refactoring").setup({
+        show_success_message = false, -- shows a message with information about the refactor on success
+                              -- i.e. [Refactor] Inlined 3 variable occurrences
+    })
+
     vim.cmd.colorscheme "catppuccin"
 
     -- Command to toggle inline diagnostics
