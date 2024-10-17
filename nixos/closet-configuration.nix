@@ -2,7 +2,7 @@
 # your system. Help is available in the configuration.nix(5) man page, on
 # https://search.nixos.org/options and in the NixOS manual (`nixos-help`).
 
-{ config, lib, pkgs, ... }:
+{ config, lib, pkgs, pkgs-stable, ... }:
 
 {
   imports =
@@ -12,6 +12,32 @@
     ];
 
   nix.settings.experimental-features = [ "nix-command" "flakes" ];
+
+  # Define a user account. Don't forget to set a password with ‘passwd’.
+  users.users.john = {
+    isNormalUser = true;
+    extraGroups = [ "wheel" "networkmanager" "input" "dialout" "docker" ]; # Enable ‘sudo’ for the user.
+    initialPassword = "john";
+    shell = pkgs.fish;
+    packages = with pkgs; [
+      obsidian # note-taking software
+      teamspeak_client
+    ];
+  };
+  security.sudo.wheelNeedsPassword = false;
+
+  home-manager = {
+    # home-manager uses extraSpecialArgs instead of specialArgs, but it does the same thing
+    extraSpecialArgs = {
+      pkgs-stable = pkgs-stable;
+    };
+    #sharedModles = [
+      #inputs.sops-nix.homeManagerModles.sops
+    #];
+    users = {
+      "john" = import ./home-cli.nix;
+    };
+  };
 
   # Use the systemd-boot EFI boot loader.
   boot.loader = {
@@ -36,25 +62,6 @@
   console = {
     font = "Lat2-Terminus16";
     keyMap = "us";
-  };
-
-  # Define a user account. Don't forget to set a password with ‘passwd’.
-  users.users.john = {
-    isNormalUser = true;
-    extraGroups = [ "wheel" "networkmanager" ]; # Enable ‘sudo’ for the user.
-    initialPassword = "john";
-    shell = pkgs.fish;
-    packages = with pkgs; [
-      fish
-    ];
-  };
-  security.sudo.wheelNeedsPassword = false;
-
-  home-manager = {
-    users = {
-      # only need the cli packages
-      "john" = import ./home-cli.nix;
-    };
   };
 
   # List packages installed in system profile. To search, run:
