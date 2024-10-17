@@ -87,6 +87,13 @@
     mongodb-compass
     doctl
     # kubernetes-helm
+
+    k3s # kubernetes k8s node
+
+    pavucontrol # audio
+    qpwgraph 
+
+    kdeconnect # phone sync
   ];
 
   wayland.windowManager.hyprland = {

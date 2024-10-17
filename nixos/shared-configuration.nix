@@ -38,13 +38,6 @@
     tmux
     vim
     btop
-
-    k3s # kubernetes k8s node
-
-    pavucontrol # audio
-    qpwgraph
-
-    kdeconnect
   ];
 
   # Define a user account. Don't forget to set a password with ‘passwd’.
@@ -65,6 +58,9 @@
     extraSpecialArgs = {
       pkgs-stable = pkgs-stable;
     };
+    #sharedModles = [
+      #inputs.sops-nix.homeManagerModles.sops
+    ];
     users = {
       "john" = import ./home.nix;
     };
