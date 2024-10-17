@@ -60,7 +60,7 @@
     };
     #sharedModles = [
       #inputs.sops-nix.homeManagerModles.sops
-    ];
+    #];
     users = {
       "john" = import ./home.nix;
     };
