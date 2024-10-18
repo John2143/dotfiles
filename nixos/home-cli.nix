@@ -64,7 +64,7 @@ in
     systemctl-tui
 
     # k8s
-    kubectl
+    # kubectl # from k3s
     kubecolor # kubectl color
     k9s
 
