@@ -123,6 +123,13 @@
     } + "/hpfva.sh";
   };
 
+  services.ollama = {
+    loadModels = [
+      "deepseek-coder-v2"
+      "llama3.2"
+    ];
+  };
+
   # Home Manager is pretty good at managing dotfiles. The primary way to manage
   # plain files is through 'home.file'.
   home.file = {

@@ -75,6 +75,7 @@
     token = "K10c774bc9053c47bd55747f362531fb443f6ca1e4364143dbd74acdd4156eb6878::875s0m.tyfzuzt4lsfmn006";
   };
 
+  services.ollama.acceleration = "cuda";
 
   # # Open ports in the firewall.
   # networking.firewall.allowedTCPPorts = [ 
