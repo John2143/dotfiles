@@ -75,6 +75,11 @@ if [ (uname) = "Darwin" ]
     alias ls=eza
 end
 
+alias lat="ls -la --tree"
+alias lt="ls --tree"
+alias la="ls -la"
+alias ll="ls --long --group --header --git"
+
 if not $NIX
     alias nvm=fnm
     fnm env | source
