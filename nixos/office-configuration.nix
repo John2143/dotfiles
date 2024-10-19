@@ -104,7 +104,7 @@
     enable = true;
     role = "agent";
     serverAddr = "https://192.168.1.35:6443";
-    token = "K10c19a7646d1e7136cc58d26d01b44ca809b0c2efed76bed7b1612f7c01e41f616::xv480x.847d9pubg1qnqif5";
+    token = "K10c774bc9053c47bd55747f362531fb443f6ca1e4364143dbd74acdd4156eb6878::3vjhdv.f8s0bl2ablc7ctej";
   };
 
   # drones
