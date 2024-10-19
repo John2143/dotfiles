@@ -61,6 +61,8 @@
   networking.defaultGateway = "192.168.1.1";
   networking.nameservers = [ "192.168.1.12" "1.1.1.1" ];
 
+  virtualisation.docker.enable = true;
+
   # Set your time zone.
   time.timeZone = "America/New_York";
   i18n.defaultLocale = "en_US.UTF-8";

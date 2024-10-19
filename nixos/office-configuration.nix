@@ -52,6 +52,12 @@
     };
   };
 
+  virtualisation.podman = {
+    enable = true;
+    dockerCompat = true;
+
+  };
+
   networking.hostName = "office"; # Define your hostname.
   networking.networkmanager.enable = true;  # Easiest to use and most distros use this by default.
   networking.interfaces = {
@@ -108,7 +114,13 @@
     token = "K10c774bc9053c47bd55747f362531fb443f6ca1e4364143dbd74acdd4156eb6878::3vjhdv.f8s0bl2ablc7ctej";
   };
 
-  services.ollama.acceleration = "rocm";
+  services.ollama = {
+    acceleration = "rocm";
+    environmentVariables = {
+      HCC_AMDGPU_TARGET = "gfx1100";
+    };
+    rocmOverrideGfx = "11.0.0";
+  };
 
   # drones
   services.upower.enable = true;

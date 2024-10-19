@@ -45,6 +45,8 @@
     efi.canTouchEfiVariables = true;
   };
 
+  virtualisation.docker.enable = true;
+
   networking.hostName = "closet"; # Define your hostname.
   networking.networkmanager.enable = true;  # Easiest to use and most distros use this by default.
   networking.interfaces = {
