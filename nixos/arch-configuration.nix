@@ -8,6 +8,7 @@
   imports =
     [
       ./arch-hardware-configuration.nix
+      ./ollama.nix
       # inputs.home-manager.nixosModules.default
     ];
 
