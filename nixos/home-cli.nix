@@ -63,6 +63,7 @@ in
     unzip
     unrar
     systemctl-tui
+    dive
 
 
     # k8s
