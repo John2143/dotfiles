@@ -36,6 +36,8 @@
       nixosConfigurations.closet = nixpkgs.lib.nixosSystem {
         inherit system;
         modules = [
+          #./nixos/simple-efi.nix
+          #disko.nixosModules.disko
           inputs.home-manager.nixosModules.default
           ./nixos/shared-configuration.nix
           ./nixos/closet-configuration.nix

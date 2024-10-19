@@ -14,17 +14,12 @@
   boot.extraModulePackages = [ ];
 
   fileSystems."/" =
-    { device = "/dev/disk/by-label/NIX";
-      fsType = "ext4";
-    };
-
-  fileSystems."/mnt" =
-    { device = "/dev/disk/by-label/ARCH";
+    { device = "/dev/disk/by-label/MAIN";
       fsType = "ext4";
     };
 
   fileSystems."/boot" =
-    { device = "/dev/disk/by-uuid/9D82-A2CC";
+    { device = "/dev/disk/by-label/CLOSETBOOT";
       fsType = "vfat";
       options = [ "fmask=0022" "dmask=0022" ];
     };
