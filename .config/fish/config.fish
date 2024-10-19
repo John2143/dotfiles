@@ -29,7 +29,8 @@ if [ (uname) = "Linux" ]
         alias en="fish -c 'cd ~/dotfiles/nixos/ ; nvim "$HOST"-configuration.nix'"
         alias enh="fish -c 'cd ~/dotfiles/nixos/ ; nvim "$HOST"-hardware-configuration.nix'"
 
-        alias ens="fish -c 'cd ~/dotfiles/nixos/ ; nvim shared-configuration.nix'"
+        alias ens="fish -c 'cd ~/dotfiles/nixos/ ; nvim shared-cli-configuration.nix'"
+        alias ensg="fish -c 'cd ~/dotfiles/nixos/ ; nvim shared-configuration.nix'"
         alias ehm="fish -c 'cd ~/dotfiles/nixos/ ; nvim home-cli.nix'"
         alias ehmg="fish -c 'cd ~/dotfiles/nixos/ ; nvim home.nix'"
         alias enf="fish -c 'cd ~/dotfiles/ ; nvim flake.nix'"

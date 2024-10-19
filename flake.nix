@@ -18,6 +18,7 @@
         specialArgs = { inherit inputs; };
         modules = [
           inputs.home-manager.nixosModules.default
+          ./nixos/shared-cli-configuration.nix
           ./nixos/shared-configuration.nix
           ./nixos/office-configuration.nix
         ];
@@ -28,6 +29,7 @@
         specialArgs = { inherit inputs; };
         modules = [
           inputs.home-manager.nixosModules.default
+          ./nixos/shared-cli-configuration.nix
           ./nixos/shared-configuration.nix
           ./nixos/arch-configuration.nix
         ];
@@ -39,7 +41,7 @@
           #./nixos/simple-efi.nix
           #disko.nixosModules.disko
           inputs.home-manager.nixosModules.default
-          ./nixos/shared-configuration.nix
+          ./nixos/shared-cli-configuration.nix
           ./nixos/closet-configuration.nix
         ];
       };

@@ -41,7 +41,11 @@
     wofi # "start menu" / program browser
     dolphin # file browser
     wl-clipboard # copy-paste via cli
-    nerdfonts # fonts, idk how many this is
+    (nerdfonts.override { fonts = [
+        "FiraCode"
+        "JetBrainsMono"
+        #"scientifica"
+    ]; }) # fonts, idk how many this is
     jetbrains-mono # font
     alacritty # terminal
     pwvucontrol # volume control
