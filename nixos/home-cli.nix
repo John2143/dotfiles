@@ -49,6 +49,7 @@ in
     btop # btop++ > bpytop > htop > top
     choose # awk replacement
     du-dust # df/du replacement
+    ncdu # du / disk usage
     fzf
     fd # find replacement
     update-nix-fetchgit # update fetchgit urls
@@ -62,6 +63,7 @@ in
     unzip
     unrar
     systemctl-tui
+
 
     # k8s
     # kubectl # from k3s
