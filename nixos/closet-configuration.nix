@@ -84,11 +84,6 @@
   # ================
 
   # Enable the OpenSSH daemon.
-  services.openssh = {
-    enable = true;
-    settings.PasswordAuthentication = false;
-    permitRootLogin = "no";
-  };
   users.users."john".openssh.authorizedKeys.keys = [
     "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOktI2Vry/5fbhZiG35o5mf7w3dnaTEDqkRJVM07cu3a john@arch"
     "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIEQTnsGZnbDgz6aY4O15lVybDwkaGJlIUmYO75gyLVds john@office"

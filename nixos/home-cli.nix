@@ -102,7 +102,7 @@ in
     # # symlink to the Nix store copy.
     ".vimrc".source = ../.vimrc;
     # ".tmux.conf".source = /home/john/dotfiles/.tmux.conf;
-    # ".gitconfig".source = ../.gitconfig;
+    ".gitconfig".source = ../.gitconfig;
 
     # # You can also set the file content immediately.
     # ".gradle/gradle.properties".text = ''

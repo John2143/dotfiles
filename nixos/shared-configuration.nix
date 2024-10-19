@@ -48,7 +48,13 @@
   programs.fish.enable = true;
 
   # Enable the OpenSSH daemon.
-  services.openssh.enable = true;
+  services.openssh = {
+    enable = true;
+    settings = {
+      PasswordAuthentication = false;
+      PermitRootLogin = "no";
+    };
+  };
   services.avahi = {
     enable = true;
     nssmdns4 = true;
