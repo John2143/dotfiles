@@ -8,7 +8,7 @@
   imports =
     [
       ./office-hardware-configuration.nix
-      ./ollama.nix
+      ./waybar.nix
       # inputs.home-manager.nixosModules.default
     ];
 

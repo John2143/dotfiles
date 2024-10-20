@@ -6,7 +6,10 @@
   };
 
   # Include everything from home-cli.nix too
-  imports = [ ./home-cli.nix ];
+  imports = [
+    ./home-cli.nix
+    ./waybar.nix
+  ];
 
   # The home.packages option allows you to install Nix packages into your
   # environment.
@@ -37,7 +40,6 @@
 
     # desktop tools (bars, clipbaords, notifications, etc)
     pulseaudio # pactl (audio)
-    waybar # status bar
     wofi # "start menu" / program browser
     dolphin # file browser
     wl-clipboard # copy-paste via cli
@@ -116,7 +118,7 @@
       preload = /home/john/backgrounds/luna_1.png
       wallpaper = , /home/john/backgrounds/luna_1.png
     ";
-    "waybar".source = config.lib.file.mkOutOfStoreSymlink ../.config/waybar;
+    # "waybar".source = config.lib.file.mkOutOfStoreSymlink ../.config/waybar;
 
     "get_sunset.fish".source = config.lib.file.mkOutOfStoreSymlink ../.config/get_sunset.fish;
 
@@ -125,10 +127,6 @@
       ref = "master";
       rev = "c268b0269617c5109585044ef6eac8623090891f";
     } + "/hpfva.sh";
-  };
-
-  services.waybar = {
-    enable = true;
   };
 
   # Home Manager is pretty good at managing dotfiles. The primary way to manage

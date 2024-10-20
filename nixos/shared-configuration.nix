@@ -48,6 +48,9 @@
     enable = true;
     #enableNvidiaPatches = true;
   };
+
+  #environment.systemPackages = with pkgs; [
+  #];
   # games
   programs.steam.enable = true;
 
