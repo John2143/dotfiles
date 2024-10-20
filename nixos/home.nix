@@ -43,10 +43,13 @@
     wofi # "start menu" / program browser
     dolphin # file browser
     wl-clipboard # copy-paste via cli
+    # https://github.com/NixOS/nixpkgs/blob/master/pkgs/data/fonts/nerdfonts/shas.nix
     (nerdfonts.override { fonts = [
-        "FiraCode"
-        "JetBrainsMono"
-        #"scientifica"
+        #"FiraCode"
+        #"JetBrainsMono"
+        #"RobotoMono"
+        #"DejaVuSansMono"
+        #"FiraMono"
     ]; }) # fonts, idk how many this is
     jetbrains-mono # font
     alacritty # terminal
