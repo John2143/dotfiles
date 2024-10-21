@@ -61,7 +61,10 @@
   networking.defaultGateway = "192.168.1.1";
   networking.nameservers = [ "192.168.1.12" "1.1.1.1" ];
 
-  virtualisation.docker.enable = true;
+  virtualisation.podman = {
+    enable = true;
+    dockerCompat = true;
+  };
 
   # Set your time zone.
   time.timeZone = "America/New_York";
