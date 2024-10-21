@@ -7,9 +7,14 @@
       url = "github:nix-community/home-manager";
       inputs.nixpkgs.follows = "nixpkgs";
     };
+
+    disko = {
+      url = "github:nix-community/disko";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
   };
 
-  outputs = { nixpkgs, ... }@inputs:
+  outputs = { nixpkgs, disko, ... }@inputs:
     let
       system = "x86_64-linux";
     in rec {
@@ -46,17 +51,19 @@
         ];
       };
 
-      nixosConfigurations.rpi1 = nixpkgs.lib.nixosSystem {
+      nixosConfigurations.rpi4b = nixpkgs.lib.nixosSystem {
+        system = "aarch64-linux";
         modules = [
-          "${nixpkgs}/nixos/modules/installer/sd-card/sd-image-raspberrypi.nix"
-          {
-            nixpkgs.config.allowUnsupportedSystem = true;
-            nixpkgs.hostPlatform.system = "aarch64-linux";
-            nixpkgs.buildPlatform.system = "${system}";
-          }
+          disko.nixosModules.disko
+          ./nixos/simple-efi.nix
+          { disko.devices.disk.my-disk.device = "/dev/mmcblk0"; }
+
+          inputs.home-manager.nixosModules.default
+          ./nixos/shared-cli-configuration.nix
+          ./nixos/rpi4b-configuration.nix
         ];
       };
 
-      images.rpi1 = nixosConfigurations.rpi1.config.system.build.sdImage;
+      #images.rpi1 = nixosConfigurations.rpi1.config.system.build.sdImage;
     };
 }

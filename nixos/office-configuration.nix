@@ -55,7 +55,6 @@
   virtualisation.podman = {
     enable = true;
     dockerCompat = true;
-
   };
 
   networking.hostName = "office"; # Define your hostname.
