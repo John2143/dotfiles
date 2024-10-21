@@ -45,7 +45,10 @@
     efi.canTouchEfiVariables = true;
   };
 
-  virtualisation.docker.enable = true;
+  virtualisation.podman = {
+    enable = true;
+    dockerCompat = true;
+  };
 
   networking.hostName = "closet"; # Define your hostname.
   networking.networkmanager.enable = true;  # Easiest to use and most distros use this by default.
