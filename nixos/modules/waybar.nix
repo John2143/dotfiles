@@ -1,9 +1,8 @@
-{ config, pkgs, ... }:
 
 {
   programs.waybar = {
     enable = true;
-    style = ../.config/waybar/style.css;
+    style = ../../.config/waybar/style.css;
     settings = {
      mainBar = {
      # Global configuration

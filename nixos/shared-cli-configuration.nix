@@ -61,10 +61,6 @@
     };
   };
 
-  services.ollama = {
-    enable = true;
-  };
-
   security.rtkit.enable = true;
   services.udisks2.enable = true;
 

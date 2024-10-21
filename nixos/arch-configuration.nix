@@ -8,9 +8,12 @@
   imports =
     [
       ./arch-hardware-configuration.nix
-      ./ollama.nix
+      ./modules/user-john.nix
+      ./modules/ollama.nix
       # inputs.home-manager.nixosModules.default
     ];
+
+  services.getty.autologinUser = "john";
 
   # Use the systemd-boot EFI boot loader.
   #boot.loader.systemd-boot.enable = true;
@@ -23,32 +26,6 @@
   };
   boot.supportedFilesystems = [ "ntfs" ];
   boot.binfmt.emulatedSystems = [ "aarch64-linux" ];
-
-  # Define a user account. Don't forget to set a password with ‘passwd’.
-  users.users.john = {
-    isNormalUser = true;
-    extraGroups = [ "wheel" "networkmanager" "input" "dialout" "docker" ]; # Enable ‘sudo’ for the user.
-    initialPassword = "john";
-    shell = pkgs.fish;
-    packages = with pkgs; [
-      obsidian # note-taking software
-      teamspeak_client
-    ];
-  };
-  security.sudo.wheelNeedsPassword = false;
-
-  home-manager = {
-    # home-manager uses extraSpecialArgs instead of specialArgs, but it does the same thing
-    extraSpecialArgs = {
-      pkgs-stable = pkgs-stable;
-    };
-    #sharedModles = [
-      #inputs.sops-nix.homeManagerModles.sops
-    #];
-    users = {
-      "john" = import ./home.nix;
-    };
-  };
 
   networking.hostName = "arch"; # Define your hostname.
   networking.networkmanager.enable = true;  # Easiest to use and most distros use this by default.

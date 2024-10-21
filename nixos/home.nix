@@ -8,7 +8,7 @@
   # Include everything from home-cli.nix too
   imports = [
     ./home-cli.nix
-    ./waybar.nix
+    ./modules/waybar.nix
   ];
 
   # The home.packages option allows you to install Nix packages into your
