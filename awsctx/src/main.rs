@@ -1,5 +1,3 @@
-#![feature(never_type)]
-
 use anyhow::bail;
 use clap::Parser;
 use nom::{
@@ -28,7 +26,7 @@ struct Args {
     env: Option<String>,
 }
 
-use std::{collections::HashMap, io::Read, process::Stdio, str::from_utf8};
+use std::{collections::HashMap, convert::Infallible, io::Read, process::Stdio, str::from_utf8};
 
 use tokio::{io::AsyncWriteExt, process::Command};
 
@@ -90,7 +88,7 @@ impl ShellOutput {
 }
 
 impl std::str::FromStr for ShellOutput {
-    type Err = !;
+    type Err = Infallible;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         Ok(if s.contains("fish") {
