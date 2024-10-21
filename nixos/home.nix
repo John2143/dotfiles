@@ -46,8 +46,8 @@
     # https://github.com/NixOS/nixpkgs/blob/master/pkgs/data/fonts/nerdfonts/shas.nix
     (nerdfonts.override { fonts = [
         #"FiraCode"
-        #"JetBrainsMono"
-        #"RobotoMono"
+        "JetBrainsMono"
+        "RobotoMono"
         #"DejaVuSansMono"
         #"FiraMono"
     ]; }) # fonts, idk how many this is

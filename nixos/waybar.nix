@@ -3,14 +3,15 @@
 {
   programs.waybar = {
     enable = true;
+    style = ../.config/waybar/style.css;
     settings = {
      mainBar = {
      # Global configuration
        layer = "top";
        position = "top";
        height = 30;
-       modules-left = [ "hyprland/workspaces" ];
-       modules-center = [ "hyprland/window" ];
+       modules-left = [ "hyprland/workspaces" "hyprland/window" ];
+       modules-center = [ ];
        modules-right = [ "network" "memory" "cpu" "temperature" "battery" "tray" "pulseaudio" "clock#date" "clock#time" ];
      # Modules configuration
        battery = {
@@ -84,7 +85,7 @@
        };
 
        temperature = {
-         rotate = 90;
+         #rotate = 90;
          criticalThreshold = 80;
          interval = 1;
          format = "{temperatureC}°";

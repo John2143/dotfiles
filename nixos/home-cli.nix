@@ -90,6 +90,8 @@ in
 
     # Other / unsorted
     # kubernetes-helm
+    nodePackages."@tailwindcss/language-server" # tailwindcss language server for neovim
+    nodePackages.yaml-language-server # yaml language server for neovim
   ];
 
   xdg.configFile = {
@@ -365,6 +367,8 @@ in
       vim-go
       vim-markdown
       lsp-status-nvim
+
+      nvim-highlight-colors
 
       plenary-nvim
       null-ls-nvim
