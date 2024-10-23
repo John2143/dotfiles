@@ -103,7 +103,7 @@
     pavucontrol # audio
     qpwgraph 
 
-    kdeconnect # phone sync
+    plasma5Packages.kdeconnect-kde
   ];
 
   wayland.windowManager.hyprland = {
