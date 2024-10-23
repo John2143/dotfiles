@@ -65,14 +65,22 @@
   # sound.enable = true;
   # hardware.pulseaudio.enable = true;
 
-  systemd.user.services.office-bad-cpu = {
+  systemd.services.office-bad-cpu = {
     wantedBy = [ "multi-user.target" ];
     description = "CPU perf core 8 is bad on my office comp";
-
+    script = ''${pkgs.fish}/bin/fish /home/john/bin/office.fish'';
     serviceConfig = {
-      ExecStart = ''${pkgs.fish}/bin/fish /home/john/bin/office.fish'';
       Type = "oneshot";
-      RemainAfterExit = true;
+      User = "root";
+    };
+  };
+
+  systemd.timers."bad-cpu" = {
+    wantedBy = [ "timers.target" ];
+    timerConfig = {
+      OnBootSec = "5";
+      OnUnitActiveSec = "5";
+      Unit = "office-bad-cpu.service";
     };
   };
 
