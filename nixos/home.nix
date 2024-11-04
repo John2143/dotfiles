@@ -1,10 +1,5 @@
 { config, inputs, pkgs, lib, pkgs-stable, ... }:
 {
-  _module.args.pkgs-stable = import inputs.nixpkgs-stable {
-    inherit (pkgs.stdenv.hostPlatform) system;
-    inherit (config.nixpkgs) config;
-  };
-
   # Include everything from home-cli.nix too
   imports = [
     ./home-cli.nix
@@ -26,7 +21,7 @@
     slurp # use mouse to get a point on screen
     grim # minimal screenshot program
     bind # network utilities
-    wf-recorder # screen recording
+    pkgs-stable.wf-recorder # screen recording
     normcap # OCR screen recognition
     hyprpicker # color picker
 
