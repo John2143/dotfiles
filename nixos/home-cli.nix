@@ -378,6 +378,7 @@ in
 
       refactoring-nvim
       plenary-nvim
+      (vimPluginFromGithub "frankroeder/parrot.nvim" "c992483dd0cf9d7481b55714d52365d1f7a66f91")
     ];
   };
 }
