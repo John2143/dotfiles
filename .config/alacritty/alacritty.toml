@@ -1,3 +1,4 @@
+[general]
 live_config_reload = true
 import = [
   "/Users/jschmidt/Library/Application Support/fnm/node-versions/v20.5.1/installation/lib/node_modules/alacritty-themes/themes/Monokai.dark.toml"

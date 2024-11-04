@@ -509,6 +509,15 @@ lua << END
                               -- i.e. [Refactor] Inlined 3 variable occurrences
     })
 
+    require("parrot").setup({
+      providers = {
+        ollama = {},
+        openai = {
+          api_key = os.getenv "OPENAI_API_KEY",
+        }
+      }
+    })
+
     vim.cmd.colorscheme "catppuccin"
 
     -- Command to toggle inline diagnostics
