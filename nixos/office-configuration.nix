@@ -116,10 +116,11 @@
   networking.firewall.enable = false;
   networking.firewall.allowPing = true;
 
-  services.samba-wsdd = {
-    enable = true;
-    openFirewall = true;
-  };
+  # Allow windows to see the samba share
+  #services.samba-wsdd = {
+    #enable = true;
+    #openFirewall = true;
+  #};
 
   services.samba = {
     enable = true;
