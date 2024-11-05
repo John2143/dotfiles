@@ -255,6 +255,10 @@ lua << END
       buf_set_keymap('n', ",q", "<cmd>lua vim.lsp.buf.formatting()<CR>", opts)
       buf_set_keymap('n', ',rz', '<cmd>lua vim.diagnostic.set_loclist()<CR>', opts)
 
+      -- buf_set_keymap('n', '<C-h>', '<cmd>NvimTmuxNavigateLeft<CR>', opts)
+      -- buf_set_keymap('n', '<C-j>', '<cmd>NvimTmuxNavigateDown<CR>', opts)
+      -- buf_set_keymap('n', '<C-k>', '<cmd>NvimTmuxNavigateUp<CR>', opts)
+      -- buf_set_keymap('n', '<C-l>', '<cmd>NvimTmuxNavigateRight<CR>', opts)
 
       -- buf_set_keymap('n', '<C-k>', '<cmd>lua vim.lsp.buf.signature_help()<CR>', opts)
       -- buf_set_keymap('n', ',D', '<cmd>lua vim.lsp.buf.type_definition()<CR>', opts)
@@ -262,6 +266,7 @@ lua << END
       -- Get signatures (and _only_ signatures) when in argument lists.
       require "lsp_signature".on_attach({
         doc_lines = 0,
+
         handler_opts = {
           border = "none"
         },
@@ -679,10 +684,10 @@ nnoremap <leader>j :!python3 -m json.tool<cr>
 " delete current file (don't add <cr>)
 nnoremap <leader>DD :call delete(expand('%'))
 "nnoremap <C-Q> NERDCommenterToggle
-noremap <c-J> <c-w>j
-noremap <c-K> <c-w>k
-noremap <c-L> <c-w>l
-noremap <c-H> <c-w>h
+"noremap <c-J> <c-w>j
+"noremap <c-K> <c-w>k
+"noremap <c-L> <c-w>l
+"noremap <c-H> <c-w>h
 
 nnoremap <leader>g :Bufstop<cr>
 nnoremap <Leader>b :FZF<CR>
