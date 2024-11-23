@@ -55,13 +55,13 @@
          };
        };
 
-       network = {
-         interval = 5;
-         format-wifi = " {essid}";
-         format-ethernet = "󰈀 {ifname}";
-         format-disconnected = "󰈂 Disconnected";
-         tooltip-format = "[{ifname}] - {ipaddr}/{cidr} - ({signalStrength}%)";
-       };
+       #network = {
+         #interval = 5;
+         #format-wifi = " {essid}";
+         #format-ethernet = "󰈀 {ifname}";
+         #format-disconnected = "󰈂 Disconnected";
+         #tooltip-format = "[{ifname}] - {ipaddr}/{cidr} - ({signalStrength}%)";
+       #};
 
        pulseaudio = {
          interval = 5;
