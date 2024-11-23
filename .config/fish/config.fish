@@ -85,6 +85,8 @@ alias ask="ollama run llama3.2:latest"
 alias askbig="ollama run llama3.1:70b"
 alias askc="ollama run deepseek-coder-v2:latest"
 
+alias fixfmt="fish -c 'cargo fix --allow-dirty --allow-staged; cargo fmt --all'"
+
 if not $NIX
     alias nvm=fnm
     fnm env | source

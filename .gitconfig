@@ -1,7 +1,8 @@
+# This gitconfig file is only used by my work computer. See my home-cli.nix for my personal gitconfig file.
 [user]
 	email = john_schmidt@discovery.com
 	name = John Schmidt
-	signingkey = /home/john/.ssh/id_github_sign.pub
+	signingkey = /Users/jschmidt/.ssh/id_github_sign.pub
 [gpg]
     format = ssh
 [push]
@@ -77,3 +78,5 @@
     gpgsign = true
 [http]
 	sslVerify = false
+[init]
+	masterBranch = main

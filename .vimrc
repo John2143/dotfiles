@@ -166,6 +166,8 @@ if empty($NIX)
 
     Plug 'github/copilot.vim'
 
+    Plug 'frankroeder/parrot.nvim'
+
     "Plug 'https://git.sr.ht/~whynothugo/lsp_lines.nvim'
 
     call plug#end()
@@ -302,13 +304,25 @@ lua << END
         capabilities = capabilities,
     }
 
-    lspconfig.ts_ls.setup {
-        on_attach = on_attach,
-        flags = {
-            debounce_text_changes = 150,
-        },
-        capabilities = capabilities,
-    }
+    -- tsserver was renamed to ts_ls, but we need to support both:
+    if lspconfig.tsserver then
+        lspconfig.tsserver.setup {
+            on_attach = on_attach,
+            flags = {
+                debounce_text_changes = 150,
+            },
+            capabilities = capabilities,
+        }
+    else
+        lspconfig.ts_ls.setup {
+            on_attach = on_attach,
+            flags = {
+                debounce_text_changes = 150,
+            },
+            capabilities = capabilities,
+        }
+    end
+
     lspconfig.pyright.setup{
         on_attach = on_attach,
         flags = {
@@ -370,6 +384,22 @@ lua << END
                     ["https://raw.githubusercontent.com/compose-spec/compose-spec/master/schema/compose-spec.json"] = "*docker-compose*.{yml,yaml}",
                     ["https://raw.githubusercontent.com/argoproj/argo-workflows/master/api/jsonschema/schema.json"] = "*flow*.{yml,yaml}",
                 },
+            },
+        },
+    }
+    lspconfig.gopls.setup{
+        on_attach = on_attach,
+        flags = {
+            debounce_text_changes = 150,
+        },
+        capabilities = capabilities,
+        settings = {
+            gopls = {
+                analyses = {
+                    unusedparams = true,
+                },
+                staticcheck = true,
+                gofumpt = true,
             },
         },
     }
@@ -509,10 +539,10 @@ lua << END
         },
     })
 
-    require("refactoring").setup({
-        show_success_message = false, -- shows a message with information about the refactor on success
+    -- require("refactoring").setup({
+        -- show_success_message = false, -- shows a message with information about the refactor on success
                               -- i.e. [Refactor] Inlined 3 variable occurrences
-    })
+    -- })
 
     require("parrot").setup({
       providers = {
