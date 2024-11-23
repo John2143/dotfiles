@@ -107,7 +107,7 @@ in
     # # symlink to the Nix store copy.
     ".vimrc".source = ../.vimrc;
     # ".tmux.conf".source = /home/john/dotfiles/.tmux.conf;
-    ".gitconfig".source = ../.gitconfig;
+    # ".gitconfig".source = ../.gitconfig;
 
     # # You can also set the file content immediately.
     # ".gradle/gradle.properties".text = ''
@@ -396,5 +396,95 @@ in
       plenary-nvim
       (vimPluginFromGithub "frankroeder/parrot.nvim" "c992483dd0cf9d7481b55714d52365d1f7a66f91")
     ];
+  };
+
+  programs.git = {
+    enable = true;
+    extraConfig = {
+      user = {
+        email = "john@john2143.com";
+        name = "John Schmidt";
+        signingkey = "/home/john/.ssh/id_github_sign.pub";
+      };
+      gpg = {
+        format = "ssh";
+      };
+      push = {
+        default = "current";
+      };
+      color = {
+        ui = "always";
+      };
+      alias = {
+        tree = "log --oneline --decorate --all --graph";
+        hist = "log --pretty=format:'%h %ad | %s%d [%an]' --graph --date=short";
+
+        co = "checkout";
+        cod = "checkout develop";
+        com = "checkout master";
+        coa = "checkout main";
+        cos = "checkout staging";
+
+        bb = "checkout -t -b";
+        br = "branch";
+
+        s = "status";
+        st = "status";
+        sts = "status -s";
+        ss = "status -s";
+
+        mf = "merge --no-ff";
+
+        adl = "add -A";
+
+        ci = "commit -S";
+        cim = "commit -S -m";
+        cia = "commit -S -a";
+        ciam = "commit -S -a -m";
+        caim = "commit -S -a -m";
+        cima = "commit -S --amend -m";
+
+        pushb = "push -u origin HEAD";
+        psuh = "push";
+
+        dh = "diff HEAD";
+
+        ignore = "!nvim .git/info/exclude";
+        unignore = "update-index --no-assume-unchanged";
+        ignored = "git ls-files -v | grep '^[[:lower:]]'";
+      };
+      url = {
+        "git@github.com" = {
+          insteadOf = "gh";
+        };
+      };
+      core = {
+        #excludesfile = "/Users/jschmidt/.gitignore";
+        pager = "delta";
+      };
+      pull = {
+        ff = "only";
+      };
+      merge = {
+        tool = "nvimdiff";
+        conflictstyle = "zdiff3";
+      };
+      rerere = {
+        enabled = true;
+      };
+      column = {
+        ui = "auto";
+      };
+      branch = {
+        sort = "-committerdate";
+      };
+      commit = {
+        verbose = true;
+        gpgsign = true;
+      };
+      tag = {
+        gpgsign = true;
+      };
+    };
   };
 }
