@@ -86,8 +86,6 @@
 
   services.udev.extraRules = builtins.readFile ./udev_embedded.rules;
 
-  # services.udiskie.enable = true;
-
   services.k3s = {
     enable = true;
     role = "agent";
@@ -122,129 +120,52 @@
     #openFirewall = true;
   #};
 
-  services.samba = {
-    enable = true;
-    securityType = "user";
-    openFirewall = true;
-    settings = {
-      global = {
-        "workgroup" = "WORKGROUP";
-        "server string" = "smbnix";
-        "netbios name" = "smbnix";
-        "security" = "user";
-        #"use sendfile" = "yes";
-        #"max protocol" = "smb2";
-        # note: localhost is the ipv6 localhost ::1
-        "hosts allow" = "192.168.1. 127.0.0.1 localhost";
-        "hosts deny" = "0.0.0.0/0";
-        "guest account" = "nobody";
-        "map to guest" = "bad user";
-      };
-      "public" = {
-        "path" = "/home/john/camera/";
-        "browseable" = "yes";
-        "read only" = "yes";
-        "guest ok" = "yes";
-        "create mask" = "0644";
-        "directory mask" = "0755";
-        "force user" = "john";
-        "force group" = "john";
-      };
-    };
-  };
-
   #services.samba = {
     #enable = true;
     #securityType = "user";
     #openFirewall = true;
-    #extraConfig = ''
-      #workgroup = WORKGROUP
-      #server string = smbnix
-      #netbios name = smbnix
-      #security = user
-      ##use sendfile = yes
-      ##max protocol = smb2
-      ## note: localhost is the ipv6 localhost ::1
-      ## hosts allow = 192.168.1. 127.0.0.1 localhost
-      #hosts allow = 0.0.0.0/0
-      ## hosts deny = 0.0.0.0/0
-      #guest account = john
-      #map to guest = bad user
-    #'';
-    #shares = {
-      #public = {
-        #path = "/home/john/camera/";
-        #browseable = "yes";
-        #"read only" = "no";
+    #settings = {
+      #global = {
+        #"workgroup" = "WORKGROUP";
+        #"server string" = "smbnix";
+        #"netbios name" = "smbnix";
+        #"security" = "user";
+        ##"use sendfile" = "yes";
+        ##"max protocol" = "smb2";
+        ## note: localhost is the ipv6 localhost ::1
+        #"hosts allow" = "192.168.1. 127.0.0.1 localhost";
+        #"hosts deny" = "0.0.0.0/0";
+        #"guest account" = "john";
+        #"map to guest" = "bad user";
+      #};
+      #"john_camera_readonly" = {
+        #"path" = "/mnt/share/camera/";
+        #"browseable" = "yes";
+        #"read only" = "yes";
         #"guest ok" = "yes";
         #"create mask" = "0644";
         #"directory mask" = "0755";
-      #};
-      #private = {
-        #path = "/mnt/Shares/Private";
-        #browseable = "yes";
-        #"read only" = "no";
-        #"guest ok" = "no";
-        #"create mask" = "0644";
-        #"directory mask" = "0755";
-        #"force user" = "username";
-        #"force group" = "groupname";
+        #"force user" = "john";
+        #"force group" = "john";
       #};
     #};
   #};
 
-  programs.ssh.extraConfig = ''
-    Host eu.nixbuild.net
-      PubkeyAcceptedKeyTypes ssh-ed25519
-      ServerAliveInterval 60
-      IPQoS throughput
-      IdentityFile /home/john/.ssh/id_ed25519
-  '';
+  #programs.ssh.extraConfig = ''
+    #Host eu.nixbuild.net
+      #PubkeyAcceptedKeyTypes ssh-ed25519
+      #ServerAliveInterval 60
+      #IPQoS throughput
+      #IdentityFile /home/john/.ssh/id_ed25519
+  #'';
 
-  programs.ssh.knownHosts = {
-    nixbuild = {
-      hostNames = [ "eu.nixbuild.net" ];
-      publicKey = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIPIQCZc54poJ8vqawd8TraNryQeJnvH1eLpIDgbiqymM";
-    };
-  };
+  #programs.ssh.knownHosts = {
+    #nixbuild = {
+      #hostNames = [ "eu.nixbuild.net" ];
+      #publicKey = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIPIQCZc54poJ8vqawd8TraNryQeJnvH1eLpIDgbiqymM";
+    #};
+  #};
 
-  nix = {
-    distributedBuilds = true;
-    buildMachines = [
-      #{ hostName = "eu.nixbuild.net";
-        #system = "x86_64-linux";
-        #maxJobs = 100;
-        #supportedFeatures = [ "benchmark" "big-parallel" ];
-      #}
-      { hostName = "eu.nixbuild.net";
-        system = "aarch64-linux";
-        maxJobs = 100;
-        supportedFeatures = [ "benchmark" "big-parallel" ];
-      }
-      { hostName = "eu.nixbuild.net";
-        system = "armv7l-linux";
-        maxJobs = 100;
-        supportedFeatures = [ "benchmark" "big-parallel" ];
-      }
-    ];
-  };
-  # Copy the NixOS configuration file and link it from the resulting system
-  # (/run/current-system/configuration.nix). This is useful in case you
-  # accidentally delete configuration.nix.
-  # system.copySystemConfiguration = true;
-
-  # This option defines the first version of NixOS you have installed on this particular machine,
-  # and is used to maintain compatibility with application data (e.g. databases) created on older NixOS versions.
-  #
-  # Most users should NEVER change this value after the initial install, for any reason,
-  # even if you've upgraded your system to a new NixOS release.
-  #
-  # This value does NOT affect the Nixpkgs version your packages and OS are pulled from,
-  # so changing it will NOT upgrade your system.
-  #
-  # This value being lower than the current NixOS release does NOT mean your system is
-  # out of date, out of support, or vulnerable.
-  #
   # Do NOT change this value unless you have manually inspected all the changes it would make to your configuration,
   # and migrated your data accordingly.
   #
