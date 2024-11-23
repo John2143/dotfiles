@@ -171,7 +171,7 @@ in
         nix flake init --template templates#rust
         nix-shell -p cargo --command "cargo init . --bin --name $program"
         nix-shell -p cargo --command "cargo b"
-        echo "./result" >> .gitignore
+        echo "/result" >> .gitignore
         echo ".direnv" >> .gitignore
         git add -A
         nix build .
