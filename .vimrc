@@ -305,8 +305,8 @@ lua << END
     }
 
     -- tsserver was renamed to ts_ls, but we need to support both:
-    if lspconfig.tsserver then
-        lspconfig.tsserver.setup {
+    if lspconfig.ts_ls then
+        lspconfig.ts_ls.setup {
             on_attach = on_attach,
             flags = {
                 debounce_text_changes = 150,
@@ -314,7 +314,7 @@ lua << END
             capabilities = capabilities,
         }
     else
-        lspconfig.ts_ls.setup {
+        lspconfig.tsserver.setup {
             on_attach = on_attach,
             flags = {
                 debounce_text_changes = 150,

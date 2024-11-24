@@ -92,6 +92,11 @@ in
     # kubernetes-helm
     nodePackages."@tailwindcss/language-server" # tailwindcss language server for neovim
     nodePackages.yaml-language-server # yaml language server for neovim
+
+
+    localsend
+    fastfetch
+    distrobox
   ];
 
   xdg.configFile = {
