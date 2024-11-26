@@ -120,6 +120,7 @@
     # "waybar".source = config.lib.file.mkOutOfStoreSymlink ../.config/waybar;
 
     "get_sunset.fish".source = config.lib.file.mkOutOfStoreSymlink ../.config/get_sunset.fish;
+    "get_mullvad.fish".source = config.lib.file.mkOutOfStoreSymlink ../.config/get_mullvad.fish;
 
     "focussed-vol-adjust.sh".source = builtins.fetchGit {
       url = "https://github.com/Orbsa/hyprland-pipewire-focused-volume-adjust";

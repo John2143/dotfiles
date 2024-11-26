@@ -1,4 +1,4 @@
-
+{ pkgs, ... }:
 {
   programs.waybar = {
     enable = true;
@@ -11,7 +11,7 @@
        height = 30;
        modules-left = [ "hyprland/workspaces" "hyprland/window" ];
        modules-center = [ ];
-       modules-right = [ "network" "memory" "cpu" "temperature" "battery" "tray" "pulseaudio" "clock#date" "clock#time" ];
+       modules-right = [ "custom/mullvad" "memory" "cpu" "temperature" "battery" "tray" "pulseaudio" "clock#date" "clock#time" ];
      # Modules configuration
        battery = {
          interval = 10;
@@ -23,6 +23,14 @@
          format-discharging = "{icon}  {capacity}%";
          format-icons = [ "" "" "" "" "" ];
          tooltip = true;
+       };
+       "custom/mullvad" = {
+         interval = 20;
+         exec = "~/.config/get_mullvad.fish";
+         on-click = "${pkgs.mullvad-vpn}/bin/mullvad connect; sleep 2";
+         on-click-right = "${pkgs.mullvad-vpn}/bin/mullvad disconnect; sleep 1";
+         on-click-middle = "${pkgs.mullvad-vpn}/bin/mullvad reconnect; sleep 2";
+         exec-on-event = true;
        };
 
        "clock#time" = {
