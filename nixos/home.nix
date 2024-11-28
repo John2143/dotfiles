@@ -12,6 +12,11 @@
     udiskie # disks
     # neovim
 
+    # fonts
+    # https://github.com/NixOS/nixpkgs/blob/master/pkgs/data/fonts/nerdfonts/shas.nix
+    nerd-fonts.jetbrains-mono # font
+    nerd-fonts.roboto-mono # font also, "FiraCode" "DejaVuSansMono" "FiraMono"
+
     # cli
     amdgpu_top # gpu stats
     chatgpt-cli # yessir
@@ -38,14 +43,6 @@
     wofi # "start menu" / program browser
     dolphin # file browser
     wl-clipboard # copy-paste via cli
-    # https://github.com/NixOS/nixpkgs/blob/master/pkgs/data/fonts/nerdfonts/shas.nix
-    (nerdfonts.override { fonts = [
-        #"FiraCode"
-        "JetBrainsMono"
-        "RobotoMono"
-        #"DejaVuSansMono"
-        #"FiraMono"
-    ]; }) # fonts, idk how many this is
     jetbrains-mono # font
     alacritty # terminal
     pwvucontrol # volume control
@@ -96,7 +93,7 @@
     k3s # kubernetes k8s node
 
     pavucontrol # audio
-    qpwgraph 
+    qpwgraph
 
     plasma5Packages.kdeconnect-kde
   ];
@@ -145,16 +142,4 @@
     #   org.gradle.daemon.idletimeout=3600000
     # '';
   };
-
-  # Home Manager can also manage your environment variables through
-  # 'home.sessionVariables'. If you don't want to manage your shell through Home
-  # Manager then you have to manually source 'hm-session-vars.sh' located at
-  # either
-  #
-  #  ~/.nix-profile/etc/profile.d/hm-session-vars.sh
-  #
-  # or
-  #
-  #  /etc/profiles/per-user/john/etc/profile.d/hm-session-vars.sh
-  #
 }
