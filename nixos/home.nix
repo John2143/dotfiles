@@ -61,6 +61,7 @@
 
     # desktop programs (programs you can open)
     firefox # browser
+    ungoogled-chromium # browser backup
     mullvad-vpn # vpn
     gthumb # image viewer
     plex-media-player # plex

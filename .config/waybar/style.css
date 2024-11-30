@@ -15,17 +15,16 @@
     /*color: @normal_text_color;*/
     border: none;
     border-radius: 0px;
-    /*font-family: RobotoMono Nerd Font;*/
-    /*font-family: scientifica Bold;*/
-    /*font-size: 24px;*/
+    /*font-family: scientifica;*/
+    font-family: scientifica, JetBrainsMono Nerd Font Mono;
+    font-size: 24px;
     min-height: 0;
 }
 
 window#waybar {
     background: rgba(17,17,27,1);
-    font-family: Jet Brains Mono Nerd Font;
     color: @normal_text_color;
-    font-size: 18px;
+    /*font-size: 18px;*/
 }
 
 #workspaces {
@@ -35,7 +34,8 @@ window#waybar {
     border-radius: 16px;
 }
 #workspaces button {
-    font-family: scientifica;
+    /*font-family: scientifica;*/
+    /*font-weight: normal;*/
     background: @button_background_color;
     /*color: #FEFCFD;*/
     color: @button_text_color;
@@ -73,7 +73,8 @@ window#waybar {
 
 #tray, #pulseaudio, #network, #battery, #temperature, #memory, #cpu, #clock,
 #custom-playerctl.backward, #custom-playerctl.play, #custom-playerctl.foward{
-    font-family: Jet Brains Mono Nerd Font;
+    /*font-family: Jet Brains Mono Nerd Font;*/
+    /*font-weight: bold;*/
     background: @right_background_color;
     color: @right_text_color;
     border-radius: 15px;
@@ -83,12 +84,12 @@ window#waybar {
 
 #clock {
     /*font-family: scientifica;*/
-    font-weight: bold;
-    font-size: 20px;
+    /*font-weight: bold;*/
+    /*font-size: 20px;*/
 }
 
 #window{
     /*color: #f5f5f5;*/
-    font-weight: normal;
-    font-style: normal;
+    /*font-weight: normal;*/
+    /*font-style: normal;*/
 }

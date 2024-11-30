@@ -11,7 +11,7 @@
        height = 30;
        modules-left = [ "hyprland/workspaces" "hyprland/window" ];
        modules-center = [ ];
-       modules-right = [ "custom/mullvad" "memory" "cpu" "temperature" "battery" "tray" "pulseaudio" "clock#date" "clock#time" ];
+       modules-right = [ "custom/mullvad" "cpu" "memory" "temperature" "battery" "tray" "pulseaudio" "clock#date" "clock#time" ];
      # Modules configuration
        battery = {
          interval = 10;
@@ -24,6 +24,7 @@
          format-icons = [ "" "" "" "" "" ];
          tooltip = true;
        };
+
        "custom/mullvad" = {
          interval = 20;
          exec = "~/.config/get_mullvad.fish";
@@ -41,13 +42,13 @@
 
        "clock#date" = {
          interval = 10;
-         format = " {:%e %b %Y}";
+         format = "{:%e %b %Y}";
          tooltip-format = "{:%e %B %Y}";
        };
 
        cpu = {
          interval = 5;
-         format = "󰍛 {usage}%";
+         format = "cpu {usage}%";
          states = {
            warning = 70;
            critical = 90;
@@ -56,7 +57,7 @@
 
        memory = {
          interval = 5;
-         format = " {used}Gb";
+         format = "{used}Gb";
          states = {
            warning = 70;
            critical = 90;
@@ -76,15 +77,16 @@
          scroll-step = 3;
          format = "{icon} {volume}%";
          format-bluetooth = "{icon} {volume}%";
-         format-muted = "";
+         #format-muted = "";
+         format-muted = "m";
          format-icons = {
-           headphones = "";
-           handsfree = "";
-           headset = "";
-           phone = "";
-           portable = "";
-           car = "";
-           default = ["" ""];
+           headphones = "a"; # "";
+           handsfree = "a"; # "";
+           headset = "a"; # "";
+           phone = "a"; # "";
+           portable = "a"; # "";
+           car = "a"; # "";
+           default = [ "a" "b" ]; # ["" ""];
          };
          onClickRight = "pavucontrol";
          onClickMiddle = "fish -c '/home/john/.config/polybar/scripts/sinks.fish bluetooth'";
