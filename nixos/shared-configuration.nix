@@ -38,6 +38,33 @@
     #jack.enable = true;
   };
 
+  xdg.mime = rec {
+    enable = true;
+    addedAssociations = defaultApplications;
+    defaultApplications = {
+      "application/pdf" = "firefox.desktop";
+      "application/json" = "firefox.desktop";
+      "application/zip" = "ark.desktop";
+      "application/vnd.appimage" = "AppImageLauncher.desktop";
+      "application/x-7z-compressed" = "ark.desktop";
+      "application/x-compressed-tar" = "ark.desktop";
+      "application/yaml" = "firefox.desktop";
+      "audio/x-mpegurl" = "mpv.desktop";
+      "image/jpeg" = "gwenview.desktop";
+      "image/png" = "gwenview.desktop";
+      "image/svg+xml" = "gwenview.desktop";
+      "image/webp" = "gwenview.desktop";
+      "inode/directory" = "dolphin.desktop";
+      "text/css" = "firefox.desktop";
+      "text/csv" = "firefox.desktop";
+      "text/plain" = "firefox.desktop";
+      "video/mp4" = "mpv.desktop";
+      "video/quicktime" = "mpv.desktop";
+      "video/webm" = "mpv.desktop";
+    };
+  };
+
+
   # graphical
   programs.hyprland = {
     enable = true;

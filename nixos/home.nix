@@ -98,6 +98,8 @@
     qpwgraph
 
     plasma5Packages.kdeconnect-kde
+    kdePackages.ark
+    gwenview
   ];
 
   wayland.windowManager.hyprland = {
