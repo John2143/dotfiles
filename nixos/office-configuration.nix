@@ -84,8 +84,6 @@
     };
   };
 
-  services.udev.extraRules = builtins.readFile ./udev_embedded.rules;
-
   services.k3s = {
     enable = true;
     role = "agent";

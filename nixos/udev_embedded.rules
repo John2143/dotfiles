@@ -143,6 +143,9 @@ ATTRS{idVendor}=="303a", ATTRS{idProduct}=="1001", MODE="660", GROUP="plugdev", 
 # Espressif USB Bridge
 ATTRS{idVendor}=="303a", ATTRS{idProduct}=="1002", MODE="660", GROUP="plugdev", TAG+="uaccess"
 
+# Cidoo keyboards QK61 v2
+ATTRS{idVendor}=="36b0", ATTRS{idProduct}=="3035", MODE="666", GROUP="plugdev", TAG+="uaccess"
+
 # CMSIS-DAP compatible adapters
 ATTRS{product}=="*CMSIS-DAP*", MODE="660", GROUP="plugdev", TAG+="uaccess"
 # WCH Link (CMSIS-DAP compatible adapter)

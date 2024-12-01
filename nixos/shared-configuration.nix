@@ -74,6 +74,8 @@
     };
   };
 
+  services.udev.extraRules = builtins.readFile ./udev_embedded.rules;
+
   systemd.services."kdeconnect-refresh" = {
     script = ''
       ${pkgs.fish}/bin/fish -c "DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus kdeconnect-cli --refresh"
