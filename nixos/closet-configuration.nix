@@ -8,6 +8,7 @@
   imports =
     [
       ./closet-hardware-configuration.nix
+      ./modules/user-john.nix
       # inputs.home-manager.nixosModules.default
     ];
 
