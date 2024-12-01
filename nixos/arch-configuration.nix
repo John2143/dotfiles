@@ -5,6 +5,7 @@
 { config, pkgs, pkgs-stable, lib, ... }:
 
 {
+  _module.args.john-home-path = ./home.nix;
   imports =
     [
       ./arch-hardware-configuration.nix

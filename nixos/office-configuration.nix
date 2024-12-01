@@ -5,6 +5,7 @@
 { config, lib, pkgs, pkgs-stable, ... }:
 
 {
+  _module.args.john-home-path = ./home.nix;
   imports =
     [
       ./office-hardware-configuration.nix

@@ -47,6 +47,7 @@
           #disko.nixosModules.disko
           inputs.home-manager.nixosModules.default
           ./nixos/shared-cli-configuration.nix
+          ./nixos/shared-configuration.nix
           ./nixos/closet-configuration.nix
         ];
       };

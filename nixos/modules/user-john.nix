@@ -1,4 +1,4 @@
-{ config, pkgs, pkgs-stable, ... }:
+{ config, pkgs, pkgs-stable, john-home-path, ... }:
 
 {
   # Define a user account. Don't forget to set a password with ‘passwd’.
@@ -23,7 +23,7 @@
       #inputs.sops-nix.homeManagerModles.sops
     #];
     users = {
-      "john" = import ../home.nix;
+      "john" = import john-home-path;
     };
   };
 }

@@ -2,18 +2,17 @@
 # your system. Help is available in the configuration.nix(5) man page, on
 # https://search.nixos.org/options and in the NixOS manual (`nixos-help`).
 
-{ config, lib, pkgs, pkgs-stable, ... }:
+{ config, lib, pkgs, pkgs-stable, inputs, ... }:
 
 {
+  _module.args.john-home-path = ./home-cli.nix;
   imports =
     [
       ./closet-hardware-configuration.nix
       ./modules/user-john.nix
+      ./modules/ollama.nix
       # inputs.home-manager.nixosModules.default
     ];
-
-
-  home-manager.users.john = import ./home-cli.nix;
 
   # Use the systemd-boot EFI boot loader.
   boot.loader = {
