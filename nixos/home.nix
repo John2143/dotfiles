@@ -68,6 +68,7 @@
     spotify # music
     prismlauncher # minecraft
     vesktop # discord
+    discord-canary
     krita
     kdenlive # video editor
     # kdeconnect # phone sync (now in main settings)
