@@ -19,9 +19,9 @@ tmux new-window 'vesktop'
 tmux rename-window 'discord'
 
 if test "$HOST" = "arch"
-    sleep 0.1
-    tmux new-window 'while true; ts3client; read; end'
-    tmux rename-window 'ts3client'
+    #sleep 0.1
+    #tmux new-window 'while true; ts3client; read; end'
+    #tmux rename-window 'ts3client'
 
     sleep 0.1
     tmux new-window 'monerod --block-sync-size 100 --data-dir /mnt/other/monero/ --max-concurrency 4 --db-sync-mode=safe:sync'
