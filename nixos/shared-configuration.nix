@@ -54,7 +54,7 @@
       "image/png" = "gwenview.desktop";
       "image/svg+xml" = "gwenview.desktop";
       "image/webp" = "gwenview.desktop";
-      "inode/directory" = "dolphin.desktop";
+      "inode/directory" = "thunar.desktop";
       "text/css" = "firefox.desktop";
       "text/csv" = "firefox.desktop";
       "text/plain" = "firefox.desktop";

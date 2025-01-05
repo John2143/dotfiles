@@ -37,11 +37,13 @@
     # stlink # stm32 programmer
     # stm32cubemx # stm32 ide
     kicad # PCB Hardware Layout
+    prusa-slicer # 3d printer slicer
 
     # desktop tools (bars, clipbaords, notifications, etc)
     pulseaudio # pactl (audio)
     wofi # "start menu" / program browser
     dolphin # file browser
+    xfce.thunar # file browser 2
     wl-clipboard # copy-paste via cli
     jetbrains-mono # font
     alacritty # terminal
