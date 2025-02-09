@@ -236,7 +236,7 @@ in
       catppuccin
       # tmux-battery
       vim-tmux-navigator
-      resurrect
+      #resurrect
       continuum
       # set -g @plugin 'tmux-plugins/tmux-sensible'
       # set -g @plugin 'seebi/tmux-colors-solarized'
