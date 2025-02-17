@@ -36,7 +36,7 @@
     # probe-rs # rust <-> stm32
     # stlink # stm32 programmer
     # stm32cubemx # stm32 ide
-    kicad # PCB Hardware Layout
+    #kicad # PCB Hardware Layout
     prusa-slicer # 3d printer slicer
 
     # desktop tools (bars, clipbaords, notifications, etc)
@@ -70,11 +70,11 @@
     spotify # music
     prismlauncher # minecraft
     vesktop # discord
-    discord-canary
+    #discord-canary
     krita
     kdenlive # video editor
     # kdeconnect # phone sync (now in main settings)
-    v4l-utils # video inputs for linux (obs)
+    #v4l-utils # video inputs for linux (obs)
     obs-studio # streaming
     path-of-building # Path of Exile build planner
     bitwarden-desktop # password manager
