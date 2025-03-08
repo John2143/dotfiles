@@ -42,7 +42,7 @@
     # desktop tools (bars, clipbaords, notifications, etc)
     pulseaudio # pactl (audio)
     wofi # "start menu" / program browser
-    dolphin # file browser
+    kdePackages.dolphin # file browser
     xfce.thunar # file browser 2
     wl-clipboard # copy-paste via cli
     jetbrains-mono # font
@@ -64,7 +64,7 @@
     # desktop programs (programs you can open)
     firefox # browser
     ungoogled-chromium # browser backup
-    mullvad-vpn # vpn
+    pkgs-stable.mullvad-vpn # vpn
     gthumb # image viewer
     plex-media-player # plex
     spotify # music
@@ -72,7 +72,7 @@
     vesktop # discord
     #discord-canary
     krita
-    kdenlive # video editor
+    kdePackages.kdenlive # video editor
     # kdeconnect # phone sync (now in main settings)
     #v4l-utils # video inputs for linux (obs)
     obs-studio # streaming
@@ -101,7 +101,7 @@
 
     plasma5Packages.kdeconnect-kde
     kdePackages.ark
-    gwenview
+    kdePackages.gwenview
   ];
 
   wayland.windowManager.hyprland = {
