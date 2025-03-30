@@ -68,7 +68,13 @@
     gthumb # image viewer
     plex-media-player # plex
     spotify # music
-    prismlauncher # minecraft
+    (prismlauncher.override {
+        jdks = [
+            temurin-bin-21
+            temurin-bin-8
+            temurin-bin-17
+        ];
+    })
     vesktop # discord
     #discord-canary
     krita
