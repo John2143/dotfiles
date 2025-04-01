@@ -27,7 +27,7 @@
     grim # minimal screenshot program
     bind # network utilities
     pkgs-stable.wf-recorder # screen recording
-    normcap # OCR screen recognition
+    pkgs-stable.normcap # OCR screen recognition
     hyprpicker # color picker
 
     # embedded programming
