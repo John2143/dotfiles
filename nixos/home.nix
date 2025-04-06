@@ -30,13 +30,13 @@
     pkgs-stable.normcap # OCR screen recognition
     hyprpicker # color picker
 
-    # embedded programming
-    # gcc-arm-embedded # arm compiler
-    # openocd # open debugger
-    # probe-rs # rust <-> stm32
-    # stlink # stm32 programmer
-    # stm32cubemx # stm32 ide
-    #kicad # PCB Hardware Layout
+    #@ embedded programming
+    #@ gcc-arm-embedded # arm compiler
+    #@ openocd # open debugger
+    #@ probe-rs # rust <-> stm32
+    #@ stlink # stm32 programmer
+    #@ stm32cubemx # stm32 ide
+    #@ kicad # PCB Hardware Layout
     prusa-slicer # 3d printer slicer
 
     # desktop tools (bars, clipbaords, notifications, etc)
@@ -63,10 +63,10 @@
 
     # desktop programs (programs you can open)
     firefox # browser
-    ungoogled-chromium # browser backup
+    #@ ungoogled-chromium # browser backup
     pkgs-stable.mullvad-vpn # vpn
     gthumb # image viewer
-    plex-media-player # plex
+    #@ plex-media-player # plex
     spotify # music
     (prismlauncher.override {
         jdks = [
@@ -76,13 +76,13 @@
         ];
     })
     vesktop # discord
-    #discord-canary
-    krita
-    kdePackages.kdenlive # video editor
+    # discord-canary
+    #@ krita
+    #@ kdePackages.kdenlive # video editor
     # kdeconnect # phone sync (now in main settings)
     #v4l-utils # video inputs for linux (obs)
     obs-studio # streaming
-    path-of-building # Path of Exile build planner
+    #@ path-of-building # Path of Exile build planner
     bitwarden-desktop # password manager
     vlc # video player
     mpv # video player
@@ -90,9 +90,9 @@
 
     # Other / unsorted
     appimage-run
-    betaflight-configurator
+    #@ betaflight-configurator
     lshw
-    darktable
+    #@ darktable
     nixd
     hyprpaper
     kind
