@@ -201,10 +201,12 @@ async fn rm() -> anyhow::Result<()> {
         .as_deref()
         .map(|x| shell.print_set("AWS_SESSION_TOKEN", x));
 
-    profile
-        .aws_security_token
-        .as_deref()
-        .map(|x| println!("echo \"Security token: {x}.\""));
+    //profile
+        //.aws_security_token
+        //.as_deref()
+        //.map(|x| println!("echo \"Security token: {x}.\""));
+
+    println!("echo \"Profile: {profile_to_check}\"");
 
     Ok(())
 }

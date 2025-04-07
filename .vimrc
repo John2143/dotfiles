@@ -166,7 +166,7 @@ if empty($NIX)
 
     Plug 'github/copilot.vim'
 
-    Plug 'frankroeder/parrot.nvim'
+    "Plug 'frankroeder/parrot.nvim'
 
     "Plug 'https://git.sr.ht/~whynothugo/lsp_lines.nvim'
 
