@@ -97,6 +97,7 @@ in
     localsend
     fastfetch
     distrobox
+    sage
   ];
 
   xdg.configFile = {
