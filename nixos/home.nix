@@ -63,18 +63,20 @@
 
     # desktop programs (programs you can open)
     firefox # browser
+    # floorp # browser
     #@ ungoogled-chromium # browser backup
     pkgs-stable.mullvad-vpn # vpn
     gthumb # image viewer
     #@ plex-media-player # plex
     spotify # music
-    (prismlauncher.override {
-        jdks = [
-            temurin-bin-21
-            temurin-bin-8
-            temurin-bin-17
-        ];
-    })
+    # (prismlauncher.override {
+    #     jdks = [
+    #         temurin-bin-21
+    #         temurin-bin-8
+    #         temurin-bin-17
+    #     ];
+    # })
+    # r2modman # game modding
     vesktop # discord
     # discord-canary
     #@ krita
@@ -108,6 +110,7 @@
     plasma5Packages.kdeconnect-kde
     kdePackages.ark
     kdePackages.gwenview
+
   ];
 
   wayland.windowManager.hyprland = {
