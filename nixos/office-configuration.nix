@@ -10,7 +10,7 @@
     [
       ./office-hardware-configuration.nix
       ./modules/user-john.nix
-      ./modules/ollama.nix
+      #./modules/ollama.nix
       #./waybar.nix
       # inputs.home-manager.nixosModules.default
     ];
