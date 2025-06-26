@@ -10,7 +10,7 @@
     [
       ./office-hardware-configuration.nix
       ./modules/user-john.nix
-      #./modules/ollama.nix
+      ./modules/ollama.nix
       #./waybar.nix
       # inputs.home-manager.nixosModules.default
     ];
@@ -92,13 +92,13 @@
     token = "K10c774bc9053c47bd55747f362531fb443f6ca1e4364143dbd74acdd4156eb6878::3vjhdv.f8s0bl2ablc7ctej";
   };
 
-  #services.ollama = {
-    #acceleration = "rocm";
-    #environmentVariables = {
-      #HCC_AMDGPU_TARGET = "gfx1100";
-    #};
-    #rocmOverrideGfx = "11.0.0";
-  #};
+  services.ollama = {
+    acceleration = "rocm";
+    environmentVariables = {
+      HCC_AMDGPU_TARGET = "gfx1100";
+    };
+    rocmOverrideGfx = "11.0.0";
+  };
 
   # drones
   services.upower.enable = true;

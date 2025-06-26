@@ -65,7 +65,7 @@
     firefox # browser
     # floorp # browser
     #@ ungoogled-chromium # browser backup
-    pkgs-stable.mullvad-vpn # vpn
+    mullvad-vpn # vpn
     gthumb # image viewer
     #@ plex-media-player # plex
     spotify # music
@@ -78,6 +78,8 @@
     })
     # r2modman # game modding
     vesktop # discord
+    discord
+    discordo
     # discord-canary
     #@ krita
     #@ kdePackages.kdenlive # video editor
