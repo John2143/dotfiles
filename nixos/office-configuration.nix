@@ -88,7 +88,7 @@
   systemd.services.rebuild-nixos = {
     wantedBy = [ "multi-user.target" ];
     description = "Rebuild NixOS configuration";
-    script = ''${pkgs.fish}/bin/fish -c "update; build boot && build switch; optimize; build switch'';
+    script = ''${pkgs.fish}/bin/fish -c "update; build boot && build switch; optimize; build switch; git tag -f rebuild-$(date +%Y-%m-%d-%H:%M:%S)"'';
     serviceConfig = {
       Type = "oneshot";
       User = "john";
@@ -101,7 +101,7 @@
     timerConfig = {
       Unit = "rebuild-nixos.service";
       # Every day at 3:00 AM and 5:00 PM.
-      OnCalendar = "Mon..Fri *-*-* 03:00:00,17:00:00";
+      OnCalendar = "Mon..Fri *-*-* 03:10:00,17:00:00";
       Persistent = true;
     };
   };
