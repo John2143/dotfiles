@@ -76,7 +76,7 @@
             temurin-bin-17
         ];
     })
-    # r2modman # game modding
+    r2modman # game modding
     vesktop # discord
     discord
     discordo
@@ -115,6 +115,13 @@
 
     e1s
   ];
+
+  nixpkgs.overlays = [
+    (import ./overlays/r2modman-overlay.nix)
+  ];
+
+
+
 
   wayland.windowManager.hyprland = {
     enable = true;
