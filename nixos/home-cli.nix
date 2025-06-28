@@ -98,6 +98,7 @@ in
     fastfetch
     distrobox
     sage
+    nh
   ];
 
   xdg.configFile = {

@@ -85,6 +85,27 @@
     };
   };
 
+  systemd.services.rebuild-nixos = {
+    wantedBy = [ "multi-user.target" ];
+    description = "Rebuild NixOS configuration";
+    script = ''${pkgs.fish}/bin/fish -c "update; build boot && build switch; optimize; build switch'';
+    serviceConfig = {
+      Type = "oneshot";
+      User = "john";
+      Environment = "HOME=/home/john";
+    };
+  };
+
+  systemd.timers."rebuild-nixos" = {
+    wantedBy = [ "timers.target" ];
+    timerConfig = {
+      Unit = "rebuild-nixos.service";
+      # Every day at 3:00 AM and 5:00 PM.
+      OnCalendar = "Mon..Fri *-*-* 03:00:00,17:00:00";
+      Persistent = true;
+    };
+  };
+
   services.k3s = {
     enable = true;
     role = "agent";
