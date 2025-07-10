@@ -10,7 +10,7 @@ in {
       owner = "ebkr";
       repo = "r2modmanPlus";
       rev = "v${version}";
-      hash = "sha256-hZGWso7gLiylYVxt6XMv8AKMic5A0L6zselKHExApqM="; # Replace with correct hash
+      hash = "sha256-l1xrp+Gl26kiWqh5pIKp4QiETrzr5mTrUP10T0DhUCw="; # Replace with correct hash
     };
 
     offlineCache = prev.fetchYarnDeps {

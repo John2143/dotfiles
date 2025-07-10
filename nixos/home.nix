@@ -116,12 +116,9 @@
     e1s
   ];
 
-  #nixpkgs.overlays = [
-    #(import ./overlays/r2modman-overlay.nix)
-  #];
-
-
-
+  nixpkgs.overlays = [
+    (import ./overlays/r2modman-overlay.nix)
+  ];
 
   wayland.windowManager.hyprland = {
     enable = true;
