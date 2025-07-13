@@ -88,7 +88,7 @@
   systemd.services.rebuild-nixos = {
     wantedBy = [ "multi-user.target" ];
     description = "Update NixOS configuration";
-    script = ''${pkgs.fish}/bin/fish -c "update"'';
+    script = ''${pkgs.fish}/bin/fish -c "update || true"'';
     serviceConfig = {
       Type = "oneshot";
       User = "john";
