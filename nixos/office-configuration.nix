@@ -109,11 +109,13 @@
   systemd.services.rebuild-nixos-boot = {
     wantedBy = [ "multi-user.target" ];
     description = "Update NixOS configuration fr";
-    script = ''${pkgs.fish}/bin/fish -c "cd dotfiles; build boot && git add flake.lock && git commit -m 'Update auto: '(date +%Y-%m-%dT%H:%M:%S) && git push"'';
+    script = ''${pkgs.fish}/bin/fish -c "build boot && git add flake.lock && git commit -m 'Update auto: '(date +%Y-%m-%dT%H:%M:%S) && git push"'';
     serviceConfig = {
       Type = "oneshot";
       User = "john";
       Environment = "HOME=/home/john";
+      # Run from /home/john/dotfiles
+      WorkingDirectory = "/home/john/dotfiles";
     };
   };
 
