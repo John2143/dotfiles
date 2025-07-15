@@ -15,13 +15,20 @@
     };
   };
 
-  outputs = { nixpkgs, disko, ... }@inputs:
+  outputs =
+    { nixpkgs, disko, ... }@inputs:
     let
       system = "x86_64-linux";
-    in rec {
+    in
+    rec {
+      formatter.x86_64-linux = nixpkgs.legacyPackages.${system}.nixfmt-tree;
+
       nixosConfigurations.office = nixpkgs.lib.nixosSystem {
         inherit system;
-        specialArgs = { inherit inputs; };
+        specialArgs = {
+          inherit inputs;
+          compName = "office";
+        };
         modules = [
           inputs.home-manager.nixosModules.default
           ./nixos/shared-cli-configuration.nix
@@ -32,7 +39,10 @@
 
       nixosConfigurations.arch = nixpkgs.lib.nixosSystem {
         inherit system;
-        specialArgs = { inherit inputs; };
+        specialArgs = {
+          inherit inputs;
+          compName = "arch";
+        };
         modules = [
           inputs.home-manager.nixosModules.default
           ./nixos/shared-cli-configuration.nix

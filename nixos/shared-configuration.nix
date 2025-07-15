@@ -2,7 +2,14 @@
 # your system. Help is available in the configuration.nix(5) man page, on
 # https://search.nixos.org/options and in the NixOS manual (`nixos-help`).
 
-{ config, lib, pkgs, pkgs-stable, inputs, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  pkgs-stable,
+  inputs,
+  ...
+}:
 
 {
   # setup my two input channels
@@ -32,7 +39,12 @@
         "bluez5.enable-sbc-xq" = true;
         "bluez5.enable-msbc" = true;
         "bluez5.enable-hw-volume" = true;
-        "bluez5.roles" = [ "hsp_hs" "hsp_ag" "hfp_hf" "hfp_ag" ];
+        "bluez5.roles" = [
+          "hsp_hs"
+          "hsp_ag"
+          "hfp_hf"
+          "hfp_ag"
+        ];
       };
     };
     #jack.enable = true;
@@ -64,7 +76,6 @@
     };
   };
 
-
   # graphical
   programs.hyprland = {
     enable = true;
@@ -75,7 +86,6 @@
   #];
   # games
   programs.steam.enable = true;
-
 
   # Enable CUPS to print documents.
   services.printing = {

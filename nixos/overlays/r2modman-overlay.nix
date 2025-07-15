@@ -2,7 +2,8 @@ final: prev:
 
 let
   customVersion = "3.2.1";
-in {
+in
+{
   r2modman = prev.r2modman.overrideAttrs (old: rec {
     version = customVersion;
 
@@ -23,4 +24,3 @@ in {
     };
   });
 }
-

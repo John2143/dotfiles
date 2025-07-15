@@ -2,17 +2,23 @@
 # your system. Help is available in the configuration.nix(5) man page, on
 # https://search.nixos.org/options and in the NixOS manual (`nixos-help`).
 
-{ config, lib, pkgs, pkgs-stable, inputs, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  pkgs-stable,
+  inputs,
+  ...
+}:
 
 {
   _module.args.john-home-path = ./home-cli.nix;
-  imports =
-    [
-      ./closet-hardware-configuration.nix
-      ./modules/user-john.nix
-      ./modules/ollama.nix
-      # inputs.home-manager.nixosModules.default
-    ];
+  imports = [
+    ./closet-hardware-configuration.nix
+    ./modules/user-john.nix
+    ./modules/ollama.nix
+    # inputs.home-manager.nixosModules.default
+  ];
 
   # Use the systemd-boot EFI boot loader.
   boot.loader = {
@@ -26,16 +32,21 @@
   };
 
   networking.hostName = "closet"; # Define your hostname.
-  networking.networkmanager.enable = true;  # Easiest to use and most distros use this by default.
+  networking.networkmanager.enable = true; # Easiest to use and most distros use this by default.
   networking.interfaces = {
-    enp6s0.ipv4.addresses = [{
-      address = "192.168.1.35";
-      prefixLength = 24;
-    }];
+    enp6s0.ipv4.addresses = [
+      {
+        address = "192.168.1.35";
+        prefixLength = 24;
+      }
+    ];
   };
 
   networking.defaultGateway = "192.168.1.1";
-  networking.nameservers = [ "192.168.1.12" "1.1.1.1" ];
+  networking.nameservers = [
+    "192.168.1.12"
+    "1.1.1.1"
+  ];
 
   time.timeZone = "America/New_York";
   i18n.defaultLocale = "en_US.UTF-8";
@@ -89,7 +100,7 @@
     role = "server";
   };
 
-  # networking.firewall.allowedTCPPorts = [ 
+  # networking.firewall.allowedTCPPorts = [
   #   5353 # avahi
   #   7777 # games
   # ];

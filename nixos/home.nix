@@ -1,14 +1,15 @@
-{ config, inputs, pkgs, lib, pkgs-stable, ... }:
 {
-  # Include everything from home-cli.nix too
-  imports = [
-    ./home-cli.nix
-    ./modules/waybar.nix
-  ];
+  config,
+  inputs,
+  pkgs,
+  lib,
+  pkgs-stable,
+  compName,
+  ...
+}:
 
-  # The home.packages option allows you to install Nix packages into your
-  # environment.
-  home.packages = with pkgs; [
+let
+  primaryPackages = with pkgs; [
     udiskie # disks
     # neovim
 
@@ -36,7 +37,6 @@
     #@ probe-rs # rust <-> stm32
     #@ stlink # stm32 programmer
     #@ stm32cubemx # stm32 ide
-    kicad # PCB Hardware Layout
     prusa-slicer # 3d printer slicer
 
     # desktop tools (bars, clipbaords, notifications, etc)
@@ -70,11 +70,11 @@
     #@ plex-media-player # plex
     spotify # music
     (prismlauncher.override {
-        jdks = [
-            temurin-bin-21
-            temurin-bin-8
-            temurin-bin-17
-        ];
+      jdks = [
+        temurin-bin-21
+        temurin-bin-8
+        temurin-bin-17
+      ];
     })
     r2modman # game modding
     vesktop # discord
@@ -85,7 +85,6 @@
     #@ kdePackages.kdenlive # video editor
     # kdeconnect # phone sync (now in main settings)
     #v4l-utils # video inputs for linux (obs)
-    obs-studio # streaming
     #@ path-of-building # Path of Exile build planner
     bitwarden-desktop # password manager
     vlc # video player
@@ -116,6 +115,23 @@
     e1s
   ];
 
+  # If we are on office computer, then also add the following:
+  optionalPackages = with pkgs; [
+    kicad # PCB Hardware Layout
+    obs-studio # streaming
+  ];
+in
+{
+  # Include everything from home-cli.nix too
+  imports = [
+    ./home-cli.nix
+    ./modules/waybar.nix
+  ];
+
+  # Check hostname to determine what to install
+  home.packages =
+    if compName == "office" then primaryPackages ++ optionalPackages else primaryPackages;
+
   nixpkgs.overlays = [
     (import ./overlays/r2modman-overlay.nix)
   ];
@@ -132,7 +148,8 @@
     "alacritty".source = config.lib.file.mkOutOfStoreSymlink ../.config/alacritty;
     "dunst".source = config.lib.file.mkOutOfStoreSymlink ../.config/dunst;
     "hypr/hyprlock.conf".source = config.lib.file.mkOutOfStoreSymlink ../.config/hypr/hyprlock.conf;
-    "hypr/hyprpaper.conf".text = "
+    "hypr/hyprpaper.conf".text =
+      "
       preload = /home/john/backgrounds/luna_1.png
       wallpaper = , /home/john/backgrounds/luna_1.png
     ";
@@ -141,11 +158,13 @@
     "get_sunset.fish".source = config.lib.file.mkOutOfStoreSymlink ../.config/get_sunset.fish;
     "get_mullvad.fish".source = config.lib.file.mkOutOfStoreSymlink ../.config/get_mullvad.fish;
 
-    "focussed-vol-adjust.sh".source = builtins.fetchGit {
-      url = "https://github.com/Orbsa/hyprland-pipewire-focused-volume-adjust";
-      ref = "master";
-      rev = "c268b0269617c5109585044ef6eac8623090891f";
-    } + "/hpfva.sh";
+    "focussed-vol-adjust.sh".source =
+      builtins.fetchGit {
+        url = "https://github.com/Orbsa/hyprland-pipewire-focused-volume-adjust";
+        ref = "master";
+        rev = "c268b0269617c5109585044ef6eac8623090891f";
+      }
+      + "/hpfva.sh";
   };
 
   # Home Manager is pretty good at managing dotfiles. The primary way to manage

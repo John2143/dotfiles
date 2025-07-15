@@ -1,15 +1,24 @@
-{ config, inputs, pkgs, lib, pkgs-stable, ... }:
+{
+  config,
+  inputs,
+  pkgs,
+  lib,
+  pkgs-stable,
+  ...
+}:
 
 let
-  vimPluginFromGithub = repo: rev: pkgs.vimUtils.buildVimPlugin {
-    pname = "${lib.strings.sanitizeDerivationName repo}";
-    version = "HEAD";
-    src = builtins.fetchGit {
-      url = "https://github.com/${repo}.git";
-      ref = "HEAD";
-      rev = rev;
+  vimPluginFromGithub =
+    repo: rev:
+    pkgs.vimUtils.buildVimPlugin {
+      pname = "${lib.strings.sanitizeDerivationName repo}";
+      version = "HEAD";
+      src = builtins.fetchGit {
+        url = "https://github.com/${repo}.git";
+        ref = "HEAD";
+        rev = rev;
+      };
     };
-  };
 in
 {
   _module.args.pkgs-stable = import inputs.nixpkgs-stable {
@@ -42,7 +51,7 @@ in
     # neovim
 
     # cli
-    starship #prompt
+    starship # prompt
     bat # cat replacement
     eza # ls replacement
     ripgrep # grep replacement
@@ -64,7 +73,6 @@ in
     unrar
     systemctl-tui
     dive
-
 
     # k8s
     # kubectl # from k3s
@@ -92,7 +100,6 @@ in
     # kubernetes-helm
     nodePackages."@tailwindcss/language-server" # tailwindcss language server for neovim
     nodePackages.yaml-language-server # yaml language server for neovim
-
 
     localsend
     fastfetch
@@ -385,7 +392,7 @@ in
       #     let g:OmniSharp_selector_ui = 'fzf'
       #     let g:OmniSharp_server_stdio = 1
       #     let g:OmniSharp_popup = 0
-      #     "let g:OmniSharp_server_path = 
+      #     "let g:OmniSharp_server_path =
       # endif
       vim-go
       vim-markdown

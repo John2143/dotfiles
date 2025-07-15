@@ -2,11 +2,21 @@
 # your system. Help is available in the configuration.nix(5) man page, on
 # https://search.nixos.org/options and in the NixOS manual (`nixos-help`).
 
-{ config, lib, pkgs, pkgs-stable, inputs, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  pkgs-stable,
+  inputs,
+  ...
+}:
 
 {
   # flakes
-  nix.settings.experimental-features = [ "nix-command" "flakes" ];
+  nix.settings.experimental-features = [
+    "nix-command"
+    "flakes"
+  ];
 
   # setup my two input channels
   nixpkgs.config = {
@@ -65,7 +75,7 @@
   services.udisks2.enable = true;
 
   # # Open ports in the firewall.
-  # networking.firewall.allowedTCPPorts = [ 
+  # networking.firewall.allowedTCPPorts = [
   #   5353 # avahi
   #   7777 # games
   # ];

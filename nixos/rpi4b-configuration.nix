@@ -2,21 +2,35 @@
 # your system. Help is available in the configuration.nix(5) man page, on
 # https://search.nixos.org/options and in the NixOS manual (`nixos-help`).
 
-{ config, lib, pkgs, pkgs-stable, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  pkgs-stable,
+  ...
+}:
 
 {
-  imports =
-    [
-      #./rpi4b-hardware-configuration.nix
-      # inputs.home-manager.nixosModules.default
-    ];
+  imports = [
+    #./rpi4b-hardware-configuration.nix
+    # inputs.home-manager.nixosModules.default
+  ];
 
-  nix.settings.experimental-features = [ "nix-command" "flakes" ];
+  nix.settings.experimental-features = [
+    "nix-command"
+    "flakes"
+  ];
 
   # Define a user account. Don't forget to set a password with ‘passwd’.
   users.users.john = {
     isNormalUser = true;
-    extraGroups = [ "wheel" "networkmanager" "input" "dialout" "docker" ]; # Enable ‘sudo’ for the user.
+    extraGroups = [
+      "wheel"
+      "networkmanager"
+      "input"
+      "dialout"
+      "docker"
+    ]; # Enable ‘sudo’ for the user.
     initialPassword = "john";
     shell = pkgs.fish;
     packages = with pkgs; [
@@ -30,7 +44,7 @@
       pkgs-stable = pkgs-stable;
     };
     #sharedModles = [
-      #inputs.sops-nix.homeManagerModles.sops
+    #inputs.sops-nix.homeManagerModles.sops
     #];
     users = {
       "john" = import ./home-cli.nix;
@@ -49,16 +63,21 @@
   };
 
   networking.hostName = "rpi4b"; # Define your hostname.
-  networking.networkmanager.enable = true;  # Easiest to use and most distros use this by default.
+  networking.networkmanager.enable = true; # Easiest to use and most distros use this by default.
   networking.interfaces = {
-    enp6s0.ipv4.addresses = [{
-      address = "192.168.1.19";
-      prefixLength = 24;
-    }];
+    enp6s0.ipv4.addresses = [
+      {
+        address = "192.168.1.19";
+        prefixLength = 24;
+      }
+    ];
   };
 
   networking.defaultGateway = "192.168.1.1";
-  networking.nameservers = [ "192.168.1.12" "1.1.1.1" ];
+  networking.nameservers = [
+    "192.168.1.12"
+    "1.1.1.1"
+  ];
 
   time.timeZone = "America/New_York";
   i18n.defaultLocale = "en_US.UTF-8";
