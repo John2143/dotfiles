@@ -113,6 +113,7 @@ let
     kdePackages.gwenview
 
     e1s
+    dbeaver-bin
   ];
 
   # If we are on office computer, then also add the following:

@@ -582,6 +582,30 @@ lua << END
       end,
       {}
     )
+
+    vim.lsp.config("Github Copilot", {
+        enabled = true,
+        filetypes = {
+            "javascript",
+            "typescript",
+            "typescriptreact",
+            "javascriptreact",
+            "vue",
+            "html",
+            "css",
+            "scss",
+            "less",
+            "markdown",
+            "python",
+            "go",
+            "rust",
+            "c",
+            "cpp",
+        },
+        suggestion = {
+            auto_trigger = true,
+        },
+    })
 END
 
 filetype plugin indent on    " required
@@ -609,7 +633,7 @@ au BufNewFile,BufRead *.jinja set ft=json syntax=json
 au BufNewFile,BufRead .fishrc set ft=fish syntax=fish
 
 "" Better copy & paste
-set pastetoggle=<F2>
+"set pastetoggle=<F2>
 
 " ==========================================================================
 " random vim settings tweaks
