@@ -94,28 +94,28 @@
     };
   };
 
-  systemd.services.rebuild-nixos-boot = {
-    wantedBy = [ "multi-user.target" ];
-    description = "Update NixOS configuration fr";
-    script = ''${pkgs.fish}/bin/fish -c "update && build boot && git add flake.lock && git commit -m 'Update auto: '(date +%Y-%m-%dT%H:%M:%S) && git push"'';
-    serviceConfig = {
-      Type = "oneshot";
-      User = "john";
-      Environment = "HOME=/home/john";
-      # Run from /home/john/dotfiles
-      WorkingDirectory = "/home/john/dotfiles";
-    };
-  };
+  #systemd.services.rebuild-nixos-boot = {
+  #  wantedBy = [ "multi-user.target" ];
+  #  description = "Update NixOS configuration fr";
+  #  script = ''${pkgs.fish}/bin/fish -c "update && build boot && git add flake.lock && git commit -m 'Update auto: '(date +%Y-%m-%dT%H:%M:%S) && git push"'';
+  #  serviceConfig = {
+  #    Type = "oneshot";
+  #    User = "john";
+  #    Environment = "HOME=/home/john";
+  #    # Run from /home/john/dotfiles
+  #    WorkingDirectory = "/home/john/dotfiles";
+  #  };
+  #};
 
-  systemd.timers."rebuild-nixos-boot" = {
-    wantedBy = [ "timers.target" ];
-    timerConfig = {
-      Unit = "rebuild-nixos-boot.service";
-      # Every 15 mins at 5 minutes after update
-      OnCalendar = "*:0/2";
-      #Persistent = true;
-    };
-  };
+  #systemd.timers."rebuild-nixos-boot" = {
+  #  wantedBy = [ "timers.target" ];
+  #  timerConfig = {
+  #    Unit = "rebuild-nixos-boot.service";
+  #    # At 2:00 AM every day
+  #    OnCalendar = "*-*-* 02:00:00";
+  #    #Persistent = true;
+  #  };
+  #};
 
   services.k3s = {
     enable = true;

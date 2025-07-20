@@ -120,6 +120,7 @@ let
   optionalPackages = with pkgs; [
     kicad # PCB Hardware Layout
     obs-studio # streaming
+    warp-terminal
   ];
 in
 {

@@ -3,9 +3,8 @@
 format = """
 $shell$time\
 $username$hostname\
-$directory\
+$directory$nix_shell\
 $git_branch$git_commit$git_state$git_status\
-$nix_shell\
 $python\
 $kubernetes\
 $aws\
@@ -29,7 +28,7 @@ fish_style_pwd_dir_length = 2
 style = "green"
 
 [git_branch]
-format = '[$symbol$branch(:$remote_branch)]($style) '
+format = '[$symbol$branch(:$remote_branch)]($style)'
 style = 'purple'
 ignore_branches = []
 #symbol = ' '
@@ -80,8 +79,9 @@ style = "fg:#777777"
 format = '[$time]($style) '
 
 [nix_shell]
-format = '[$symbol$state$name]($style) '
-symbol = '❄️'
+format = '[$symbol$state]($style) '
+#symbol = '❄️'
+symbol = '*'
 style = 'bold blue'
 impure_msg = ''
 pure_msg = ''
