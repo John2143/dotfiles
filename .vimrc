@@ -1027,4 +1027,4 @@ require'nvim-treesitter.configs'.setup {
 EOF
 
 " fix fish
-set shell=/bin/bash
+set shell=bash

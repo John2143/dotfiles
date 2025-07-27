@@ -114,13 +114,13 @@ let
 
     e1s
     dbeaver-bin
+    warp-terminal # wow
   ];
 
   # If we are on office computer, then also add the following:
   optionalPackages = with pkgs; [
     kicad # PCB Hardware Layout
     obs-studio # streaming
-    warp-terminal
   ];
 in
 {
