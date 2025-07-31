@@ -146,6 +146,17 @@ in
     extraConfig = builtins.readFile ../.config/hypr/hyprland.conf;
   };
 
+  services.gammastep = {
+    enable = true;
+    # New york
+    longitude = -74.0060;
+    latitude = 40.7128;
+    temperature = {
+      day = 6500;
+      night = 3500;
+    };
+  };
+
   xdg.configFile = {
     "alacritty".source = config.lib.file.mkOutOfStoreSymlink ../.config/alacritty;
     "dunst".source = config.lib.file.mkOutOfStoreSymlink ../.config/dunst;
