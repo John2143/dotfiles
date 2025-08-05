@@ -135,7 +135,7 @@ in
     if compName == "office" then primaryPackages ++ optionalPackages else primaryPackages;
 
   nixpkgs.overlays = [
-    (import ./overlays/r2modman-overlay.nix)
+    #(import ./overlays/r2modman-overlay.nix)
   ];
 
   wayland.windowManager.hyprland = {
