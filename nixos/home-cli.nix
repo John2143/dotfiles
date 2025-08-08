@@ -107,6 +107,7 @@ in
     sage
     nh
     postgresql_17 # need psql and stuff
+    trash-cli # bound to "rmm"
   ];
 
   xdg.configFile = {

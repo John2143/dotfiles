@@ -59,6 +59,7 @@ if [ (uname) = "Linux" ]
 
     alias cronerrors="sudo systemctl status cronie"
     alias ls=exa
+    alias rmm="trash-put"
 end
 
 if [ (uname) = "Darwin" ]
