@@ -106,6 +106,7 @@ in
     distrobox
     sage
     nh
+    postgresql_17 # need psql and stuff
   ];
 
   xdg.configFile = {
