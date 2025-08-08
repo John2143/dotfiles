@@ -112,14 +112,18 @@ let
     kdePackages.gwenview
 
     e1s
-    dbeaver-bin
-    warp-terminal # wow
+    dbeaver-bin # db browser
+    warp-terminal # agent terminal
   ];
 
   # If we are on office computer, then also add the following:
   optionalPackages = with pkgs; [
     kicad # PCB Hardware Layout
     obs-studio # streaming
+  ];
+
+  # On my other computer, I want to install these
+  optionalPackagesUpstairs = with pkgs; [
   ];
 in
 {
@@ -131,7 +135,9 @@ in
 
   # Check hostname to determine what to install
   home.packages =
-    if compName == "office" then primaryPackages ++ optionalPackages else primaryPackages;
+    if compName == "office" then primaryPackages ++ optionalPackages else
+    if compName == "arch" then primaryPackages ++ optionalPackagesUpstairs else
+    primaryPackages;
 
   nixpkgs.overlays = [
     #(import ./overlays/r2modman-overlay.nix)

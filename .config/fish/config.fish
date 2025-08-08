@@ -22,6 +22,7 @@ if [ (uname) = "Linux" ]
     set -g fish_user_paths "/opt/miniconda3/bin/" $fish_user_paths
     alias k="kubecolor"
     if $NIX
+        set -x NH_FLAKE "/home/john/dotfiles"
         alias nixi="nix-env -iA"
         alias nixq="nix-env -q"
         alias nixe="nix-env -e"
@@ -35,7 +36,6 @@ if [ (uname) = "Linux" ]
         alias ehmg="fish -c 'cd ~/dotfiles/nixos/ ; nvim home.nix'"
         alias enf="fish -c 'cd ~/dotfiles/ ; nvim flake.nix'"
 
-        alias build="sudo nixos-rebuild -v --flake ~/dotfiles"
         alias update="fish -c 'cd ~/dotfiles/; nix flake update'"
         alias optimize="fish -c 'sudo nix-collect-garbage --delete-older-than 14d; sudo nix-store --optimise; rfish'"
 
@@ -59,6 +59,7 @@ if [ (uname) = "Linux" ]
 
     alias cronerrors="sudo systemctl status cronie"
     alias ls=exa
+    alias rmm="trash-put"
 end
 
 if [ (uname) = "Darwin" ]
