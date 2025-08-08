@@ -94,10 +94,11 @@
     };
   };
 
+  # I use this computer to rebuild my NixOS configuration daily.
   systemd.services.rebuild-nixos-boot = {
     wantedBy = [ "multi-user.target" ];
     description = "Update NixOS configuration fr";
-    script = ''${pkgs.fish}/bin/fish -c "update; build boot && git add flake.lock && git commit -m 'Update auto: '(date +%Y-%m-%dT%H:%M:%S) && git push || true"'';
+    script = ''${pkgs.fish}/bin/fish -c "update; sudo nixos-rebuild --flake ~/dotfiles boot && git add flake.lock && git commit -m 'Update auto: '(date +%Y-%m-%dT%H:%M:%S) && git push || true"'';
     serviceConfig = {
       Type = "oneshot";
       User = "john";
