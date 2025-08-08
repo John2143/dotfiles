@@ -16,7 +16,7 @@
   imports = [
     ./closet-hardware-configuration.nix
     ./modules/user-john.nix
-    ./modules/ollama.nix
+    #./modules/ollama.nix
     # inputs.home-manager.nixosModules.default
   ];
 
@@ -98,6 +98,18 @@
   services.k3s = {
     enable = true;
     role = "server";
+  };
+
+  services.postgresql = {
+    enable = true;
+    ensureDatabases = [ "openfrontpro" ];
+    authentication = pkgs.lib.mkOverride 10 ''
+      #type databse DBuser auth-method
+      local all all trust
+
+      host all all 127.0.0.1/32 trust
+      host all all 192.168.1.1/24 trust
+    '';
   };
 
   # networking.firewall.allowedTCPPorts = [

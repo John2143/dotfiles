@@ -96,7 +96,6 @@ let
     #@ betaflight-configurator
     lshw
     #@ darktable
-    nixd
     hyprpaper
     kind
     mongodb-compass

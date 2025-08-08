@@ -106,6 +106,7 @@ in
     distrobox
     sage
     nh
+    nixd
   ];
 
   xdg.configFile = {
