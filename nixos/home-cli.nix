@@ -326,6 +326,7 @@ in
       # "Plug 'Shougo/neocomplete.vim'
       # "Plug 'Shougo/deoplete.nvim', { 'do': ':UpdateRemotePlugins' }
       (vimPluginFromGithub "mihaifm/bufstop" "9ae087c74e3f184192c55c8d6bbba3a33e1d8dd6")
+      (vimPluginFromGithub "dmmulroy/ts-error-translator.nvim" "47e5ba89f71b9e6c72eaaaaa519dd59bd6897df4")
 
       lightline-vim
 
