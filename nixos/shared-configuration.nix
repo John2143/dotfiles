@@ -15,7 +15,9 @@
   # setup my two input channels
   nixpkgs.config = {
     permittedInsecurePackages = [
-      "electron-25.9.0"
+      #"electron-25.9.0"
+      # used by teamspeak
+      "qtwebengine-5.15.19"
     ];
   };
 

@@ -104,7 +104,7 @@ in
     localsend
     fastfetch
     distrobox
-    sage
+    # sage
     nh
     nixd
     postgresql_17 # need psql and stuff
