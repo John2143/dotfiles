@@ -24,8 +24,10 @@ let
     ffmpeg
 
     # screenshots
+    # I use my own screenshoot script
     slurp # use mouse to get a point on screen
     grim # minimal screenshot program
+    swappy # screenshot editor
     bind # network utilities
     pkgs-stable.wf-recorder # screen recording
     pkgs-stable.normcap # OCR screen recognition
@@ -67,7 +69,7 @@ let
     #@ ungoogled-chromium # browser backup
     mullvad-vpn # vpn
     gthumb # image viewer
-    #@ plex-media-player # plex
+    plex-desktop # plex
     spotify # music
     (prismlauncher.override {
       jdks = [
