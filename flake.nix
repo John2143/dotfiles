@@ -51,6 +51,15 @@
         ];
       };
 
+      nixosConfigurations.livecd = nixpkgs.lib.nixosSystem {
+        inherit system;
+        modules = [
+          inputs.home-manager.nixosModules.default
+          ./nixos/shared-cli-configuration.nix
+          ./nixos/livecd-configuration.nix
+        ];
+      };
+
       nixosConfigurations.closet = nixpkgs.lib.nixosSystem {
         inherit system;
         modules = [
