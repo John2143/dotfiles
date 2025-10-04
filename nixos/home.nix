@@ -66,7 +66,6 @@ let
     # desktop programs (programs you can open)
     firefox # browser
     # floorp # browser
-    #@ ungoogled-chromium # browser backup
     mullvad-vpn # vpn
     gthumb # image viewer
     plex-desktop # plex
@@ -122,6 +121,7 @@ let
   optionalPackages = with pkgs; [
     kicad # PCB Hardware Layout
     obs-studio # streaming
+    ungoogled-chromium # browser backup
   ];
 
   # On my other computer, I want to install these
