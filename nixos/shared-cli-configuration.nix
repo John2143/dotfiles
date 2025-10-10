@@ -18,6 +18,8 @@
     "flakes"
   ];
 
+  nix.gc.automatic = true;
+
   # setup my two input channels
   nixpkgs.config = {
     allowUnfree = true;
