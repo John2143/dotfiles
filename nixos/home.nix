@@ -50,7 +50,7 @@ let
     jetbrains-mono # font
     alacritty # terminal
     pwvucontrol # volume control
-    pamixer # volume control
+    pkgs-stable.pamixer # volume control
     cliphist # clipboard history
     wl-clipboard-x11 # clipboard compatibility for some apps
     dunst # desktop alert notificaitons

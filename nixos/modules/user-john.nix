@@ -22,7 +22,7 @@
     shell = pkgs.fish;
     packages = with pkgs; [
       obsidian # note-taking software
-      teamspeak_client
+      pkgs-stable.teamspeak_client
     ];
   };
   security.sudo.wheelNeedsPassword = false;

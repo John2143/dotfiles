@@ -92,8 +92,8 @@
   # Enable CUPS to print documents.
   services.printing = {
     enable = true;
-    drivers = with pkgs; [
-      brlaser
+    drivers = [
+      pkgs-stable.brlaser
     ];
     listenAddresses = [ "*:631" ];
     allowFrom = [ "all" ];
