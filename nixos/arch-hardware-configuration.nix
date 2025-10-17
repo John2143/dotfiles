@@ -32,6 +32,15 @@
   fileSystems."/" = {
     device = "/dev/disk/by-label/NIX";
     fsType = "ext4";
+    neededForBoot = true;
+  };
+
+  fileSystems."/home/john" = {
+    # this is a bind mount: mount --bind /mnt/other/home/john/john/ /home/john
+    device = "/mnt/other/home/john/john";
+    fsType = "none";
+    options = [ "bind" ];
+    neededForBoot = true;
   };
 
   fileSystems."/mnt/arch" = {
@@ -42,6 +51,7 @@
   fileSystems."/mnt/other" = {
     device = "/dev/disk/by-label/OTHER";
     fsType = "ext4";
+    neededForBoot = true;
   };
 
   fileSystems."/boot" = {
