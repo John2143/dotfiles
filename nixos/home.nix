@@ -114,21 +114,25 @@ let
     e1s
     dbeaver-bin # db browser
     warp-terminal # agent terminal
+
+    #wineWowPackages.stable
+    winetricks
+    wineWowPackages.waylandFull
+    ungoogled-chromium # browser backup
+    obs-studio # streaming
   ];
 
   # If we are on office computer, then also add the following:
   optionalPackages = with pkgs; [
     kicad # PCB Hardware Layout
-    obs-studio # streaming
-    ungoogled-chromium # browser backup
-    wine-wayland # wine
+    #wine-wayland # wine
   ];
 
   # On my other computer, I want to install these
   optionalPackagesUpstairs = with pkgs; [
     #wineWowPackages.stable
-    winetricks
-    wineWowPackages.waylandFull
+    #winetricks
+    #wineWowPackages.waylandFull
   ];
 in
 {
