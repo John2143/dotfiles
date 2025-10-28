@@ -412,13 +412,14 @@ in
 
       refactoring-nvim
       plenary-nvim
+      rustaceanvim
       #(vimPluginFromGithub "frankroeder/parrot.nvim" "c992483dd0cf9d7481b55714d52365d1f7a66f91")
     ];
   };
 
   programs.git = {
     enable = true;
-    extraConfig = {
+    settings = {
       user = {
         email = "john@john2143.com";
         name = "John Schmidt";

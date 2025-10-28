@@ -165,6 +165,8 @@ if empty($NIX)
 
     Plug 'github/copilot.vim'
 
+    Plug 'mrcjkb/rustaceanvim'
+
     "Plug 'frankroeder/parrot.nvim'
 
     "Plug 'https://git.sr.ht/~whynothugo/lsp_lines.nvim'
@@ -236,24 +238,39 @@ lua << END
       -- Mappings.
       local opts = { noremap=true, silent=true }
 
+
       -- See `:help vim.lsp.*` for documentation on any of the below functions
-      buf_set_keymap('n', 'gD', '<Cmd>lua vim.lsp.buf.declaration()<CR>', opts)
-      buf_set_keymap('n', 'gd', '<Cmd>lua vim.lsp.buf.definition()<CR>', opts)
-      buf_set_keymap('n', 'gi', '<cmd>lua vim.lsp.buf.implementation()<CR>', opts)
-      buf_set_keymap('n', 'gr', '<cmd>lua vim.lsp.buf.references()<CR>', opts)
+      -- buf_set_keymap('n', 'gD', '<Cmd>lua vim.lsp.buf.declaration()<CR>', opts)
+      vim.keymap.set('n', 'gD', function() vim.lsp.buf.declaration() end, opts)
+      -- buf_set_keymap('n', 'gd', '<Cmd>lua vim.lsp.buf.definition()<CR>', opts)
+      vim.keymap.set('n', 'gd', function() vim.lsp.buf.definition() end, opts)
+      -- buf_set_keymap('n', 'gi', '<cmd>lua vim.lsp.buf.implementation()<CR>', opts)
+      vim.keymap.set('n', 'gi', function() vim.lsp.buf.implementation() end, opts)
+      -- buf_set_keymap('n', 'gr', '<cmd>lua vim.lsp.buf.references()<CR>', opts)
+      vim.keymap.set('n', 'gr', function() vim.lsp.buf.references() end, opts)
 
-      buf_set_keymap('n', '[g', '<cmd>lua vim.diagnostic.goto_prev()<CR>', opts)
-      buf_set_keymap('n', ']g', '<cmd>lua vim.diagnostic.goto_next()<CR>', opts)
 
-      buf_set_keymap('n', 'K', '<Cmd>lua vim.lsp.buf.hover()<CR>', opts)
-      buf_set_keymap('n', 'gt', '<Cmd>lua vim.lsp.buf.type_definition()<CR>', opts)
+      -- buf_set_keymap('n', '[g', '<cmd>lua vim.diagnostic.goto_prev()<CR>', opts)
+      -- buf_set_keymap('n', ']g', '<cmd>lua vim.diagnostic.goto_next()<CR>', opts)
+      vim.keymap.set('n', '[g', function() vim.diagnostic.goto_prev() end, opts)
+      vim.keymap.set('n', ']g', function() vim.diagnostic.goto_next() end, opts)
 
-      buf_set_keymap('n', ',rn', '<cmd>lua vim.lsp.buf.rename()<CR>', opts)
-      buf_set_keymap('n', ',y', '<cmd>lua vim.lsp.buf.code_action()<CR>', opts)
-      buf_set_keymap('n', ',z', '<cmd>lua vim.diagnostic.open_float()<CR>', opts)
+      -- buf_set_keymap('n', 'K', '<Cmd>lua vim.lsp.buf.hover()<CR>', opts)
+      vim.keymap.set('n', 'K', function() vim.lsp.buf.hover() end, opts)
+      -- buf_set_keymap('n', 'gt', '<Cmd>lua vim.lsp.buf.type_definition()<CR>', opts)
+      vim.keymap.set('n', 'gt', function() vim.lsp.buf.type_definition() end, opts)
 
-      buf_set_keymap('n', ",q", "<cmd>lua vim.lsp.buf.formatting()<CR>", opts)
-      buf_set_keymap('n', ',rz', '<cmd>lua vim.diagnostic.set_loclist()<CR>', opts)
+      -- buf_set_keymap('n', ',rn', '<cmd>lua vim.lsp.buf.rename()<CR>', opts)
+      vim.keymap.set('n', ',rn', function() vim.lsp.buf.rename() end, opts)
+      -- buf_set_keymap('n', ',y', '<cmd>lua vim.lsp.buf.code_action()<CR>', opts)
+      vim.keymap.set('n', ',y', function() vim.lsp.buf.code_action() end, opts)
+      -- buf_set_keymap('n', ',z', '<cmd>lua vim.diagnostic.open_float()<CR>', opts)
+      vim.keymap.set('n', ',z', function() vim.diagnostic.open_float() end, opts)
+
+      -- buf_set_keymap('n', ",q", "<cmd>lua vim.lsp.buf.formatting()<CR>", opts)
+      vim.keymap.set('n', ",q", "<cmd>lua vim.lsp.buf.formatting()<CR>", opts)
+      -- buf_set_keymap('n', ',rz', '<cmd>lua vim.diagnostic.set_loclist()<CR>', opts)
+      vim.keymap.set('n', ',rz', function() vim.diagnostic.set_loclist() end, opts)
 
       -- buf_set_keymap('n', '<C-h>', '<cmd>NvimTmuxNavigateLeft<CR>', opts)
       -- buf_set_keymap('n', '<C-j>', '<cmd>NvimTmuxNavigateDown<CR>', opts)
@@ -278,13 +295,12 @@ lua << END
     local capabilities_cmp = require('cmp_nvim_lsp').default_capabilities()
     local capabilities = vim.tbl_extend('keep', capabilities_cmp, lsp_status.capabilities)
 
-    vim.lsp.config("rust_analyzer", {
-        on_attach = on_attach,
-        flags = {
-            debounce_text_changes = 150,
+    vim.g.rustaceanvim = {
+        tools = {
         },
-        settings = {
-            ["rust-analyzer"] = {
+        server = {
+            on_attach = on_attach,
+            default_settings = {
                 cargo = {
                     allFeatures = true,
                 },
@@ -296,11 +312,9 @@ lua << END
                 diagnostics = {
                     disabled = { "unresolved-proc-macro" },
                 },
-            },
-        },
-        -- root_dir = lspconfig.util.root_pattern("src"),
-        capabilities = capabilities,
-    });
+            }
+        }
+    }
 
     -- tsserver was renamed to ts_ls, but we need to support both:
     vim.lsp.config("ts_ls", {
@@ -694,7 +708,7 @@ set nobackup
 set noswapfile
 
 " clear highlights with C-l and add "cd to current file" when vim-rooter doesn't
-nnoremap <c-l> :noh<cr>:sign unplace *<cr><c-l>
+nnoremap <c-m> :noh<cr>:sign unplace *<cr><c-l>
 nnoremap <leader>cd :cd %:p:h<cr>:pwd<cr>
 
 " ` = -> for c. might start using for rust but its much less common than in c
