@@ -59,7 +59,6 @@ let
     spotifyd # play to spotify device if needed
 
     temurin-jre-bin-21 # java
-    wine-wayland # wine
 
     hyprlock # screen locker
 
@@ -122,10 +121,14 @@ let
     kicad # PCB Hardware Layout
     obs-studio # streaming
     ungoogled-chromium # browser backup
+    wine-wayland # wine
   ];
 
   # On my other computer, I want to install these
   optionalPackagesUpstairs = with pkgs; [
+    #wineWowPackages.stable
+    winetricks
+    wineWowPackages.waylandFull
   ];
 in
 {

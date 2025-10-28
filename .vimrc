@@ -131,7 +131,6 @@ if empty($NIX)
     let g:rainbow_active = 1
 
     " Semantic language support
-    Plug 'neovim/nvim-lspconfig'
     Plug 'nvim-lua/lsp_extensions.nvim'
     Plug 'hrsh7th/cmp-nvim-lsp', {'branch': 'main'}
     Plug 'hrsh7th/cmp-buffer', {'branch': 'main'}
@@ -191,7 +190,6 @@ lua << END
         indicator_ok = 'Ok',
     })
 
-    local lspconfig = require'lspconfig'
     cmp.setup({
       snippet = {
         -- REQUIRED by nvim-cmp. get rid of it once we can
@@ -280,7 +278,7 @@ lua << END
     local capabilities_cmp = require('cmp_nvim_lsp').default_capabilities()
     local capabilities = vim.tbl_extend('keep', capabilities_cmp, lsp_status.capabilities)
 
-    lspconfig.rust_analyzer.setup {
+    vim.lsp.config("rust_analyzer", {
         on_attach = on_attach,
         flags = {
             debounce_text_changes = 150,
@@ -300,67 +298,57 @@ lua << END
                 },
             },
         },
-        root_dir = lspconfig.util.root_pattern("src"),
+        -- root_dir = lspconfig.util.root_pattern("src"),
         capabilities = capabilities,
-    }
+    });
 
     -- tsserver was renamed to ts_ls, but we need to support both:
-    if lspconfig.ts_ls then
-        lspconfig.ts_ls.setup {
-            on_attach = on_attach,
-            flags = {
-                debounce_text_changes = 150,
-            },
-            capabilities = capabilities,
-        }
-    else
-        lspconfig.tsserver.setup {
-            on_attach = on_attach,
-            flags = {
-                debounce_text_changes = 150,
-            },
-            capabilities = capabilities,
-        }
-    end
+    vim.lsp.config("ts_ls", {
+        on_attach = on_attach,
+        flags = {
+            debounce_text_changes = 150,
+        },
+        capabilities = capabilities,
+    })
 
-    lspconfig.pyright.setup{
+    vim.lsp.config("pyright", {
         on_attach = on_attach,
         flags = {
             debounce_text_changes = 150,
         },
-        root_dir = lspconfig.util.find_git_ancestor,
+        -- root_dir = lspconfig.util.find_git_ancestor,
         capabilities = capabilities,
-    }
-    lspconfig.jdtls.setup{
-        on_attach = on_attach,
-        flags = {
-            debounce_text_changes = 150,
-        },
-        capabilities = capabilities,
-    }
-    lspconfig.ccls.setup{
-        on_attach = on_attach,
-        flags = {
-            debounce_text_changes = 150,
-        },
-        root_dir = lspconfig.util.find_git_ancestor,
-        capabilities = capabilities,
-    }
-    lspconfig.nixd.setup{
+    })
+    vim.lsp.config("jdtls", {
         on_attach = on_attach,
         flags = {
             debounce_text_changes = 150,
         },
         capabilities = capabilities,
-    }
-    lspconfig.tailwindcss.setup{
+    })
+    vim.lsp.config("ccls", {
+        on_attach = on_attach,
+        flags = {
+            debounce_text_changes = 150,
+        },
+        -- root_dir = lspconfig.util.find_git_ancestor,
+        capabilities = capabilities,
+    })
+    vim.lsp.config("nixd", {
         on_attach = on_attach,
         flags = {
             debounce_text_changes = 150,
         },
         capabilities = capabilities,
-    }
-    lspconfig.yamlls.setup{
+    })
+    vim.lsp.config("tailwindcss", {
+        on_attach = on_attach,
+        flags = {
+            debounce_text_changes = 150,
+        },
+        capabilities = capabilities,
+    })
+    vim.lsp.config("yamlls", {
         on_attach = on_attach,
         flags = {
             debounce_text_changes = 150,
@@ -370,7 +358,7 @@ lua << END
             yaml = {
                 schemas = {
                     -- https://www.reddit.com/r/neovim/comments/ze9gbe/kubernetes_auto_completion_support_in_neovim/
-                    kubernetes = "*.yaml",
+                    -- kubernetes = "*.yaml",
                     ["http://json.schemastore.org/github-workflow"] = ".github/workflows/*",
                     ["http://json.schemastore.org/github-action"] = ".github/action.{yml,yaml}",
                     ["http://json.schemastore.org/ansible-stable-2.9"] = "roles/tasks/*.{yml,yaml}",
@@ -386,8 +374,8 @@ lua << END
                 },
             },
         },
-    }
-    lspconfig.gopls.setup{
+    })
+    vim.lsp.config("gopls", {
         on_attach = on_attach,
         flags = {
             debounce_text_changes = 150,
@@ -402,7 +390,7 @@ lua << END
                 gofumpt = true,
             },
         },
-    }
+    })
 
     vim.lsp.handlers["textDocument/publishDiagnostics"] = vim.lsp.with(
       vim.lsp.diagnostic.on_publish_diagnostics, {

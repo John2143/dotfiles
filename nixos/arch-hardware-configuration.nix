@@ -43,10 +43,10 @@
     neededForBoot = true;
   };
 
-  fileSystems."/mnt/arch" = {
-    device = "/dev/disk/by-label/ARCH";
-    fsType = "ext4";
-  };
+  #fileSystems."/mnt/arch" = {
+    #device = "/dev/disk/by-label/ARCH";
+    #fsType = "ext4";
+  #};
 
   fileSystems."/mnt/other" = {
     device = "/dev/disk/by-label/OTHER";
@@ -63,23 +63,23 @@
     ];
   };
 
-  fileSystems."/mnt/efi1" = {
-    device = "/dev/disk/by-uuid/C84B-9CD5";
-    fsType = "vfat";
-    options = [
-      "fmask=0022"
-      "dmask=0022"
-    ];
-  };
+  # fileSystems."/mnt/efi1" = {
+  #   device = "/dev/disk/by-uuid/C84B-9CD5";
+  #   fsType = "vfat";
+  #   options = [
+  #     "fmask=0022"
+  #     "dmask=0022"
+  #   ];
+  # };
 
-  fileSystems."/mnt/efi2" = {
-    device = "/dev/disk/by-uuid/B06A-EB76";
-    fsType = "vfat";
-    options = [
-      "fmask=0022"
-      "dmask=0022"
-    ];
-  };
+  # fileSystems."/mnt/efi2" = {
+  #   device = "/dev/disk/by-uuid/B06A-EB76";
+  #   fsType = "vfat";
+  #   options = [
+  #     "fmask=0022"
+  #     "dmask=0022"
+  #   ];
+  # };
 
   swapDevices = [ ];
 
