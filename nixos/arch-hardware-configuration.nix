@@ -35,22 +35,40 @@
     neededForBoot = true;
   };
 
-  fileSystems."/home/john" = {
-    # this is a bind mount: mount --bind /mnt/other/home/john/john/ /home/john
-    device = "/mnt/other/home/john/john";
-    fsType = "none";
-    options = [ "bind" ];
-    neededForBoot = true;
-  };
-
   #fileSystems."/mnt/arch" = {
     #device = "/dev/disk/by-label/ARCH";
     #fsType = "ext4";
   #};
 
-  fileSystems."/mnt/other" = {
-    device = "/dev/disk/by-label/OTHER";
+  #fileSystems."/mnt/other" = {
+    #device = "/dev/disk/by-label/OTHER";
+    #fsType = "ext4";
+    #neededForBoot = true;
+  #};
+
+  fileSystems."/mnt/x9" = {
+    device = "/dev/disk/by-label/x9";
     fsType = "ext4";
+    neededForBoot = true;
+  };
+
+  fileSystems."/mnt/other" = {
+    device = "/mnt/x9/other";
+    fsType = "none";
+    options = [ "bind" ];
+    neededForBoot = true;
+  };
+
+  #fileSystems."/home/john" = {
+    #device = "/dev/pool1a/john_home";
+    #fsType = "ext4";
+    #neededForBoot = true;
+  #};
+
+  fileSystems."/home/john" = {
+    device = "/mnt/x9/other/home/john/john";
+    fsType = "none";
+    options = [ "bind" ];
     neededForBoot = true;
   };
 
