@@ -46,31 +46,31 @@
     #neededForBoot = true;
   #};
 
-  fileSystems."/mnt/x9" = {
-    device = "/dev/disk/by-label/x9";
-    fsType = "ext4";
-    neededForBoot = true;
-  };
-
-  fileSystems."/mnt/other" = {
-    device = "/mnt/x9/other";
-    fsType = "none";
-    options = [ "bind" ];
-    neededForBoot = true;
-  };
-
-  #fileSystems."/home/john" = {
-    #device = "/dev/pool1a/john_home";
+  #fileSystems."/mnt/x9" = {
+    #device = "/dev/disk/by-label/x9";
     #fsType = "ext4";
     #neededForBoot = true;
   #};
 
+  #fileSystems."/mnt/other" = {
+    #device = "/mnt/x9/other";
+    #fsType = "none";
+    #options = [ "bind" ];
+    #neededForBoot = true;
+  #};
+
   fileSystems."/home/john" = {
-    device = "/mnt/x9/other/home/john/john";
-    fsType = "none";
-    options = [ "bind" ];
+    device = "/dev/pool1a/john_home";
+    fsType = "ext4";
     neededForBoot = true;
   };
+
+  #fileSystems."/home/john" = {
+    #device = "/mnt/x9/other/home/john/john";
+    #fsType = "none";
+    #options = [ "bind" ];
+    #neededForBoot = true;
+  #};
 
   fileSystems."/boot" = {
     device = "/dev/disk/by-uuid/FD0B-76B7";

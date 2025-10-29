@@ -103,6 +103,7 @@ let
     # kubernetes-helm
 
     k3s # kubernetes k8s node
+    gparted
 
     pavucontrol # audio
     qpwgraph
