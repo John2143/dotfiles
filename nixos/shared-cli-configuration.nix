@@ -18,7 +18,7 @@
     "flakes"
   ];
 
-  nix.gc.automatic = true;
+  #nix.gc.automatic = true;
 
   # setup my two input channels
   nixpkgs.config = {

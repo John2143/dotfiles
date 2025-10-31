@@ -108,15 +108,15 @@
     };
   };
 
-  systemd.timers."rebuild-nixos-boot" = {
-    wantedBy = [ "timers.target" ];
-    timerConfig = {
-      Unit = "rebuild-nixos-boot.service";
-      # At 2:00 PM every day
-      OnCalendar = "*-*-* 14:00:00";
-      #Persistent = true;
-    };
-  };
+  #systemd.timers."rebuild-nixos-boot" = {
+    #wantedBy = [ "timers.target" ];
+    #timerConfig = {
+      #Unit = "rebuild-nixos-boot.service";
+      ## At 2:00 PM every day
+      #OnCalendar = "*-*-* 14:00:00";
+      ##Persistent = true;
+    #};
+  #};
 
   services.k3s = {
     enable = true;
