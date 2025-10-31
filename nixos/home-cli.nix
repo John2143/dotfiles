@@ -57,7 +57,7 @@ in
     ripgrep # grep replacement
     btop # btop++ > bpytop > htop > top
     choose # awk replacement
-    du-dust # df/du replacement
+    dust # df/du replacement
     ncdu # du / disk usage
     fzf
     fd # find replacement
