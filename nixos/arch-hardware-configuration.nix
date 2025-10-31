@@ -65,11 +65,25 @@
     neededForBoot = true;
   };
 
-  #fileSystems."/home/john" = {
-    #device = "/mnt/x9/other/home/john/john";
-    #fsType = "none";
-    #options = [ "bind" ];
-    #neededForBoot = true;
+  fileSystems."/mnt/monero" = {
+    device = "/dev/pool1b/monero";
+    fsType = "ext4";
+  };
+
+  fileSystems."/mnt/d" = {
+    device = "/dev/disk/by-label/xd";
+    fsType = "ntfs";
+    neededForBoot = false;
+  };
+
+  fileSystems."/mnt/games_a" = {
+    device = "/dev/pool1a/games_a";
+    fsType = "ext4";
+  };
+
+  #fileSystems."/mnt/games_b" = {
+    #device = "/dev/pool1a/games_b";
+    #fsType = "ext4";
   #};
 
   fileSystems."/boot" = {

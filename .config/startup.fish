@@ -24,7 +24,7 @@ if test "$HOST" = "arch"
     #tmux rename-window 'ts3client'
 
     sleep 0.1
-    tmux new-window 'monerod --block-sync-size 100 --data-dir /mnt/other/monero/ --max-concurrency 4 --db-sync-mode=safe:sync'
+    tmux new-window 'monerod --block-sync-size 100 --data-dir /mnt/monero/monero/ --max-concurrency 4 --db-sync-mode=safe:sync'
     tmux rename-window 'monero'
 
     #sleep 0.1
