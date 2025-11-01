@@ -105,24 +105,24 @@
   # bluetooth
   services.blueman.enable = true;
 
-  systemd.timers."kdeconnect-refresh" = {
-    wantedBy = [ "timers.target" ];
-    timerConfig = {
-      OnBootSec = "5m";
-      OnUnitActiveSec = "5m";
-      Unit = "kdeconnect-refresh.service";
-    };
-  };
+  #systemd.timers."kdeconnect-refresh" = {
+    #wantedBy = [ "timers.target" ];
+    #timerConfig = {
+      #OnBootSec = "5m";
+      #OnUnitActiveSec = "5m";
+      #Unit = "kdeconnect-refresh.service";
+    #};
+  #};
 
   services.udev.extraRules = builtins.readFile ./udev_embedded.rules;
 
-  systemd.services."kdeconnect-refresh" = {
-    script = ''
-      ${pkgs.fish}/bin/fish -c "DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus kdeconnect-cli --refresh"
-    '';
-    serviceConfig = {
-      Type = "oneshot";
-      User = "john";
-    };
-  };
+  #systemd.services."kdeconnect-refresh" = {
+    #script = ''
+      #${pkgs.fish}/bin/fish -c "DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus kdeconnect-cli --refresh"
+    #'';
+    #serviceConfig = {
+      #Type = "oneshot";
+      #User = "john";
+    #};
+  #};
 }
