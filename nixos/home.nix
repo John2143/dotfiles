@@ -121,6 +121,9 @@ let
     wineWowPackages.waylandFull
     ungoogled-chromium # browser backup
     obs-studio # streaming
+
+
+    xlsclients
   ];
 
   # If we are on office computer, then also add the following:
