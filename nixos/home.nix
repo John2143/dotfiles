@@ -135,6 +135,7 @@ let
   # On my other computer, I want to install these
   optionalPackagesUpstairs = with pkgs; [
     monero-cli
+    monero-gui
     cryptsetup
     #wineWowPackages.stable
     #winetricks
