@@ -85,7 +85,7 @@ let
     #@ kdePackages.kdenlive # video editor
     # kdeconnect # phone sync (now in main settings)
     #v4l-utils # video inputs for linux (obs)
-    path-of-building # Path of Exile build planner
+    rusty-path-of-building # Path of Exile build planner
     bitwarden-desktop # password manager
     vlc # video player
     mpv # video player
