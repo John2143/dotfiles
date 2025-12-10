@@ -55,10 +55,10 @@
           ./nixos/shared-cli-configuration.nix
           ./nixos/shared-configuration.nix
           ./nixos/arch-configuration.nix
-          nix-snapd.nixosModules.default
-          {
-            services.snap.enable = true;
-          }
+          #nix-snapd.nixosModules.default
+          #{
+            #services.snap.enable = true;
+          #}
         ];
       };
 
