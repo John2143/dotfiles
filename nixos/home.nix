@@ -116,9 +116,9 @@ let
     dbeaver-bin # db browser
     warp-terminal # agent terminal
 
-    wineWowPackages.stable
+    #wineWowPackages.stable
     winetricks
-    #wineWowPackages.waylandFull
+    wineWowPackages.waylandFull
     ungoogled-chromium # browser backup
     obs-studio # streaming
 

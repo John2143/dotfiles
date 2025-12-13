@@ -17,6 +17,7 @@
       "input"
       "dialout"
       "docker"
+      "ydotool"
     ]; # Enable ‘sudo’ for the user.
     initialPassword = "john";
     shell = pkgs.fish;
