@@ -10,7 +10,7 @@
 let
   unfreePackages = with pkgs; [
     obsidian # note-taking software
-    pkgs-stable.teamspeak_client
+    pkgs-stable.teamspeak3
   ];
 in
 {

@@ -97,6 +97,7 @@ in
 
     # Other / unsorted
     # kubernetes-helm
+    nodejs
     nodePackages."@tailwindcss/language-server" # tailwindcss language server for neovim
     nodePackages.yaml-language-server # yaml language server for neovim
 
@@ -503,9 +504,231 @@ in
     };
   };
 
+## # https://starship.rs/config
+## "$schema" = 'https://starship.rs/config-schema.json'
+## format = """
+## $shell$time\
+## $username$hostname\
+## $directory$nix_shell\
+## $git_branch$git_commit$git_state$git_status\
+## $python\
+## $kubernetes\
+## $aws\
+## $status$cmd_duration$jobs\
+## $line_break\
+## $character
+## """
+## 
+## #add_newline = true
+## 
+## # Replace the '❯' symbol in the prompt with '➜'
+## [character] # The name of the module we are configuring is 'character'
+## success_symbol = '[\$](bold green)' # The 'success_symbol' segment is being set to '➜' with the color 'bold green'
+## error_symbol = '[\$](bold red)' # The 'success_symbol' segment is being set to '➜' with the color 'bold green'
+## vimcmd_symbol = '[\$](bold white bg:#ff1493)' 
+## 
+## [directory]
+## truncation_length = 3
+## truncate_to_repo = false
+## fish_style_pwd_dir_length = 2
+## style = "green"
+## 
+## [git_branch]
+## format = '[$symbol$branch(:$remote_branch)]($style)'
+## style = 'purple'
+## ignore_branches = []
+## #symbol = ' '
+## symbol = ''
+## 
+## [git_commit]
+## format = '[#$hash$tag]($style) '
+## tag_symbol = ''
+## style = 'purple'
+## 
+## [git_status]
+## style = 'purple'
+## stashed = ''
+## 
+## [hostname]
+## ssh_only = false
+## format = '[@](fg:#666666)[$hostname](bold white) '
+## trim_at = ''
+## 
+## [status]
+## format = '[$status](bold red) '
+## disabled = false
+## 
+## [username]
+## style_user = 'bold white'
+## format = '[$user]($style)'
+## show_always = true
+## 
+## [python]
+## format = '([🐍](yellow)[$virtualenv]($style) )'
+## style = "cyan"
+## 
+## [shell]
+## disabled = true
+## fish_indicator = ''
+## format = '[$indicator ]($style)'
+## 
+## [cmd_duration]
+## format = '[$duration]($style) '
+## min_time = 5000
+## 
+## [jobs]
+## number_threshold = 1
+## 
+## [time]
+## disabled = false
+## style = "fg:#777777"
+## format = '[$time]($style) '
+## 
+## [nix_shell]
+## format = '[$symbol$state]($style) '
+## #symbol = '❄️'
+## symbol = '*'
+## style = 'bold blue'
+## impure_msg = ''
+## pure_msg = ''
+## unknown_msg = ''
+## 
+## 
+## [kubernetes]
+## format = '[⛵$context](dimmed cyan) '
+## disabled = false
+## 
+## [aws]
+## format = '[$symbol($profile )(\($region\) )]($style)'
+## style = 'bold blue'
+## symbol = ''#'🅰 '
+## [aws.region_aliases]
+## us-east-1 = 'ue1'
+## [aws.profile_aliases]
+## "wbd-syndication-dev-/wbd-syndication-developer" = 'wbd-synd-dev'
+## "aws-aio-eks-poc2-/AWSAdmin" = 'eks-poc2'
+## "aws-aio-eks-poc1-/AWSAdmin" = 'eks-poc1'
+## "wbd-ms-rally-dev-/ms-rally-developer" = 'ms-rally-dev'
+## 
+## 
+## [[kubernetes.contexts]]
+## context_pattern = "kind-(?P<cluster>.+)"
+## context_alias = "kind-$cluster"
+## 
+## [[kubernetes.contexts]]
+## context_pattern = "(?P<cluster>[\\w-]+):(?P<account>\\d+):(?P<name>[\\w-]+)"
+## context_alias = "aws-$cluster"
+## 
+## [[kubernetes.contexts]]
+## context_pattern = "default"
+## context_alias = "home"
+## 
+## #[[kubernetes.contexts]]
+## #context_pattern = ".+"
+## #context_alias = "yipee"
   programs.starship = {
     enable = true;
     settings = {
+      add_newline = true;
+      format = "\
+$shell$time\
+$username$hostname\
+$directory$nix_shell\
+$git_branch$git_commit$git_state$git_status\
+$python\
+$kubernetes\
+$aws\
+$status$cmd_duration$jobs\
+$line_break\
+$character
+";
+        character = {
+            success_symbol = "[$](bold green)";
+            error_symbol = "[$](bold red)";
+            vimcmd_symbol = "[$](bold white bg:#ff1493)";
+        };
+        directory = {
+            truncation_length = 3;
+            truncate_to_repo = false;
+            fish_style_pwd_dir_length = 2;
+            style = "green";
+        };
+        git_branch = {
+            format = "[$symbol$branch(:$remote_branch)]($style)";
+            style = "purple";
+            ignore_branches = [ ];
+            symbol = "";
+        };
+        git_commit = {
+            format = "[#$hash$tag]($style) ";
+            tag_symbol = "";
+            style = "purple";
+        };
+        git_status = {
+            style = "purple";
+            stashed = "";
+        };
+        hostname = {
+            ssh_only = false;
+            format = "[@](fg:#666666)[$hostname](bold white) ";
+            trim_at = "";
+        };
+        status = {
+            format = "[$status](bold red) ";
+            disabled = false;
+        };
+        username = {
+            style_user = "bold white";
+            format = "[$user]($style)";
+            show_always = true;
+        };
+        python = {
+            format = "([🐍](yellow)[$virtualenv]($style) )";
+            style = "cyan";
+        };
+        shell = {
+            disabled = true;
+            fish_indicator = "";
+            format = "[$indicator ]($style)";
+        };
+        cmd_duration = {
+            format = "[$duration]($style) ";
+            min_time = 5000;
+        };
+        jobs = {
+            number_threshold = 1;
+        };
+        time = {
+            disabled = false;
+            style = "fg:#777777";
+            format = "[$time]($style) ";
+        };
+        nix_shell = {
+            format = "[$symbol$state]($style) ";
+            symbol = "*";
+            style = "bold blue";
+            impure_msg = "";
+            pure_msg = "";
+            unknown_msg = "";
+        };
+        kubernetes = {
+            format = "[⛵$context](dimmed cyan) ";
+            disabled = false;
+        };
+        aws = {
+            format = "[$symbol($profile )(\($region\) )]($style)";
+            style = "bold blue";
+            symbol = "";
+            region_aliases = {
+              "us-east-1" = "ue1";
+            };
+            profile_aliases = {
+              "wbd-syndication-dev-/wbd-syndication-developer" = "wbd-synd-dev";
+              "aws-aio-eks-poc2-/AWSAdmin" = "eks-poc2";
+              "aws-aio-eks-poc1-/AWSAdmin" = "eks-poc1";
+              "wbd-ms-rally-dev-/ms-rally-developer" = "ms-rally-dev";
+            };
+        };
+      };
     };
-  };
 }
