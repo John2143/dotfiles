@@ -51,7 +51,6 @@ in
     # neovim
 
     # cli
-    starship # prompt
     bat # cat replacement
     eza # ls replacement
     ripgrep # grep replacement
@@ -112,8 +111,7 @@ in
   ];
 
   xdg.configFile = {
-    "btop".source = config.lib.file.mkOutOfStoreSymlink ../.config/btop;
-    "starship.toml".source = config.lib.file.mkOutOfStoreSymlink ../.config/starship.toml;
+    #"btop".source = ../.config/btop;
   };
 
   # Home Manager is pretty good at managing dotfiles. The primary way to manage
@@ -123,8 +121,6 @@ in
     # # the Nix store. Activating the configuration will then make '~/.screenrc' a
     # # symlink to the Nix store copy.
     ".vimrc".source = ../.vimrc;
-    # ".tmux.conf".source = /home/john/dotfiles/.tmux.conf;
-    # ".gitconfig".source = ../.gitconfig;
 
     # # You can also set the file content immediately.
     # ".gradle/gradle.properties".text = ''
@@ -504,6 +500,12 @@ in
       tag = {
         gpgsign = true;
       };
+    };
+  };
+
+  programs.starship = {
+    enable = true;
+    settings = {
     };
   };
 }

@@ -36,6 +36,11 @@
     ];
   };
 
+  fileSystems."/mnt/x9" = {
+    device = "/dev/disk/by-label/x9";
+    fsType = "ext4";
+  };
+
   swapDevices = [
   ];
 

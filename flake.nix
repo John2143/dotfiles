@@ -2,7 +2,7 @@
   inputs = {
     #nixpkgs.url = "github:John2143/nixpkgs/johnpkgs";
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
-    nixpkgs-stable.url = "github:NixOS/nixpkgs/nixos-24.05";
+    nixpkgs-stable.url = "github:NixOS/nixpkgs/nixos-25.11";
 
     nix-snapd.url = "github:nix-community/nix-snapd";
     nix-snapd.inputs.nixpkgs.follows = "nixpkgs";
@@ -64,6 +64,10 @@
 
       nixosConfigurations.closet = nixpkgs.lib.nixosSystem {
         inherit system;
+        specialArgs = {
+          inherit system;
+          compName = "closet";
+        };
         modules = [
           #./nixos/simple-efi.nix
           #disko.nixosModules.disko

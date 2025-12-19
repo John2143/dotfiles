@@ -1,5 +1,5 @@
 {
-  config,
+  #config,
   pkgs,
   pkgs-stable,
   john-home-path,
@@ -7,6 +7,12 @@
   ...
 }:
 
+let
+  unfreePackages = with pkgs; [
+    obsidian # note-taking software
+    pkgs-stable.teamspeak_client
+  ];
+in
 {
   # Define a user account. Don't forget to set a password with ‘passwd’.
   users.users.john = {
@@ -21,10 +27,10 @@
     ]; # Enable ‘sudo’ for the user.
     initialPassword = "john";
     shell = pkgs.fish;
-    packages = with pkgs; [
-      obsidian # note-taking software
-      pkgs-stable.teamspeak_client
-    ];
+    packages =
+      if compName == "office" then unfreePackages else
+      if compName == "arch" then unfreePackages else
+      [];
   };
   security.sudo.wheelNeedsPassword = false;
 

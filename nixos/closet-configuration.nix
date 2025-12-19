@@ -77,7 +77,7 @@
   # Enable the OpenSSH daemon.
   users.users."john".openssh.authorizedKeys.keys = [
     "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOktI2Vry/5fbhZiG35o5mf7w3dnaTEDqkRJVM07cu3a john@arch"
-    "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIEQTnsGZnbDgz6aY4O15lVybDwkaGJlIUmYO75gyLVds john@office"
+    "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFVckq0oXyXkxiLo39typ6PR039XrLwze/Cb0PZaTzmi john@office"
   ];
   services.avahi = {
     enable = true;
