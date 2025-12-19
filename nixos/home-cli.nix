@@ -630,22 +630,11 @@ in
     enable = true;
     settings = {
       add_newline = true;
-      format = "\
-$shell$time\
-$username$hostname\
-$directory$nix_shell\
-$git_branch$git_commit$git_state$git_status\
-$python\
-$kubernetes\
-$aws\
-$status$cmd_duration$jobs\
-$line_break\
-$character
-";
+      format = "$shell$time$username$hostname$directory$nix_shell$git_branch$git_commit$git_state$git_status$python$kubernetes$aws$status$cmd_duration$jobs$line_break$character";
         character = {
-            success_symbol = "[$](bold green)";
-            error_symbol = "[$](bold red)";
-            vimcmd_symbol = "[$](bold white bg:#ff1493)";
+            success_symbol = "[\\$](bold green)";
+            error_symbol = "[\\$](bold red)";
+            vimcmd_symbol = "[\\$](bold white bg:#ff1493)";
         };
         directory = {
             truncation_length = 3;

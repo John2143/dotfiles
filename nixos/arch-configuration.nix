@@ -34,6 +34,17 @@
   boot.supportedFilesystems = [ "ntfs" ];
   boot.binfmt.emulatedSystems = [ "aarch64-linux" ];
 
+  services.resolved = {
+    enable = true;
+    dnssec = "true";
+    domains = [ "~." ];
+    fallbackDns = [
+      "1.1.1.1"
+      "1.0.0.1"
+    ];
+    dnsovertls = "true";
+  };
+
   networking.hostName = "arch"; # Define your hostname.
   networking.networkmanager.enable = true; # Easiest to use and most distros use this by default.
   networking.interfaces = {
