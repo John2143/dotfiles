@@ -17,7 +17,7 @@
     permittedInsecurePackages = [
       #"electron-25.9.0"
       # used by teamspeak
-      "qtwebengine-5.15.19"
+      #"qtwebengine-5.15.19"
     ];
   };
 
