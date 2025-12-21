@@ -20,6 +20,11 @@
     # inputs.home-manager.nixosModules.default
   ];
 
+  #nix.settings.trusted-users = [ "john" "root" ];
+  nix.settings.trusted-public-keys = [
+    "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFVckq0oXyXkxiLo39typ6PR039XrLwze/Cb0PZaTzmi john@office"
+  ];
+
   services.getty.autologinUser = "john";
 
   # Use the systemd-boot EFI boot loader.
