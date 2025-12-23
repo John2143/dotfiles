@@ -60,6 +60,7 @@
 
   # Enable the OpenSSH daemon.
   services.openssh = {
+    package = pkgs-stable.openssh;
     enable = true;
     settings = {
       PasswordAuthentication = false;
