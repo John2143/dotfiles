@@ -37,7 +37,7 @@ if [ (uname) = "Linux" ]
         alias enf="fish -c 'cd ~/dotfiles/ ; nvim flake.nix'"
 
         alias update="fish -c 'cd ~/dotfiles/; nix flake update'"
-        alias optimize="fish -c 'sudo nix-collect-garbage --delete-older-than 14d; sudo nix-store --optimise; rfish'"
+        alias optimize="fish -c 'echo nix collect garbage; sudo nix-collect-garbage --delete-older-than 14d; echo nix store optimize; sudo nix-store --optimise; echo rfish; rfish'"
 
         alias pbcopy="wl-copy"
         alias pbpaste="wl-paste"
