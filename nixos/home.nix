@@ -124,6 +124,7 @@ let
 
 
     xlsclients
+    equicord
   ];
 
   # If we are on office computer, then also add the following:

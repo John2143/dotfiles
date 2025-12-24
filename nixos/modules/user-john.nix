@@ -9,8 +9,6 @@
 
 let
   unfreePackages = with pkgs; [
-    obsidian # note-taking software
-    pkgs-stable.teamspeak3
   ];
 in
 {
@@ -27,10 +25,7 @@ in
     ]; # Enable ‘sudo’ for the user.
     initialPassword = "john";
     shell = pkgs.fish;
-    packages =
-      if compName == "office" then unfreePackages else
-      [];
-      #if compName == "arch" then unfreePackages else
+    packages = [];
   };
   security.sudo.wheelNeedsPassword = false;
 
