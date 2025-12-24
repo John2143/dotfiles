@@ -12,14 +12,14 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
-    disko = {
-      url = "github:nix-community/disko";
-      inputs.nixpkgs.follows = "nixpkgs";
-    };
+    #disko = {
+      #url = "github:nix-community/disko";
+      #inputs.nixpkgs.follows = "nixpkgs";
+    #};
   };
 
   outputs =
-    { nixpkgs, disko, nix-snapd, ... }@inputs:
+    { nixpkgs, nix-snapd, ... }@inputs:
     let
       system = "x86_64-linux";
     in
@@ -77,18 +77,18 @@
         ];
       };
 
-      nixosConfigurations.rpi4b = nixpkgs.lib.nixosSystem {
-        system = "aarch64-linux";
-        modules = [
-          disko.nixosModules.disko
-          ./nixos/simple-efi.nix
-          { disko.devices.disk.my-disk.device = "/dev/mmcblk0"; }
+      #nixosConfigurations.rpi4b = nixpkgs.lib.nixosSystem {
+        #system = "aarch64-linux";
+        #modules = [
+          #disko.nixosModules.disko
+          #./nixos/simple-efi.nix
+          #{ disko.devices.disk.my-disk.device = "/dev/mmcblk0"; }
 
-          inputs.home-manager.nixosModules.default
-          ./nixos/shared-cli-configuration.nix
-          ./nixos/rpi4b-configuration.nix
-        ];
-      };
+          #inputs.home-manager.nixosModules.default
+          #./nixos/shared-cli-configuration.nix
+          #./nixos/rpi4b-configuration.nix
+        #];
+      #};
 
       #images.rpi1 = nixosConfigurations.rpi1.config.system.build.sdImage;
     };
