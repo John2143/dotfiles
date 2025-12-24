@@ -29,8 +29,8 @@ in
     shell = pkgs.fish;
     packages =
       if compName == "office" then unfreePackages else
-      if compName == "arch" then unfreePackages else
       [];
+      #if compName == "arch" then unfreePackages else
   };
   security.sudo.wheelNeedsPassword = false;
 
