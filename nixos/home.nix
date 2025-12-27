@@ -56,7 +56,7 @@ let
     dunst # desktop alert notificaitons
     libnotify # notifications cli
     gammastep # redshift / f.lux / night light
-    spotifyd # play to spotify device if needed
+    #spotifyd # play to spotify device if needed
 
     temurin-jre-bin-21 # java
 
@@ -68,7 +68,7 @@ let
     mullvad-vpn # vpn
     gthumb # image viewer
     plex-desktop # plex
-    spotify # music
+    #spotify # music
     (prismlauncher.override {
       jdks = [
         temurin-bin-21
@@ -77,10 +77,11 @@ let
       ];
     })
     r2modman # game modding
-    vesktop # discord
-    discord
-    discordo
-    # discord-canary
+    #vesktop # discord
+    #discord # discord
+    #discordo # discord
+    #equibop # discord
+    # discord-canary # discord
     #@ krita
     #@ kdePackages.kdenlive # video editor
     # kdeconnect # phone sync (now in main settings)
@@ -122,9 +123,7 @@ let
     ungoogled-chromium # browser backup
     obs-studio # streaming
 
-
     xlsclients
-    equicord
   ];
 
   # If we are on office computer, then also add the following:
