@@ -72,11 +72,13 @@ in
     unrar
     systemctl-tui
     dive
+    bind # network utilities
 
     # k8s
     # kubectl # from k3s
     kubecolor # kubectl color
     k9s
+    k3s
 
     direnv # nixos env manager: see also (direnv hook fish)
     # clang # compiler
@@ -110,10 +112,6 @@ in
     postgresql_17 # need psql and stuff
     trash-cli # bound to "rmm"
   ];
-
-  xdg.configFile = {
-    #"btop".source = ../.config/btop;
-  };
 
   # Home Manager is pretty good at managing dotfiles. The primary way to manage
   # plain files is through 'home.file'.
