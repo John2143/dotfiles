@@ -11,7 +11,6 @@
 }:
 
 {
-  _module.args.john-home-path = ./home.nix;
   imports = [
     ./office-hardware-configuration.nix
     ./modules/user-john.nix
@@ -19,6 +18,7 @@
     #./waybar.nix
     # inputs.home-manager.nixosModules.default
   ];
+  home-manager.users."john" = import ./home.nix;
 
   # Use the systemd-boot EFI boot loader.
   #boot.loader.systemd-boot.enable = true;

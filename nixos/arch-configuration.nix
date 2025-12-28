@@ -11,14 +11,13 @@
 }:
 
 {
-  _module.args.john-home-path = ./home.nix;
-
   imports = [
     ./arch-hardware-configuration.nix
     ./modules/user-john.nix
     ./modules/ollama.nix
     # inputs.home-manager.nixosModules.default
   ];
+  home-manager.users."john" = import ./home.nix;
 
   #nix.settings.trusted-users = [ "@wheel" ];
   #nix.settings.trusted-public-keys = [
