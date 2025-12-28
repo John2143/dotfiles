@@ -18,6 +18,10 @@ sleep 0.1
 tmux new-window 'flatpak run dev.vencord.Vesktop'
 tmux rename-window 'discord'
 
+sleep 0.1
+tmux new-window 'flatpak run com.spotify.Client'
+tmux rename-window 'spotify'
+
 if test "$HOST" = "arch"
     #sleep 0.1
     #tmux new-window 'while true; ts3client; read; end'
