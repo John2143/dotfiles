@@ -12,15 +12,15 @@
 }:
 
 {
-  _module.args.john-home-path = ./home-cli.nix;
   imports = [
     ./closet-hardware-configuration.nix
     ./modules/user-john.nix
     #./modules/ollama.nix
     # inputs.home-manager.nixosModules.default
   ];
+  home-manager.users."john" = import ./home-cli.nix;
 
-  # Use the systemd-boot EFI boot loader.
+  # Use the systemd-boot EFI boot loader.;
   boot.loader = {
     systemd-boot.enable = true;
     efi.canTouchEfiVariables = true;

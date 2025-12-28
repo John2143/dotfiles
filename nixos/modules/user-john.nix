@@ -2,7 +2,6 @@
   #config,
   pkgs,
   pkgs-stable,
-  john-home-path,
   compName,
   ...
 }:
@@ -38,8 +37,5 @@ in
     #sharedModles = [
     #inputs.sops-nix.homeManagerModles.sops
     #];
-    users = {
-      "john" = import john-home-path;
-    };
   };
 }
