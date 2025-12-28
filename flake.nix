@@ -54,12 +54,10 @@
       nixosConfigurations.closet = nixpkgs.lib.nixosSystem {
         inherit system;
         specialArgs = {
-          inherit system;
+          inherit inputs;
           compName = "closet";
         };
         modules = [
-          #./nixos/simple-efi.nix
-          #disko.nixosModules.disko
           inputs.home-manager.nixosModules.default
           ./nixos/shared-cli-configuration.nix
           ./nixos/closet-configuration.nix

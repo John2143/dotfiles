@@ -10,9 +10,6 @@
 
 let
   primaryPackages = with pkgs; [
-    udiskie # disks
-    # neovim
-
     # fonts
     # https://github.com/NixOS/nixpkgs/blob/master/pkgs/data/fonts/nerdfonts/shas.nix
     nerd-fonts.jetbrains-mono # font
@@ -28,7 +25,6 @@ let
     slurp # use mouse to get a point on screen
     grim # minimal screenshot program
     swappy # screenshot editor
-    bind # network utilities
     pkgs-stable.wf-recorder # screen recording
     pkgs-stable.normcap # OCR screen recognition
     hyprpicker # color picker
@@ -103,7 +99,6 @@ let
     doctl
     # kubernetes-helm
 
-    k3s # kubernetes k8s node
     gparted
 
     pavucontrol # audio
