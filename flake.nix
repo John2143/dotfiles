@@ -4,6 +4,8 @@
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
     nixpkgs-stable.url = "github:NixOS/nixpkgs/nixos-25.11";
 
+    nix-cachyos-kernel.url = "github:xddxdd/nix-cachyos-kernel/release";
+
     home-manager = {
       url = "github:nix-community/home-manager";
       inputs.nixpkgs.follows = "nixpkgs";
@@ -16,9 +18,23 @@
   };
 
   outputs =
-    { nixpkgs, ... }@inputs:
+    { nixpkgs, nix-cachyos-kernel, ... }@inputs:
     let
       system = "x86_64-linux";
+      catchy-os = [
+        ({ pkgs, ... }:
+        {
+          nixpkgs.overlays = [
+             nix-cachyos-kernel.overlays.default
+             #nix-cachyos-kernel.overlays.pinned
+          ];
+        })
+        ({ pkgs, ... }:
+        {
+          boot.kernelPackages = pkgs.cachyosKernels.linuxPackages-cachyos-latest;
+          #hardware.nvidia.package = config.boot.kernelPackages.nvidiaPackages.stable;
+        })
+      ];
     in
     rec {
       formatter.x86_64-linux = nixpkgs.legacyPackages.${system}.nixfmt-tree;
@@ -43,7 +59,7 @@
           inherit inputs;
           compName = "arch";
         };
-        modules = [
+        modules = catchy-os ++ [
           inputs.home-manager.nixosModules.default
           ./nixos/shared-cli-configuration.nix
           ./nixos/shared-configuration.nix
