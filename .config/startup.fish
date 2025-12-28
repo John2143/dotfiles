@@ -11,11 +11,11 @@ tmux new-window 'while true; steam; read; end'
 tmux rename-window 'steam'
 
 sleep 0.1
-tmux new-window 'while true; obsidian; read; end'
+tmux new-window 'flatpak run md.obsidian.Obsidian'
 tmux rename-window 'obsidian'
 
 sleep 0.1
-tmux new-window 'vesktop'
+tmux new-window 'flatpak run dev.vencord.Vesktop'
 tmux rename-window 'discord'
 
 if test "$HOST" = "arch"
