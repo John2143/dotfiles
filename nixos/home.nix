@@ -111,6 +111,7 @@ let
     e1s
     dbeaver-bin # db browser
     warp-terminal # agent terminal
+    code-cursor # agent terminal
 
     #wineWowPackages.stable
     winetricks

@@ -160,7 +160,6 @@ if empty($NIX)
     Plug 'nvim-lua/lsp-status.nvim'
 
     Plug 'nvim-lua/plenary.nvim'
-    Plug 'jose-elias-alvarez/null-ls.nvim'
     Plug 'saecki/crates.nvim', { 'tag': 'v0.3.0' }
 
     Plug 'github/copilot.vim'
@@ -874,7 +873,7 @@ function! StatuslineTabWarning()
 endfunction
 
 function! LspStatus() abort
-  if luaeval('#vim.lsp.buf_get_clients() > 0')
+  if luaeval('#vim.lsp.get_clients() > 0')
     return luaeval("require('lsp-status').status()")
   endif
 

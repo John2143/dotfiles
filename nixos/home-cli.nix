@@ -400,7 +400,6 @@ in
       nvim-highlight-colors
 
       plenary-nvim
-      null-ls-nvim
       crates-nvim
 
       copilot-vim

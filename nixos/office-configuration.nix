@@ -46,10 +46,10 @@
       }
     ];
   };
-  networking.wireless.secretsFile = "/run/secrets/wireless.env";
-  networking.wireless.networks = {
-    jimmys_2G.pskRaw = "ext:PSK_HOME";
-  };
+  #networking.wireless.secretsFile = "/run/secrets/wireless.env";
+  #networking.wireless.networks = {
+    #jimmys_2G.pskRaw = "ext:PSK_HOME";
+  #};
   networking.defaultGateway = "192.168.1.1";
   networking.nameservers = [
     "1.1.1.1"
