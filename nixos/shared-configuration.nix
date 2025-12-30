@@ -81,6 +81,7 @@
     xwayland.enable = true;
     #enableNvidiaPatches = true;
   };
+  xdg.portal.enable = true;
 
   #environment.systemPackages = with pkgs; [
   #];
