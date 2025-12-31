@@ -49,6 +49,13 @@
     #jack.enable = true;
   };
 
+  xdg.portal = {
+    enable = true;
+    extraPortals = with pkgs; [
+      xdg-desktop-portal-hyprland
+    ];
+    xdgOpenUsePortal = true;
+  };
   xdg.mime = rec {
     enable = true;
     addedAssociations = defaultApplications;
@@ -81,7 +88,6 @@
     xwayland.enable = true;
     #enableNvidiaPatches = true;
   };
-  xdg.portal.enable = true;
 
   #environment.systemPackages = with pkgs; [
   #];
