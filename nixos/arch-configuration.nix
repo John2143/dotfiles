@@ -78,7 +78,7 @@
     enable = true;
     role = "agent";
     serverAddr = "https://192.168.1.35:6443";
-    token = "K10c774bc9053c47bd55747f362531fb443f6ca1e4364143dbd74acdd4156eb6878::zrn5is.xofs0ptxviid21y8";
+    token = "K10c774bc9053c47bd55747f362531fb443f6ca1e4364143dbd74acdd4156eb6878::gw42uk.w06j3n5hkp5o30h8";
   };
 
   # services.ollama.acceleration = "cuda";
