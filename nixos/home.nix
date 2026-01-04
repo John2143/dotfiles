@@ -126,6 +126,7 @@ let
   # If we are on office computer, then also add the following:
   optionalPackages = with pkgs; [
     kicad # PCB Hardware Layout
+    blender
     #wine-wayland # wine
   ];
 
