@@ -121,6 +121,7 @@ let
 
     xlsclients
     easyeffects
+    evremap
   ];
 
   # If we are on office computer, then also add the following:
