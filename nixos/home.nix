@@ -120,6 +120,7 @@ let
     obs-studio # streaming
 
     xlsclients
+    easyeffects
   ];
 
   # If we are on office computer, then also add the following:

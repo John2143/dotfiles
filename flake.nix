@@ -59,7 +59,7 @@
           inherit inputs;
           compName = "arch";
         };
-        modules = catchy-os ++ [
+        modules = [
           inputs.home-manager.nixosModules.default
           ./nixos/shared-cli-configuration.nix
           ./nixos/shared-configuration.nix
