@@ -60,7 +60,7 @@ in
     ncdu # du / disk usage
     fzf
     fd # find replacement
-    update-nix-fetchgit # update fetchgit urls
+    #update-nix-fetchgit # update fetchgit urls
     yt-dlp # youtube-dl
     delta # pager
     gptfdisk # disk partitioning tool
