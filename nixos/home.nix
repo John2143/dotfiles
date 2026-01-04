@@ -41,7 +41,7 @@ let
     pulseaudio # pactl (audio)
     wofi # "start menu" / program browser
     kdePackages.dolphin # file browser
-    xfce.thunar # file browser 2
+    thunar # file browser 2
     wl-clipboard # copy-paste via cli
     jetbrains-mono # font
     alacritty # terminal

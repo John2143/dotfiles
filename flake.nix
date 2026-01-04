@@ -5,6 +5,7 @@
     nixpkgs-stable.url = "github:NixOS/nixpkgs/nixos-25.11";
 
     nix-cachyos-kernel.url = "github:xddxdd/nix-cachyos-kernel/release";
+    nix-cachyos-kernel.inputs.nixpkgs.follows = "nixpkgs";
 
     home-manager = {
       url = "github:nix-community/home-manager";
@@ -64,6 +65,10 @@
           ./nixos/shared-cli-configuration.nix
           ./nixos/shared-configuration.nix
           ./nixos/arch-configuration.nix
+          ({ config, ... }:
+          {
+            hardware.nvidia.package = config.boot.kernelPackages.nvidiaPackages.beta;
+          })
         ];
       };
 
