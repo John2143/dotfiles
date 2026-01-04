@@ -1009,16 +1009,5 @@ endfunction
 
 nnoremap <leader>d :call NumberToDate()<cr>
 
-" treesitter lua setup
-lua <<EOF
-require'nvim-treesitter.configs'.setup {
-  -- ensure_installed = { "rust", "json", "typescript", "javascript", "python", "c", "vue", "html", "latex", "lua", },
-  highlight = {
-    enable = true,              -- false will disable the whole extension
-    disable = { },  -- list of language that will be disabled
-  },
-}
-EOF
-
 " fix fish
 set shell=bash
