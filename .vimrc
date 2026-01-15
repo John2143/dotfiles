@@ -627,7 +627,7 @@ au BufNewFile,BufRead *.jinja set ft=json syntax=json
 au BufNewFile,BufRead .fishrc set ft=fish syntax=fish
 
 "" Better copy & paste
-"set pastetoggle=<F2>
+" set pastetoggle=<F2>
 
 " ==========================================================================
 " random vim settings tweaks
@@ -939,17 +939,20 @@ call togglebg#map("<F4>")
 au! BufEnter */silo-presets/*  let b:fswitchdst = 'json' | let b:fswitchlocs = 'reg:/silo-presets/silo-metadata'
 au! BufEnter */silo-metadata/* let b:fswitchdst = 'yaml,py,txt,xml,json' | let b:fswitchlocs = 'reg:/silo-metadata/silo-presets'
 
-"nnoremap <leader><leader>u :!rally preset upload --file "%" -e UAT<cr>
+nnoremap <leader><leader>u :!rally preset upload --file "%" -e MSDEV<cr>
+nnoremap <leader><leader>U :!rally preset upload --file "%" -e MSPROD<cr>
 "nnoremap <leader><leader>U :!rally preset upload --file "%" -e PROD --no-protect<cr>
 "nnoremap <leader><leader>i :!rally preset upload --file "%" -e QA<cr>
 "nnoremap <leader><leader>I :!rally preset upload --file "%" -e DEV<cr>
 "nnoremap <leader><leader>R :!rally preset upload --file "%" -e DEV<cr>
 nnoremap <leader>ru :!/Users/jschmidt/Library/Caches/fnm_multishells/11071_1708938644231/bin/rally supply make --file "%" --to MSDEV<cr>
+nnoremap <leader>rU :!/Users/jschmidt/Library/Caches/fnm_multishells/11071_1708938644231/bin/rally supply make --file "%" --to MSPROD<cr>
 "nnoremap <leader>ri :!rally supply make --file "%" --to QA<cr>
 "nnoremap <leader>rU :!rally supply make --file "%" --to PROD --no-protect<cr>
 "nnoremap <leader>rI :!rally supply make --file "%" --to DEV<cr>
 "nnoremap <leader>rk :!rally preset info --file "%" --e UAT,PROD<cr>
-"nnoremap <leader>rd :call Rallydiff("")<cr>
+nnoremap <leader>rd :call Rallydiff("-e MSDEV")<cr>
+nnoremap <leader>rD :call Rallydiff("-e MSPROD")<cr>
 "nnoremap <leader>rD :call Rallydiff("-e PROD")<cr>
 "nnoremap <leader>rc :call Rallydiff("-e QA")<cr>
 "nnoremap <leader>rC :call Rallydiff("-e DEV")<cr>

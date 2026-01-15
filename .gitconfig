@@ -7,8 +7,6 @@
     format = ssh
 [push]
 	default = current
-[color]
-    ui = always
 [alias]
 	tree = log --oneline --decorate --all --graph
 	hist = log --pretty=format:'%h %ad | %s%d [%an]' --graph --date=short
