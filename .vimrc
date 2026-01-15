@@ -157,10 +157,10 @@ if empty($NIX)
     endif
     "Plug 'fatih/vim-go'
     "Plug 'plasticboy/vim-markdown'
-    Plug 'nvim-lua/lsp-status.nvim'
+    "Plug 'nvim-lua/lsp-status.nvim'
 
     Plug 'nvim-lua/plenary.nvim'
-    Plug 'saecki/crates.nvim', { 'tag': 'v0.3.0' }
+    Plug 'saecki/crates.nvim', { 'tag': 'v0.7.0' }
 
     Plug 'github/copilot.vim'
 
@@ -181,15 +181,15 @@ endif
 lua << END
     local cmp = require'cmp'
 
-    local lsp_status = require('lsp-status')
-    lsp_status.register_progress()
-    lsp_status.config({
-        indicator_errors = 'E',
-        indicator_warnings = 'W',
-        indicator_info = 'i',
-        indicator_hint = 'H',
-        indicator_ok = 'Ok',
-    })
+    -- local lsp_status = require('lsp-status')
+    -- lsp_status.register_progress()
+    -- lsp_status.config({
+    --     indicator_errors = 'E',
+    --     indicator_warnings = 'W',
+    --     indicator_info = 'i',
+    --     indicator_hint = 'H',
+    --     indicator_ok = 'Ok',
+    -- })
 
     cmp.setup({
       snippet = {
@@ -288,11 +288,12 @@ lua << END
         },
       })
 
-      lsp_status.on_attach(client)
+      -- lsp_status.on_attach(client)
     end
 
     local capabilities_cmp = require('cmp_nvim_lsp').default_capabilities()
-    local capabilities = vim.tbl_extend('keep', capabilities_cmp, lsp_status.capabilities)
+    local capabilities = capabilities_cmp
+    -- local capabilities = vim.tbl_extend('keep', capabilities_cmp, lsp_status.capabilities)
 
     vim.g.rustaceanvim = {
         tools = {
@@ -866,9 +867,9 @@ function! StatuslineTabWarning()
 endfunction
 
 function! LspStatus() abort
-  if luaeval('#vim.lsp.get_clients() > 0')
-    return luaeval("require('lsp-status').status()")
-  endif
+  "if luaeval('#vim.lsp.get_clients() > 0')
+    "return luaeval("require('lsp-status').status()")
+  "endif
 
   return ''
 endfunction
