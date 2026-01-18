@@ -67,7 +67,7 @@
           ./nixos/arch-configuration.nix
           ({ config, ... }:
           {
-            hardware.nvidia.package = config.boot.kernelPackages.nvidiaPackages.beta;
+            hardware.nvidia.package = config.boot.kernelPackages.nvidiaPackages.stable;
           })
         ];
       };
