@@ -33,6 +33,17 @@
     alsa.enable = true;
     alsa.support32Bit = true;
     pulse.enable = true;
+    extraConfig = {
+      pipewire-pulse."chrome-no-audio" = {
+          "pulse.rules" = [
+            {
+              # prevent all sources matching "Chromium" from messing with the volume
+              matches = [ { "application.name" = "~Chromium.*"; } ];
+              actions = { quirks = [ "block-source-volume" ]; };
+            }
+          ];
+      };
+    };
     wireplumber.extraConfig = {
       "monitor.bluez.properties" = {
         "bluez5.enable-sbc-xq" = true;
