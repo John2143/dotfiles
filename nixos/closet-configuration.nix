@@ -113,8 +113,8 @@
       local all all trust
 
       # local trust
-      host all all 127.0.0.1/32 trust
-      host all all 192.168.1.1/24 trust
+      #host all all 127.0.0.1/32 trust
+      #host all all 192.168.1.1/24 trust
 
       # password login
       host all all 0.0.0.0/0 scram-sha-256
