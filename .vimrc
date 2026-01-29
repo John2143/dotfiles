@@ -615,6 +615,9 @@ vnoremap  :  ;
 " leader p to paste w/o yank
 vnoremap <leader>p "_dP
 
+nnoremap <silent> <leader> :WhichKey ','<CR>
+vnoremap <silent> <leader> :WhichKeyVisual ','<CR>
+
 if has("gui_running")
     " disable menubar in a mode I never use
     set guioptions -=m
