@@ -24,11 +24,7 @@
   #boot.loader.systemd-boot.enable = true;
   boot.loader = {
     efi.canTouchEfiVariables = true;
-    grub = {
-      extraEntries = '''';
-      enable = true;
-      device = "nodev";
-    };
+    systemd-boot.enable = true;
   };
 
   virtualisation.podman = {
