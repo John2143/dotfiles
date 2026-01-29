@@ -38,13 +38,17 @@ window#waybar {
     /*font-weight: normal;*/
     background: @button_background_color;
     /*color: #FEFCFD;*/
-    color: @button_text_color;
+    color: #FFFFFF;
     font-size: 24px;
     padding: 4px 15px;
     margin: 0px 3px;
     border-radius: 16px;
     /*background: rgba(17,17,27,1);*/
     /*transition: all 0.3s ease-in-out;*/
+}
+
+#workspaces button.empty {
+    color: #888888;
 }
 
 #workspaces button.focused {
@@ -56,9 +60,9 @@ window#waybar {
     background: @col_urgent;
 }
 
-#workspaces button.persistent {
-    color: #00FFFF;
-}
+/*#workspaces button.persistent {*/
+    /*color: #00FFFF;*/
+/*}*/
 
 #workspaces button.active {
     color: @colb;

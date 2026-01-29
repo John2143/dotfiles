@@ -11,6 +11,7 @@
         height = 30;
         modules-left = [
           "hyprland/workspaces"
+          "custom/newworkspace"
           "hyprland/window"
         ];
         modules-center = [ ];
@@ -42,6 +43,13 @@
             ""
           ];
           tooltip = true;
+        };
+
+        "custom/newworkspace" = {
+          format = "+";
+          tooltip = true;
+          tooltip-format = "Create new temporary workspace";
+          on-click = "NAME=$(cat /dev/random | head -c 10 | sha1sum | head -c 6) && hyprctl dispatch workspace name:$NAME";
         };
 
         "custom/mullvad" = {
