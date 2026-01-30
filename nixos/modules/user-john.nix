@@ -15,13 +15,14 @@ in
   users.users.john = {
     isNormalUser = true;
     extraGroups = [
-      "wheel"
-      "networkmanager"
-      "input"
-      "dialout"
-      "docker"
-      "ydotool"
-    ]; # Enable ‘sudo’ for the user.
+      "wheel" # to use sudo
+      "networkmanager" # to manage network connections
+      "input" # to access input devices
+      "dialout" # for serial devices like Arduino
+      "docker" # to use docker without sudo
+      "ydotool" # can act as a virtual keyboard and mouse
+      "seat" # used for login with lemurs
+    ];
     initialPassword = "john";
     shell = pkgs.fish;
     packages = [];

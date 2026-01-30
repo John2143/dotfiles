@@ -24,7 +24,7 @@
     #"ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFVckq0oXyXkxiLo39typ6PR039XrLwze/Cb0PZaTzmi john@office"
   #];
 
-  services.getty.autologinUser = "john";
+  #services.getty.autologinUser = "john";
 
   # Use the systemd-boot EFI boot loader.
   boot.loader = {
@@ -33,6 +33,9 @@
   };
   boot.supportedFilesystems = [ "ntfs" ];
   boot.binfmt.emulatedSystems = [ "aarch64-linux" ];
+  services.displayManager.lemurs = {
+    enable = true;
+  };
 
   services.resolved = {
     enable = true;
