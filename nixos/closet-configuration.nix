@@ -31,6 +31,23 @@
     dockerCompat = true;
   };
 
+  virtualisation.oci-containers = {
+    backend = "podman";
+    containers.teamspeak = {
+      image = "docker.io/teamspeak:latest";
+      ports = [
+        "9987:9987/udp"
+        "30033:30033"
+      ];
+      environment = {
+        TS3SERVER_LICENSE = "accept";
+      };
+      volumes = [
+        "/home/john/teamspeak/teamspeak3-server_linux_amd64_old:/var/ts3server"
+      ];
+    };
+  };
+
   networking.hostName = "closet"; # Define your hostname.
   networking.networkmanager.enable = true; # Easiest to use and most distros use this by default.
   networking.interfaces = {
