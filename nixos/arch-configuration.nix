@@ -36,6 +36,7 @@
   services.displayManager.lemurs = {
     enable = true;
   };
+  services.seatd.enable = true;
 
   services.resolved = {
     enable = true;

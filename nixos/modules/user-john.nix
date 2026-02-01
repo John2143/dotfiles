@@ -22,6 +22,10 @@ in
       "docker" # to use docker without sudo
       "ydotool" # can act as a virtual keyboard and mouse
       "seat" # used for login with lemurs
+      "video" # to access video devices
+      "audio" # to access audio devices
+      "lp" # to access printers
+      "scanner" # to access scanners
     ];
     initialPassword = "john";
     shell = pkgs.fish;
