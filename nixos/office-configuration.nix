@@ -26,6 +26,9 @@
     efi.canTouchEfiVariables = true;
     systemd-boot.enable = true;
   };
+  services.displayManager.lemurs = {
+    enable = true;
+  };
 
   virtualisation.podman = {
     enable = true;
