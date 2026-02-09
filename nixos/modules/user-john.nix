@@ -29,7 +29,8 @@ in
     ];
     initialPassword = "john";
     shell = pkgs.fish;
-    packages = [];
+    packages = [
+    ];
   };
   security.sudo.wheelNeedsPassword = false;
 

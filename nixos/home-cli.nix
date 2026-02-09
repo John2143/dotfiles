@@ -335,7 +335,7 @@ in
       # " :Tab
       # tabular
 
-      ctrlp
+      ctrlp-vim
 
       # " allows ctrl hjkl to work between both vim and tmux (also install tmux plugin)
       vim-tmux-navigator
@@ -353,7 +353,7 @@ in
 
       # " colorschemes
       # Plug 'altercation/vim-colors-solarized'
-      solarized
+      vim-colors-solarized
       sonokai
       gruvbox-material
       base16-vim

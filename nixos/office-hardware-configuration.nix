@@ -82,6 +82,7 @@
   hardware.graphics.extraPackages = with pkgs; [
     rocmPackages.clr.icd
   ];
+  hardware.graphics.enable32Bit = true;
 
   hardware.bluetooth.enable = true; # enables support for Bluetooth
   hardware.bluetooth.powerOnBoot = true; # powers up the default Bluetooth controller on boot

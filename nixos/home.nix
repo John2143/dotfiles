@@ -123,6 +123,7 @@ let
     easyeffects
     evremap
     imagemagick
+    protonup-qt
   ];
 
   # If we are on office computer, then also add the following:

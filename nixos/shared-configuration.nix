@@ -104,6 +104,7 @@
   #];
   # games
   programs.steam.enable = true;
+  programs.gamescope.enable = true;
   services.flatpak.enable = true;
 
   programs.ydotool = {
