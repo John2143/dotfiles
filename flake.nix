@@ -94,7 +94,7 @@
         modules = [
           inputs.home-manager.nixosModules.default
           ./nixos/shared-cli-configuration.nix
-          ./nixos/stradmsad-configuration.nix
+          ./nixos/strradmsad-configuration.nix
         ];
       };
 
