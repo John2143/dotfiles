@@ -20,6 +20,7 @@
   boot.initrd.kernelModules = [ "dm-snapshot" ];
   boot.kernelModules = [ ];
   boot.extraModulePackages = [ ];
+  virtualisation.vmware.guest.enable = true;
 
   fileSystems."/" = {
     device = "/dev/disk/by-label/NIX";
@@ -51,7 +52,6 @@
   # networking.interfaces.wlp0s20f3.useDHCP = lib.mkDefault true;
 
   nixpkgs.hostPlatform = lib.mkDefault "x86_64-linux";
-  hardware.cpu.intel.updateMicrocode = lib.mkDefault config.hardware.enableRedistributableFirmware;
 
   # hardware.bluetooth.enable = true; # enables support for Bluetooth
   # ardware.bluetooth.powerOnBoot = true; # powers up the default Bluetooth controller on boot
