@@ -111,6 +111,7 @@ in
     nixd
     postgresql_17 # need psql and stuff
     trash-cli # bound to "rmm"
+    s3cmd
   ];
 
   # Home Manager is pretty good at managing dotfiles. The primary way to manage
