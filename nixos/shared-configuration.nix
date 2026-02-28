@@ -135,7 +135,11 @@
     #};
   #};
 
-  services.udev.extraRules = builtins.readFile ./udev_embedded.rules;
+  services.udev.extraRules = (
+      builtins.readFile ./udev_embedded.rules
+      + "\n"
+      + builtins.readFile ./udev_keyboard_via.rules
+  );
 
   #systemd.services."kdeconnect-refresh" = {
     #script = ''

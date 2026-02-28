@@ -1,0 +1,9 @@
+# Copy this file to /etc/udev/rules.d/
+# If rules fail to reload automatically, you can refresh udev rules
+# with the command "udevadm control --reload"
+
+# This rules are based on the udev rules from the OpenOCD project, with unsupported probes removed.
+# See http://openocd.org/ for more details.
+#
+# This file is available under the GNU General Public License v2.0
+KERNEL=="hidraw*", SUBSYSTEM=="hidraw", ATTRS{idVendor}=="36b0", ATTRS{idProduct}=="3035", MODE="666", GROUP="plugdev", TAG+="uaccess"
