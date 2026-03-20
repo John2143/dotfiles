@@ -110,12 +110,12 @@ let
 
     e1s
     dbeaver-bin # db browser
-    warp-terminal # agent terminal
+    #warp-terminal # agent terminal
     code-cursor # agent terminal
 
     #wineWowPackages.stable
     winetricks
-    wineWowPackages.waylandFull
+    wineWow64Packages.waylandFull
     ungoogled-chromium # browser backup
     obs-studio # streaming
 
