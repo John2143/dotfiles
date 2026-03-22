@@ -417,6 +417,7 @@ in
 
   programs.git = {
     enable = true;
+    signing.format = "openpgp";
     settings = {
       user = {
         email = "john@john2143.com";
