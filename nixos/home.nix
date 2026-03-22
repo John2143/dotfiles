@@ -16,18 +16,7 @@ let
     nerd-fonts.roboto-mono # font also, "FiraCode" "DejaVuSansMono" "FiraMono"
 
     # cli
-    amdgpu_top # gpu stats
-    chatgpt-cli # yessir
     ffmpeg
-
-    # screenshots
-    # I use my own screenshoot script
-    slurp # use mouse to get a point on screen
-    grim # minimal screenshot program
-    swappy # screenshot editor
-    pkgs-stable.wf-recorder # screen recording
-    pkgs-stable.normcap # OCR screen recognition
-    hyprpicker # color picker
 
     #@ embedded programming
     #@ gcc-arm-embedded # arm compiler
@@ -35,7 +24,6 @@ let
     #@ probe-rs # rust <-> stm32
     #@ stlink # stm32 programmer
     #@ stm32cubemx # stm32 ide
-    prusa-slicer # 3d printer slicer
 
     # desktop tools (bars, clipbaords, notifications, etc)
     pulseaudio # pactl (audio)
@@ -54,25 +42,12 @@ let
     gammastep # redshift / f.lux / night light
     #spotifyd # play to spotify device if needed
 
-    temurin-jre-bin-21 # java
-
     hyprlock # screen locker
 
     # desktop programs (programs you can open)
     firefox # browser
     # floorp # browser
-    mullvad-vpn # vpn
     gthumb # image viewer
-    plex-desktop # plex
-    #spotify # music
-    (prismlauncher.override {
-      jdks = [
-        temurin-bin-21
-        temurin-bin-8
-        temurin-bin-17
-      ];
-    })
-    r2modman # game modding
     #vesktop # discord
     #discord # discord
     #discordo # discord
@@ -82,8 +57,6 @@ let
     #@ kdePackages.kdenlive # video editor
     # kdeconnect # phone sync (now in main settings)
     #v4l-utils # video inputs for linux (obs)
-    rusty-path-of-building # Path of Exile build planner
-    bitwarden-desktop # password manager
     vlc # video player
     mpv # video player
     wev # wayland event viewer
@@ -94,9 +67,6 @@ let
     lshw
     #@ darktable
     hyprpaper
-    kind
-    mongodb-compass
-    doctl
     # kubernetes-helm
 
     gparted
@@ -107,19 +77,51 @@ let
     #plasma5Packages.kdeconnect-kde
     kdePackages.ark
     kdePackages.gwenview
-
-    e1s
-    dbeaver-bin # db browser
     #warp-terminal # agent terminal
-    code-cursor # agent terminal
 
     #wineWowPackages.stable
     winetricks
     wineWow64Packages.waylandFull
     ungoogled-chromium # browser backup
-    obs-studio # streaming
 
     xlsclients
+  ];
+
+  # not needed for minimal stuff like security cam
+  extensionPackages = with pkgs; [
+    # screenshots
+    # I use my own screenshoot script
+    slurp # use mouse to get a point on screen
+    grim # minimal screenshot program
+    swappy # screenshot editor
+    pkgs-stable.wf-recorder # screen recording
+    pkgs-stable.normcap # OCR screen recognition
+    hyprpicker # color picker
+
+    temurin-jre-bin-21 # java
+
+    mullvad-vpn # vpn
+    plex-desktop # plex
+    #spotify # music
+    (prismlauncher.override {
+      jdks = [
+        temurin-bin-21
+        temurin-bin-8
+        temurin-bin-17
+      ];
+    })
+    r2modman # game modding
+    rusty-path-of-building # Path of Exile build planner
+    bitwarden-desktop # password manager
+    kind
+    mongodb-compass
+    doctl
+
+    e1s
+    dbeaver-bin # db browser
+
+    code-cursor # agent terminal
+    obs-studio # streaming
     easyeffects
     evremap
     imagemagick
@@ -127,7 +129,8 @@ let
   ];
 
   # If we are on office computer, then also add the following:
-  optionalPackages = with pkgs; [
+  optionalPackagesOffice = with pkgs; [
+    amdgpu_top # gpu stats
     kicad # PCB Hardware Layout
     blender
     #wine-wayland # wine
@@ -135,6 +138,7 @@ let
 
   # On my other computer, I want to install these
   optionalPackagesUpstairs = with pkgs; [
+    prusa-slicer # 3d printer slicer
     monero-cli
     monero-gui
     cryptsetup
@@ -152,8 +156,8 @@ in
 
   # Check hostname to determine what to install
   home.packages =
-    if compName == "office" then primaryPackages ++ optionalPackages else
-    if compName == "arch" then primaryPackages ++ optionalPackagesUpstairs else
+    if compName == "office" then primaryPackages ++ optionalPackagesOffice ++ extensionPackages else
+    if compName == "arch" then primaryPackages ++ optionalPackagesUpstairs ++ extensionPackages else
     primaryPackages;
 
   nixpkgs.overlays = [

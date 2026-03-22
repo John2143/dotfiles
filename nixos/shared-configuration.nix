@@ -22,11 +22,6 @@
     scientifica
   ];
 
-  # VPN
-  services.mullvad-vpn = {
-    enable = true;
-  };
-
   # audio
   services.pipewire = {
     enable = true;
@@ -103,24 +98,10 @@
   #environment.systemPackages = with pkgs; [
   #];
   # games
-  programs.steam.enable = true;
-  programs.gamescope.enable = true;
   services.flatpak.enable = true;
 
   programs.ydotool = {
     enable = true;
-  };
-
-  # Enable CUPS to print documents.
-  services.printing = {
-    enable = true;
-    drivers = [
-      pkgs-stable.brlaser
-    ];
-    listenAddresses = [ "*:631" ];
-    allowFrom = [ "all" ];
-    browsing = true;
-    defaultShared = true;
   };
 
   # bluetooth
@@ -134,12 +115,6 @@
       #Unit = "kdeconnect-refresh.service";
     #};
   #};
-
-  services.udev.extraRules = (
-      builtins.readFile ./udev_embedded.rules
-      + "\n"
-      + builtins.readFile ./udev_keyboard_via.rules
-  );
 
   #systemd.services."kdeconnect-refresh" = {
     #script = ''

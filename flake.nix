@@ -50,6 +50,7 @@
           inputs.home-manager.nixosModules.default
           ./nixos/shared-cli-configuration.nix
           ./nixos/shared-configuration.nix
+          ./nixos/shared-games-configuration.nix
           ./nixos/office-configuration.nix
         ];
       };
@@ -64,6 +65,7 @@
           inputs.home-manager.nixosModules.default
           ./nixos/shared-cli-configuration.nix
           ./nixos/shared-configuration.nix
+          ./nixos/shared-games-configuration.nix
           ./nixos/arch-configuration.nix
           ({ config, ... }:
           {
@@ -98,19 +100,61 @@
         ];
       };
 
-      #nixosConfigurations.rpi4b = nixpkgs.lib.nixosSystem {
+      nixosConfigurations.security = nixpkgs.lib.nixosSystem {
+        inherit system;
+        specialArgs = {
+          inherit inputs;
+          compName = "security";
+        };
+        modules = [
+          inputs.home-manager.nixosModules.default
+          ./nixos/shared-cli-configuration.nix
+          ./nixos/security-configuration.nix
+        ];
+      };
+
+      #nixosConfigurations.security = nixpkgs.lib.nixosSystem {
         #system = "aarch64-linux";
         #modules = [
-          #disko.nixosModules.disko
-          #./nixos/simple-efi.nix
-          #{ disko.devices.disk.my-disk.device = "/dev/mmcblk0"; }
+          #({ config, pkgs, lib, ...}:
+          #{
+              #imports =
+                #[
+                  #<nixos-hardware/raspberry-pi/4>
+                  #./hardware-configuration.nix
+                #];
+              #hardware = {
+                #raspberry-pi."4".apply-overlays-dtmerge.enable = true;
+                #deviceTree = {
+                  #enable = true;
+                  #filter = "*rpi-4-*.dtb";
+                #};
+              #};
+              #console.enable = false;
+              #environment.systemPackages = with pkgs; [
+                #libraspberrypi
+                #raspberrypi-eeprom
+              #];
+              #system.stateVersion = "25.11";
+          #})
+          #({ pkgs, ... }:
+            #{
+              #imports = [
+                #.../nixos-hardware/raspberry-pi/4
+              #];
 
-          #inputs.home-manager.nixosModules.default
-          #./nixos/shared-cli-configuration.nix
-          #./nixos/rpi4b-configuration.nix
+              #hardware.raspberry-pi."4".fkms-3d.enable = true;
+
+              #services.xserver = {
+                #enable = true;
+                #displayManager.lightdm.enable = true;
+                #desktopManager.gnome.enable = true;
+              #};
+          #})
+
         #];
       #};
 
-      #images.rpi1 = nixosConfigurations.rpi1.config.system.build.sdImage;
+      #images.security = nixosConfigurations.security.config.system.build.sdImage;
     };
 }
