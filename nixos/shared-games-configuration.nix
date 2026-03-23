@@ -21,6 +21,10 @@
   programs.steam.enable = true;
   programs.gamescope.enable = true;
   services.flatpak.enable = true;
+  environment.systemPackages = with pkgs; [
+    via
+    qmk
+  ];
 
   # Enable CUPS to print documents.
   services.printing = {
