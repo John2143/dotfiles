@@ -2,7 +2,8 @@ set -x EMAIL_NAME "john"
 set -x EMAIL_DOMAIN "john2143.com"
 set HOST (hostname -s)
 set NIX false
-if ls -la /nix
+ls -la /nix > /dev/null
+if test $status = 0
     set -x NIX true
 end
 
