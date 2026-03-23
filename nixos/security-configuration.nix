@@ -24,6 +24,7 @@
   boot.loader = {
     grub.enable = false;
     generic-extlinux-compatible.enable = true;
+    #systemd-boot.enable = true;
   };
 
   virtualisation.podman = {
@@ -31,17 +32,10 @@
     dockerCompat = true;
   };
 
+  services.resolved.enable = true;
+
   networking.hostName = "security"; # Define your hostname.
   networking.networkmanager.enable = true; # Easiest to use and most distros use this by default.
-  networking.interfaces = {
-    enp6s0.ipv4.addresses = [
-      {
-        address = "192.168.1.69";
-        prefixLength = 24;
-      }
-    ];
-  };
-
   networking.defaultGateway = "192.168.1.1";
   networking.nameservers = [
     "1.1.1.1"

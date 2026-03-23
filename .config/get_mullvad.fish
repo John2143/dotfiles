@@ -1,5 +1,12 @@
 #!/usr/bin/env fish
 
+mullvad help > /dev/null
+
+if test $status = 127
+    echo "-"
+    exit 0
+end
+
 set mvstatus (mullvad status -j | string collect)
 
 set connection_status (echo $mvstatus | jq -r '.state')

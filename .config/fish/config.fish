@@ -11,6 +11,9 @@ end
 if test "$HOST" = "arch"
     set -x NIX true
 end
+if test "$HOST" = "security"
+    set -x NIX true
+end
 
 
 if [ (uname) = "Linux" ]
