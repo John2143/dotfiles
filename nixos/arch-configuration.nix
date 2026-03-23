@@ -38,8 +38,6 @@
   };
   services.seatd.enable = true;
 
-  services.tailscale.enable = true;
-
   services.resolved = {
     enable = true;
     settings = {

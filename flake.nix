@@ -52,6 +52,7 @@
           ./nixos/shared-configuration.nix
           ./nixos/shared-games-configuration.nix
           ./nixos/office-configuration.nix
+          ./nixos/tailscale.nix
         ];
       };
 
@@ -67,6 +68,7 @@
           ./nixos/shared-configuration.nix
           ./nixos/shared-games-configuration.nix
           ./nixos/arch-configuration.nix
+          ./nixos/tailscale.nix
           ({ config, ... }:
           {
             hardware.nvidia.package = config.boot.kernelPackages.nvidiaPackages.stable;
@@ -84,6 +86,7 @@
           inputs.home-manager.nixosModules.default
           ./nixos/shared-cli-configuration.nix
           ./nixos/closet-configuration.nix
+          ./nixos/tailscale.nix
         ];
       };
 
@@ -111,6 +114,7 @@
           ./nixos/shared-cli-configuration.nix
           ./nixos/shared-configuration.nix
           ./nixos/security-configuration.nix
+          ./nixos/tailscale.nix
         ];
       };
 
@@ -125,6 +129,7 @@
           ./nixos/shared-cli-configuration.nix
           ./nixos/shared-configuration.nix
           ./nixos/security-configuration.nix
+          ./nixos/tailscale.nix
         ];
       };
 
