@@ -80,8 +80,6 @@ let
     #warp-terminal # agent terminal
 
     #wineWowPackages.stable
-    winetricks
-    wineWow64Packages.waylandFull
     ungoogled-chromium # browser backup
 
     xlsclients
@@ -91,6 +89,8 @@ let
   extensionPackages = with pkgs; [
     # screenshots
     # I use my own screenshoot script
+    wineWow64Packages.waylandFull
+    winetricks
     slurp # use mouse to get a point on screen
     grim # minimal screenshot program
     swappy # screenshot editor
