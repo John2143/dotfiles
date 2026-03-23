@@ -18,7 +18,7 @@
     #./modules/ollama.nix
     # inputs.home-manager.nixosModules.default
   ];
-  home-manager.users."john" = import ./home-cli.nix;
+  home-manager.users."john" = import ./home.nix;
 
   # Use the systemd-boot EFI boot loader.;
   boot.loader = {

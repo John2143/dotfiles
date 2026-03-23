@@ -109,6 +109,7 @@
         modules = [
           inputs.home-manager.nixosModules.default
           ./nixos/shared-cli-configuration.nix
+          ./nixos/shared-configuration.nix
           ./nixos/security-configuration.nix
         ];
       };
