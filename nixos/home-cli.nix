@@ -173,19 +173,19 @@ in
         end
         kubectl config use-context $new_env
       '';
-      mullvad-split-tunnel.body = ''
-        set appname "$argv[1]";
-        set procs (ps aux | grep $appname | grep -v "0:00 rg" | choose 1)
-        set num_procs (echo $procs | wc -l)
+      #mullvad-split-tunnel.body = ''
+        #set appname "$argv[1]";
+        #set procs (ps aux | grep $appname | grep -v "0:00 rg" | choose 1)
+        #set num_procs (echo $procs | wc -l)
 
-        # Echo to stderr so that other scripts can use this command
-        echo 1>&2 "Ignoring $appname ($num_procs matches)";
-        for pid in $procs;
-            echo -n "Split-tunneling $pid ... ";
-            mullvad split-tunnel add $pid;
-        end
-        echo 1>&2 "Done"
-      '';
+        ## Echo to stderr so that other scripts can use this command
+        #echo 1>&2 "Ignoring $appname ($num_procs matches)";
+        #for pid in $procs;
+            #echo -n "Split-tunneling $pid ... ";
+            #mullvad split-tunnel add $pid;
+        #end
+        #echo 1>&2 "Done"
+      #'';
       test-program.body = ''
         set -f program "$argv[1]"
         mkdir -p ~/test/$program

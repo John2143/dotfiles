@@ -99,7 +99,7 @@ let
 
     temurin-jre-bin-21 # java
 
-    mullvad-vpn # vpn
+    #mullvad-vpn # vpn
     plex-desktop # plex
     #spotify # music
     (prismlauncher.override {
@@ -193,8 +193,8 @@ in
     ";
     # "waybar".source = config.lib.file.mkOutOfStoreSymlink ../.config/waybar;
 
-    "get_sunset.fish".source = config.lib.file.mkOutOfStoreSymlink ../.config/get_sunset.fish;
-    "get_mullvad.fish".source = config.lib.file.mkOutOfStoreSymlink ../.config/get_mullvad.fish;
+    #"get_sunset.fish".source = config.lib.file.mkOutOfStoreSymlink ../.config/get_sunset.fish;
+    #"get_mullvad.fish".source = config.lib.file.mkOutOfStoreSymlink ../.config/get_mullvad.fish;
 
     "focussed-vol-adjust.sh".source =
       builtins.fetchGit {

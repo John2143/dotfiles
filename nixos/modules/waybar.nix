@@ -16,7 +16,7 @@
         ];
         modules-center = [ ];
         modules-right = [
-          "custom/mullvad"
+          #"custom/mullvad"
           "cpu"
           "memory"
           "temperature"
@@ -52,14 +52,14 @@
           on-click = "NAME=$(cat /dev/random | head -c 10 | sha1sum | head -c 6) && hyprctl dispatch workspace name:$NAME";
         };
 
-        "custom/mullvad" = {
-          interval = 20;
-          exec = "~/.config/get_mullvad.fish";
-          on-click = "${pkgs.mullvad-vpn}/bin/mullvad connect; sleep 2";
-          on-click-right = "${pkgs.mullvad-vpn}/bin/mullvad disconnect; sleep 1";
-          on-click-middle = "${pkgs.mullvad-vpn}/bin/mullvad reconnect; sleep 2";
-          exec-on-event = true;
-        };
+        #"custom/mullvad" = {
+          #interval = 20;
+          #exec = "~/.config/get_mullvad.fish";
+          #on-click = "${pkgs.mullvad-vpn}/bin/mullvad connect; sleep 2";
+          #on-click-right = "${pkgs.mullvad-vpn}/bin/mullvad disconnect; sleep 1";
+          #on-click-middle = "${pkgs.mullvad-vpn}/bin/mullvad reconnect; sleep 2";
+          #exec-on-event = true;
+        #};
 
         "clock#time" = {
           interval = 1;
