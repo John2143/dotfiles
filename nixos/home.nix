@@ -85,11 +85,10 @@ let
     xlsclients
   ];
 
-  # not needed for minimal stuff like security cam
+  # not needed for minimal stuff not on security cam
   extensionPackages = with pkgs; [
-    # screenshots
-    # I use my own screenshoot script
-    wineWow64Packages.waylandFull
+    wineWow64Packages.stable
+    #wineWow64Packages.waylandFull
     winetricks
     slurp # use mouse to get a point on screen
     grim # minimal screenshot program

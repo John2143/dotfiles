@@ -8,6 +8,7 @@
   pkgs,
   pkgs-stable,
   inputs,
+  compName,
   ...
 }:
 
@@ -55,7 +56,7 @@
     };
   };
 
-  networking.hostName = "security"; # Define your hostname.
+  networking.hostName = compName; # Define your hostname.
   networking.networkmanager.enable = true; # Easiest to use and most distros use this by default.
   networking.defaultGateway = "192.168.1.1";
   networking.nameservers = [

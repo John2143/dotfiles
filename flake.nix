@@ -114,6 +114,20 @@
         ];
       };
 
+      nixosConfigurations.pite = nixpkgs.lib.nixosSystem {
+        inherit system;
+        specialArgs = {
+          inherit inputs;
+          compName = "pite";
+        };
+        modules = [
+          inputs.home-manager.nixosModules.default
+          ./nixos/shared-cli-configuration.nix
+          ./nixos/shared-configuration.nix
+          ./nixos/security-configuration.nix
+        ];
+      };
+
       #nixosConfigurations.security = nixpkgs.lib.nixosSystem {
         #system = "aarch64-linux";
         #modules = [
