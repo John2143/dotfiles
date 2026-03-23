@@ -19,6 +19,7 @@
     # inputs.home-manager.nixosModules.default
   ];
   home-manager.users."john" = import ./home.nix;
+  services.getty.autologinUser = "john";
 
   # Use the systemd-boot EFI boot loader.;
   boot.loader = {
@@ -32,7 +33,27 @@
     dockerCompat = true;
   };
 
-  services.resolved.enable = true;
+  services.displayManager.lemurs = {
+    enable = true;
+  };
+  services.seatd.enable = true;
+
+  services.resolved = {
+    enable = true;
+    settings = {
+      Resolve = {
+        DNSOverTLS = "true";
+        DNSSEC = "true";
+        Domains = [
+          "~."
+        ];
+        FallbackDNS = [
+          "1.1.1.1"
+          "1.0.0.1"
+        ];
+      };
+    };
+  };
 
   networking.hostName = "security"; # Define your hostname.
   networking.networkmanager.enable = true; # Easiest to use and most distros use this by default.
