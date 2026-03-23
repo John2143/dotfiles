@@ -21,6 +21,7 @@
   programs.steam.enable = true;
   programs.gamescope.enable = true;
   services.flatpak.enable = true;
+  services.udev.packages = [ pkgs.via ];
   environment.systemPackages = with pkgs; [
     via
     qmk

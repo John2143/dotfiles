@@ -49,7 +49,6 @@ let
     # floorp # browser
     gthumb # image viewer
     #vesktop # discord
-    discord # discord
     #discordo # discord
     #equibop # discord
     # discord-canary # discord
@@ -87,6 +86,7 @@ let
 
   # not needed for minimal stuff not on security cam
   extensionPackages = with pkgs; [
+    discord # discord
     wineWow64Packages.stable
     #wineWow64Packages.waylandFull
     winetricks
