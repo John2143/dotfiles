@@ -49,7 +49,7 @@ let
     # floorp # browser
     gthumb # image viewer
     #vesktop # discord
-    #discord # discord
+    discord # discord
     #discordo # discord
     #equibop # discord
     # discord-canary # discord

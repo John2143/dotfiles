@@ -47,7 +47,6 @@ in
   # The home.packages option allows you to install Nix packages into your
   # environment.
   home.packages = with pkgs; [
-    udiskie # disks
     # neovim
 
     # cli
@@ -144,6 +143,14 @@ in
   #
   home.sessionVariables = {
     EDITOR = "nvim";
+  };
+
+  services.udiskie = {
+    enable = true;
+    settings = {
+      program_options = {
+      };
+    };
   };
 
   programs.fish = {
