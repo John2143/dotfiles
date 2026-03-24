@@ -116,6 +116,20 @@
   services.k3s = {
     enable = true;
     role = "server";
+    manifests.traefik-config.content = {
+      apiVersion = "helm.cattle.io/v1";
+      kind = "HelmChartConfig";
+      metadata = {
+        name = "traefik";
+        namespace = "kube-system";
+      };
+      spec.valuesContent = ''
+        providers:
+          kubernetesGateway:
+            enabled: true
+            experimentalChannel: true
+      '';
+    };
   };
 
   services.postgresql = {
