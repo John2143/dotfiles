@@ -89,7 +89,7 @@ let
     discord # discord
     #wineWow64Packages.stable
     wineWow64Packages.waylandFull
-    wine64
+    #wine64
 
     winetricks
     slurp # use mouse to get a point on screen
