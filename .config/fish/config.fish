@@ -2,19 +2,10 @@ set -x EMAIL_NAME "john"
 set -x EMAIL_DOMAIN "john2143.com"
 set HOST (hostname -s)
 set NIX false
-if test "$HOST" = "office"
+ls -la /nix > /dev/null
+if test $status = 0
     set -x NIX true
 end
-if test "$HOST" = "closet"
-    set -x NIX true
-end
-if test "$HOST" = "arch"
-    set -x NIX true
-end
-if test "$HOST" = "security"
-    set -x NIX true
-end
-
 
 if [ (uname) = "Linux" ]
     function screenshot_location

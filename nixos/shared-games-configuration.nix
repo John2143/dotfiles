@@ -13,9 +13,9 @@
 
 {
   # VPN
-  services.mullvad-vpn = {
-    enable = true;
-  };
+  #services.mullvad-vpn = {
+    #enable = true;
+  #};
 
   # games
   programs.steam.enable = true;
