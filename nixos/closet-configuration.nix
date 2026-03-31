@@ -8,6 +8,8 @@
   pkgs,
   pkgs-stable,
   inputs,
+  sshKeys,
+  compName,
   ...
 }:
 
@@ -48,7 +50,7 @@
     #};
   #};
 
-  networking.hostName = "closet"; # Define your hostname.
+  networking.hostName = compName; # Define your hostname.
   networking.networkmanager.enable = true; # Easiest to use and most distros use this by default.
   networking.interfaces = {
     enp6s0.ipv4.addresses = [
@@ -92,11 +94,7 @@
   # ================
 
   # Enable the OpenSSH daemon.
-  users.users."john".openssh.authorizedKeys.keys = [
-    "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOktI2Vry/5fbhZiG35o5mf7w3dnaTEDqkRJVM07cu3a john@arch"
-    "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFVckq0oXyXkxiLo39typ6PR039XrLwze/Cb0PZaTzmi john@office"
-    "ecdsa-sha2-nistp256 AAAAE2VjZHNhLXNoYTItbmlzdHAyNTYAAAAIbmlzdHAyNTYAAABBBHjc0NNrHCwjrBUvUByFoFPW9vKGVFsWVD6LoKp1FLtNaIjyigMTYXoCKZSNNguKdNwUiyqKIZfCExZmgc3Cccw= phone"
-  ];
+  users.users."john".openssh.authorizedKeys.keys = sshKeys;
   services.avahi = {
     enable = true;
     nssmdns4 = true;

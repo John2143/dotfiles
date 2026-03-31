@@ -36,6 +36,11 @@
           #hardware.nvidia.package = config.boot.kernelPackages.nvidiaPackages.stable;
         })
       ];
+      my-keys = [
+        "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOktI2Vry/5fbhZiG35o5mf7w3dnaTEDqkRJVM07cu3a john@arch"
+        "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFVckq0oXyXkxiLo39typ6PR039XrLwze/Cb0PZaTzmi john@office"
+        "ecdsa-sha2-nistp256 AAAAE2VjZHNhLXNoYTItbmlzdHAyNTYAAAAIbmlzdHAyNTYAAABBBHjc0NNrHCwjrBUvUByFoFPW9vKGVFsWVD6LoKp1FLtNaIjyigMTYXoCKZSNNguKdNwUiyqKIZfCExZmgc3Cccw= phone"
+      ];
     in
     rec {
       formatter.x86_64-linux = nixpkgs.legacyPackages.${system}.nixfmt-tree;
@@ -45,6 +50,7 @@
         specialArgs = {
           inherit inputs;
           compName = "office";
+          sshKeys = my-keys;
         };
         modules = [
           inputs.home-manager.nixosModules.default
@@ -61,6 +67,7 @@
         specialArgs = {
           inherit inputs;
           compName = "arch";
+          sshKeys = my-keys;
         };
         modules = [
           inputs.home-manager.nixosModules.default
@@ -81,6 +88,7 @@
         specialArgs = {
           inherit inputs;
           compName = "closet";
+          sshKeys = my-keys;
         };
         modules = [
           inputs.home-manager.nixosModules.default
@@ -108,6 +116,7 @@
         specialArgs = {
           inherit inputs;
           compName = "security";
+          sshKeys = my-keys;
         };
         modules = [
           inputs.home-manager.nixosModules.default
@@ -115,6 +124,27 @@
           ./nixos/shared-configuration.nix
           ./nixos/security-configuration.nix
           ./nixos/tailscale.nix
+          #(
+            #{ ... }:
+            #{  
+              #virtualisation.oci-containers = {
+                #backend = "podman";
+                #containers.homeassistant = {
+                  #volumes = [ "home-assistant:/config" ];
+                  #environment.TZ = "Europe/Berlin";
+                  ## Note: The image will not be updated on rebuilds, unless the version label changes
+                  #image = "ghcr.io/home-assistant/home-assistant:stable";
+                  #extraOptions = [ 
+                    ## Use the host network namespace for all sockets
+                    #"--network=host"
+                    ## Pass devices into the container, so Home Assistant can discover and make use of them
+                    #"--device=/dev/ttyUSB0:/dev/ttyUSB0"
+                  #];
+                #};
+              #};
+            #}
+          #)
+
         ];
       };
 
