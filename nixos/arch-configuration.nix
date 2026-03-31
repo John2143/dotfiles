@@ -88,7 +88,6 @@
     enable = true;
     role = "agent";
     serverAddr = "https://192.168.1.35:6443";
-    extraFlags = "--node-ip=0.0.0.0,::";
     token = "K10c774bc9053c47bd55747f362531fb443f6ca1e4364143dbd74acdd4156eb6878::gw42uk.w06j3n5hkp5o30h8";
   };
 

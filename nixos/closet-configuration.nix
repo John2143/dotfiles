@@ -118,8 +118,8 @@
       # Dual-stack pod and service networks (IPv4 + IPv6)
       "--cluster-cidr=10.42.0.0/16,fd42:42:42::/56"
       "--service-cidr=10.43.0.0/16,fd42:42:43::/112"
-      # Auto-detect both node address families from default routes
-      "--node-ip=0.0.0.0,::"
+      # Dual-stack nodes must use explicit IPv4+IPv6 addresses
+      "--node-ip=192.168.1.35,2600:4040:25f0:c500:42b0:76ff:fed9:6992"
       # Required for IPv6 pod egress when using flannel
       "--flannel-ipv6-masq"
       # Keep standard per-node subnet sizing across families
