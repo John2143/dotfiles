@@ -116,6 +116,16 @@
   services.k3s = {
     enable = true;
     role = "server";
+    extraFlags = lib.concatStringsSep " " [
+      # Dual-stack pod and service networks (IPv4 + IPv6)
+      "--cluster-cidr=10.42.0.0/16,fd42:42:42::/56"
+      "--service-cidr=10.43.0.0/16,fd42:42:43::/112"
+      # Required for IPv6 pod egress when using flannel
+      "--flannel-ipv6-masq"
+      # Keep standard per-node subnet sizing across families
+      "--kube-controller-manager-arg=node-cidr-mask-size-ipv4=24"
+      "--kube-controller-manager-arg=node-cidr-mask-size-ipv6=64"
+    ];
     manifests.traefik-config.content = {
       apiVersion = "helm.cattle.io/v1";
       kind = "HelmChartConfig";
