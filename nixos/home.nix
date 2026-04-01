@@ -143,6 +143,8 @@ let
     monero-cli
     monero-gui
     cryptsetup
+    woeusb-ng
+
     #wineWowPackages.stable
     #winetricks
     #wineWowPackages.waylandFull

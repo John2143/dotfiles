@@ -5,10 +5,19 @@
   config,
   lib,
   modulesPath,
+  pkgs,
   ...
 }:
+let
+  no-rgb = pkgs.writeScriptBin "no-rgb" ''
+    #!/bin/sh
+    NUM_DEVICES=$(${pkgs.openrgb}/bin/openrgb --noautoconnect --list-devices | grep -E '^[0-9]+: ' | wc -l)
 
-{
+    for i in $(seq 0 $(($NUM_DEVICES - 1))); do
+      ${pkgs.openrgb}/bin/openrgb --noautoconnect --device $i --mode static --color 000000
+    done
+  '';
+in {
   imports = [
     (modulesPath + "/installer/scan/not-detected.nix")
   ];
@@ -19,7 +28,12 @@
     "usbhid"
   ];
   boot.initrd.kernelModules = [ ];
-  boot.kernelModules = [ "kvm-intel" ];
+  boot.kernelModules = [
+    "kvm-intel"
+    "i2c-dev"
+  ];
+  hardware.i2c.enable = true;
+  services.hardware.openrgb.enable = true;
   boot.kernelParams = [
     "video=DP-1:2560x1440@120"
     "video=HDMI-A-2:2560x1440@120"
@@ -33,6 +47,14 @@
     device = "/dev/disk/by-label/NIX";
     fsType = "ext4";
     neededForBoot = true;
+  };
+  systemd.services.no-rgb = {
+    description = "no-rgb";
+    serviceConfig = {
+      ExecStart = "${no-rgb}/bin/no-rgb";
+      Type = "oneshot";
+    };
+    wantedBy = [ "multi-user.target" ];
   };
 
   #fileSystems."/mnt/arch" = {
