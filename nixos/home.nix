@@ -87,8 +87,8 @@ let
   # not needed for minimal stuff not on security cam
   extensionPackages = with pkgs; [
     discord # discord
-    #wineWow64Packages.stable
-    wineWow64Packages.waylandFull
+    wineWow64Packages.stable
+    #wineWow64Packages.waylandFull
     #wine64
 
     winetricks
