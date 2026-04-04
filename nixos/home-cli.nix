@@ -99,8 +99,8 @@ in
     # Other / unsorted
     # kubernetes-helm
     nodejs
-    nodePackages."@tailwindcss/language-server" # tailwindcss language server for neovim
-    nodePackages.yaml-language-server # yaml language server for neovim
+    #nodePackages."@tailwindcss/language-server" # tailwindcss language server for neovim
+    #nodePackages.yaml-language-server # yaml language server for neovim
 
     localsend
     fastfetch
