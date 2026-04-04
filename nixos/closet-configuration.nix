@@ -8,6 +8,8 @@
   pkgs,
   pkgs-stable,
   inputs,
+  sshKeys,
+  compName,
   ...
 }:
 
@@ -48,7 +50,7 @@
     #};
   #};
 
-  networking.hostName = "closet"; # Define your hostname.
+  networking.hostName = compName; # Define your hostname.
   networking.networkmanager.enable = true; # Easiest to use and most distros use this by default.
   networking.interfaces = {
     enp6s0.ipv4.addresses = [
@@ -92,11 +94,7 @@
   # ================
 
   # Enable the OpenSSH daemon.
-  users.users."john".openssh.authorizedKeys.keys = [
-    "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOktI2Vry/5fbhZiG35o5mf7w3dnaTEDqkRJVM07cu3a john@arch"
-    "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFVckq0oXyXkxiLo39typ6PR039XrLwze/Cb0PZaTzmi john@office"
-    "ecdsa-sha2-nistp256 AAAAE2VjZHNhLXNoYTItbmlzdHAyNTYAAAAIbmlzdHAyNTYAAABBBHjc0NNrHCwjrBUvUByFoFPW9vKGVFsWVD6LoKp1FLtNaIjyigMTYXoCKZSNNguKdNwUiyqKIZfCExZmgc3Cccw= phone"
-  ];
+  users.users."john".openssh.authorizedKeys.keys = sshKeys;
   services.avahi = {
     enable = true;
     nssmdns4 = true;
@@ -116,6 +114,18 @@
   services.k3s = {
     enable = true;
     role = "server";
+    extraFlags = lib.concatStringsSep " " [
+      # Dual-stack pod and service networks (IPv4 + IPv6)
+      "--cluster-cidr=10.42.0.0/16,fd42:42:42::/56"
+      "--service-cidr=10.43.0.0/16,fd42:42:43::/112"
+      # Dual-stack nodes must use explicit IPv4+IPv6 addresses
+      "--node-ip=192.168.1.35,2600:4040:25f0:c500:42b0:76ff:fed9:6992"
+      # Required for IPv6 pod egress when using flannel
+      "--flannel-ipv6-masq"
+      # Keep standard per-node subnet sizing across families
+      "--kube-controller-manager-arg=node-cidr-mask-size-ipv4=24"
+      "--kube-controller-manager-arg=node-cidr-mask-size-ipv6=64"
+    ];
     manifests.traefik-config.content = {
       apiVersion = "helm.cattle.io/v1";
       kind = "HelmChartConfig";
