@@ -175,6 +175,21 @@
         ];
       };
 
+      nixosConfigurations.man = nixpkgs.lib.nixosSystem {
+        inherit system;
+        specialArgs = {
+          inherit inputs;
+          compName = "man";
+        };
+        modules = [
+          inputs.home-manager.nixosModules.default
+          ./nixos/shared-cli-configuration.nix
+          ./nixos/shared-configuration.nix
+          ./nixos/man-configuration.nix
+          ./nixos/tailscale.nix
+        ];
+      };
+
       #nixosConfigurations.security = nixpkgs.lib.nixosSystem {
         #system = "aarch64-linux";
         #modules = [
