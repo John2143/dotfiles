@@ -158,6 +158,7 @@
         specialArgs = {
           inherit inputs;
           compName = "pite";
+          sshKeys = my-keys;
         };
         modules = [
           inputs.home-manager.nixosModules.default
@@ -175,14 +176,17 @@
         inherit system;
         specialArgs = {
           inherit inputs;
-          compName = "man";
+          compName = "aman";
+          sshKeys = my-keys;
         };
         modules = [
           inputs.home-manager.nixosModules.default
           ./nixos/shared-cli-configuration.nix
           ./nixos/shared-configuration.nix
-          ./nixos/man-configuration.nix
+          ./nixos/security-configuration.nix
+          ./nixos/modules/k3s-agent.nix
           ./nixos/tailscale.nix
+          { custom.k3sNodeTaints = [ "aarch=true:NoSchedule" ]; }
         ];
       };
 
