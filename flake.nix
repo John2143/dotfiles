@@ -85,10 +85,6 @@
           ./nixos/arch-configuration.nix
           ./nixos/modules/k3s-agent.nix
           ./nixos/tailscale.nix
-          ({ config, ... }:
-          {
-            hardware.nvidia.package = config.boot.kernelPackages.nvidiaPackages.stable;
-          })
         ];
       };
 
