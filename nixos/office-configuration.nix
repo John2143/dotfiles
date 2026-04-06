@@ -3,7 +3,6 @@
 # https://search.nixos.org/options and in the NixOS manual (`nixos-help`).
 
 {
-  config,
   lib,
   pkgs,
   pkgs-stable,
@@ -117,20 +116,7 @@
     };
   };
 
-  age.identityPaths = [ "/home/john/.ssh/age" ];
-  age.secrets.k3s-local-token = {
-    file = ../secrets/k3s-local-token.age;
-    mode = "0400";
-    owner = "root";
-    group = "root";
-  };
-
-  services.k3s = {
-    enable = true;
-    role = "agent";
-    serverAddr = "https://192.168.1.35:6443";
-    tokenFile = config.age.secrets.k3s-local-token.path;
-  };
+  custom.k3sNodeTaints = [ "seated=true:NoSchedule" ];
 
   #services.ollama = {
     #acceleration = "rocm";

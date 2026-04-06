@@ -64,6 +64,7 @@
           ./nixos/shared-configuration.nix
           ./nixos/shared-games-configuration.nix
           ./nixos/office-configuration.nix
+          ./nixos/modules/k3s-agent.nix
           ./nixos/tailscale.nix
         ];
       };
@@ -77,10 +78,12 @@
         };
         modules = [
           inputs.home-manager.nixosModules.default
+          agenix.nixosModules.default
           ./nixos/shared-cli-configuration.nix
           ./nixos/shared-configuration.nix
           ./nixos/shared-games-configuration.nix
           ./nixos/arch-configuration.nix
+          ./nixos/modules/k3s-agent.nix
           ./nixos/tailscale.nix
           ({ config, ... }:
           {
@@ -162,10 +165,13 @@
         };
         modules = [
           inputs.home-manager.nixosModules.default
+          agenix.nixosModules.default
           ./nixos/shared-cli-configuration.nix
           ./nixos/shared-configuration.nix
           ./nixos/security-configuration.nix
+          ./nixos/modules/k3s-agent.nix
           ./nixos/tailscale.nix
+          { custom.k3sNodeTaints = [ "aarch=true:NoSchedule" ]; }
         ];
       };
 

@@ -84,12 +84,8 @@
     keyMap = "us";
   };
 
-  services.k3s = {
-    enable = true;
-    role = "agent";
-    serverAddr = "https://192.168.1.35:6443";
-    token = "K10c774bc9053c47bd55747f362531fb443f6ca1e4364143dbd74acdd4156eb6878::gw42uk.w06j3n5hkp5o30h8";
-  };
+
+  custom.k3sNodeTaints = [ "seated=true:NoSchedule" ];
 
   # services.ollama.acceleration = "cuda";
 
