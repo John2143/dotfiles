@@ -39,12 +39,37 @@ window#waybar {
     background: @button_background_color;
     /*color: #FEFCFD;*/
     color: #FFFFFF;
-    font-size: 24px;
-    padding: 4px 15px;
+    font-size: 18px;
+    padding: 2px 8px;
     margin: 0px 3px;
     border-radius: 16px;
     /*background: rgba(17,17,27,1);*/
     /*transition: all 0.3s ease-in-out;*/
+}
+
+#workspaces .workspace-label {
+    padding-left: 3px;
+    border-top: 1px solid transparent;
+}
+
+#workspaces .taskbar-window {
+    border-top: 1px solid transparent;
+    font-weight: normal;
+    padding-left: 4px;
+    padding-right: 4px;
+}
+
+#workspaces button.visible .taskbar-window,
+#workspaces button.visible .workspace-label {
+    border-color: rgba(255, 255, 255, 0.6);
+}
+
+#workspaces .taskbar-window.active {
+    background-color: rgba(255, 255, 255, 0.15);
+}
+
+#workspaces .taskbar-window image {
+    margin-top: 1px;
 }
 
 #workspaces button.empty {

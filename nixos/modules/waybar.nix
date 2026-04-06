@@ -27,6 +27,18 @@
           "clock#time"
         ];
         # Modules configuration
+        "hyprland/workspaces" = {
+          format = "{name} {windows}";
+          "workspace-taskbar" = {
+            enable = true;
+            "update-active-window" = true;
+            "format" = "{icon}";
+            "icon-size" = 20;
+            "on-click-window" = "hyprctl dispatch focuswindow address:{address}";
+            "ignore-list" = [ "^xwaylandvideobridge$" ];
+          };
+        };
+
         battery = {
           interval = 10;
           states = {
