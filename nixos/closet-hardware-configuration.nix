@@ -36,9 +36,9 @@
     ];
   };
 
-  fileSystems."/mnt/x9" = {
-    device = "/dev/disk/by-label/x9";
-    fsType = "ext4";
+  fileSystems."/mnt" =
+  { device = "/dev/disk/by-uuid/4557abd8-9b0b-4468-9337-26fe7ffa7c97";
+      fsType = "ext4";
   };
 
   swapDevices = [
