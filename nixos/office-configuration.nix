@@ -121,7 +121,7 @@
     enable = true;
     role = "agent";
     serverAddr = "https://192.168.1.35:6443";
-    token = "K10c774bc9053c47bd55747f362531fb443f6ca1e4364143dbd74acdd4156eb6878::65fbp3.ugvj45z6vv47bbyc";
+    token = "K10164345c7f5eb5ab6660c0263bc4f1008e2f4ab9c5319084084441c28edee8427::zl36rv.o7zhqwkf7kfyvpo";
   };
 
   #services.ollama = {
