@@ -12,6 +12,11 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
+    agenix = {
+      url = "github:ryantm/agenix";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+
     #disko = {
       #url = "github:nix-community/disko";
       #inputs.nixpkgs.follows = "nixpkgs";
@@ -19,7 +24,7 @@
   };
 
   outputs =
-    { nixpkgs, nix-cachyos-kernel, ... }@inputs:
+    { nixpkgs, nix-cachyos-kernel, agenix, ... }@inputs:
     let
       system = "x86_64-linux";
       catchy-os = [
@@ -54,6 +59,7 @@
         };
         modules = [
           inputs.home-manager.nixosModules.default
+          agenix.nixosModules.default
           ./nixos/shared-cli-configuration.nix
           ./nixos/shared-configuration.nix
           ./nixos/shared-games-configuration.nix

@@ -117,11 +117,19 @@
     };
   };
 
+  age.identityPaths = [ "/home/john/.ssh/age" ];
+  age.secrets.k3s-office-token = {
+    file = ../secrets/k3s-office-token.age;
+    mode = "0400";
+    owner = "root";
+    group = "root";
+  };
+
   services.k3s = {
     enable = true;
     role = "agent";
     serverAddr = "https://192.168.1.35:6443";
-    token = "K10164345c7f5eb5ab6660c0263bc4f1008e2f4ab9c5319084084441c28edee8427::zl36rv.o7zhqwkf7kfyvpo";
+    tokenFile = config.age.secrets.k3s-office-token.path;
   };
 
   #services.ollama = {
