@@ -118,8 +118,8 @@
   };
 
   age.identityPaths = [ "/home/john/.ssh/age" ];
-  age.secrets.k3s-office-token = {
-    file = ../secrets/k3s-office-token.age;
+  age.secrets.k3s-local-token = {
+    file = ../secrets/k3s-local-token.age;
     mode = "0400";
     owner = "root";
     group = "root";
@@ -129,7 +129,7 @@
     enable = true;
     role = "agent";
     serverAddr = "https://192.168.1.35:6443";
-    tokenFile = config.age.secrets.k3s-office-token.path;
+    tokenFile = config.age.secrets.k3s-local-token.path;
   };
 
   #services.ollama = {
