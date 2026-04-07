@@ -168,11 +168,10 @@
           ./nixos/security-configuration.nix
           ./nixos/modules/k3s-agent.nix
           ./nixos/tailscale.nix
-          { custom.k3sNodeTaints = [ "aarch=true:NoSchedule" ]; }
         ];
       };
 
-      nixosConfigurations.man = nixpkgs.lib.nixosSystem {
+      nixosConfigurations.aman = nixpkgs.lib.nixosSystem {
         inherit system;
         specialArgs = {
           inherit inputs;
@@ -186,7 +185,6 @@
           ./nixos/security-configuration.nix
           ./nixos/modules/k3s-agent.nix
           ./nixos/tailscale.nix
-          { custom.k3sNodeTaints = [ "aarch=true:NoSchedule" ]; }
         ];
       };
 

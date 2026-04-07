@@ -21,10 +21,6 @@
       role = "agent";
       serverAddr = "https://192.168.1.35:6443";
       tokenFile = config.age.secrets.k3s-local-token.path;
-      extraFlags = lib.concatStringsSep " " (
-        [ "--node-name=${config.networking.hostName}" ]
-        ++ map (taint: "--node-taint ${taint}") config.custom.k3sNodeTaints
-      );
     };
   };
 }
