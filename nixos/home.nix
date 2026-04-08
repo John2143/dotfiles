@@ -81,6 +81,7 @@ let
     #wineWowPackages.stable
     ungoogled-chromium # browser backup
 
+    yt-dlp # youtube-dl used to be in cli but its a lot of code
     xlsclients
   ];
 
