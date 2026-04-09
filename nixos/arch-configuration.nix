@@ -14,7 +14,7 @@
   imports = [
     ./arch-hardware-configuration.nix
     ./modules/user-john.nix
-    ./modules/ollama.nix
+    #./modules/ollama.nix
     # inputs.home-manager.nixosModules.default
   ];
   home-manager.users."john" = import ./home.nix;

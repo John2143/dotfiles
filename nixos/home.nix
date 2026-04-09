@@ -100,6 +100,7 @@ let
     hyprpicker # color picker
 
     temurin-jre-bin-21 # java
+    yt-dlp # youtube-dl used to be in cli but its a lot of code
 
     #mullvad-vpn # vpn
     plex-desktop # plex

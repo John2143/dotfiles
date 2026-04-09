@@ -60,7 +60,6 @@ in
     fzf
     fd # find replacement
     #update-nix-fetchgit # update fetchgit urls
-    yt-dlp # youtube-dl
     delta # pager
     gptfdisk # disk partitioning tool
     killall # like pkill
@@ -102,13 +101,11 @@ in
     #nodePackages."@tailwindcss/language-server" # tailwindcss language server for neovim
     #nodePackages.yaml-language-server # yaml language server for neovim
 
-    localsend
     fastfetch
     distrobox
     # sage
     nh
     nixd
-    postgresql_17 # need psql and stuff
     trash-cli # bound to "rmm"
     s3cmd
     websocat

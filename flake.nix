@@ -129,27 +129,6 @@
           ./nixos/shared-configuration.nix
           ./nixos/security-configuration.nix
           ./nixos/tailscale.nix
-          #(
-            #{ ... }:
-            #{  
-              #virtualisation.oci-containers = {
-                #backend = "podman";
-                #containers.homeassistant = {
-                  #volumes = [ "home-assistant:/config" ];
-                  #environment.TZ = "Europe/Berlin";
-                  ## Note: The image will not be updated on rebuilds, unless the version label changes
-                  #image = "ghcr.io/home-assistant/home-assistant:stable";
-                  #extraOptions = [ 
-                    ## Use the host network namespace for all sockets
-                    #"--network=host"
-                    ## Pass devices into the container, so Home Assistant can discover and make use of them
-                    #"--device=/dev/ttyUSB0:/dev/ttyUSB0"
-                  #];
-                #};
-              #};
-            #}
-          #)
-
         ];
       };
 
@@ -164,15 +143,15 @@
           inputs.home-manager.nixosModules.default
           agenix.nixosModules.default
           ./nixos/shared-cli-configuration.nix
-          ./nixos/shared-configuration.nix
-          ./nixos/security-configuration.nix
+          ./nixos/remote-cli-config.nix
+          #./nixos/shared-configuration.nix
+          #./nixos/security-configuration.nix
           ./nixos/modules/k3s-agent.nix
           ./nixos/tailscale.nix
-          { custom.k3sNodeTaints = [ "aarch=true:NoSchedule" ]; }
         ];
       };
 
-      nixosConfigurations.man = nixpkgs.lib.nixosSystem {
+      nixosConfigurations.aman = nixpkgs.lib.nixosSystem {
         inherit system;
         specialArgs = {
           inherit inputs;
@@ -182,11 +161,26 @@
         modules = [
           inputs.home-manager.nixosModules.default
           ./nixos/shared-cli-configuration.nix
+          ./nixos/remote-cli-config.nix
+          #./nixos/modules/k3s-agent.nix
+          ./nixos/tailscale.nix
+        ];
+      };
+
+      nixosConfigurations.term = nixpkgs.lib.nixosSystem {
+        inherit system;
+        specialArgs = {
+          inherit inputs;
+          compName = "term";
+          sshKeys = my-keys;
+        };
+        modules = [
+          inputs.home-manager.nixosModules.default
+          ./nixos/shared-cli-configuration.nix
           ./nixos/shared-configuration.nix
           ./nixos/security-configuration.nix
-          ./nixos/modules/k3s-agent.nix
+          #./nixos/modules/k3s-agent.nix
           ./nixos/tailscale.nix
-          { custom.k3sNodeTaints = [ "aarch=true:NoSchedule" ]; }
         ];
       };
 
