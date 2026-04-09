@@ -177,8 +177,9 @@
         modules = [
           inputs.home-manager.nixosModules.default
           ./nixos/shared-cli-configuration.nix
-          ./nixos/shared-configuration.nix
-          ./nixos/security-configuration.nix
+          #./nixos/shared-configuration.nix
+          #./nixos/security-configuration.nix
+          ./nixos/remote-cli-config.nix
           #./nixos/modules/k3s-agent.nix
           ./nixos/tailscale.nix
         ];
