@@ -57,7 +57,6 @@ let
     # kdeconnect # phone sync (now in main settings)
     #v4l-utils # video inputs for linux (obs)
     vlc # video player
-    mpv # video player
     wev # wayland event viewer
 
     # Other / unsorted
@@ -100,7 +99,10 @@ let
     hyprpicker # color picker
 
     temurin-jre-bin-21 # java
-    yt-dlp # youtube-dl used to be in cli but its a lot of code
+
+    # both these depend on deno, which takes forever to compile on non-gui hosts
+    yt-dlp # youtube-dl
+    mpv # video player
 
     #mullvad-vpn # vpn
     plex-desktop # plex
