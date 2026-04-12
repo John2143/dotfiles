@@ -25,9 +25,8 @@
 
   # Use the systemd-boot EFI boot loader.;
   boot.loader = {
-    grub.enable = false;
-    generic-extlinux-compatible.enable = true;
-    #systemd-boot.enable = true;
+    efi.canTouchEfiVariables = true;
+    systemd-boot.enable = true;
   };
 
   virtualisation.podman = {
