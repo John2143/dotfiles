@@ -15,8 +15,13 @@
   ];
 
   boot.initrd.availableKernelModules = [ "xhci_pci" "usbhid" "ahci" "usb_storage" "sd_mod" ];
-  boot.initrd.kernelModules = [ ];
+  # Load i915 early so KMS is active before stage 2, preventing signal loss
+  # on passive DP-to-HDMI adapters during the framebuffer-to-KMS transition.
+  boot.initrd.kernelModules = [ "i915" ];
   boot.kernelModules = [ "kvm-intel" ];
+  boot.kernelParams = [
+    "video=HDMI-A-1:1024x768"
+  ];
   boot.extraModulePackages = [ ];
 
   # fileSystems and swapDevices are managed by disko (see modules/disko_secu.nix)
