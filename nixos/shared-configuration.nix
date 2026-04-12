@@ -60,6 +60,7 @@
     enable = true;
     extraPortals = with pkgs; [
       xdg-desktop-portal-hyprland
+      xdg-desktop-portal-gtk
     ];
     xdgOpenUsePortal = true;
   };
@@ -67,6 +68,11 @@
     enable = true;
     addedAssociations = defaultApplications;
     defaultApplications = {
+      "x-scheme-handler/http" = "firefox.desktop";
+      "x-scheme-handler/https" = "firefox.desktop";
+      "x-scheme-handler/about" = "firefox.desktop";
+      "x-scheme-handler/unknown" = "firefox.desktop";
+      "x-scheme-handler/spotify" = "com.spotify.Client.desktop";
       "application/pdf" = "firefox.desktop";
       "application/json" = "firefox.desktop";
       "application/zip" = "ark.desktop";

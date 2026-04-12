@@ -17,10 +17,10 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
-    #disko = {
-      #url = "github:nix-community/disko";
-      #inputs.nixpkgs.follows = "nixpkgs";
-    #};
+    disko = {
+      url = "github:nix-community/disko";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
   };
 
   outputs =
@@ -103,19 +103,6 @@
         ];
       };
 
-      nixosConfigurations.strradmsad = nixpkgs.lib.nixosSystem {
-        inherit system;
-        specialArgs = {
-          inherit inputs;
-          compName = "strradmsad";
-        };
-        modules = [
-          inputs.home-manager.nixosModules.default
-          ./nixos/shared-cli-configuration.nix
-          ./nixos/strradmsad-configuration.nix
-        ];
-      };
-
       nixosConfigurations.security = nixpkgs.lib.nixosSystem {
         inherit system;
         specialArgs = {
@@ -185,48 +172,24 @@
         ];
       };
 
-      #nixosConfigurations.security = nixpkgs.lib.nixosSystem {
-        #system = "aarch64-linux";
-        #modules = [
-          #({ config, pkgs, lib, ...}:
-          #{
-              #imports =
-                #[
-                  #<nixos-hardware/raspberry-pi/4>
-                  #./hardware-configuration.nix
-                #];
-              #hardware = {
-                #raspberry-pi."4".apply-overlays-dtmerge.enable = true;
-                #deviceTree = {
-                  #enable = true;
-                  #filter = "*rpi-4-*.dtb";
-                #};
-              #};
-              #console.enable = false;
-              #environment.systemPackages = with pkgs; [
-                #libraspberrypi
-                #raspberrypi-eeprom
-              #];
-              #system.stateVersion = "25.11";
-          #})
-          #({ pkgs, ... }:
-            #{
-              #imports = [
-                #.../nixos-hardware/raspberry-pi/4
-              #];
-
-              #hardware.raspberry-pi."4".fkms-3d.enable = true;
-
-              #services.xserver = {
-                #enable = true;
-                #displayManager.lightdm.enable = true;
-                #desktopManager.gnome.enable = true;
-              #};
-          #})
-
-        #];
-      #};
-
-      #images.security = nixosConfigurations.security.config.system.build.sdImage;
+      nixosConfigurations.secu = nixpkgs.lib.nixosSystem {
+        inherit system;
+        specialArgs = {
+          inherit inputs;
+          compName = "secu";
+          sshKeys = my-keys;
+        };
+        modules = [
+          inputs.home-manager.nixosModules.default
+          ./nixos/shared-cli-configuration.nix
+          ./nixos/shared-configuration.nix
+          ./nixos/secu-configuration.nix
+          #./nixos/remote-cli-config.nix
+          #./nixos/modules/k3s-agent.nix
+          #./nixos/tailscale.nix
+          ## TODO: DISKO ##
+          #./nixos/modules/disko_secu.nix
+        ];
+      };
     };
 }
