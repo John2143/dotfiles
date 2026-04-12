@@ -19,19 +19,7 @@
   boot.kernelModules = [ "kvm-intel" ];
   boot.extraModulePackages = [ ];
 
-  fileSystems."/" = {
-    device = "/dev/disk/by-label/NIX";
-    fsType = "ext4";
-  };
-
-  fileSystems."/boot" = {
-    device = "/dev/disk/by-label/BOOT";
-    fsType = "ext4";
-  };
-
-  swapDevices = [ 
-     { device = "/dev/disk/by-label/SWAP"; }
-  ];
+  # fileSystems and swapDevices are managed by disko (see modules/disko_secu.nix)
 
   networking.useDHCP = lib.mkDefault true;
   # networking.interfaces.eno1.useDHCP = lib.mkDefault true;

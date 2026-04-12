@@ -181,14 +181,16 @@
         };
         modules = [
           inputs.home-manager.nixosModules.default
+          inputs.disko.nixosModules.default
           ./nixos/shared-cli-configuration.nix
           ./nixos/shared-configuration.nix
           ./nixos/secu-configuration.nix
+          ./nixos/modules/disko_secu.nix
           #./nixos/remote-cli-config.nix
           #./nixos/modules/k3s-agent.nix
           #./nixos/tailscale.nix
-          ## TODO: DISKO ##
-          #./nixos/modules/disko_secu.nix
+          ## POST-INSTALL: uncomment after TPM enrollment ##
+          #./nixos/modules/secu-post-install.nix
         ];
       };
     };
