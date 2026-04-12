@@ -188,7 +188,7 @@
           ./nixos/modules/disko_secu.nix
           #./nixos/remote-cli-config.nix
           #./nixos/modules/k3s-agent.nix
-          #./nixos/tailscale.nix
+          ./nixos/tailscale.nix
           ## POST-INSTALL: uncomment after TPM enrollment ##
           ./nixos/modules/secu-post-install.nix
         ];
