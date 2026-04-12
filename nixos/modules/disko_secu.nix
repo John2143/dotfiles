@@ -15,15 +15,16 @@
 #    and mounting. During install you will be prompted for a LUKS passphrase
 #    for the "cryptroot" partition.
 #
-# 2. Enroll TPM2 -- after booting into the installed system:
-#      sudo systemd-cryptenroll --tpm2-device=auto /dev/sda3
+# 2. Enroll USB keyfile -- plug in the CRYPTKEY USB and run:
+#      sudo cryptsetup luksAddKey /dev/sda3 /dev/disk/by-partlabel/CRYPTKEY --new-keyfile-size 4096
+#    (you will be prompted for the existing passphrase to authorize)
 #
 # 3. Enable post-install module -- uncomment the secu-post-install.nix
 #    import in flake.nix and rebuild:
 #      sudo nixos-rebuild switch --flake .#secu
 #
-# 4. Verify TPM unlock -- reboot; the system should unlock automatically
-#    without a passphrase.
+# 4. Verify USB unlock -- reboot with the USB plugged in; the system should
+#    unlock automatically. Without the USB, it falls back to passphrase.
 #
 # 5. Snapshots -- btrbk will begin taking hourly snapshots of /home/john.
 #    List them with:

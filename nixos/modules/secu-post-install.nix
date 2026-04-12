@@ -1,10 +1,14 @@
 # Post-install module for secu.
-# Enable this AFTER enrolling TPM2 with:
-#   sudo systemd-cryptenroll --tpm2-device=auto /dev/sda3
+# Enable this AFTER enrolling the USB keyfile with:
+#   sudo cryptsetup luksAddKey /dev/sda3 /dev/disk/by-partlabel/CRYPTKEY --new-keyfile-size 4096
 { ... }:
 {
-  boot.initrd.systemd.enable = true;
-  security.tpm2.enable = true;
+  # USB keyfile unlock for LUKS (falls back to passphrase if USB is absent)
+  boot.initrd.luks.devices."cryptroot" = {
+    keyFile = "/dev/disk/by-partlabel/CRYPTKEY";
+    keyFileSize = 4096;
+    fallbackToPassword = true;
+  };
 
   services.btrbk.instances."home" = {
     onCalendar = "hourly";

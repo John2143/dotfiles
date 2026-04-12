@@ -190,7 +190,7 @@
           #./nixos/modules/k3s-agent.nix
           #./nixos/tailscale.nix
           ## POST-INSTALL: uncomment after TPM enrollment ##
-          #./nixos/modules/secu-post-install.nix
+          ./nixos/modules/secu-post-install.nix
         ];
       };
     };
