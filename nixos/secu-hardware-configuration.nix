@@ -15,12 +15,12 @@
   ];
 
   boot.initrd.availableKernelModules = [ "xhci_pci" "usbhid" "ahci" "usb_storage" "sd_mod" ];
-  # Load i915 early so KMS is active before stage 2, preventing signal loss
-  # on passive DP-to-HDMI adapters during the framebuffer-to-KMS transition.
-  boot.initrd.kernelModules = [ "i915" ];
+  boot.initrd.kernelModules = [ ];
   boot.kernelModules = [ "kvm-intel" ];
+  # Passive DP-to-HDMI adapter can't handle KMS mode negotiation.
+  # nomodeset keeps VESA framebuffer throughout boot until an active adapter is available.
   boot.kernelParams = [
-    "video=HDMI-A-1:1024x768"
+    "nomodeset"
   ];
   boot.extraModulePackages = [ ];
 
