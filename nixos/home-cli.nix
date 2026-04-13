@@ -171,6 +171,22 @@ in
         end
         kubectl config use-context $new_env
       '';
+      vc.body = ''
+        set -f nodes (tailscale status --json | jq -r '.Peer[] | select(.ExitNodeOption == true) | .DNSName')
+        # add a node of "None" to the list of nodes so that we can exit if the user doesn't select a node
+        set nodes $nodes None
+        set -f new_node (echo $nodes | fzf)
+        if test "A$new_node" = "A"
+            exit 1
+        end
+        if test $new_node = "None"
+            tailscale up --exit-node=""
+        else
+            tailscale up --exit-node=$new_node --exit-node-allow-lan-access
+        end
+      '';
+      vc.description = "Select a Tailscale exit node";
+
       #mullvad-split-tunnel.body = ''
         #set appname "$argv[1]";
         #set procs (ps aux | grep $appname | grep -v "0:00 rg" | choose 1)

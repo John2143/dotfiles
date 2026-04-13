@@ -77,10 +77,6 @@ alias lt="ls --tree"
 alias la="ls -la"
 alias ll="ls --long --group --header --git"
 
-alias ask="ollama run llama3.2:latest"
-alias askbig="ollama run llama3.1:70b"
-alias askc="ollama run deepseek-coder-v2:latest"
-
 alias fixfmt="fish -c 'cargo fix --allow-dirty --allow-staged; cargo fmt --all'"
 
 if not $NIX
