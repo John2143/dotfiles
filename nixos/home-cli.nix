@@ -110,6 +110,7 @@ in
     s3cmd
     websocat
     zip
+    lxqt.lxqt-policykit
   ];
 
   # Home Manager is pretty good at managing dotfiles. The primary way to manage
