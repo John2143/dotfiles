@@ -42,6 +42,7 @@
       mullvad lan set allow
       mullvad auto-connect set on
       mullvad tunnel set ipv6 on
+      mullvad tunnel set quantum-resistant on
 
       # Best-effort: exclude tailscaled from Mullvad tunnel so its WireGuard
       # traffic bypasses the kill switch. Syntax varies across Mullvad versions.
