@@ -41,13 +41,14 @@
     script = ''
       mullvad lan set allow
       mullvad auto-connect set on
-      mullvad split-tunnel set state on
+      mullvad tunnel ipv6 set on || true
 
-      # Exclude tailscaled so its WireGuard traffic bypasses Mullvad's kill switch,
-      # while kernel-forwarded exit node traffic still routes through the Mullvad tunnel.
+      # Best-effort: exclude tailscaled from Mullvad tunnel so its WireGuard
+      # traffic bypasses the kill switch. Syntax varies across Mullvad versions.
       TSPID=$(pgrep tailscaled || true)
       if [ -n "$TSPID" ]; then
-        mullvad split-tunnel pid add "$TSPID"
+        mullvad split-tunnel pid add "$TSPID" 2>/dev/null ||
+          mullvad split-tunnel add "$TSPID" 2>/dev/null || true
       fi
 
       mullvad connect --wait
