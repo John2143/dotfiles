@@ -118,13 +118,9 @@
 
   custom.k3sNodeTaints = [ "seated=true:NoSchedule" ];
 
-  #services.ollama = {
-    #acceleration = "rocm";
-    #environmentVariables = {
-      #HCC_AMDGPU_TARGET = "gfx1100";
-    #};
-    #rocmOverrideGfx = "11.0.0";
-  #};
+  services.ollama = {
+    package = pkgs.ollama-rocm;
+  };
 
   # drones
   services.upower.enable = true;

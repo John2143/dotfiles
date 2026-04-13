@@ -17,6 +17,11 @@
   boot.initrd.availableKernelModules = [ "xhci_pci" "usbhid" "ahci" "usb_storage" "sd_mod" ];
   boot.initrd.kernelModules = [ ];
   boot.kernelModules = [ "kvm-intel" ];
+  # Passive DP-to-HDMI adapter can't handle KMS mode negotiation.
+  # nomodeset keeps VESA framebuffer throughout boot until an active adapter is available.
+  boot.kernelParams = [
+    "nomodeset"
+  ];
   boot.extraModulePackages = [ ];
 
   # fileSystems and swapDevices are managed by disko (see modules/disko_secu.nix)
