@@ -54,12 +54,33 @@
           mullvad split-tunnel add "$TSPID" 2>/dev/null || true
       fi
 
+      # Clean stale ip rules from previous runs so Mullvad doesn't
+      # keep leapfrogging them with lower priority numbers.
+      while ip rule del to 100.64.0.0/10 lookup 52 2>/dev/null; do :; done
+      while ip -6 rule del to fd7a:115c:a1e0::/48 lookup 52 2>/dev/null; do :; done
+      ip rule del fwmark 0x40000/0x40000 table 200 2>/dev/null || true
+      ip route flush table 200 2>/dev/null || true
+
       mullvad connect --wait
 
+      # --- Inject Tailscale route into Mullvad's own routing table ---
+      # Mullvad's catch-all ip rule sends all non-Mullvad traffic to its
+      # routing table (0x6d6f6c65 / 1836018789). By adding a more-specific
+      # route for the Tailscale CGNAT range inside that table, packets to
+      # Tailscale peers hit our route before Mullvad's default route.
+      # This avoids the priority arms-race entirely.
+      MULLVAD_RT=$(ip rule show \
+        | awk '/0x6d6f6c65/{print $NF; exit}')
+      if [ -n "$MULLVAD_RT" ]; then
+        ip route replace 100.64.0.0/10 dev tailscale0 table "$MULLVAD_RT"
+      fi
+      MULLVAD_RT6=$(ip -6 rule show \
+        | awk '/0x6d6f6c65/{print $NF; exit}')
+      if [ -n "$MULLVAD_RT6" ]; then
+        ip -6 route replace fd7a:115c:a1e0::/48 dev tailscale0 table "$MULLVAD_RT6"
+      fi
+
       # --- Tailscale bypass for Mullvad's nftables kill-switch ---
-      # Mullvad uses nftables (not iptables). Insert accept rules for
-      # tailscale0 into Mullvad's own chains so traffic is accepted
-      # before the kill-switch DROP rules.
       MULLVAD_TABLE=$(nft list tables inet 2>/dev/null \
         | awk 'tolower($0) ~ /mullvad/{print $3; exit}')
       if [ -n "$MULLVAD_TABLE" ]; then
@@ -69,39 +90,16 @@
           nft insert rule inet "$MULLVAD_TABLE" "$chain" \
             iifname "tailscale0" accept 2>/dev/null || true
         done
+        # Allow tailscaled's WireGuard packets (fwmark 0x80000) through
+        # the kill-switch so direct LAN peer connections work.
+        nft insert rule inet "$MULLVAD_TABLE" output \
+          meta mark \& 0x80000 == 0x80000 accept 2>/dev/null || true
       fi
-
-      # --- Reverse-path routing via conntrack marks ---
-      # Connections arriving on tailscale0 get a ct mark. On output the
-      # mark is copied to the packet fwmark so policy routing sends
-      # replies back through tailscale0 instead of the Mullvad tunnel.
-      nft delete table inet tailscale-rpf 2>/dev/null || true
-      nft -f - <<'NFT_RULES'
-      table inet tailscale-rpf {
-        chain prerouting {
-          type filter hook prerouting priority mangle; policy accept;
-          iifname "tailscale0" ct mark set ct mark | 0x40000
-        }
-        chain output {
-          type route hook output priority mangle; policy accept;
-          ct mark & 0x40000 == 0x40000 meta mark set meta mark | 0x40000
-        }
-      }
-      NFT_RULES
-
-      # --- Policy routing for Tailscale traffic ---
-      # Send Tailscale-destined traffic to Tailscale's table (52) at a
-      # priority above Mullvad's catch-all rule (5209).
-      ip rule  add to 100.64.0.0/10      lookup 52  priority 99 2>/dev/null || true
-      ip -6 rule add to fd7a:115c:a1e0::/48 lookup 52  priority 99 2>/dev/null || true
-      # Route connmark-tagged reply packets through tailscale0.
-      ip rule  add fwmark 0x40000/0x40000 table 200 priority 100 2>/dev/null || true
-      ip route replace default dev tailscale0 table 200
     '';
   };
 
-  # Re-apply the tailscale0 bypass rules periodically in case Mullvad
-  # reconnects and re-creates its nftables chains.
+  # Re-apply bypass rules periodically in case Mullvad reconnects
+  # and re-creates its nftables chains or flushes its routing table.
   systemd.services.mullvad-tailscale-keepalive = {
     description = "Re-apply Tailscale bypass rules for Mullvad";
     after = [ "mullvad-auto-connect.service" ];
@@ -116,6 +114,17 @@
       Type = "oneshot";
     };
     script = ''
+      MULLVAD_RT=$(ip rule show \
+        | awk '/0x6d6f6c65/{print $NF; exit}')
+      if [ -n "$MULLVAD_RT" ]; then
+        ip route replace 100.64.0.0/10 dev tailscale0 table "$MULLVAD_RT"
+      fi
+      MULLVAD_RT6=$(ip -6 rule show \
+        | awk '/0x6d6f6c65/{print $NF; exit}')
+      if [ -n "$MULLVAD_RT6" ]; then
+        ip -6 route replace fd7a:115c:a1e0::/48 dev tailscale0 table "$MULLVAD_RT6"
+      fi
+
       MULLVAD_TABLE=$(nft list tables inet 2>/dev/null \
         | awk 'tolower($0) ~ /mullvad/{print $3; exit}')
       [ -z "$MULLVAD_TABLE" ] && exit 0
@@ -130,26 +139,11 @@
         fi
       done
 
-      # Recreate tailscale-rpf if it was lost.
-      if ! nft list table inet tailscale-rpf >/dev/null 2>&1; then
-        nft -f - <<'NFT_RULES'
-        table inet tailscale-rpf {
-          chain prerouting {
-            type filter hook prerouting priority mangle; policy accept;
-            iifname "tailscale0" ct mark set ct mark | 0x40000
-          }
-          chain output {
-            type route hook output priority mangle; policy accept;
-            ct mark & 0x40000 == 0x40000 meta mark set meta mark | 0x40000
-          }
-        }
-      NFT_RULES
+      if ! nft list chain inet "$MULLVAD_TABLE" output 2>/dev/null \
+           | grep -q '0x80000'; then
+        nft insert rule inet "$MULLVAD_TABLE" output \
+          meta mark \& 0x80000 == 0x80000 accept 2>/dev/null || true
       fi
-
-      ip rule  add to 100.64.0.0/10      lookup 52  priority 99 2>/dev/null || true
-      ip -6 rule add to fd7a:115c:a1e0::/48 lookup 52  priority 99 2>/dev/null || true
-      ip rule  add fwmark 0x40000/0x40000 table 200 priority 100 2>/dev/null || true
-      ip route replace default dev tailscale0 table 200
     '';
   };
 
