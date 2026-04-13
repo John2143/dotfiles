@@ -41,7 +41,7 @@
     script = ''
       mullvad lan set allow
       mullvad auto-connect set on
-      mullvad tunnel ipv6 set on || true
+      mullvad tunnel set ipv6 on
 
       # Best-effort: exclude tailscaled from Mullvad tunnel so its WireGuard
       # traffic bypasses the kill switch. Syntax varies across Mullvad versions.
