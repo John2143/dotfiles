@@ -154,6 +154,24 @@
         ];
       };
 
+      nixosConfigurations.vpin = nixpkgs.lib.nixosSystem {
+        inherit system;
+        specialArgs = {
+          inherit inputs;
+          compName = "vpin";
+          sshKeys = my-keys;
+        };
+        modules = [
+          inputs.home-manager.nixosModules.default
+          ./nixos/shared-cli-configuration.nix
+          ./nixos/remote-cli-config.nix
+          #./nixos/modules/k3s-agent.nix
+          ./nixos/tailscale.nix
+          ./nixos/modules/mullvad.nix
+        ];
+      };
+
+
       nixosConfigurations.term = nixpkgs.lib.nixosSystem {
         inherit system;
         specialArgs = {

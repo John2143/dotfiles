@@ -101,6 +101,7 @@
     xwayland.enable = true;
     #enableNvidiaPatches = true;
   };
+  security.polkit.enable = true;
 
   # games
   services.flatpak.enable = true;
