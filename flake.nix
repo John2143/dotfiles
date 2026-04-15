@@ -151,6 +151,7 @@
           ./nixos/remote-cli-config.nix
           #./nixos/modules/k3s-agent.nix
           ./nixos/tailscale.nix
+          ./nixos/modules/mullvad.nix
         ];
       };
 
