@@ -35,7 +35,7 @@ let
     exec 9>"$LOCK"
     if ! flock -n 9; then
       echo "Another relay selection is running, skipping" >&2
-      exit 0
+      exit 10
     fi
 
     TMPDIR="$(mktemp -d)"
@@ -357,17 +357,19 @@ let
     [ -z "$MULLVAD_TABLE" ] && exit 0
 
     for chain in input output forward; do
-      if ! nft list chain inet "$MULLVAD_TABLE" "$chain" 2>/dev/null \
-           | grep -q 'tailscale0'; then
+      CHAIN_RULES="$(nft list chain inet "$MULLVAD_TABLE" "$chain" 2>/dev/null || true)"
+      if ! echo "$CHAIN_RULES" | grep -q 'oifname "tailscale0" accept'; then
         nft insert rule inet "$MULLVAD_TABLE" "$chain" \
           oifname "tailscale0" accept 2>/dev/null || true
+      fi
+      if ! echo "$CHAIN_RULES" | grep -q 'iifname "tailscale0" accept'; then
         nft insert rule inet "$MULLVAD_TABLE" "$chain" \
           iifname "tailscale0" accept 2>/dev/null || true
       fi
     done
 
     if ! nft list chain inet "$MULLVAD_TABLE" output 2>/dev/null \
-         | grep -q '0x80000'; then
+         | grep -q 'meta mark.*0x80000.*== 0x80000 accept'; then
       nft insert rule inet "$MULLVAD_TABLE" output \
         meta mark \& 0x80000 == 0x80000 accept 2>/dev/null || true
     fi
@@ -427,7 +429,11 @@ in
       ip rule del fwmark 0x40000/0x40000 table 200 2>/dev/null || true
       ip route flush table 200 2>/dev/null || true
 
-      ${selectRelay}
+      SELECT_RELAY_RC=0
+      ${selectRelay} || SELECT_RELAY_RC=$?
+      if [ "$SELECT_RELAY_RC" -ne 0 ] && [ "$SELECT_RELAY_RC" -ne 10 ]; then
+        exit "$SELECT_RELAY_RC"
+      fi
 
       mullvad connect --wait
 
@@ -451,7 +457,16 @@ in
       Type = "oneshot";
     };
     script = ''
-      ${selectRelay}
+      SELECT_RELAY_RC=0
+      ${selectRelay} || SELECT_RELAY_RC=$?
+      if [ "$SELECT_RELAY_RC" -eq 10 ]; then
+        echo "Relay selection skipped due to lock contention; skipping reconnect" >&2
+        exit 0
+      fi
+      if [ "$SELECT_RELAY_RC" -ne 0 ]; then
+        exit "$SELECT_RELAY_RC"
+      fi
+
       mullvad reconnect --wait
       ${applyBypass}
     '';
