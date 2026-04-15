@@ -125,6 +125,190 @@ let
     mv "$TMPDIR/hist_trim" "$HISTORY"
   '';
 
+  watchdogFailFile = "/run/mullvad-watchdog-first-failure";
+
+  connectivityWatchdog = pkgs.writeShellScript "mullvad-connectivity-watchdog" ''
+    set -uo pipefail
+    export PATH="${lib.makeBinPath [
+      config.services.mullvad-vpn.package
+      pkgs.iputils
+      pkgs.tailscale
+      pkgs.jq
+      pkgs.iproute2
+      pkgs.nftables
+      pkgs.gawk
+      pkgs.gnugrep
+      pkgs.coreutils
+      pkgs.systemd
+      pkgs.networkmanager
+      pkgs.util-linux
+    ]}"
+
+    FAIL_FILE="${watchdogFailFile}"
+
+    log() { echo "watchdog: $*"; }
+
+    reset_failure() {
+      rm -f "$FAIL_FILE"
+    }
+
+    check_reboot_timeout() {
+      if [ ! -f "$FAIL_FILE" ]; then
+        date +%s > "$FAIL_FILE"
+      fi
+      ELAPSED=$(( $(date +%s) - $(cat "$FAIL_FILE") ))
+      log "Sustained failure for ''${ELAPSED}s (reboot at 180s)"
+      if [ "$ELAPSED" -ge 180 ]; then
+        log "CRITICAL: 3 minutes of sustained failure -- rebooting"
+        systemctl reboot
+      fi
+    }
+
+    quick_ping_check() {
+      FAIL=0
+      for ip in 1.1.1.1 1.0.0.1 8.8.8.8; do
+        ping -c1 -W3 "$ip" &>/dev/null || FAIL=$((FAIL+1))
+      done
+      echo "$FAIL"
+    }
+
+    # Skip if relay rotation is in progress to avoid false positives
+    if systemctl is-active --quiet mullvad-rotate-relay.service 2>/dev/null; then
+      log "Relay rotation in progress, skipping check"
+      exit 0
+    fi
+
+    # ── Health check ──────────────────────────────────────────────
+    PING_FAIL=$(quick_ping_check)
+    TS_ONLINE=$(tailscale status --json 2>/dev/null | jq -r '.Self.Online // false') || TS_ONLINE="false"
+
+    if [ "$PING_FAIL" -lt 2 ] && [ "$TS_ONLINE" = "true" ]; then
+      reset_failure
+      exit 0
+    fi
+
+    log "Unhealthy: $PING_FAIL/3 pings failed, tailscale_online=$TS_ONLINE"
+
+    # ── Diagnostics (all logged for post-mortem) ──────────────────
+    MULLVAD_STATUS=$(mullvad status 2>&1) || true
+    log "mullvad status: $MULLVAD_STATUS"
+
+    END0_STATE=$(ip -j link show end0 2>/dev/null | jq -r '.[0].operstate // "UNKNOWN"') || END0_STATE="MISSING"
+    WLAN0_STATE=$(ip -j link show wlan0 2>/dev/null | jq -r '.[0].operstate // "UNKNOWN"') || WLAN0_STATE="MISSING"
+    log "interfaces: end0=$END0_STATE wlan0=$WLAN0_STATE"
+
+    END0_IP=$(ip -j addr show end0 2>/dev/null | jq -r '.[0].addr_info[]? | select(.family=="inet") | .local // empty' | head -1) || END0_IP=""
+    WLAN0_IP=$(ip -j addr show wlan0 2>/dev/null | jq -r '.[0].addr_info[]? | select(.family=="inet") | .local // empty' | head -1) || WLAN0_IP=""
+    log "IPs: end0=$END0_IP wlan0=$WLAN0_IP"
+
+    GATEWAY=$(ip route show default 2>/dev/null | awk '/default/{print $3; exit}') || GATEWAY=""
+    GW_IFACE=$(ip route show default 2>/dev/null | awk '/default/{for(i=1;i<=NF;i++) if($i=="dev") print $(i+1); exit}') || GW_IFACE=""
+    log "gateway=$GATEWAY via $GW_IFACE"
+
+    GW_REACHABLE="false"
+    if [ -n "$GATEWAY" ]; then
+      ping -c1 -W2 "$GATEWAY" &>/dev/null && GW_REACHABLE="true"
+    fi
+    log "gateway_reachable=$GW_REACHABLE"
+
+    # ── Recovery ladder ───────────────────────────────────────────
+
+    # Step 1: Mullvad disconnected → reconnect + bypass
+    if echo "$MULLVAD_STATUS" | grep -qi "disconnected\|error"; then
+      log "Step 1: Mullvad disconnected, reconnecting"
+      mullvad connect --wait || true
+      ${applyBypass} || true
+      sleep 3
+      NEW_FAIL=$(quick_ping_check)
+      if [ "$NEW_FAIL" -lt 2 ]; then
+        log "Recovered after mullvad reconnect"
+        reset_failure
+        exit 0
+      fi
+    fi
+
+    # Step 2: Mullvad connected but pings fail → bad relay, force switch
+    if echo "$MULLVAD_STATUS" | grep -qi "connected"; then
+      log "Step 2: Mullvad connected but no internet, forcing relay switch"
+      mullvad reconnect --wait || true
+      ${applyBypass} || true
+      sleep 3
+      NEW_FAIL=$(quick_ping_check)
+      if [ "$NEW_FAIL" -lt 2 ]; then
+        log "Recovered after relay switch"
+        reset_failure
+        exit 0
+      fi
+    fi
+
+    # Step 3: Bring up interfaces if DOWN
+    IFACE_FIXED="false"
+    if [ "$END0_STATE" != "UP" ]; then
+      log "Step 3: end0 is $END0_STATE, attempting to bring up"
+      nmcli device connect end0 2>/dev/null || true
+      IFACE_FIXED="true"
+    fi
+    if [ "$WLAN0_STATE" != "UP" ]; then
+      log "Step 3: wlan0 is $WLAN0_STATE, attempting to bring up"
+      nmcli device connect wlan0 2>/dev/null || true
+      IFACE_FIXED="true"
+    fi
+    if [ "$IFACE_FIXED" = "true" ]; then
+      sleep 5
+      mullvad connect --wait || true
+      ${applyBypass} || true
+      sleep 3
+      NEW_FAIL=$(quick_ping_check)
+      if [ "$NEW_FAIL" -lt 2 ]; then
+        log "Recovered after bringing up interfaces"
+        reset_failure
+        exit 0
+      fi
+    fi
+
+    # Step 4: Gateway unreachable → restart NetworkManager
+    if [ "$GW_REACHABLE" = "false" ]; then
+      log "Step 4: Gateway unreachable, restarting NetworkManager"
+      systemctl restart NetworkManager || true
+      sleep 10
+      mullvad connect --wait || true
+      ${applyBypass} || true
+      sleep 3
+      NEW_FAIL=$(quick_ping_check)
+      if [ "$NEW_FAIL" -lt 2 ]; then
+        log "Recovered after NetworkManager restart"
+        reset_failure
+        exit 0
+      fi
+    fi
+
+    # Step 5: Nuclear VPN reset
+    log "Step 5: Restarting mullvad-daemon"
+    systemctl restart mullvad-daemon || true
+    sleep 10
+    mullvad connect --wait || true
+    ${applyBypass} || true
+    sleep 3
+    NEW_FAIL=$(quick_ping_check)
+    if [ "$NEW_FAIL" -lt 2 ]; then
+      log "Recovered after mullvad-daemon restart"
+      reset_failure
+      exit 0
+    fi
+
+    # Step 6: Restart tailscaled
+    if [ "$TS_ONLINE" != "true" ]; then
+      log "Step 6: Restarting tailscaled"
+      systemctl restart tailscaled || true
+      sleep 5
+      tailscale set --advertise-exit-node || true
+    fi
+
+    # Still broken — record failure and check reboot timeout
+    log "All recovery steps exhausted, waiting for next cycle"
+    check_reboot_timeout
+  '';
+
   applyBypass = pkgs.writeShellScript "mullvad-apply-bypass" ''
     set -uo pipefail
     export PATH="${lib.makeBinPath [
@@ -282,6 +466,30 @@ in
     timerConfig = {
       OnBootSec = "5min";
       OnUnitActiveSec = "10min";
+    };
+  };
+
+  systemd.services.mullvad-connectivity-watchdog = {
+    description = "Connectivity watchdog: diagnose and recover internet/VPN failures";
+    after = [
+      "mullvad-auto-connect.service"
+      "tailscaled.service"
+      "network-online.target"
+    ];
+    wants = [ "network-online.target" ];
+    serviceConfig = {
+      Type = "oneshot";
+    };
+    script = ''
+      ${connectivityWatchdog}
+    '';
+  };
+
+  systemd.timers.mullvad-connectivity-watchdog = {
+    wantedBy = [ "timers.target" ];
+    timerConfig = {
+      OnBootSec = "2min";
+      OnUnitActiveSec = "30s";
     };
   };
 
