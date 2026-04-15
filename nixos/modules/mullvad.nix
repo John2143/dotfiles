@@ -145,11 +145,24 @@ let
     ]}"
 
     FAIL_FILE="${watchdogFailFile}"
+    GUARD_TABLE="watchdog_leak_guard"
 
     log() { echo "watchdog: $*"; }
 
     reset_failure() {
       rm -f "$FAIL_FILE"
+    }
+
+    enable_leak_guard() {
+      log "Enabling forward leak guard (blocking all forwarded traffic)"
+      nft add table inet "$GUARD_TABLE" 2>/dev/null || true
+      nft 'add chain inet '"$GUARD_TABLE"' forward { type filter hook forward priority -1; policy drop; }' \
+        2>/dev/null || true
+    }
+
+    disable_leak_guard() {
+      log "Disabling forward leak guard"
+      nft delete table inet "$GUARD_TABLE" 2>/dev/null || true
     }
 
     check_reboot_timeout() {
@@ -160,6 +173,7 @@ let
       log "Sustained failure for ''${ELAPSED}s (reboot at 180s)"
       if [ "$ELAPSED" -ge 180 ]; then
         log "CRITICAL: 3 minutes of sustained failure -- rebooting"
+        disable_leak_guard
         systemctl reboot
       fi
     }
@@ -171,6 +185,8 @@ let
       done
       echo "$FAIL"
     }
+
+    trap 'nft delete table inet "$GUARD_TABLE" 2>/dev/null || true' EXIT
 
     # Skip if relay rotation is in progress to avoid false positives
     if systemctl is-active --quiet mullvad-rotate-relay.service 2>/dev/null; then
@@ -283,11 +299,16 @@ let
     fi
 
     # Step 5: Nuclear VPN reset
+    # Restarting mullvad-daemon removes its nft kill switch and routing
+    # rules entirely, which would let exit-node user traffic forward out
+    # the physical interface unencrypted. Block all forwarding first.
     log "Step 5: Restarting mullvad-daemon"
+    enable_leak_guard
     systemctl restart mullvad-daemon || true
     sleep 10
     mullvad connect --wait || true
     ${applyBypass} || true
+    disable_leak_guard
     sleep 3
     NEW_FAIL=$(quick_ping_check)
     if [ "$NEW_FAIL" -lt 2 ]; then
