@@ -152,6 +152,12 @@
           #./nixos/modules/k3s-agent.nix
           ./nixos/tailscale.nix
           ./nixos/modules/mullvad.nix
+          ({ ... }: {
+            services.avahi = {
+              reflector = true;
+              allowInterfaces = [ "end0" "wlan0" ];
+            };
+          })
         ];
       };
 
