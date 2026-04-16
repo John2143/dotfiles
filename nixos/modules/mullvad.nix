@@ -170,9 +170,9 @@ let
         date +%s > "$FAIL_FILE"
       fi
       ELAPSED=$(( $(date +%s) - $(cat "$FAIL_FILE") ))
-      log "Sustained failure for ''${ELAPSED}s (reboot at 180s)"
-      if [ "$ELAPSED" -ge 180 ]; then
-        log "CRITICAL: 3 minutes of sustained failure -- rebooting"
+      log "Sustained failure for ''${ELAPSED}s (reboot at 600s)"
+      if [ "$ELAPSED" -ge 600 ]; then
+        log "CRITICAL: 10 minutes of sustained failure -- rebooting"
         disable_leak_guard
         systemctl reboot
       fi
@@ -234,6 +234,7 @@ let
       log "Step 1: Mullvad disconnected, reconnecting"
       mullvad connect --wait || true
       ${applyBypass} || true
+      ${reapplySplitTunnel} || true
       sleep 3
       NEW_FAIL=$(quick_ping_check)
       if [ "$NEW_FAIL" -lt 2 ]; then
@@ -243,15 +244,17 @@ let
       fi
     fi
 
-    # Step 2: Mullvad connected but pings fail → bad relay, force switch
+    # Step 2: Mullvad connected but pings fail → bad relay, rotate to new one
     if echo "$MULLVAD_STATUS" | grep -qi "connected"; then
-      log "Step 2: Mullvad connected but no internet, forcing relay switch"
+      log "Step 2: Mullvad connected but no internet, rotating relay"
+      ${selectRelay} || true
       mullvad reconnect --wait || true
       ${applyBypass} || true
+      ${reapplySplitTunnel} || true
       sleep 3
       NEW_FAIL=$(quick_ping_check)
       if [ "$NEW_FAIL" -lt 2 ]; then
-        log "Recovered after relay switch"
+        log "Recovered after relay rotation"
         reset_failure
         exit 0
       fi
@@ -273,6 +276,7 @@ let
       sleep 5
       mullvad connect --wait || true
       ${applyBypass} || true
+      ${reapplySplitTunnel} || true
       sleep 3
       NEW_FAIL=$(quick_ping_check)
       if [ "$NEW_FAIL" -lt 2 ]; then
@@ -289,6 +293,7 @@ let
       sleep 10
       mullvad connect --wait || true
       ${applyBypass} || true
+      ${reapplySplitTunnel} || true
       sleep 3
       NEW_FAIL=$(quick_ping_check)
       if [ "$NEW_FAIL" -lt 2 ]; then
@@ -298,16 +303,25 @@ let
       fi
     fi
 
-    # Step 5: Nuclear VPN reset
-    # Restarting mullvad-daemon removes its nft kill switch and routing
-    # rules entirely, which would let exit-node user traffic forward out
-    # the physical interface unencrypted. Block all forwarding first.
+    # Step 5: Nuclear VPN reset (with 5-minute cooldown to avoid
+    # rapid-fire daemon restarts that destabilize everything)
+    if [ -f "${nuclearCooldownFile}" ]; then
+      NUCLEAR_AGE=$(( $(date +%s) - $(cat "${nuclearCooldownFile}") ))
+      if [ "$NUCLEAR_AGE" -lt 300 ]; then
+        log "Step 5: Skipping nuclear reset (cooldown ''${NUCLEAR_AGE}s/300s)"
+        log "All recovery steps exhausted, waiting for next cycle"
+        check_reboot_timeout
+        exit 1
+      fi
+    fi
+    date +%s > "${nuclearCooldownFile}"
     log "Step 5: Restarting mullvad-daemon"
     enable_leak_guard
     systemctl restart mullvad-daemon || true
     sleep 10
     mullvad connect --wait || true
     ${applyBypass} || true
+    ${reapplySplitTunnel} || true
     disable_leak_guard
     sleep 3
     NEW_FAIL=$(quick_ping_check)
@@ -323,6 +337,7 @@ let
       systemctl restart tailscaled || true
       sleep 5
       tailscale set --advertise-exit-node || true
+      ${reapplySplitTunnel} || true
     fi
 
     # Still broken — record failure and check reboot timeout
@@ -374,6 +389,27 @@ let
         meta mark \& 0x80000 == 0x80000 accept 2>/dev/null || true
     fi
   '';
+
+  reapplySplitTunnel = pkgs.writeShellScript "mullvad-reapply-split-tunnel" ''
+    set -uo pipefail
+    export PATH="${lib.makeBinPath [
+      config.services.mullvad-vpn.package
+      pkgs.procps
+      pkgs.coreutils
+    ]}"
+
+    TSPID=$(pgrep -x tailscaled || true)
+    if [ -z "$TSPID" ]; then
+      echo "tailscaled not running, skipping split tunnel" >&2
+      exit 0
+    fi
+
+    mullvad split-tunnel pid add "$TSPID" 2>/dev/null ||
+      mullvad split-tunnel add "$TSPID" 2>/dev/null || true
+    echo "Split tunnel updated for tailscaled PID $TSPID" >&2
+  '';
+
+  nuclearCooldownFile = "/run/mullvad-nuclear-cooldown";
 in
 {
   services.mullvad-vpn.enable = true;
@@ -416,11 +452,7 @@ in
       mullvad tunnel set ipv6 on
       mullvad tunnel set quantum-resistant on
 
-      TSPID=$(pgrep tailscaled || true)
-      if [ -n "$TSPID" ]; then
-        mullvad split-tunnel pid add "$TSPID" 2>/dev/null ||
-          mullvad split-tunnel add "$TSPID" 2>/dev/null || true
-      fi
+      ${reapplySplitTunnel} || true
 
       # Clean stale ip rules from previous runs so Mullvad doesn't
       # keep leapfrogging them with lower priority numbers.
@@ -494,6 +526,7 @@ in
     };
     script = ''
       ${applyBypass}
+      ${reapplySplitTunnel}
     '';
   };
 
@@ -525,7 +558,7 @@ in
     wantedBy = [ "timers.target" ];
     timerConfig = {
       OnBootSec = "2min";
-      OnUnitActiveSec = "30s";
+      OnUnitActiveSec = "60s";
     };
   };
 
