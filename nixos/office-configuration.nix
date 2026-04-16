@@ -36,8 +36,6 @@
 
   networking.hostName = "office"; # Define your hostname.
   networking.networkmanager.enable = true; # Easiest to use and most distros use this by default.
-  networking.interfaces = {
-  };
   #networking.wireless.secretsFile = "/run/secrets/wireless.env";
   #networking.wireless.networks = {
     #jimmys_2G.pskRaw = "ext:PSK_HOME";
