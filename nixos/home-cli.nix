@@ -181,9 +181,9 @@ in
             exit 1
         end
         if test $new_node = "None"
-            tailscale set --exit-node=""
+            sudo tailscale set --exit-node=""
         else
-            tailscale set --exit-node=$new_node --exit-node-allow-lan-access
+            sudo tailscale set --exit-node=$new_node --exit-node-allow-lan-access
         end
       '';
       vc.description = "Select a Tailscale exit node";
