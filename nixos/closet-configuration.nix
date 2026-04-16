@@ -52,20 +52,6 @@
 
   networking.hostName = compName; # Define your hostname.
   networking.networkmanager.enable = true; # Easiest to use and most distros use this by default.
-  networking.interfaces = {
-    enp6s0.ipv4.addresses = [
-      {
-        address = "192.168.1.35";
-        prefixLength = 24;
-      }
-    ];
-  };
-
-  networking.defaultGateway = "192.168.1.1";
-  networking.nameservers = [
-    "192.168.1.12"
-    "1.1.1.1"
-  ];
 
   time.timeZone = "America/New_York";
   i18n.defaultLocale = "en_US.UTF-8";
@@ -119,7 +105,7 @@
       "--cluster-cidr=10.42.0.0/16,fd42:42:42::/56"
       "--service-cidr=10.43.0.0/16,fd42:42:43::/112"
       # Dual-stack nodes must use explicit IPv4+IPv6 addresses
-      "--node-ip=192.168.1.35,2600:4040:25f0:c500:42b0:76ff:fed9:6992"
+      "--node-ip=192.168.5.35,2600:4040:2602:f801:c037:db04:d14a:5052"
       # Required for IPv6 pod egress when using flannel
       "--flannel-ipv6-masq"
       # Keep standard per-node subnet sizing across families

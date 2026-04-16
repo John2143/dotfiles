@@ -59,7 +59,6 @@
 
   networking.hostName = compName; # Define your hostname.
   networking.networkmanager.enable = true; # Easiest to use and most distros use this by default.
-  networking.defaultGateway = "192.168.1.1";
   networking.nameservers = [
     "1.1.1.1"
   ];
