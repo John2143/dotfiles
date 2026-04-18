@@ -6,6 +6,7 @@
   config,
   pkgs,
   pkgs-stable,
+  inputs,
   lib,
   ...
 }:
@@ -76,7 +77,42 @@
   };
 
 
+  # Second keyboard (winkeyless ps2avrGB) remapped to F13-F24.
+  # Hyprland binds in hyprland.conf map these to actual commands.
+  services.keyd = {
+    enable = true;
+    keyboards.macropad = {
+      ids = [ "20a0:422d" ];
+      settings.main = {
+        esc = "f13";
+        q   = "f14";
+        w   = "f15";
+        e   = "f16";
+        r   = "f17";
+        t   = "f18";
+      };
+    };
+  };
+
   custom.k3sNodeTaints = [ "seated=true:NoSchedule" ];
+
+  systemd.services.screen-control = {
+    description = "REST screen control server";
+    after = [ "network.target" ];
+    wantedBy = [ "multi-user.target" ];
+    serviceConfig = {
+      ExecStart = "${inputs.screen-control.defaultPackage.x86_64-linux}/bin/screen-control";
+      Restart = "always";
+      RestartSec = 5;
+      User = "john";
+      Environment = [
+        "XDG_RUNTIME_DIR=/run/user/1000"
+      ];
+    };
+    path = [ pkgs.hyprland ];
+  };
+
+  networking.firewall.allowedTCPPorts = [ 50051 ];
 
   # services.ollama.acceleration = "cuda";
 

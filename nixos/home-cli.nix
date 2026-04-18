@@ -391,6 +391,7 @@ in
       # " rainbow parens
       {
         plugin = rainbow;
+        type = "viml";
         config = "let g:rainbow_active = 1";
       }
 
