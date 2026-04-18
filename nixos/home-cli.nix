@@ -139,6 +139,13 @@ in
   #
   #  /etc/profiles/per-user/john/etc/profile.d/hm-session-vars.sh
   #
+  home.pointerCursor = {
+    name = "Adwaita";
+    package = pkgs.adwaita-icon-theme;
+    size = 24;
+    gtk.enable = true;
+  };
+
   home.sessionVariables = {
     EDITOR = "nvim";
   };
