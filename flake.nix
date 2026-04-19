@@ -240,5 +240,28 @@
           ./nixos/tailscale.nix
         ];
       };
+
+      nixosConfigurations.installer = nixpkgs.lib.nixosSystem {
+        inherit system;
+        specialArgs = {
+          inherit inputs;
+          compName = "installer";
+          sshKeys = my-keys;
+        };
+        modules = [
+          inputs.home-manager.nixosModules.default
+          ./nixos/shared-cli-configuration.nix
+          ./nixos/modules/user-john.nix
+          ({ modulesPath, ... }: {
+            imports = [
+              (modulesPath + "/installer/cd-dvd/installation-cd-minimal.nix")
+            ];
+            home-manager.users."john" = import ./nixos/home-cli.nix;
+            users.users."john".openssh.authorizedKeys.keys = my-keys;
+          })
+        ];
+      };
+
+      packages.x86_64-linux.installer = nixosConfigurations.installer.config.system.build.isoImage;
     };
 }
