@@ -242,7 +242,7 @@
   security.rtkit.enable = true;
 
   networking.firewall = {
-    enable = true;
+    #enable = true;
     allowedTCPPorts = [
       2283  # immich
     ];
