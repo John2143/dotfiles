@@ -40,11 +40,6 @@
   #networking.wireless.networks = {
     #jimmys_2G.pskRaw = "ext:PSK_HOME";
   #};
-  networking.defaultGateway = "192.168.1.1";
-  networking.nameservers = [
-    "1.1.1.1"
-    "192.168.1.12"
-  ];
 
   # Set your time zone.
   time.timeZone = "America/New_York";
