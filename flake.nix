@@ -223,5 +223,22 @@
           ./nixos/modules/secu-post-install.nix
         ];
       };
+
+      nixosConfigurations.nas = nixpkgs.lib.nixosSystem {
+        inherit system;
+        specialArgs = {
+          inherit inputs;
+          compName = "nas";
+          sshKeys = my-keys;
+        };
+        modules = [
+          inputs.home-manager.nixosModules.default
+          inputs.disko.nixosModules.default
+          ./nixos/shared-cli-configuration.nix
+          ./nixos/nas-configuration.nix
+          ./nixos/modules/disko_nas.nix
+          ./nixos/tailscale.nix
+        ];
+      };
     };
 }
