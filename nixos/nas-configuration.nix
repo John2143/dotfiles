@@ -78,10 +78,7 @@
   networking.hostName = compName;
   networking.networkmanager.enable = true;
   # ZFS requires a stable hostId — generate with: head -c 8 /etc/machine-id
-  networking.hostId = "CHANGEME0";
-  networking.nameservers = [
-    "1.1.1.1"
-  ];
+  networking.hostId = "115e93a1";
 
   services.resolved = {
     enable = true;
