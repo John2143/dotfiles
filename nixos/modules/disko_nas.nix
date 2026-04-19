@@ -29,14 +29,14 @@
   disko.devices = {
     disk = {
       main = {
-        device = "/dev/disk/by-id/ata-WDC_CHANGEME";
+        device = "/dev/sdb";
         type = "disk";
         content = {
           type = "gpt";
           partitions = {
             ESP = {
               type = "EF00";
-              size = "1G";
+              size = "4G";
               content = {
                 type = "filesystem";
                 format = "vfat";
@@ -46,7 +46,7 @@
               };
             };
             swap = {
-              size = "8G";
+              size = "16G";
               content = {
                 type = "swap";
                 randomEncryption = true;
