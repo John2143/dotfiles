@@ -7,7 +7,6 @@
   boot.initrd.luks.devices."cryptroot" = {
     keyFile = "/dev/disk/by-partlabel/CRYPTKEY";
     keyFileSize = 4096;
-    fallbackToPassword = true;
   };
 
   services.btrbk.instances."home" = {
