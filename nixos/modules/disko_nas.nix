@@ -3,10 +3,10 @@
 # Partition layout (2TB WD SSD, GPT):
 #   part1: ESP        (1GB,    vfat, label=BOOT,    mount=/boot)
 #   part2: Swap       (8GB,    random-key encrypted, label=SWAP)
-#   part3: Root       (~1TB,   ext4, label=NIXROOT,  mount=/)
-#   part4: ZFS-special (~500GB, raw, no filesystem)
+#   part3: ZFS-special (100GB,  raw, no filesystem)
 #         └── Used as one leg of the mirrored ZFS special vdev on `tank`.
-#             Paired with the 500GB SSD via: zpool add tank special mirror ...
+#             Paired with the 100GB SSD via: zpool add tank special mirror ...
+#   part4: Root       (remainder, ext4, label=NIXROOT, mount=/)
 #
 # The ZFS data pool (`tank`) is NOT managed by disko. It is created manually
 # after the first boot and auto-imported by NixOS via boot.zfs.extraPools.
@@ -53,17 +53,17 @@
                 extraArgs = [ "-L" "SWAP" ];
               };
             };
+            zfs_special = {
+              size = "100G";
+            };
             root = {
-              size = "1T";
+              size = "100%";
               content = {
                 type = "filesystem";
                 format = "ext4";
                 mountpoint = "/";
                 extraArgs = [ "-L" "NIXROOT" ];
               };
-            };
-            zfs_special = {
-              size = "100%";
             };
           };
         };
