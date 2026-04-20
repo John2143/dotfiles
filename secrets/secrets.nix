@@ -20,4 +20,6 @@ in
 {
   # Readable only by the office machine (k3s agent token).
   "k3s-local-token.age".publicKeys = [ office arch pite ];
+  # Samba credentials for mounting NAS shares (username/password/domain).
+  "smb-credentials.age".publicKeys = [ arch ];
 }
