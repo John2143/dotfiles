@@ -165,17 +165,28 @@
         "fruit:delete_empty_adfiles" = "yes";
         "server min protocol" = "SMB2";
         "ea support" = "yes";
+        "map to guest" = "Bad User";
       };
       share = {
         path = "/tank/share";
+        browseable = "yes";
+        "read only" = "no";
+        "guest ok" = "yes";
+        "create mask" = "0666";
+        "directory mask" = "0777";
+        "force user" = "john";
+        "force group" = "john";
+      };
+      media = {
+        path = "/tank/media";
         browseable = "yes";
         "read only" = "no";
         "valid users" = "john";
         "create mask" = "0644";
         "directory mask" = "0755";
       };
-      media = {
-        path = "/tank/media";
+      scratch = {
+        path = "/tank/scratch";
         browseable = "yes";
         "read only" = "no";
         "valid users" = "john";

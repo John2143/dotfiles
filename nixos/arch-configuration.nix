@@ -141,6 +141,8 @@
       "credentials=${config.age.secrets.smb-credentials.path}"
       "uid=1000"
       "gid=1000"
+      "forceuid"
+      "forcegid"
       "file_mode=0644"
       "dir_mode=0755"
     ];
@@ -159,6 +161,8 @@
       "credentials=${config.age.secrets.smb-credentials.path}"
       "uid=1000"
       "gid=1000"
+      "forceuid"
+      "forcegid"
       "file_mode=0644"
       "dir_mode=0755"
     ];
