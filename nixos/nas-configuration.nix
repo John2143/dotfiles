@@ -243,9 +243,12 @@
   services.openssh.enable = true;
   users.users."john".openssh.authorizedKeys.keys = sshKeys;
 
+  users.groups.backup = {};
   users.users.backup = {
     isNormalUser = true;
+    group = "backup";
     home = "/tank/backups";
+    createHome = false;
     shell = pkgs.shadow + "/bin/nologin";
     openssh.authorizedKeys.keys = [
       # Dedicated backup keypair — NOT john's personal keys.

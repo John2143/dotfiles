@@ -43,6 +43,7 @@
     tmux
     vim
     btop
+    inputs.agenix.packages.${pkgs.stdenv.hostPlatform.system}.default
   ];
 
   programs.gnupg.agent = {
