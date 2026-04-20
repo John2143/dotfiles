@@ -165,6 +165,7 @@
         "fruit:wipe_intentionally_left_blank_rfork" = "yes";
         "fruit:delete_empty_adfiles" = "yes";
         "server min protocol" = "SMB2";
+        # Added for compat with ios:
         "server max protocol" = "SMB3";
         "ea support" = "yes";
         # iOS Files is picky; avoid SMB3 transport encryption fighting with VPN/Tailscale.
@@ -187,7 +188,7 @@
         path = "/tank/media";
         browseable = "yes";
         "read only" = "no";
-        "valid users" = "john";
+        "valid users" = "john ewan brown";
         "create mask" = "0644";
         "directory mask" = "0755";
       };
@@ -195,7 +196,7 @@
         path = "/tank/scratch";
         browseable = "yes";
         "read only" = "no";
-        "valid users" = "john";
+        "valid users" = "john ewan brown";
         "create mask" = "0644";
         "directory mask" = "0755";
       };
