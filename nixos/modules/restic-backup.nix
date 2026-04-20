@@ -74,7 +74,7 @@ in
     age.identityPaths = [ "/home/john/.ssh/age" ];
 
     age.secrets.restic-password = {
-      file = ../../secrets/restic-password.age;
+      file = ../../secrets/restic-password-${hostname}.age;
       mode = "0400";
       owner = "root";
       group = "root";

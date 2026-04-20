@@ -37,6 +37,7 @@
 
   environment.systemPackages = with pkgs; [
     git
+    agenix
     fish
     wget
     curl

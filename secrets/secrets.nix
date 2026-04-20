@@ -23,7 +23,12 @@ in
   "k3s-local-token.age".publicKeys = [ office arch pite ];
   # Samba credentials for mounting NAS shares (username/password/domain).
   "smb-credentials.age".publicKeys = [ arch office closet ];
-  "restic-password.age".publicKeys = [ office arch closet nas secu ];
+  # Per-machine restic repository passwords (each machine can only decrypt its own).
+  # Generate: agenix -e restic-password-<host>.age -i ~/.ssh/age
+  "restic-password-arch.age".publicKeys = [ arch ];
+  "restic-password-office.age".publicKeys = [ office ];
+  "restic-password-closet.age".publicKeys = [ closet ];
+  "restic-password-secu.age".publicKeys = [ secu ];
   # Private SSH key for the backup user on the NAS (all backup clients need this).
   # Generate once: ssh-keygen -t ed25519 -f /tmp/backup-key -N "" -C "backup@nas"
   # Then: agenix -e backup-ssh-key.age -i ~/.ssh/age  (paste the private key)

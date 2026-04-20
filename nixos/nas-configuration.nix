@@ -18,11 +18,16 @@
 #          /dev/disk/by-id/ata-ST8000..._3 \
 #          /dev/disk/by-id/ata-ST8000..._4
 #
-# 3. Add mirrored special vdev (500GB SSD + partition on boot SSD):
+# 3. Add mirrored special vdev (100GB SSD partition + partition on boot SSD):
 #      sudo zpool add tank special mirror \
-#        /dev/disk/by-id/ata-<500GB-SSD> \
+#        /dev/disk/by-id/wwn-0x5e83a97923abf0ec-part1 \
 #        /dev/disk/by-id/ata-WDC_...-part4
 #      sudo zfs set special_small_blocks=32K tank
+#
+# Current live mapping on this NAS:
+#   - raidz1-0 (data): ata-ST8000DM004-2CX188_{ZR10RP6D,ZR10TRAD,ZR109DM9,ZR10RB8J}
+#   - special mirror: wwn-0x5e83a97923abf0ec-part1 (sdf1) +
+#                     wwn-0x5001b448be24504b-part4 (sda4)
 #
 # 4. Create datasets:
 #      sudo zfs create -o mountpoint=/tank/share    tank/share
