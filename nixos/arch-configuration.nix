@@ -95,6 +95,7 @@
   };
 
   custom.k3sNodeTaints = [ "seated=true:NoSchedule" ];
+  custom.backup.enable = true;
 
   systemd.services.screen-control = {
     description = "REST screen control server";
@@ -113,6 +114,60 @@
   };
 
   networking.firewall.allowedTCPPorts = [ 50051 ];
+
+  # ================
+  # === NAS mounts ===
+  # ================
+  # Samba shares from the `nas` host, reached over Tailscale.
+  # Mounts are lazy via x-systemd.automount so a missing NAS never blocks boot.
+  environment.systemPackages = with pkgs; [ cifs-utils ];
+
+  age.secrets.smb-credentials = {
+    file = ../secrets/smb-credentials.age;
+    mode = "0400";
+    owner = "root";
+    group = "root";
+  };
+
+  fileSystems."/mnt/nas/share" = {
+    device = "//nas.ts.2143.me/share";
+    fsType = "cifs";
+    options = [
+      "x-systemd.automount"
+      "noauto"
+      "x-systemd.idle-timeout=60"
+      "x-systemd.device-timeout=10s"
+      "x-systemd.mount-timeout=10s"
+      "_netdev"
+      "credentials=${config.age.secrets.smb-credentials.path}"
+      "uid=1000"
+      "gid=1000"
+      "forceuid"
+      "forcegid"
+      "file_mode=0644"
+      "dir_mode=0755"
+    ];
+  };
+
+  fileSystems."/mnt/nas/scratch" = {
+    device = "//nas.ts.2143.me/scratch";
+    fsType = "cifs";
+    options = [
+      "x-systemd.automount"
+      "noauto"
+      "x-systemd.idle-timeout=60"
+      "x-systemd.device-timeout=10s"
+      "x-systemd.mount-timeout=10s"
+      "_netdev"
+      "credentials=${config.age.secrets.smb-credentials.path}"
+      "uid=1000"
+      "gid=1000"
+      "forceuid"
+      "forcegid"
+      "file_mode=0644"
+      "dir_mode=0755"
+    ];
+  };
 
   # services.ollama.acceleration = "cuda";
 

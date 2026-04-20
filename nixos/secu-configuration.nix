@@ -84,6 +84,8 @@
 
   programs.fish.enable = true;
 
+  custom.backup.enable = true;
+
   # ================
   # === Services ===
   # ================

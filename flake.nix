@@ -70,6 +70,7 @@
           ./nixos/shared-games-configuration.nix
           ./nixos/office-configuration.nix
           ./nixos/modules/k3s-agent.nix
+          ./nixos/modules/restic-backup.nix
           ./nixos/tailscale.nix
         ];
       };
@@ -89,6 +90,7 @@
           ./nixos/shared-games-configuration.nix
           ./nixos/arch-configuration.nix
           ./nixos/modules/k3s-agent.nix
+          ./nixos/modules/restic-backup.nix
           ./nixos/tailscale.nix
         ];
       };
@@ -102,8 +104,10 @@
         };
         modules = [
           inputs.home-manager.nixosModules.default
+          agenix.nixosModules.default
           ./nixos/shared-cli-configuration.nix
           ./nixos/closet-configuration.nix
+          ./nixos/modules/restic-backup.nix
           ./nixos/tailscale.nix
         ];
       };
@@ -212,10 +216,12 @@
         modules = [
           inputs.home-manager.nixosModules.default
           inputs.disko.nixosModules.default
+          agenix.nixosModules.default
           ./nixos/shared-cli-configuration.nix
           ./nixos/shared-configuration.nix
           ./nixos/secu-configuration.nix
           ./nixos/modules/disko_secu.nix
+          ./nixos/modules/restic-backup.nix
           #./nixos/remote-cli-config.nix
           #./nixos/modules/k3s-agent.nix
           ./nixos/tailscale.nix

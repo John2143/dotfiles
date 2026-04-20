@@ -75,6 +75,17 @@
 
   programs.fish.enable = true;
 
+  custom.backup = {
+    enable = true;
+    prepareCommand = ''
+      mkdir -p /mnt/backup
+      ${pkgs.util-linux}/bin/ionice -c3 ${pkgs.coreutils}/bin/nice -n19 \
+        ${pkgs.sudo}/bin/sudo -u postgres ${pkgs.postgresql_17}/bin/pg_dumpall \
+        | ${pkgs.gzip}/bin/gzip > /mnt/backup/postgres.sql.gz
+    '';
+    extraPaths = [ "/mnt/backup/postgres.sql.gz" ];
+  };
+
   # ================
   # === Services ===
   # ================

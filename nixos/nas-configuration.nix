@@ -18,11 +18,16 @@
 #          /dev/disk/by-id/ata-ST8000..._3 \
 #          /dev/disk/by-id/ata-ST8000..._4
 #
-# 3. Add mirrored special vdev (500GB SSD + partition on boot SSD):
+# 3. Add mirrored special vdev (100GB SSD partition + partition on boot SSD):
 #      sudo zpool add tank special mirror \
-#        /dev/disk/by-id/ata-<500GB-SSD> \
+#        /dev/disk/by-id/wwn-0x5e83a97923abf0ec-part1 \
 #        /dev/disk/by-id/ata-WDC_...-part4
 #      sudo zfs set special_small_blocks=32K tank
+#
+# Current live mapping on this NAS:
+#   - raidz1-0 (data): ata-ST8000DM004-2CX188_{ZR10RP6D,ZR10TRAD,ZR109DM9,ZR10RB8J}
+#   - special mirror: wwn-0x5e83a97923abf0ec-part1 (sdf1) +
+#                     wwn-0x5001b448be24504b-part4 (sda4)
 #
 # 4. Create datasets:
 #      sudo zfs create -o mountpoint=/tank/share    tank/share
@@ -34,6 +39,13 @@
 # 5. Set ownership:
 #      sudo chown john:john /tank/share /tank/media /tank/scratch
 #      sudo chown immich:immich /tank/immich
+#      # /tank/backups must be root-owned for OpenSSH ChrootDirectory.
+#      # Per-host subdirs are owned by the backup user:
+#      sudo chown root:root /tank/backups && sudo chmod 755 /tank/backups
+#      for h in arch office closet secu; do
+#        sudo zfs create tank/backups/$h   # or just: sudo mkdir /tank/backups/$h
+#        sudo chown backup:backup /tank/backups/$h
+#      done
 #
 # 6. Set Samba password:
 #      sudo smbpasswd -a john
@@ -80,18 +92,6 @@
   # ZFS requires a stable hostId — generate with: head -c 8 /etc/machine-id
   networking.hostId = "115e93a1";
 
-  services.resolved = {
-    enable = true;
-    settings = {
-      Resolve = {
-        DNSOverTLS = "true";
-        DNSSEC = "true";
-        Domains = [ "~." ];
-        FallbackDNS = [ "1.1.1.1" "1.0.0.1" ];
-      };
-    };
-  };
-
   time.timeZone = "America/New_York";
   i18n.defaultLocale = "en_US.UTF-8";
   console = {
@@ -103,6 +103,8 @@
     git
     fish
     curl
+    smartmontools # smartctl — inspect SMART on SATA/SCSI disks
+    restic
   ];
 
   programs.gnupg.agent = {
@@ -163,7 +165,8 @@
         "netbios name" = "nas";
         "workgroup" = "WORKGROUP";
         "server role" = "standalone server";
-        "hosts allow" = "192.168. 10.10. 127.0.0.1 localhost";
+        # Include Tailscale CGNAT so phones / laptops on the tailnet can reach SMB.
+        "hosts allow" = "192.168. 10.10. 100.64.0.0/10 127.0.0.1 localhost";
         "hosts deny" = "0.0.0.0/0";
         # macOS compatibility (Finder metadata, resource forks)
         "vfs objects" = "catia fruit streams_xattr";
@@ -175,21 +178,38 @@
         "fruit:wipe_intentionally_left_blank_rfork" = "yes";
         "fruit:delete_empty_adfiles" = "yes";
         "server min protocol" = "SMB2";
+        # Added for compat with ios:
+        "server max protocol" = "SMB3";
         "ea support" = "yes";
+        # iOS Files is picky; avoid SMB3 transport encryption fighting with VPN/Tailscale.
+        # Tailscale already encrypts the tunnel; signing still protects auth on LAN.
+        "server signing" = "auto";
+        "server smb encrypt" = "off";
+        "map to guest" = "Bad User";
       };
       share = {
         path = "/tank/share";
         browseable = "yes";
         "read only" = "no";
-        "valid users" = "john";
-        "create mask" = "0644";
-        "directory mask" = "0755";
+        "guest ok" = "yes";
+        "create mask" = "0666";
+        "directory mask" = "0777";
+        "force user" = "john";
+        "force group" = "john";
       };
       media = {
         path = "/tank/media";
         browseable = "yes";
         "read only" = "no";
-        "valid users" = "john";
+        "valid users" = "john ewan brown";
+        "create mask" = "0644";
+        "directory mask" = "0755";
+      };
+      scratch = {
+        path = "/tank/scratch";
+        browseable = "yes";
+        "read only" = "no";
+        "valid users" = "john ewan brown";
         "create mask" = "0644";
         "directory mask" = "0755";
       };
@@ -222,6 +242,30 @@
 
   services.openssh.enable = true;
   users.users."john".openssh.authorizedKeys.keys = sshKeys;
+
+  users.groups.backup = {};
+  users.users.backup = {
+    isNormalUser = true;
+    group = "backup";
+    home = "/tank/backups";
+    createHome = false;
+    shell = pkgs.shadow + "/bin/nologin";
+    openssh.authorizedKeys.keys = [
+      # Dedicated backup keypair — NOT john's personal keys.
+      # Generate: ssh-keygen -t ed25519 -f /tmp/backup-key -N "" -C "backup@nas"
+      # Paste the public key here, encrypt the private key with agenix.
+      "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIHc7Lm/K9+ayv0s8Emk8z89Cgtzm5jexAUfdcjoJAinw backup@nas"
+    ];
+  };
+
+  services.openssh.extraConfig = ''
+    Match User backup
+      ForceCommand internal-sftp
+      ChrootDirectory /tank/backups
+      AllowTcpForwarding no
+      X11Forwarding no
+      PermitTunnel no
+  '';
 
   services.avahi = {
     enable = true;
