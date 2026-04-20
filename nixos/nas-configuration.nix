@@ -242,7 +242,12 @@
     isNormalUser = true;
     home = "/tank/backups";
     shell = pkgs.shadow + "/bin/nologin";
-    openssh.authorizedKeys.keys = sshKeys;
+    openssh.authorizedKeys.keys = [
+      # Dedicated backup keypair — NOT john's personal keys.
+      # Generate: ssh-keygen -t ed25519 -f /tmp/backup-key -N "" -C "backup@nas"
+      # Paste the public key here, encrypt the private key with agenix.
+      "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIHc7Lm/K9+ayv0s8Emk8z89Cgtzm5jexAUfdcjoJAinw backup@nas"
+    ];
   };
 
   services.openssh.extraConfig = ''

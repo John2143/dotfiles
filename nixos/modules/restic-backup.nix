@@ -5,16 +5,20 @@
 #
 # === ONE-TIME SETUP (after first deploy) ===
 #
-# 1. Generate the NAS age key (on the NAS, if not already done):
-#      ssh-keygen -t ed25519 -f ~/.ssh/age -N ""
-#    Then paste the public key into secrets/secrets.nix and re-key.
+# 1. Generate a dedicated backup SSH keypair (NOT john's personal keys):
+#      ssh-keygen -t ed25519 -f /tmp/backup-key -N "" -C "backup@nas"
+#    Paste the PUBLIC key into nas-configuration.nix (backup user authorizedKeys).
+#    Encrypt the PRIVATE key with agenix:
+#      cd secrets && agenix -e backup-ssh-key.age -i ~/.ssh/age
+#      (paste contents of /tmp/backup-key, then save)
+#    Delete the temp files: rm /tmp/backup-key /tmp/backup-key.pub
 #
 # 2. Create the restic-password secret (from the secrets/ directory):
-#      nix run github:ryantm/agenix -- -e restic-password.age -i ~/.ssh/age
+#      agenix -e restic-password.age -i ~/.ssh/age
 #    Enter a strong random passphrase (e.g. `openssl rand -base64 32`).
 #
 # 3. Re-encrypt after adding new machine keys to secrets.nix:
-#      nix run github:ryantm/agenix -- -r -i ~/.ssh/age
+#      agenix -r -i ~/.ssh/age
 #
 # 4. Set up backup directories on the NAS. ChrootDirectory requires
 #    /tank/backups to be root-owned; per-host subdirs are owned by backup:
@@ -76,6 +80,13 @@ in
       group = "root";
     };
 
+    age.secrets.backup-ssh-key = {
+      file = ../../secrets/backup-ssh-key.age;
+      mode = "0400";
+      owner = "root";
+      group = "root";
+    };
+
     services.restic.backups.nas = {
       repository = "sftp:backup@nas.ts.2143.me:/${hostname}";
       passwordFile = config.age.secrets.restic-password.path;
@@ -124,7 +135,7 @@ in
       backupPrepareCommand = cfg.prepareCommand;
 
       extraOptions = [
-        "sftp.command='ssh backup@nas.ts.2143.me -o StrictHostKeyChecking=accept-new -s sftp'"
+        "sftp.command='ssh backup@nas.ts.2143.me -i ${config.age.secrets.backup-ssh-key.path} -o StrictHostKeyChecking=accept-new -s sftp'"
       ];
     };
   };
