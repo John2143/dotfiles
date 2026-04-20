@@ -91,6 +91,7 @@
     git
     fish
     curl
+    smartmontools # smartctl — inspect SMART on SATA/SCSI disks
   ];
 
   programs.gnupg.agent = {
