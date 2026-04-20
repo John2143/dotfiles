@@ -152,7 +152,8 @@
         "netbios name" = "nas";
         "workgroup" = "WORKGROUP";
         "server role" = "standalone server";
-        "hosts allow" = "192.168. 10.10. 127.0.0.1 localhost";
+        # Include Tailscale CGNAT so phones / laptops on the tailnet can reach SMB.
+        "hosts allow" = "192.168. 10.10. 100.64.0.0/10 127.0.0.1 localhost";
         "hosts deny" = "0.0.0.0/0";
         # macOS compatibility (Finder metadata, resource forks)
         "vfs objects" = "catia fruit streams_xattr";
@@ -164,7 +165,12 @@
         "fruit:wipe_intentionally_left_blank_rfork" = "yes";
         "fruit:delete_empty_adfiles" = "yes";
         "server min protocol" = "SMB2";
+        "server max protocol" = "SMB3";
         "ea support" = "yes";
+        # iOS Files is picky; avoid SMB3 transport encryption fighting with VPN/Tailscale.
+        # Tailscale already encrypts the tunnel; signing still protects auth on LAN.
+        "server signing" = "auto";
+        "server smb encrypt" = "off";
         "map to guest" = "Bad User";
       };
       share = {
