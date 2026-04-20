@@ -84,6 +84,9 @@
 
   programs.fish.enable = true;
 
+  # Enable after generating ~/.ssh/age on secu and adding the pubkey to secrets/secrets.nix
+  #custom.backup.enable = true;
+
   # ================
   # === Services ===
   # ================

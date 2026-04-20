@@ -11,15 +11,17 @@ let
   closet = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIN3VC6q1KhVCI3BRzbTi9Di/pS7I1ASEYoNBwBzU4jgT john@closet";
   pite = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAh9fgjUMvSfYUYteUHeI/JkjxUJLwVAnoLyluU1Uknd john@pite";
   security = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAILO6ntnqr4ERZLUdL2MOMeC++HPIsigce4d42h8UogA2 john@security";
-  # nas: generate with `ssh-keygen -t ed25519 -f ~/.ssh/age -N ""` on the NAS, then paste here
-  #nas = "ssh-ed25519 AAAA... john@nas";
+  secu = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIN4vMixKG/e9b3ttJy9Xb5ymavp7Gny6dxKrViQl8AUl john@secu";
+  nas = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIPzgxUuaZUG9Dr5ZTZImKqt3SUSPVD/FLO2wKQfwz98A john@nas";
+  # generate with `ssh-keygen -f ~/.ssh/age; cat ~/.ssh/age.pub -p` on each host, then paste here
 
   # Collect all keys that should be able to re-encrypt / manage secrets.
-  allKeys = [ office arch closet pite security ];
+  allKeys = [ office arch ];
 in
 {
   # Readable only by the office machine (k3s agent token).
   "k3s-local-token.age".publicKeys = [ office arch pite ];
   # Samba credentials for mounting NAS shares (username/password/domain).
-  "smb-credentials.age".publicKeys = [ arch ];
+  "smb-credentials.age".publicKeys = [ arch office closet ];
+  "restic-password.age".publicKeys = [ office arch closet nas secu ];
 }

@@ -34,6 +34,13 @@
 # 5. Set ownership:
 #      sudo chown john:john /tank/share /tank/media /tank/scratch
 #      sudo chown immich:immich /tank/immich
+#      # /tank/backups must be root-owned for OpenSSH ChrootDirectory.
+#      # Per-host subdirs are owned by the backup user:
+#      sudo chown root:root /tank/backups && sudo chmod 755 /tank/backups
+#      for h in arch office closet secu; do
+#        sudo zfs create tank/backups/$h   # or just: sudo mkdir /tank/backups/$h
+#        sudo chown backup:backup /tank/backups/$h
+#      done
 #
 # 6. Set Samba password:
 #      sudo smbpasswd -a john
@@ -92,6 +99,7 @@
     fish
     curl
     smartmontools # smartctl — inspect SMART on SATA/SCSI disks
+    restic
   ];
 
   programs.gnupg.agent = {
@@ -229,6 +237,22 @@
 
   services.openssh.enable = true;
   users.users."john".openssh.authorizedKeys.keys = sshKeys;
+
+  users.users.backup = {
+    isNormalUser = true;
+    home = "/tank/backups";
+    shell = pkgs.shadow + "/bin/nologin";
+    openssh.authorizedKeys.keys = sshKeys;
+  };
+
+  services.openssh.extraConfig = ''
+    Match User backup
+      ForceCommand internal-sftp
+      ChrootDirectory /tank/backups
+      AllowTcpForwarding no
+      X11Forwarding no
+      PermitTunnel no
+  '';
 
   services.avahi = {
     enable = true;

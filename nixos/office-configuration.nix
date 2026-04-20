@@ -104,6 +104,7 @@
   };
 
   custom.k3sNodeTaints = [ "seated=true:NoSchedule" ];
+  custom.backup.enable = true;
 
   services.ollama = {
     package = pkgs.ollama-rocm;

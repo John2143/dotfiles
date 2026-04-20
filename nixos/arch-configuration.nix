@@ -95,6 +95,7 @@
   };
 
   custom.k3sNodeTaints = [ "seated=true:NoSchedule" ];
+  custom.backup.enable = true;
 
   systemd.services.screen-control = {
     description = "REST screen control server";
