@@ -80,18 +80,6 @@
   # ZFS requires a stable hostId — generate with: head -c 8 /etc/machine-id
   networking.hostId = "115e93a1";
 
-  services.resolved = {
-    enable = true;
-    settings = {
-      Resolve = {
-        DNSOverTLS = "true";
-        DNSSEC = "true";
-        Domains = [ "~." ];
-        FallbackDNS = [ "1.1.1.1" "1.0.0.1" ];
-      };
-    };
-  };
-
   time.timeZone = "America/New_York";
   i18n.defaultLocale = "en_US.UTF-8";
   console = {
