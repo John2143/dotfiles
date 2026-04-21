@@ -20,7 +20,7 @@
   # Passive DP-to-HDMI adapter can't handle KMS mode negotiation.
   # nomodeset keeps VESA framebuffer throughout boot until an active adapter is available.
   boot.kernelParams = [
-    "nomodeset"
+    "video=1920x1080"
   ];
   boot.extraModulePackages = [ ];
 

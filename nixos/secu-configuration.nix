@@ -39,28 +39,9 @@
   };
   services.seatd.enable = true;
 
-  services.resolved = {
-    enable = true;
-    settings = {
-      Resolve = {
-        DNSOverTLS = "true";
-        DNSSEC = "true";
-        Domains = [
-          "~."
-        ];
-        FallbackDNS = [
-          "1.1.1.1"
-          "1.0.0.1"
-        ];
-      };
-    };
-  };
 
   networking.hostName = compName; # Define your hostname.
   networking.networkmanager.enable = true; # Easiest to use and most distros use this by default.
-  networking.nameservers = [
-    "1.1.1.1"
-  ];
 
   time.timeZone = "America/New_York";
   i18n.defaultLocale = "en_US.UTF-8";
