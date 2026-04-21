@@ -36,6 +36,24 @@
 #      sudo zfs create -o mountpoint=/tank/immich   tank/immich
 #      sudo zfs create -o mountpoint=/tank/scratch  tank/scratch
 #
+#    Immich thumbnails — dedicated child dataset pinned to the SSD special
+#    vdev for fast scrolling. recordsize=special_small_blocks=1M means every
+#    block written under thumbs/ lands on the SSD mirror, not the raidz1
+#    HDDs. Originals under tank/immich stay on HDD.
+#      sudo systemctl stop immich-server immich-machine-learning
+#      sudo mv /tank/immich/thumbs /tank/immich/thumbs.old   # if it exists
+#      sudo zfs create \
+#        -o mountpoint=/tank/immich/thumbs \
+#        -o recordsize=1M \
+#        -o special_small_blocks=1M \
+#        -o compression=lz4 \
+#        -o atime=off \
+#        tank/immich/thumbs
+#      sudo chown immich:immich /tank/immich/thumbs
+#      sudo chmod 750 /tank/immich/thumbs
+#      sudo rsync -aHAX /tank/immich/thumbs.old/ /tank/immich/thumbs/   # if moved
+#      sudo systemctl start immich-server immich-machine-learning
+#
 # 5. Set ownership:
 #      sudo chown john:john /tank/share /tank/media /tank/scratch
 #      sudo chown immich:immich /tank/immich
@@ -143,6 +161,11 @@
         hourly = 24;
         daily = 30;
         monthly = 6;
+      };
+      # tank/immich/thumbs lives on the SSD special vdev and is regenerable
+      # from originals — don't waste SSD space snapshotting it.
+      "tank/immich/thumbs" = {
+        autosnap = false;
       };
       "tank/backups" = {
         autosnap = true;
