@@ -35,6 +35,7 @@
 #      sudo zfs create -o mountpoint=/tank/backups  tank/backups
 #      sudo zfs create -o mountpoint=/tank/immich   tank/immich
 #      sudo zfs create -o mountpoint=/tank/scratch  tank/scratch
+#      sudo zfs create -o mountpoint=/tank/private  tank/private
 #
 #    Immich thumbnails — dedicated child dataset pinned to the SSD special
 #    vdev for fast scrolling. recordsize=special_small_blocks=1M means every
@@ -55,7 +56,7 @@
 #      sudo systemctl start immich-server immich-machine-learning
 #
 # 5. Set ownership:
-#      sudo chown john:john /tank/share /tank/media /tank/scratch
+#      sudo chown john:john /tank/share /tank/media /tank/scratch /tank/private
 #      sudo chown immich:immich /tank/immich
 #      # /tank/backups must be root-owned for OpenSSH ChrootDirectory.
 #      # Per-host subdirs are owned by the backup user:
@@ -172,6 +173,12 @@
         daily = 7;
         monthly = 3;
       };
+      "tank/private" = {
+        autosnap = true;
+        daily = 30;
+        monthly = 12;
+        yearly = 1;
+      };
     };
   };
 
@@ -228,6 +235,14 @@
         "valid users" = "john ewan brown";
         "create mask" = "0664";
         "directory mask" = "2775";
+      };
+      private = {
+        path = "/tank/private/%U";
+        browseable = "no";
+        "read only" = "no";
+        "valid users" = "john";
+        "create mask" = "0600";
+        "directory mask" = "0700";
       };
     };
   };

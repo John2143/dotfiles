@@ -35,6 +35,15 @@ in
     group = "root";
   };
 
+  age.secrets.gocryptfs-passphrase = lib.mkIf
+    (builtins.elem config.networking.hostName [ "arch" "office" "closet" ])
+    {
+      file = ../../secrets/gocryptfs-passphrase.age;
+      mode = "0400";
+      owner = "john";
+      group = "root";
+    };
+
   fileSystems."/mnt/nas/share" = {
     device = "//nas.ts.2143.me/share";
     fsType = "cifs";
@@ -49,6 +58,12 @@ in
 
   fileSystems."/mnt/nas/media" = {
     device = "//nas.ts.2143.me/media";
+    fsType = "cifs";
+    options = mountOpts;
+  };
+
+  fileSystems."/mnt/nas/private" = {
+    device = "//nas.ts.2143.me/private";
     fsType = "cifs";
     options = mountOpts;
   };

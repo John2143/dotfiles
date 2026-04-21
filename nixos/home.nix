@@ -17,6 +17,7 @@ let
 
     # cli
     ffmpeg
+    gocryptfs
 
     #@ embedded programming
     #@ gcc-arm-embedded # arm compiler

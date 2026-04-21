@@ -36,4 +36,7 @@ in
   # Then: agenix -e backup-ssh-key.age -i ~/.ssh/age  (paste the private key)
   # Add the public key to nas-configuration.nix backup user's authorizedKeys.
   "backup-ssh-key.age".publicKeys = [ office arch closet secu ];
+  # gocryptfs passphrase for encrypted vault on NAS scratch share.
+  # Only workstations that mount the vault need this — the NAS never sees the key.
+  "gocryptfs-passphrase.age".publicKeys = [ arch office closet ];
 }
