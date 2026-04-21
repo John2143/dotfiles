@@ -257,6 +257,11 @@
     machine-learning.enable = true;
     database.enable = true;
     redis.enable = true;
+
+    # Public serving of /share/* is handled by the k8s `immich-public-proxy`
+    # workload fronting images.2143.me. This setting only controls the URL
+    # Immich embeds in generated share links (and a few other UI-copied URLs).
+    settings.server.externalDomain = "https://images.2143.me";
   };
 
   # ================
