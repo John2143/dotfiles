@@ -71,6 +71,7 @@
           ./nixos/office-configuration.nix
           ./nixos/modules/k3s-agent.nix
           ./nixos/modules/restic-backup.nix
+          ./nixos/modules/nas-mounts.nix
           ./nixos/tailscale.nix
         ];
       };
@@ -91,6 +92,7 @@
           ./nixos/arch-configuration.nix
           ./nixos/modules/k3s-agent.nix
           ./nixos/modules/restic-backup.nix
+          ./nixos/modules/nas-mounts.nix
           ./nixos/tailscale.nix
         ];
       };
@@ -108,6 +110,7 @@
           ./nixos/shared-cli-configuration.nix
           ./nixos/closet-configuration.nix
           ./nixos/modules/restic-backup.nix
+          ./nixos/modules/nas-mounts.nix
           ./nixos/tailscale.nix
         ];
       };
@@ -222,6 +225,7 @@
           ./nixos/secu-configuration.nix
           ./nixos/modules/disko_secu.nix
           ./nixos/modules/restic-backup.nix
+          ./nixos/modules/nas-mounts.nix
           #./nixos/remote-cli-config.nix
           #./nixos/modules/k3s-agent.nix
           ./nixos/tailscale.nix

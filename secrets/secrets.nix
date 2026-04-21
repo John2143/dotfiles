@@ -1,8 +1,10 @@
 let
   # Per-machine age keys (~/.ssh/age on each host).
   # Generate on a new computer with: ssh-keygen -f ~/.ssh/age; cat ~/.ssh/age.pub -p
-  # Then add the public key here and re-encrypt any secrets that host should read
-  # using: nix run github:ryantm/agenix -- -r -i ~/.ssh/age
+  # Then add the public key here and re-encrypt any secrets that host should read.
+  #
+  # Re-encrypt all secrets (run from the office host, the admin):
+  #   cd ~/dotfiles/secrets && agenix -r -i ~/.ssh/age
   #
   # NOTE: The k3s token committed before this was introduced is in git history.
   # Rotate the k3s cluster token to fully remove exposure.
@@ -15,23 +17,25 @@ let
   nas = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIPzgxUuaZUG9Dr5ZTZImKqt3SUSPVD/FLO2wKQfwz98A john@nas";
   # generate with `ssh-keygen -f ~/.ssh/age; cat ~/.ssh/age.pub -p` on each host, then paste here
 
-  # Collect all keys that should be able to re-encrypt / manage secrets.
-  allKeys = [ office arch ];
+  # Admin keys — included in every secret so `agenix -r` can rekey the whole
+  # repo from one host. office is the daily-driver and the canonical admin.
+  admin = [ office ];
 in
 {
-  # Readable only by the office machine (k3s agent token).
-  "k3s-local-token.age".publicKeys = [ office arch pite ];
+  # k3s agent token — readable by k3s nodes.
+  "k3s-local-token.age".publicKeys = admin ++ [ arch pite ];
   # Samba credentials for mounting NAS shares (username/password/domain).
-  "smb-credentials.age".publicKeys = [ arch office closet ];
-  # Per-machine restic repository passwords (each machine can only decrypt its own).
+  "smb-credentials.age".publicKeys = admin ++ [ arch closet secu ];
+  # Per-machine restic repository passwords (each machine can only decrypt its
+  # own backups; admin keys can rekey).
   # Generate: agenix -e restic-password-<host>.age -i ~/.ssh/age
-  "restic-password-arch.age".publicKeys = [ arch ];
-  "restic-password-office.age".publicKeys = [ office ];
-  "restic-password-closet.age".publicKeys = [ closet ];
-  "restic-password-secu.age".publicKeys = [ secu ];
+  "restic-password-arch.age".publicKeys = admin ++ [ arch ];
+  "restic-password-office.age".publicKeys = admin;
+  "restic-password-closet.age".publicKeys = admin ++ [ closet ];
+  "restic-password-secu.age".publicKeys = admin ++ [ secu ];
   # Private SSH key for the backup user on the NAS (all backup clients need this).
   # Generate once: ssh-keygen -t ed25519 -f /tmp/backup-key -N "" -C "backup@nas"
   # Then: agenix -e backup-ssh-key.age -i ~/.ssh/age  (paste the private key)
   # Add the public key to nas-configuration.nix backup user's authorizedKeys.
-  "backup-ssh-key.age".publicKeys = [ office arch closet secu ];
+  "backup-ssh-key.age".publicKeys = admin ++ [ arch closet secu ];
 }
