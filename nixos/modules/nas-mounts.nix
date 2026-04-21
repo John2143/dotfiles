@@ -46,4 +46,10 @@ in
     fsType = "cifs";
     options = mountOpts;
   };
+
+  fileSystems."/mnt/nas/media" = {
+    device = "//nas.ts.2143.me/media";
+    fsType = "cifs";
+    options = mountOpts;
+  };
 }

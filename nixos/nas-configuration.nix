@@ -201,40 +201,33 @@
         "fruit:wipe_intentionally_left_blank_rfork" = "yes";
         "fruit:delete_empty_adfiles" = "yes";
         "server min protocol" = "SMB2";
-        # Added for compat with ios:
-        "server max protocol" = "SMB3";
         "ea support" = "yes";
-        # iOS Files is picky; avoid SMB3 transport encryption fighting with VPN/Tailscale.
-        # Tailscale already encrypts the tunnel; signing still protects auth on LAN.
         "server signing" = "auto";
-        "server smb encrypt" = "off";
+        "server smb encrypt" = "auto";
         "map to guest" = "Bad User";
       };
       share = {
         path = "/tank/share";
         browseable = "yes";
-        "read only" = "no";
+        "read only" = "yes";
         "guest ok" = "yes";
-        "create mask" = "0666";
-        "directory mask" = "0777";
-        "force user" = "john";
-        "force group" = "john";
+        "write list" = "john ewan brown";
+        "create mask" = "0664";
+        "directory mask" = "2775";
       };
       media = {
         path = "/tank/media";
         browseable = "yes";
-        "read only" = "no";
+        "read only" = "yes";
         "valid users" = "john ewan brown";
-        "create mask" = "0644";
-        "directory mask" = "0755";
       };
       scratch = {
         path = "/tank/scratch";
         browseable = "yes";
         "read only" = "no";
         "valid users" = "john ewan brown";
-        "create mask" = "0644";
-        "directory mask" = "0755";
+        "create mask" = "0664";
+        "directory mask" = "2775";
       };
     };
   };
