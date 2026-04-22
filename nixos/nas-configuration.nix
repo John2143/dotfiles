@@ -256,7 +256,7 @@
         browseable = "yes";
         "read only" = "yes";
         "guest ok" = "yes";
-        "write list" = "john ewan brown";
+        "write list" = "john ewan brown amandastry`";
         "create mask" = "0664";
         "directory mask" = "2775";
       };
@@ -264,13 +264,13 @@
         path = "/tank/media";
         browseable = "yes";
         "read only" = "yes";
-        "valid users" = "john ewan brown";
+        "valid users" = "john ewan brown amandastry";
       };
       scratch = {
         path = "/tank/scratch";
         browseable = "yes";
         "read only" = "no";
-        "valid users" = "john ewan brown";
+        "valid users" = "john ewan brown amandastry";
         "create mask" = "0664";
         "directory mask" = "2775";
       };
@@ -278,7 +278,7 @@
         path = "/tank/private/%U";
         browseable = "no";
         "read only" = "no";
-        "valid users" = "john";
+        "valid users" = "john amandastry";
         "create mask" = "0600";
         "directory mask" = "0700";
       };
