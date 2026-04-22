@@ -276,7 +276,7 @@
       };
       private = {
         path = "/tank/private/%U";
-        browseable = "no";
+        browseable = "yes";
         "read only" = "no";
         "valid users" = "john amandastry";
         "create mask" = "0600";
