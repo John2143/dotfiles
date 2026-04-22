@@ -256,7 +256,7 @@
         browseable = "yes";
         "read only" = "yes";
         "guest ok" = "yes";
-        "write list" = "john ewan brown amandastry`";
+        "write list" = "john ewan brown amandastry";
         "create mask" = "0664";
         "directory mask" = "2775";
       };
