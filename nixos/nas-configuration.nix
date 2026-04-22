@@ -250,6 +250,7 @@
         "server signing" = "auto";
         "server smb encrypt" = "auto";
         "map to guest" = "Bad User";
+        "host msdfs" = "no";
       };
       share = {
         path = "/tank/share";
