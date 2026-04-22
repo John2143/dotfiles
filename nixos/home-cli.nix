@@ -50,6 +50,7 @@ in
     # neovim
 
     # cli
+    gocryptfs
     bat # cat replacement
     eza # ls replacement
     ripgrep # grep replacement
