@@ -37,6 +37,18 @@
 #      sudo zfs create -o mountpoint=/tank/scratch  tank/scratch
 #      sudo zfs create -o mountpoint=/tank/private  tank/private
 #
+#    Minecraft — pinned entirely to the SSD special mirror for fast chunk
+#    reads and mirrored integrity. recordsize=special_small_blocks=128K
+#    means every block lands on the SSD, not the raidz1 HDDs.
+#      sudo zfs create \
+#        -o mountpoint=/tank/minecraft \
+#        -o recordsize=128K \
+#        -o special_small_blocks=128K \
+#        -o compression=lz4 \
+#        -o atime=off \
+#        tank/minecraft
+#      sudo chown john:john /tank/minecraft
+#
 #    Immich thumbnails — dedicated child dataset pinned to the SSD special
 #    vdev for fast scrolling. recordsize=special_small_blocks=1M means every
 #    block written under thumbs/ lands on the SSD mirror, not the raidz1
@@ -100,6 +112,26 @@
   virtualisation.podman = {
     enable = true;
     dockerCompat = true;
+  };
+
+  # ==================
+  # === Minecraft  ===
+  # ==================
+
+  virtualisation.oci-containers = {
+    backend = "podman";
+    containers.minecraft = {
+      image = "docker.io/itzg/minecraft-server:latest";
+      ports = [ "25565:25565" ];
+      environment = {
+        EULA = "TRUE";
+        TYPE = "NEOFORGE";
+        MEMORY = "6G";
+      };
+      volumes = [
+        "/tank/minecraft:/data"
+      ];
+    };
   };
 
   # ================
@@ -179,6 +211,12 @@
         monthly = 12;
         yearly = 1;
       };
+      "tank/minecraft" = {
+        autosnap = true;
+        hourly = 0;
+        daily = 0;
+        monthly = 0;
+      };
     };
   };
 
@@ -212,13 +250,14 @@
         "server signing" = "auto";
         "server smb encrypt" = "auto";
         "map to guest" = "Bad User";
+        "host msdfs" = "no";
       };
       share = {
         path = "/tank/share";
         browseable = "yes";
         "read only" = "yes";
         "guest ok" = "yes";
-        "write list" = "john ewan brown";
+        "write list" = "john ewan brown amandastry";
         "create mask" = "0664";
         "directory mask" = "2775";
       };
@@ -226,21 +265,21 @@
         path = "/tank/media";
         browseable = "yes";
         "read only" = "yes";
-        "valid users" = "john ewan brown";
+        "valid users" = "john ewan brown amandastry";
       };
       scratch = {
         path = "/tank/scratch";
         browseable = "yes";
         "read only" = "no";
-        "valid users" = "john ewan brown";
+        "valid users" = "john ewan brown amandastry";
         "create mask" = "0664";
         "directory mask" = "2775";
       };
       private = {
         path = "/tank/private/%U";
-        browseable = "no";
+        browseable = "yes";
         "read only" = "no";
-        "valid users" = "john";
+        "valid users" = "john amandastry";
         "create mask" = "0600";
         "directory mask" = "0700";
       };
@@ -321,7 +360,8 @@
   networking.firewall = {
     #enable = true;
     allowedTCPPorts = [
-      2283  # immich
+      2283   # immich
+      25565  # minecraft
     ];
   };
 
