@@ -119,7 +119,7 @@
 
   services.ollama = {
     package = pkgs.ollama-cuda;
-    models = "/mnt/share/ollama/models/";
+    models = "/mnt/nas/share/ollama/models/";
   };
 
   # # Open ports in the firewall.

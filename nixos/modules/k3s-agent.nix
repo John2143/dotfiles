@@ -8,7 +8,6 @@
   };
 
   config = {
-    age.identityPaths = [ "/home/john/.ssh/age" ];
     age.secrets.k3s-local-token = {
       file = ../../secrets/k3s-local-token.age;
       mode = "0400";
