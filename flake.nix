@@ -26,6 +26,10 @@
       url = "path:./screen-control";
       inputs.nixpkgs.follows = "nixpkgs";
     };
+
+    llm-agents = {
+      url = "github:numtide/llm-agents.nix";
+    };
   };
 
   outputs =
@@ -244,6 +248,7 @@
         modules = [
           inputs.home-manager.nixosModules.default
           inputs.disko.nixosModules.default
+          agenix.nixosModules.default
           ./nixos/shared-cli-configuration.nix
           ./nixos/nas-configuration.nix
           ./nixos/modules/disko_nas.nix

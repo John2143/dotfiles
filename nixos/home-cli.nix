@@ -109,6 +109,7 @@ in
     nixd
     trash-cli # bound to "rmm"
     s3cmd
+    minio-client # provides `mc` for RustFS/S3 operations
     websocat
     zip
     lxqt.lxqt-policykit
@@ -127,6 +128,76 @@ in
     #   org.gradle.console=verbose
     #   org.gradle.daemon.idletimeout=3600000
     # '';
+
+    ".omp/agent/models.yml".text = ''
+providers:
+  office-ollama:
+    baseUrl: http://office:11434/v1
+    api: openai-completions
+    auth: none
+    models:
+      - id: gemma4
+        name: Gemma 4 (Office ROCm)
+        reasoning: false
+        input: [text]
+        cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }
+        contextWindow: 128000
+        maxTokens: 8192
+      - id: qwen3
+        name: Qwen 3 (Office ROCm)
+        reasoning: true
+        input: [text]
+        cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }
+        contextWindow: 128000
+        maxTokens: 8192
+
+  arch-ollama:
+    baseUrl: http://arch:11434/v1
+    api: openai-completions
+    auth: none
+    models:
+      - id: gemma4
+        name: Gemma 4 (Arch CUDA)
+        reasoning: false
+        input: [text]
+        cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }
+        contextWindow: 128000
+        maxTokens: 8192
+      - id: qwen3
+        name: Qwen 3 (Arch CUDA)
+        reasoning: true
+        input: [text]
+        cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }
+        contextWindow: 128000
+        maxTokens: 8192
+    '';
+
+    ".omp/agent/config.yml".text = ''
+modelRoles:
+  default: office-ollama/gemma4
+  smol: office-ollama/qwen3
+
+modelProviderOrder:
+  - office-ollama
+  - arch-ollama
+  - anthropic
+  - google
+
+enabledModels:
+  - "office-ollama/*"
+  - "arch-ollama/*"
+  - "anthropic/*"
+  - "google/*"
+
+retry:
+  enabled: true
+  maxRetries: 3
+  baseDelayMs: 2000
+  fallbackChains:
+    default:
+      - "arch-ollama/gemma4"
+      - "anthropic/claude-sonnet-4-6"
+    '';
   };
 
   # Home Manager can also manage your environment variables through
@@ -242,6 +313,25 @@ in
         echo "Set Signing key to $SIGNING_KEY"
         git config --global user.signingkey $SIGNING_KEY > /dev/null
       '';
+      juush.body = ''
+        set -l creds_file /run/agenix/rustfs-credentials
+        if test -f $creds_file
+          envsource $creds_file
+        end
+        bash /home/john/dotfiles/.config/juush.bash $argv
+      '';
+      juush.description = "Upload a file to juush and get a short URL";
+      bigjuush.body = ''
+        set -l creds_file /run/agenix/rustfs-credentials
+        if not test -f $creds_file
+          echo "Error: RustFS credentials not found at $creds_file" >&2
+          return 1
+        end
+        envsource $creds_file
+        mc alias set rustfs https://files.john2143.com $RUSTFS_USER $RUSTFS_PASSWORD 2>/dev/null
+        bash /home/john/dotfiles/.config/nas-share.sh $argv
+      '';
+      bigjuush.description = "Upload files to RustFS and get public share links";
       envsource.body = ''
         set -f envfile "$argv"
         if not test -f "$envfile"

@@ -108,6 +108,8 @@
 
   services.ollama = {
     package = pkgs.ollama-rocm;
+    home = "/mnt/share/ollama";
+    models = "/mnt/share/ollama/models/";
   };
 
   # drones
