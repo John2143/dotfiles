@@ -106,7 +106,7 @@ let
 
     #mullvad-vpn # vpn
     plex-desktop # plex
-    rustdesk
+    #rustdesk
     #spotify # music
     (prismlauncher.override {
       jdks = [
