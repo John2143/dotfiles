@@ -198,6 +198,12 @@ retry:
       - "arch-ollama/gemma4"
       - "anthropic/claude-sonnet-4-6"
     '';
+
+    ".omp/agent/keybindings.json".text = ''
+      {
+        "app.model.select": ["alt+l"]
+      }
+    '';
   };
 
   # Home Manager can also manage your environment variables through
@@ -314,11 +320,13 @@ retry:
         git config --global user.signingkey $SIGNING_KEY > /dev/null
       '';
       juush.body = ''
+        set -l _pre_vars (set --names -x)
         set -l creds_file /run/agenix/rustfs-credentials
         if test -f $creds_file
           envsource $creds_file
         end
         bash /home/john/dotfiles/.config/juush.bash $argv
+        env-cleanup $_pre_vars
       '';
       juush.description = "Upload a file to juush and get a short URL";
       bigjuush.body = ''
@@ -327,9 +335,11 @@ retry:
           echo "Error: RustFS credentials not found at $creds_file" >&2
           return 1
         end
+        set -l _pre_vars (set --names -x)
         envsource $creds_file
         mc alias set rustfs https://files.john2143.com $RUSTFS_USER $RUSTFS_PASSWORD 2>/dev/null
         bash /home/john/dotfiles/.config/nas-share.sh $argv
+        env-cleanup $_pre_vars
       '';
       bigjuush.description = "Upload files to RustFS and get public share links";
       llm-load-keys.body = ''
@@ -342,6 +352,7 @@ retry:
       '';
       llm-load-keys.description = "Load LLM API keys into current shell (on-demand)";
       llm-costs.body = ''
+        set -l _pre_vars (set --names -x)
         llm-load-keys 2>/dev/null
 
         set -l days 30
@@ -361,21 +372,25 @@ retry:
           set -l start_time (math "$now - $days * 86400")
           set -l resp (curl -s "https://api.openai.com/v1/organization/costs?start_time=$start_time&group_by[]=line_item&limit=180" \
             -H "Authorization: Bearer $oai_key")
-          set -l total (printf '%s\n' $resp | jq '[.data[].results[].amount.value // 0] | add // 0' 2>/dev/null)
-          if test -n "$total" -a "$total" != "null"
-            set_color --bold
-            printf "=== OpenAI (%d days) ===\n" $days
-            set_color normal
-            printf "Total: \$%.2f\n" $total
-            printf '%s\n' $resp | jq -r '
-              [.data[].results[] | select((.amount.value // 0) > 0)]
-              | group_by(.line_item)
-              | map({item: .[0].line_item, total: ([.[].amount.value] | add)})
-              | sort_by(-.total)[]
-              | "  \(.item): $\(.total * 100 | round | . / 100)"'
+          set -l err (printf '%s\n' $resp | jq -r '.error.message // empty' 2>/dev/null)
+          if test -n "$err"
+            echo "OpenAI: $err"
           else
-            echo "OpenAI: failed to fetch costs"
-            printf '%s\n' $resp | jq -r '.error.message // empty' 2>/dev/null
+            set -l total (printf '%s\n' $resp | jq '[.data[].results[].amount.value // 0] | add // 0' 2>/dev/null)
+            if test -n "$total" -a "$total" != "null"
+              set_color --bold
+              printf "=== OpenAI (%d days) ===\n" $days
+              set_color normal
+              printf "Total: \$%.2f\n" $total
+              printf '%s\n' $resp | jq -r '
+                [.data[].results[] | select((.amount.value // 0) > 0)]
+                | group_by(.line_item)
+                | map({item: .[0].line_item, total: ([.[].amount.value] | add)})
+                | sort_by(-.total)[]
+                | "  \(.item): $\(.total * 100 | round | . / 100)"'
+            else
+              echo "OpenAI: failed to fetch costs"
+            end
           end
         else
           echo "OpenAI: no API key set (OPENAI_API_KEY or OPENAI_ADMIN_KEY)"
@@ -383,35 +398,55 @@ retry:
 
         echo ""
 
+        set -l anthropic_key ""
         if set -q ANTHROPIC_ADMIN_KEY
+          set anthropic_key $ANTHROPIC_ADMIN_KEY
+        else if set -q ANTHROPIC_API_KEY
+          set anthropic_key $ANTHROPIC_API_KEY
+        end
+
+        if test -n "$anthropic_key"
           set -l start_date (date -d "$days days ago" -u +%Y-%m-%dT00:00:00Z)
           set -l end_date (date -u +%Y-%m-%dT23:59:59Z)
           set -l resp (curl -s "https://api.anthropic.com/v1/organizations/cost_report?starting_at=$start_date&ending_at=$end_date&bucket_width=1d&group_by[]=description" \
             -H "anthropic-version: 2023-06-01" \
-            -H "x-api-key: $ANTHROPIC_ADMIN_KEY")
-          set -l total_cents (printf '%s\n' $resp | jq '[.data[].results[].amount | tonumber] | add // 0' 2>/dev/null)
-          if test -n "$total_cents" -a "$total_cents" != "null"
-            set_color --bold
-            printf "=== Anthropic (%d days) ===\n" $days
-            set_color normal
-            printf "Total: \$%.2f\n" (math "$total_cents / 100")
-            printf '%s\n' $resp | jq -r '
-              [.data[].results[] | select((.amount | tonumber) > 0)]
-              | group_by(.model // "other")
-              | map({model: .[0].model // "other", total: ([.[].amount | tonumber] | add)})
-              | sort_by(-.total)[]
-              | "  \(.model): $\(.total | round | . / 100)"'
+            -H "x-api-key: $anthropic_key")
+          set -l err (printf '%s\n' $resp | jq -r '.error.message // empty' 2>/dev/null)
+          if test -n "$err"
+            echo "Anthropic: $err"
           else
-            echo "Anthropic: failed to fetch costs"
-            printf '%s\n' $resp | jq -r '.error.message // empty' 2>/dev/null
+            set -l total_cents (printf '%s\n' $resp | jq '[.data[].results[].amount | tonumber] | add // 0' 2>/dev/null)
+            if test -n "$total_cents" -a "$total_cents" != "null"
+              set_color --bold
+              printf "=== Anthropic (%d days) ===\n" $days
+              set_color normal
+              printf "Total: \$%.2f\n" (math "$total_cents / 100")
+              printf '%s\n' $resp | jq -r '
+                [.data[].results[] | select((.amount | tonumber) > 0)]
+                | group_by(.model // "other")
+                | map({model: .[0].model // "other", total: ([.[].amount | tonumber] | add)})
+                | sort_by(-.total)[]
+                | "  \(.model): $\(.total | round | . / 100)"'
+            else
+              echo "Anthropic: failed to fetch costs"
+            end
           end
         else
-          echo "Anthropic: cost API requires admin key (sk-ant-admin...)"
-          echo "  https://console.anthropic.com/settings/admin-keys"
-          echo "  Add ANTHROPIC_ADMIN_KEY to your llm-api-keys secret"
+          echo "Anthropic: no API key set (ANTHROPIC_ADMIN_KEY or ANTHROPIC_API_KEY)"
         end
+
+        env-cleanup $_pre_vars
       '';
       llm-costs.description = "Show LLM API usage costs (default: last 30 days, pass N for custom)";
+      env-cleanup.body = ''
+        for _v in (set --names -x)
+          if not contains $_v $argv
+            set -e $_v
+          end
+        end
+      '';
+      env-cleanup.description = "Remove exported env vars not in the given snapshot";
+
       envsource.body = ''
         set -f envfile "$argv"
         if not test -f "$envfile"
@@ -574,7 +609,6 @@ retry:
       }
 
       # " Semantic language support
-      nvim-lspconfig
       lsp_extensions-nvim
       cmp-nvim-lsp
       cmp-buffer
