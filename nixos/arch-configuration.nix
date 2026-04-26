@@ -15,7 +15,7 @@
   imports = [
     ./arch-hardware-configuration.nix
     ./modules/user-john.nix
-    #./modules/ollama.nix
+    ./modules/ollama.nix
     # inputs.home-manager.nixosModules.default
   ];
   home-manager.users."john" = import ./home.nix;
@@ -117,7 +117,10 @@
 
   # NAS CIFS mounts live in ./modules/nas-mounts.nix (shared across workstations).
 
-  # services.ollama.acceleration = "cuda";
+  services.ollama = {
+    package = pkgs.ollama-cuda;
+    models = "/mnt/nas/share/ollama/models/";
+  };
 
   # # Open ports in the firewall.
   # networking.firewall.allowedTCPPorts = [

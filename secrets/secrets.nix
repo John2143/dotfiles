@@ -39,4 +39,7 @@ in
   # gocryptfs passphrase for encrypted vault on NAS scratch share.
   # Only workstations that mount the vault need this — the NAS never sees the key.
   "gocryptfs-passphrase.age".publicKeys = [ arch office closet ];
+  # RustFS (minio) credentials for bigjuush/juush.
+  # Format: RUSTFS_USER=...\nRUSTFS_PASSWORD=...\nJUUSH_KEY=...
+  "rustfs-credentials.age".publicKeys = [ office arch nas closet ];
 }

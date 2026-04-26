@@ -18,6 +18,11 @@
     "flakes"
   ];
 
+  nix.settings.extra-substituters = [ "https://cache.numtide.com" ];
+  nix.settings.extra-trusted-public-keys = [
+    "niks3.numtide.com-1:DTx8wZduET09hRmMtKdQDxNNthLQETkc/yaX7M4qK0g="
+  ];
+
   #nix.gc.automatic = true;
 
   # setup my two input channels
@@ -44,6 +49,7 @@
     vim
     btop
     inputs.agenix.packages.${pkgs.stdenv.hostPlatform.system}.default
+    inputs.llm-agents.packages.${pkgs.stdenv.hostPlatform.system}.omp
   ];
 
   programs.gnupg.agent = {
@@ -80,6 +86,17 @@
       workstation = true;
     };
   };
+
+  # RustFS credentials for juush/bigjuush file sharing
+  age.identityPaths = [ "/home/john/.ssh/age" ];
+  age.secrets.rustfs-credentials = lib.mkIf
+    (builtins.elem config.networking.hostName [ "office" "arch" "nas" "closet" ])
+    {
+      file = ../secrets/rustfs-credentials.age;
+      mode = "0400";
+      owner = "john";
+      group = "users";
+    };
 
   security.rtkit.enable = true;
   services.udisks2.enable = true;

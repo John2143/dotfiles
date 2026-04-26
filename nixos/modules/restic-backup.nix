@@ -71,7 +71,6 @@ in
   };
 
   config = lib.mkIf cfg.enable {
-    age.identityPaths = [ "/home/john/.ssh/age" ];
 
     age.secrets.restic-password = {
       file = ../../secrets/restic-password-${hostname}.age;
