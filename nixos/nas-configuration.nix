@@ -137,21 +137,23 @@
   # === Minecraft  ===
   # ==================
 
-  virtualisation.oci-containers = {
-    backend = "podman";
-    containers.minecraft = {
-      image = "docker.io/itzg/minecraft-server:latest";
-      ports = [ "25565:25565" ];
-      environment = {
-        EULA = "TRUE";
-        TYPE = "NEOFORGE";
-        MEMORY = "6G";
-      };
-      volumes = [
-        "/tank/minecraft:/data"
-      ];
-    };
-  };
+  # instead:
+  # nix flake at /tank/minecraft/AoC/flake.nix: nix flake run
+  #virtualisation.oci-containers = {
+    #backend = "podman";
+    #containers.minecraft = {
+      #image = "docker.io/itzg/minecraft-server:latest";
+      #ports = [ "25565:25565" ];
+      #environment = {
+        #EULA = "TRUE";
+        #TYPE = "NEOFORGE";
+        #MEMORY = "6G";
+      #};
+      #volumes = [
+        #"/tank/minecraft:/data"
+      #];
+    #};
+  #};
 
   # ================
   # === Network  ===
