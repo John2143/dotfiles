@@ -50,6 +50,15 @@ in
     options = mountOpts;
   };
 
+  fileSystems."/mnt/nas/ollama" = {
+    device = "//nas.ts.2143.me/share";
+    fsType = "cifs";
+    options = mountOpts ++ [
+      "cache=none"
+      "nobrl"
+    ];
+  };
+
   fileSystems."/mnt/nas/scratch" = {
     device = "//nas.ts.2143.me/scratch";
     fsType = "cifs";
