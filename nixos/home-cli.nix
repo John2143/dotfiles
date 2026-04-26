@@ -332,6 +332,86 @@ retry:
         bash /home/john/dotfiles/.config/nas-share.sh $argv
       '';
       bigjuush.description = "Upload files to RustFS and get public share links";
+      llm-load-keys.body = ''
+        set -l creds_file /run/agenix/llm-api-keys
+        if not test -f $creds_file
+          echo "LLM keys not found at $creds_file" >&2
+          return 1
+        end
+        envsource $creds_file
+      '';
+      llm-load-keys.description = "Load LLM API keys into current shell (on-demand)";
+      llm-costs.body = ''
+        llm-load-keys 2>/dev/null
+
+        set -l days 30
+        if test (count $argv) -gt 0
+          set days $argv[1]
+        end
+
+        set -l oai_key ""
+        if set -q OPENAI_ADMIN_KEY
+          set oai_key $OPENAI_ADMIN_KEY
+        else if set -q OPENAI_API_KEY
+          set oai_key $OPENAI_API_KEY
+        end
+
+        if test -n "$oai_key"
+          set -l now (date +%s)
+          set -l start_time (math "$now - $days * 86400")
+          set -l resp (curl -s "https://api.openai.com/v1/organization/costs?start_time=$start_time&group_by[]=line_item&limit=180" \
+            -H "Authorization: Bearer $oai_key")
+          set -l total (printf '%s\n' $resp | jq '[.data[].results[].amount.value // 0] | add // 0' 2>/dev/null)
+          if test -n "$total" -a "$total" != "null"
+            set_color --bold
+            printf "=== OpenAI (%d days) ===\n" $days
+            set_color normal
+            printf "Total: \$%.2f\n" $total
+            printf '%s\n' $resp | jq -r '
+              [.data[].results[] | select((.amount.value // 0) > 0)]
+              | group_by(.line_item)
+              | map({item: .[0].line_item, total: ([.[].amount.value] | add)})
+              | sort_by(-.total)[]
+              | "  \(.item): $\(.total * 100 | round | . / 100)"'
+          else
+            echo "OpenAI: failed to fetch costs"
+            printf '%s\n' $resp | jq -r '.error.message // empty' 2>/dev/null
+          end
+        else
+          echo "OpenAI: no API key set (OPENAI_API_KEY or OPENAI_ADMIN_KEY)"
+        end
+
+        echo ""
+
+        if set -q ANTHROPIC_ADMIN_KEY
+          set -l start_date (date -d "$days days ago" -u +%Y-%m-%dT00:00:00Z)
+          set -l end_date (date -u +%Y-%m-%dT23:59:59Z)
+          set -l resp (curl -s "https://api.anthropic.com/v1/organizations/cost_report?starting_at=$start_date&ending_at=$end_date&bucket_width=1d&group_by[]=description" \
+            -H "anthropic-version: 2023-06-01" \
+            -H "x-api-key: $ANTHROPIC_ADMIN_KEY")
+          set -l total_cents (printf '%s\n' $resp | jq '[.data[].results[].amount | tonumber] | add // 0' 2>/dev/null)
+          if test -n "$total_cents" -a "$total_cents" != "null"
+            set_color --bold
+            printf "=== Anthropic (%d days) ===\n" $days
+            set_color normal
+            printf "Total: \$%.2f\n" (math "$total_cents / 100")
+            printf '%s\n' $resp | jq -r '
+              [.data[].results[] | select((.amount | tonumber) > 0)]
+              | group_by(.model // "other")
+              | map({model: .[0].model // "other", total: ([.[].amount | tonumber] | add)})
+              | sort_by(-.total)[]
+              | "  \(.model): $\(.total | round | . / 100)"'
+          else
+            echo "Anthropic: failed to fetch costs"
+            printf '%s\n' $resp | jq -r '.error.message // empty' 2>/dev/null
+          end
+        else
+          echo "Anthropic: cost API requires admin key (sk-ant-admin...)"
+          echo "  https://console.anthropic.com/settings/admin-keys"
+          echo "  Add ANTHROPIC_ADMIN_KEY to your llm-api-keys secret"
+        end
+      '';
+      llm-costs.description = "Show LLM API usage costs (default: last 30 days, pass N for custom)";
       envsource.body = ''
         set -f envfile "$argv"
         if not test -f "$envfile"

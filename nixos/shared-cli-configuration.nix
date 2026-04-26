@@ -50,7 +50,15 @@
     btop
     inputs.agenix.packages.${pkgs.stdenv.hostPlatform.system}.default
   ] ++ lib.optionals (builtins.elem config.networking.hostName [ "office" "arch" ]) [
-    inputs.llm-agents.packages.${pkgs.stdenv.hostPlatform.system}.omp
+    (let omp-unwrapped = inputs.llm-agents.packages.${pkgs.stdenv.hostPlatform.system}.omp; in
+      pkgs.writeShellScriptBin "omp" ''
+        if [ -f /run/agenix/llm-api-keys ]; then
+          set -a
+          . /run/agenix/llm-api-keys
+          set +a
+        fi
+        exec ${omp-unwrapped}/bin/omp "$@"
+      '')
     (pkgs.writeShellScriptBin "ollama-sync" ''
       set -euo pipefail
       exec sudo -E ${pkgs.rsync}/bin/rsync -ahP --delete \
@@ -101,6 +109,15 @@
     (builtins.elem config.networking.hostName [ "office" "arch" "nas" "closet" ])
     {
       file = ../secrets/rustfs-credentials.age;
+      mode = "0400";
+      owner = "john";
+      group = "users";
+    };
+
+  age.secrets.llm-api-keys = lib.mkIf
+    (builtins.elem config.networking.hostName [ "office" "arch" ])
+    {
+      file = ../secrets/llm-api-keys.age;
       mode = "0400";
       owner = "john";
       group = "users";

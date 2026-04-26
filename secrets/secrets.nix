@@ -42,4 +42,10 @@ in
   # RustFS (minio) credentials for bigjuush/juush.
   # Format: RUSTFS_USER=...\nRUSTFS_PASSWORD=...\nJUUSH_KEY=...
   "rustfs-credentials.age".publicKeys = [ office arch nas closet ];
+  # LLM API keys for omp on workstations. Env-file format:
+  #   ANTHROPIC_API_KEY=sk-ant-...
+  #   OPENAI_API_KEY=sk-...
+  #   ANTHROPIC_ADMIN_KEY=sk-ant-admin-...  (for llm-costs, from console.anthropic.com/settings/admin-keys)
+  #   OPENAI_ADMIN_KEY=sk-admin-...          (for llm-costs, optional if regular key has org access)
+  "llm-api-keys.age".publicKeys = [ office arch ];
 }
