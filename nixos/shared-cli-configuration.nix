@@ -49,6 +49,7 @@
     vim
     btop
     inputs.agenix.packages.${pkgs.stdenv.hostPlatform.system}.default
+  ] ++ lib.optionals (builtins.elem config.networking.hostName [ "office" "arch" ]) [
     inputs.llm-agents.packages.${pkgs.stdenv.hostPlatform.system}.omp
   ];
 
