@@ -53,7 +53,9 @@
     inputs.llm-agents.packages.${pkgs.stdenv.hostPlatform.system}.omp
     (pkgs.writeShellScriptBin "ollama-sync" ''
       set -euo pipefail
-      exec ${pkgs.rsync}/bin/rsync -ahP --delete \
+      exec sudo -E ${pkgs.rsync}/bin/rsync -ahP --delete \
+        --chown=john:users \
+        --rsh="sudo -u john ${pkgs.openssh}/bin/ssh" \
         nas:/tank/share/ollama/models/ /var/lib/ollama/models/
     '')
   ];
