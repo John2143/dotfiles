@@ -143,7 +143,7 @@ providers:
         cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }
         contextWindow: 128000
         maxTokens: 8192
-      - id: qwen3
+      - id: qwen3.6
         name: Qwen 3 (Office ROCm)
         reasoning: true
         input: [text]
@@ -163,7 +163,7 @@ providers:
         cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }
         contextWindow: 128000
         maxTokens: 8192
-      - id: qwen3
+      - id: qwen3.6
         name: Qwen 3 (Arch CUDA)
         reasoning: true
         input: [text]
@@ -175,7 +175,7 @@ providers:
     ".omp/agent/config.yml".text = ''
 modelRoles:
   default: office-ollama/gemma4
-  smol: office-ollama/qwen3
+  smol: office-ollama/qwen3.6
 
 modelProviderOrder:
   - office-ollama
