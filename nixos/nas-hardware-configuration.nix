@@ -28,7 +28,7 @@
   boot.extraModulePackages = [ ];
 
   boot.supportedFilesystems = [ "zfs" ];
-  boot.zfs.extraPools = [ "tank" ];
+  boot.zfs.extraPools = [ "tank" "neo" ];
 
   # fileSystems and swapDevices are managed by disko (see modules/disko_nas.nix)
 

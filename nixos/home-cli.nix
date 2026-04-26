@@ -538,6 +538,14 @@ retry:
     ];
   };
 
+  programs.gpg = {
+    enable = true;
+    scdaemonSettings = {
+      disable-ccid = "";
+      disable-pcsc = "";
+    };
+  };
+
   programs.git = {
     enable = true;
     signing.format = "openpgp";

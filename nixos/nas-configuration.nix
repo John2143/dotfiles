@@ -18,18 +18,30 @@
 #          /dev/disk/by-id/ata-ST8000..._3 \
 #          /dev/disk/by-id/ata-ST8000..._4
 #
-# 3. Add mirrored special vdev (100GB SSD partition + partition on boot SSD):
+# 3. Add mirrored special vdev (100GB SSD partitions):
 #      sudo zpool add tank special mirror \
 #        /dev/disk/by-id/wwn-0x5e83a97923abf0ec-part1 \
-#        /dev/disk/by-id/ata-WDC_...-part4
+#        /dev/disk/by-id/wwn-0x5001b448be24504b-part4
 #      sudo zfs set special_small_blocks=32K tank
+#
+# 4. Add L2ARC read cache (200GB SSD partition on boot SSD):
+#      sudo zpool add tank cache /dev/disk/by-id/wwn-0x5001b448be24504b-part5
+#
+# 5. Create the "neo" pool (single SSD partition on boot SSD):
+#      sudo zpool create -o ashift=12 \
+#        -O atime=off -O compression=lz4 -O xattr=sa -O acltype=posixacl \
+#        -O mountpoint=/neo \
+#        neo /dev/disk/by-id/wwn-0x5001b448be24504b-part6
 #
 # Current live mapping on this NAS:
 #   - raidz1-0 (data): ata-ST8000DM004-2CX188_{ZR10RP6D,ZR10TRAD,ZR109DM9,ZR10RB8J}
-#   - special mirror: wwn-0x5e83a97923abf0ec-part1 (sdf1) +
-#                     wwn-0x5001b448be24504b-part4 (sda4)
+#     (sda, sdc, sde, sdf)
+#   - special mirror: wwn-0x5e83a97923abf0ec-part1 (sdd1) +
+#                     wwn-0x5001b448be24504b-part4 (sdb4)
+#   - L2ARC cache:    wwn-0x5001b448be24504b-part5 (sdb5)
+#   - neo pool:       wwn-0x5001b448be24504b-part6 (sdb6)
 #
-# 4. Create datasets:
+# 6. Create datasets:
 #      sudo zfs create -o mountpoint=/tank/share    tank/share
 #      sudo zfs create -o mountpoint=/tank/media    tank/media
 #      sudo zfs create -o mountpoint=/tank/backups  tank/backups
@@ -67,7 +79,7 @@
 #      sudo rsync -aHAX /tank/immich/thumbs.old/ /tank/immich/thumbs/   # if moved
 #      sudo systemctl start immich-server immich-machine-learning
 #
-# 5. Set ownership:
+# 7. Set ownership:
 #      sudo chown john:john /tank/share /tank/media /tank/scratch /tank/private
 #      sudo chown immich:immich /tank/immich
 #      # /tank/backups must be root-owned for OpenSSH ChrootDirectory.
@@ -78,10 +90,10 @@
 #        sudo chown backup:backup /tank/backups/$h
 #      done
 #
-# 6. Set Samba password:
+# 8. Set Samba password:
 #      sudo smbpasswd -a john
 #
-# 7. Rebuild:
+# 9. Rebuild:
 #      sudo nixos-rebuild switch --flake /home/john/dotfiles#nas
 #
 
