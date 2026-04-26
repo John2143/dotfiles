@@ -112,9 +112,16 @@
   imports = [
     ./nas-hardware-configuration.nix
     ./modules/user-john.nix
+    ./modules/ollama.nix
   ];
   home-manager.users."john" = import ./home-cli.nix;
   services.getty.autologinUser = "john";
+
+  services.ollama = {
+    host = "127.0.0.1";
+    openFirewall = lib.mkForce false;
+    models = "/tank/share/ollama/models";
+  };
 
   boot.loader = {
     systemd-boot.enable = true;

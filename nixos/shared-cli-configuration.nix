@@ -51,6 +51,11 @@
     inputs.agenix.packages.${pkgs.stdenv.hostPlatform.system}.default
   ] ++ lib.optionals (builtins.elem config.networking.hostName [ "office" "arch" ]) [
     inputs.llm-agents.packages.${pkgs.stdenv.hostPlatform.system}.omp
+    (pkgs.writeShellScriptBin "ollama-sync" ''
+      set -euo pipefail
+      exec ${pkgs.rsync}/bin/rsync -ahP --delete \
+        nas:/tank/share/ollama/models/ /var/lib/ollama/models/
+    '')
   ];
 
   programs.gnupg.agent = {
