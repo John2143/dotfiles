@@ -134,7 +134,7 @@ let
     gdtoolkit_4 # gdscript linter/formatter
     protonup-qt
 
-    nvtop
+    #nvtop # unfree
   ];
 
   # If we are on office computer, then also add the following:
