@@ -130,6 +130,8 @@ let
     easyeffects
     evremap
     imagemagick
+    godot # game engine / gdscript
+    gdtoolkit_4 # gdscript linter/formatter
     protonup-qt
   ];
 
