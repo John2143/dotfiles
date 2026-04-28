@@ -32,251 +32,250 @@
     };
   };
 
-  outputs =
-    { nixpkgs, nix-cachyos-kernel, agenix, ... }@inputs:
-    let
-      system = "x86_64-linux";
-      catchy-os = [
-        ({ pkgs, ... }:
-        {
-          nixpkgs.overlays = [
-             nix-cachyos-kernel.overlays.default
-             #nix-cachyos-kernel.overlays.pinned
-          ];
-        })
-        ({ pkgs, ... }:
-        {
-          boot.kernelPackages = pkgs.cachyosKernels.linuxPackages-cachyos-latest;
-          #hardware.nvidia.package = config.boot.kernelPackages.nvidiaPackages.stable;
-        })
+  outputs = {
+    nixpkgs,
+    nix-cachyos-kernel,
+    agenix,
+    ...
+  } @ inputs: let
+    system = "x86_64-linux";
+    catchy-os = [
+      ({pkgs, ...}: {
+        nixpkgs.overlays = [
+          nix-cachyos-kernel.overlays.default
+          #nix-cachyos-kernel.overlays.pinned
+        ];
+      })
+      ({pkgs, ...}: {
+        boot.kernelPackages = pkgs.cachyosKernels.linuxPackages-cachyos-latest;
+        #hardware.nvidia.package = config.boot.kernelPackages.nvidiaPackages.stable;
+      })
+    ];
+    my-keys = [
+      "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOktI2Vry/5fbhZiG35o5mf7w3dnaTEDqkRJVM07cu3a john@arch"
+      "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFVckq0oXyXkxiLo39typ6PR039XrLwze/Cb0PZaTzmi john@office"
+      "ecdsa-sha2-nistp256 AAAAE2VjZHNhLXNoYTItbmlzdHAyNTYAAAAIbmlzdHAyNTYAAABBBHjc0NNrHCwjrBUvUByFoFPW9vKGVFsWVD6LoKp1FLtNaIjyigMTYXoCKZSNNguKdNwUiyqKIZfCExZmgc3Cccw= phone"
+    ];
+  in rec {
+    formatter.x86_64-linux = nixpkgs.legacyPackages.${system}.nixfmt-tree;
+
+    nixosConfigurations.office = nixpkgs.lib.nixosSystem {
+      inherit system;
+      specialArgs = {
+        inherit inputs;
+        compName = "office";
+        sshKeys = my-keys;
+      };
+      modules = [
+        inputs.home-manager.nixosModules.default
+        agenix.nixosModules.default
+        ./nixos/shared-cli-configuration.nix
+        ./nixos/shared-configuration.nix
+        ./nixos/shared-games-configuration.nix
+        ./nixos/office-configuration.nix
+        ./nixos/modules/k3s-agent.nix
+        ./nixos/modules/restic-backup.nix
+        ./nixos/modules/nas-mounts.nix
+        ./nixos/tailscale.nix
       ];
-      my-keys = [
-        "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOktI2Vry/5fbhZiG35o5mf7w3dnaTEDqkRJVM07cu3a john@arch"
-        "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFVckq0oXyXkxiLo39typ6PR039XrLwze/Cb0PZaTzmi john@office"
-        "ecdsa-sha2-nistp256 AAAAE2VjZHNhLXNoYTItbmlzdHAyNTYAAAAIbmlzdHAyNTYAAABBBHjc0NNrHCwjrBUvUByFoFPW9vKGVFsWVD6LoKp1FLtNaIjyigMTYXoCKZSNNguKdNwUiyqKIZfCExZmgc3Cccw= phone"
-      ];
-    in
-    rec {
-      formatter.x86_64-linux = nixpkgs.legacyPackages.${system}.nixfmt-tree;
-
-      nixosConfigurations.office = nixpkgs.lib.nixosSystem {
-        inherit system;
-        specialArgs = {
-          inherit inputs;
-          compName = "office";
-          sshKeys = my-keys;
-        };
-        modules = [
-          inputs.home-manager.nixosModules.default
-          agenix.nixosModules.default
-          ./nixos/shared-cli-configuration.nix
-          ./nixos/shared-configuration.nix
-          ./nixos/shared-games-configuration.nix
-          ./nixos/office-configuration.nix
-          ./nixos/modules/k3s-agent.nix
-          ./nixos/modules/restic-backup.nix
-          ./nixos/modules/nas-mounts.nix
-          ./nixos/tailscale.nix
-        ];
-      };
-
-      nixosConfigurations.arch = nixpkgs.lib.nixosSystem {
-        inherit system;
-        specialArgs = {
-          inherit inputs;
-          compName = "arch";
-          sshKeys = my-keys;
-        };
-        modules = [
-          inputs.home-manager.nixosModules.default
-          agenix.nixosModules.default
-          ./nixos/shared-cli-configuration.nix
-          ./nixos/shared-configuration.nix
-          ./nixos/shared-games-configuration.nix
-          ./nixos/arch-configuration.nix
-          ./nixos/modules/k3s-agent.nix
-          ./nixos/modules/restic-backup.nix
-          ./nixos/modules/nas-mounts.nix
-          ./nixos/tailscale.nix
-        ];
-      };
-
-      nixosConfigurations.closet = nixpkgs.lib.nixosSystem {
-        inherit system;
-        specialArgs = {
-          inherit inputs;
-          compName = "closet";
-          sshKeys = my-keys;
-        };
-        modules = [
-          inputs.home-manager.nixosModules.default
-          agenix.nixosModules.default
-          ./nixos/shared-cli-configuration.nix
-          ./nixos/closet-configuration.nix
-          ./nixos/modules/restic-backup.nix
-          ./nixos/modules/nas-mounts.nix
-          ./nixos/tailscale.nix
-        ];
-      };
-
-      nixosConfigurations.security = nixpkgs.lib.nixosSystem {
-        inherit system;
-        specialArgs = {
-          inherit inputs;
-          compName = "security";
-          sshKeys = my-keys;
-        };
-        modules = [
-          inputs.home-manager.nixosModules.default
-          ./nixos/shared-cli-configuration.nix
-          ./nixos/shared-configuration.nix
-          ./nixos/security-configuration.nix
-          ./nixos/tailscale.nix
-        ];
-      };
-
-      nixosConfigurations.pite = nixpkgs.lib.nixosSystem {
-        inherit system;
-        specialArgs = {
-          inherit inputs;
-          compName = "pite";
-          sshKeys = my-keys;
-        };
-        modules = [
-          inputs.home-manager.nixosModules.default
-          agenix.nixosModules.default
-          ./nixos/shared-cli-configuration.nix
-          ./nixos/remote-cli-config.nix
-          #./nixos/shared-configuration.nix
-          #./nixos/security-configuration.nix
-          ./nixos/modules/k3s-agent.nix
-          ./nixos/tailscale.nix
-        ];
-      };
-
-      nixosConfigurations.aman = nixpkgs.lib.nixosSystem {
-        inherit system;
-        specialArgs = {
-          inherit inputs;
-          compName = "aman";
-          sshKeys = my-keys;
-        };
-        modules = [
-          inputs.home-manager.nixosModules.default
-          ./nixos/shared-cli-configuration.nix
-          ./nixos/remote-cli-config.nix
-          #./nixos/modules/k3s-agent.nix
-          ./nixos/tailscale.nix
-          ./nixos/modules/mullvad.nix
-          ({ ... }: {
-            services.avahi = {
-              reflector = true;
-              allowInterfaces = [ "end0" "wlan0" ];
-            };
-          })
-        ];
-      };
-
-      nixosConfigurations.vpin = nixpkgs.lib.nixosSystem {
-        inherit system;
-        specialArgs = {
-          inherit inputs;
-          compName = "vpin";
-          sshKeys = my-keys;
-        };
-        modules = [
-          inputs.home-manager.nixosModules.default
-          ./nixos/shared-cli-configuration.nix
-          ./nixos/remote-cli-config.nix
-          #./nixos/modules/k3s-agent.nix
-          ./nixos/tailscale.nix
-          ./nixos/modules/mullvad.nix
-        ];
-      };
-
-
-      nixosConfigurations.term = nixpkgs.lib.nixosSystem {
-        inherit system;
-        specialArgs = {
-          inherit inputs;
-          compName = "term";
-          sshKeys = my-keys;
-        };
-        modules = [
-          inputs.home-manager.nixosModules.default
-          ./nixos/shared-cli-configuration.nix
-          ./nixos/shared-configuration.nix
-          ./nixos/security-configuration.nix
-          #./nixos/remote-cli-config.nix
-          #./nixos/modules/k3s-agent.nix
-          ./nixos/tailscale.nix
-        ];
-      };
-
-      nixosConfigurations.secu = nixpkgs.lib.nixosSystem {
-        inherit system;
-        specialArgs = {
-          inherit inputs;
-          compName = "secu";
-          sshKeys = my-keys;
-        };
-        modules = [
-          inputs.home-manager.nixosModules.default
-          inputs.disko.nixosModules.default
-          agenix.nixosModules.default
-          ./nixos/shared-cli-configuration.nix
-          ./nixos/shared-configuration.nix
-          ./nixos/secu-configuration.nix
-          ./nixos/modules/disko_secu.nix
-          ./nixos/modules/restic-backup.nix
-          ./nixos/modules/nas-mounts.nix
-          #./nixos/remote-cli-config.nix
-          #./nixos/modules/k3s-agent.nix
-          ./nixos/tailscale.nix
-          ## POST-INSTALL: uncomment after TPM enrollment ##
-          ./nixos/modules/secu-post-install.nix
-        ];
-      };
-
-      nixosConfigurations.nas = nixpkgs.lib.nixosSystem {
-        inherit system;
-        specialArgs = {
-          inherit inputs;
-          compName = "nas";
-          sshKeys = my-keys;
-        };
-        modules = [
-          inputs.home-manager.nixosModules.default
-          inputs.disko.nixosModules.default
-          agenix.nixosModules.default
-          ./nixos/shared-cli-configuration.nix
-          ./nixos/nas-configuration.nix
-          ./nixos/modules/disko_nas.nix
-          ./nixos/tailscale.nix
-        ];
-      };
-
-      nixosConfigurations.installer = nixpkgs.lib.nixosSystem {
-        inherit system;
-        specialArgs = {
-          inherit inputs;
-          compName = "installer";
-          sshKeys = my-keys;
-        };
-        modules = [
-          inputs.home-manager.nixosModules.default
-          ./nixos/shared-cli-configuration.nix
-          ./nixos/modules/user-john.nix
-          ({ modulesPath, ... }: {
-            imports = [
-              (modulesPath + "/installer/cd-dvd/installation-cd-minimal.nix")
-            ];
-            home-manager.users."john" = import ./nixos/home-cli.nix;
-            users.users."john".openssh.authorizedKeys.keys = my-keys;
-          })
-        ];
-      };
-
-      packages.x86_64-linux.installer = nixosConfigurations.installer.config.system.build.isoImage;
     };
+
+    nixosConfigurations.arch = nixpkgs.lib.nixosSystem {
+      inherit system;
+      specialArgs = {
+        inherit inputs;
+        compName = "arch";
+        sshKeys = my-keys;
+      };
+      modules = [
+        inputs.home-manager.nixosModules.default
+        agenix.nixosModules.default
+        ./nixos/shared-cli-configuration.nix
+        ./nixos/shared-configuration.nix
+        ./nixos/shared-games-configuration.nix
+        ./nixos/arch-configuration.nix
+        ./nixos/modules/k3s-agent.nix
+        ./nixos/modules/restic-backup.nix
+        ./nixos/modules/nas-mounts.nix
+        ./nixos/tailscale.nix
+      ];
+    };
+
+    nixosConfigurations.closet = nixpkgs.lib.nixosSystem {
+      inherit system;
+      specialArgs = {
+        inherit inputs;
+        compName = "closet";
+        sshKeys = my-keys;
+      };
+      modules = [
+        inputs.home-manager.nixosModules.default
+        agenix.nixosModules.default
+        ./nixos/shared-cli-configuration.nix
+        ./nixos/closet-configuration.nix
+        ./nixos/modules/restic-backup.nix
+        ./nixos/modules/nas-mounts.nix
+        ./nixos/tailscale.nix
+      ];
+    };
+
+    nixosConfigurations.security = nixpkgs.lib.nixosSystem {
+      inherit system;
+      specialArgs = {
+        inherit inputs;
+        compName = "security";
+        sshKeys = my-keys;
+      };
+      modules = [
+        inputs.home-manager.nixosModules.default
+        ./nixos/shared-cli-configuration.nix
+        ./nixos/shared-configuration.nix
+        ./nixos/security-configuration.nix
+        ./nixos/tailscale.nix
+      ];
+    };
+
+    nixosConfigurations.pite = nixpkgs.lib.nixosSystem {
+      inherit system;
+      specialArgs = {
+        inherit inputs;
+        compName = "pite";
+        sshKeys = my-keys;
+      };
+      modules = [
+        inputs.home-manager.nixosModules.default
+        agenix.nixosModules.default
+        ./nixos/shared-cli-configuration.nix
+        ./nixos/remote-cli-config.nix
+        #./nixos/shared-configuration.nix
+        #./nixos/security-configuration.nix
+        ./nixos/modules/k3s-agent.nix
+        ./nixos/tailscale.nix
+      ];
+    };
+
+    nixosConfigurations.aman = nixpkgs.lib.nixosSystem {
+      inherit system;
+      specialArgs = {
+        inherit inputs;
+        compName = "aman";
+        sshKeys = my-keys;
+      };
+      modules = [
+        inputs.home-manager.nixosModules.default
+        ./nixos/shared-cli-configuration.nix
+        ./nixos/remote-cli-config.nix
+        #./nixos/modules/k3s-agent.nix
+        ./nixos/tailscale.nix
+        ./nixos/modules/mullvad.nix
+        ({...}: {
+          services.avahi = {
+            reflector = true;
+            allowInterfaces = ["end0" "wlan0"];
+          };
+        })
+      ];
+    };
+
+    nixosConfigurations.vpin = nixpkgs.lib.nixosSystem {
+      inherit system;
+      specialArgs = {
+        inherit inputs;
+        compName = "vpin";
+        sshKeys = my-keys;
+      };
+      modules = [
+        inputs.home-manager.nixosModules.default
+        ./nixos/shared-cli-configuration.nix
+        ./nixos/remote-cli-config.nix
+        #./nixos/modules/k3s-agent.nix
+        ./nixos/tailscale.nix
+        ./nixos/modules/mullvad.nix
+      ];
+    };
+
+    nixosConfigurations.term = nixpkgs.lib.nixosSystem {
+      inherit system;
+      specialArgs = {
+        inherit inputs;
+        compName = "term";
+        sshKeys = my-keys;
+      };
+      modules = [
+        inputs.home-manager.nixosModules.default
+        ./nixos/shared-cli-configuration.nix
+        ./nixos/shared-configuration.nix
+        ./nixos/security-configuration.nix
+        #./nixos/remote-cli-config.nix
+        #./nixos/modules/k3s-agent.nix
+        ./nixos/tailscale.nix
+      ];
+    };
+
+    nixosConfigurations.secu = nixpkgs.lib.nixosSystem {
+      inherit system;
+      specialArgs = {
+        inherit inputs;
+        compName = "secu";
+        sshKeys = my-keys;
+      };
+      modules = [
+        inputs.home-manager.nixosModules.default
+        inputs.disko.nixosModules.default
+        agenix.nixosModules.default
+        ./nixos/shared-cli-configuration.nix
+        ./nixos/shared-configuration.nix
+        ./nixos/secu-configuration.nix
+        ./nixos/modules/disko_secu.nix
+        ./nixos/modules/restic-backup.nix
+        ./nixos/modules/nas-mounts.nix
+        #./nixos/remote-cli-config.nix
+        #./nixos/modules/k3s-agent.nix
+        ./nixos/tailscale.nix
+        ## POST-INSTALL: uncomment after TPM enrollment ##
+        ./nixos/modules/secu-post-install.nix
+      ];
+    };
+
+    nixosConfigurations.nas = nixpkgs.lib.nixosSystem {
+      inherit system;
+      specialArgs = {
+        inherit inputs;
+        compName = "nas";
+        sshKeys = my-keys;
+      };
+      modules = [
+        inputs.home-manager.nixosModules.default
+        inputs.disko.nixosModules.default
+        agenix.nixosModules.default
+        ./nixos/shared-cli-configuration.nix
+        ./nixos/nas-configuration.nix
+        ./nixos/modules/disko_nas.nix
+        ./nixos/tailscale.nix
+      ];
+    };
+
+    nixosConfigurations.installer = nixpkgs.lib.nixosSystem {
+      inherit system;
+      specialArgs = {
+        inherit inputs;
+        compName = "installer";
+        sshKeys = my-keys;
+      };
+      modules = [
+        inputs.home-manager.nixosModules.default
+        ./nixos/shared-cli-configuration.nix
+        ./nixos/modules/user-john.nix
+        ({modulesPath, ...}: {
+          imports = [
+            (modulesPath + "/installer/cd-dvd/installation-cd-minimal.nix")
+          ];
+          home-manager.users."john" = import ./nixos/home-cli.nix;
+          users.users."john".openssh.authorizedKeys.keys = my-keys;
+        })
+      ];
+    };
+
+    packages.x86_64-linux.installer = nixosConfigurations.installer.config.system.build.isoImage;
+  };
 }

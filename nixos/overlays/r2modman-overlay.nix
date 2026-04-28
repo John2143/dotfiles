@@ -1,9 +1,6 @@
-final: prev:
-
-let
+final: prev: let
   customVersion = "3.2.1";
-in
-{
+in {
   r2modman = prev.r2modman.overrideAttrs (old: rec {
     version = customVersion;
 
@@ -19,8 +16,10 @@ in
       hash = "sha256-HLVHxjyymi0diurVamETrfwYM2mkUrIOHhbYCrqGkeg="; # Replace with correct hash
     };
 
-    meta = old.meta // {
-      changelog = "https://github.com/ebkr/r2modmanPlus/releases/tag/v${version}";
-    };
+    meta =
+      old.meta
+      // {
+        changelog = "https://github.com/ebkr/r2modmanPlus/releases/tag/v${version}";
+      };
   });
 }

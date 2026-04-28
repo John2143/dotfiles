@@ -7,8 +7,7 @@
   modulesPath,
   pkgs,
   ...
-}:
-let
+}: let
   no-rgb = pkgs.writeScriptBin "no-rgb" ''
     #!/bin/sh
     NUM_DEVICES=$(${pkgs.openrgb}/bin/openrgb --noautoconnect --list-devices | grep -E '^[0-9]+: ' | wc -l)
@@ -27,7 +26,7 @@ in {
     "nvme"
     "usbhid"
   ];
-  boot.initrd.kernelModules = [ ];
+  boot.initrd.kernelModules = [];
   boot.kernelModules = [
     "kvm-intel"
     "i2c-dev"
@@ -38,7 +37,7 @@ in {
     "video=DP-1:2560x1440@120"
     "video=HDMI-A-2:2560x1440@120"
   ];
-  boot.extraModulePackages = [ ];
+  boot.extraModulePackages = [];
   boot.extraModprobeConfig = '''';
   #blacklist nouveau
   #options nouveauu modeset=0
@@ -54,31 +53,31 @@ in {
       ExecStart = "${no-rgb}/bin/no-rgb";
       Type = "oneshot";
     };
-    wantedBy = [ "multi-user.target" ];
+    wantedBy = ["multi-user.target"];
   };
 
   #fileSystems."/mnt/arch" = {
-    #device = "/dev/disk/by-label/ARCH";
-    #fsType = "ext4";
+  #device = "/dev/disk/by-label/ARCH";
+  #fsType = "ext4";
   #};
 
   #fileSystems."/mnt/other" = {
-    #device = "/dev/disk/by-label/OTHER";
-    #fsType = "ext4";
-    #neededForBoot = true;
+  #device = "/dev/disk/by-label/OTHER";
+  #fsType = "ext4";
+  #neededForBoot = true;
   #};
 
   #fileSystems."/mnt/x9" = {
-    #device = "/dev/disk/by-label/x9";
-    #fsType = "ext4";
-    #neededForBoot = true;
+  #device = "/dev/disk/by-label/x9";
+  #fsType = "ext4";
+  #neededForBoot = true;
   #};
 
   #fileSystems."/mnt/other" = {
-    #device = "/mnt/x9/other";
-    #fsType = "none";
-    #options = [ "bind" ];
-    #neededForBoot = true;
+  #device = "/mnt/x9/other";
+  #fsType = "none";
+  #options = [ "bind" ];
+  #neededForBoot = true;
   #};
 
   fileSystems."/home/john" = {
@@ -104,8 +103,8 @@ in {
   };
 
   #fileSystems."/mnt/games_b" = {
-    #device = "/dev/pool1a/games_b";
-    #fsType = "ext4";
+  #device = "/dev/pool1a/games_b";
+  #fsType = "ext4";
   #};
 
   fileSystems."/boot" = {
@@ -136,7 +135,7 @@ in {
   # };
 
   swapDevices = [
-     { device = "/dev/disk/by-label/swap"; }
+    {device = "/dev/disk/by-label/swap";}
   ];
 
   # Enables DHCP on each ethernet and wireless interface. In case of scripted networking
@@ -156,7 +155,7 @@ in {
 
   nixpkgs.hostPlatform = lib.mkDefault "x86_64-linux";
   hardware.cpu.intel.updateMicrocode = lib.mkDefault config.hardware.enableRedistributableFirmware;
-  services.xserver.videoDrivers = [ "nvidia" ];
+  services.xserver.videoDrivers = ["nvidia"];
   hardware.nvidia = {
     package = config.boot.kernelPackages.nvidiaPackages.legacy_580;
     open = false;

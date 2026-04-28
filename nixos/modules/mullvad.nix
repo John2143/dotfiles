@@ -3,8 +3,7 @@
   lib,
   pkgs,
   ...
-}:
-let
+}: let
   cfg = config.services.mullvad-relay;
 
   historyFile = "/var/lib/mullvad-relay-history";
@@ -438,168 +437,172 @@ in {
   };
 
   config = {
-  services.mullvad-vpn.enable = true;
+    services.mullvad-vpn.enable = true;
 
-  services.tailscale.useRoutingFeatures = "both";
+    services.tailscale.useRoutingFeatures = "both";
 
-  networking.firewall = {
-    enable = lib.mkForce true;
-    trustedInterfaces = [ "tailscale0" ];
-    allowedUDPPorts = [ config.services.tailscale.port ];
-    extraCommands = ''
-      iptables -t nat -A POSTROUTING -s 100.64.0.0/10 ! -o tailscale0 -j MASQUERADE
-    '';
-    extraStopCommands = ''
-      iptables -t nat -D POSTROUTING -s 100.64.0.0/10 ! -o tailscale0 -j MASQUERADE || true
-    '';
-  };
-
-  systemd.services.mullvad-auto-connect = {
-    description = "Auto-configure and connect Mullvad VPN";
-    after = [
-      "mullvad-daemon.service"
-      "tailscaled.service"
-    ];
-    requires = [ "mullvad-daemon.service" ];
-    wants = [ "tailscaled.service" ];
-    wantedBy = [ "multi-user.target" ];
-    path = commonPath ++ [
-      pkgs.procps
-      pkgs.util-linux
-    ];
-    serviceConfig = {
-      Type = "oneshot";
-      RemainAfterExit = true;
+    networking.firewall = {
+      enable = lib.mkForce true;
+      trustedInterfaces = ["tailscale0"];
+      allowedUDPPorts = [config.services.tailscale.port];
+      extraCommands = ''
+        iptables -t nat -A POSTROUTING -s 100.64.0.0/10 ! -o tailscale0 -j MASQUERADE
+      '';
+      extraStopCommands = ''
+        iptables -t nat -D POSTROUTING -s 100.64.0.0/10 ! -o tailscale0 -j MASQUERADE || true
+      '';
     };
-    script = ''
-      mullvad lan set allow
-      mullvad auto-connect set on
-      mullvad tunnel set ipv6 on
-      mullvad tunnel set quantum-resistant on
 
-      ${reapplySplitTunnel} || true
+    systemd.services.mullvad-auto-connect = {
+      description = "Auto-configure and connect Mullvad VPN";
+      after = [
+        "mullvad-daemon.service"
+        "tailscaled.service"
+      ];
+      requires = ["mullvad-daemon.service"];
+      wants = ["tailscaled.service"];
+      wantedBy = ["multi-user.target"];
+      path =
+        commonPath
+        ++ [
+          pkgs.procps
+          pkgs.util-linux
+        ];
+      serviceConfig = {
+        Type = "oneshot";
+        RemainAfterExit = true;
+      };
+      script = ''
+        mullvad lan set allow
+        mullvad auto-connect set on
+        mullvad tunnel set ipv6 on
+        mullvad tunnel set quantum-resistant on
 
-      # Clean stale ip rules from previous runs so Mullvad doesn't
-      # keep leapfrogging them with lower priority numbers.
-      while ip rule del to 100.64.0.0/10 lookup 52 2>/dev/null; do :; done
-      while ip -6 rule del to fd7a:115c:a1e0::/48 lookup 52 2>/dev/null; do :; done
-      ip rule del fwmark 0x40000/0x40000 table 200 2>/dev/null || true
-      ip route flush table 200 2>/dev/null || true
+        ${reapplySplitTunnel} || true
 
-      SELECT_RELAY_RC=0
-      ${selectRelay} || SELECT_RELAY_RC=$?
-      if [ "$SELECT_RELAY_RC" -ne 0 ] && [ "$SELECT_RELAY_RC" -ne 10 ]; then
-        exit "$SELECT_RELAY_RC"
-      fi
+        # Clean stale ip rules from previous runs so Mullvad doesn't
+        # keep leapfrogging them with lower priority numbers.
+        while ip rule del to 100.64.0.0/10 lookup 52 2>/dev/null; do :; done
+        while ip -6 rule del to fd7a:115c:a1e0::/48 lookup 52 2>/dev/null; do :; done
+        ip rule del fwmark 0x40000/0x40000 table 200 2>/dev/null || true
+        ip route flush table 200 2>/dev/null || true
 
-      mullvad connect --wait
+        SELECT_RELAY_RC=0
+        ${selectRelay} || SELECT_RELAY_RC=$?
+        if [ "$SELECT_RELAY_RC" -ne 0 ] && [ "$SELECT_RELAY_RC" -ne 10 ]; then
+          exit "$SELECT_RELAY_RC"
+        fi
 
-      ${applyBypass}
-    '';
-  };
+        mullvad connect --wait
 
-  systemd.services.mullvad-rotate-relay = {
-    description = "Rotate Mullvad relay to a nearby city";
-    after = [
-      "mullvad-daemon.service"
-      "network-online.target"
-      "mullvad-auto-connect.service"
-    ];
-    wants = [ "network-online.target" ];
-    path = commonPath ++ [
-      pkgs.util-linux
-    ];
-    serviceConfig = {
-      Type = "oneshot";
+        ${applyBypass}
+      '';
     };
-    script = ''
-      SELECT_RELAY_RC=0
-      ${selectRelay} || SELECT_RELAY_RC=$?
-      if [ "$SELECT_RELAY_RC" -eq 10 ]; then
-        echo "Relay selection skipped due to lock contention; skipping reconnect" >&2
-        exit 0
-      fi
-      if [ "$SELECT_RELAY_RC" -ne 0 ]; then
-        exit "$SELECT_RELAY_RC"
-      fi
 
-      mullvad reconnect --wait
-      ${applyBypass}
-    '';
-  };
+    systemd.services.mullvad-rotate-relay = {
+      description = "Rotate Mullvad relay to a nearby city";
+      after = [
+        "mullvad-daemon.service"
+        "network-online.target"
+        "mullvad-auto-connect.service"
+      ];
+      wants = ["network-online.target"];
+      path =
+        commonPath
+        ++ [
+          pkgs.util-linux
+        ];
+      serviceConfig = {
+        Type = "oneshot";
+      };
+      script = ''
+        SELECT_RELAY_RC=0
+        ${selectRelay} || SELECT_RELAY_RC=$?
+        if [ "$SELECT_RELAY_RC" -eq 10 ]; then
+          echo "Relay selection skipped due to lock contention; skipping reconnect" >&2
+          exit 0
+        fi
+        if [ "$SELECT_RELAY_RC" -ne 0 ]; then
+          exit "$SELECT_RELAY_RC"
+        fi
 
-  systemd.timers.mullvad-rotate-relay = {
-    wantedBy = [ "timers.target" ];
-    timerConfig = {
-      OnBootSec = "5min";
-      OnUnitActiveSec = "5min";
-      RandomizedDelaySec = "90min";
-      Persistent = true;
+        mullvad reconnect --wait
+        ${applyBypass}
+      '';
     };
-  };
 
-  # Safety net: re-apply bypass rules at a low frequency in case
-  # something other than rotation disturbs Mullvad's state.
-  systemd.services.mullvad-tailscale-keepalive = {
-    description = "Re-apply Tailscale bypass rules for Mullvad";
-    after = [ "mullvad-auto-connect.service" ];
-    wants = [ "mullvad-auto-connect.service" ];
-    path = commonPath;
-    serviceConfig = {
-      Type = "oneshot";
+    systemd.timers.mullvad-rotate-relay = {
+      wantedBy = ["timers.target"];
+      timerConfig = {
+        OnBootSec = "5min";
+        OnUnitActiveSec = "5min";
+        RandomizedDelaySec = "90min";
+        Persistent = true;
+      };
     };
-    script = ''
-      ${applyBypass}
-      ${reapplySplitTunnel}
-    '';
-  };
 
-  systemd.timers.mullvad-tailscale-keepalive = {
-    wantedBy = [ "timers.target" ];
-    timerConfig = {
-      OnBootSec = "5min";
-      OnUnitActiveSec = "10min";
+    # Safety net: re-apply bypass rules at a low frequency in case
+    # something other than rotation disturbs Mullvad's state.
+    systemd.services.mullvad-tailscale-keepalive = {
+      description = "Re-apply Tailscale bypass rules for Mullvad";
+      after = ["mullvad-auto-connect.service"];
+      wants = ["mullvad-auto-connect.service"];
+      path = commonPath;
+      serviceConfig = {
+        Type = "oneshot";
+      };
+      script = ''
+        ${applyBypass}
+        ${reapplySplitTunnel}
+      '';
     };
-  };
 
-  systemd.services.mullvad-connectivity-watchdog = {
-    description = "Connectivity watchdog: diagnose and recover internet/VPN failures";
-    after = [
-      "mullvad-auto-connect.service"
-      "tailscaled.service"
-      "network-online.target"
-    ];
-    wants = [ "network-online.target" ];
-    serviceConfig = {
-      Type = "oneshot";
+    systemd.timers.mullvad-tailscale-keepalive = {
+      wantedBy = ["timers.target"];
+      timerConfig = {
+        OnBootSec = "5min";
+        OnUnitActiveSec = "10min";
+      };
     };
-    script = ''
-      ${connectivityWatchdog}
-    '';
-  };
 
-  systemd.timers.mullvad-connectivity-watchdog = {
-    wantedBy = [ "timers.target" ];
-    timerConfig = {
-      OnBootSec = "2min";
-      OnUnitActiveSec = "60s";
+    systemd.services.mullvad-connectivity-watchdog = {
+      description = "Connectivity watchdog: diagnose and recover internet/VPN failures";
+      after = [
+        "mullvad-auto-connect.service"
+        "tailscaled.service"
+        "network-online.target"
+      ];
+      wants = ["network-online.target"];
+      serviceConfig = {
+        Type = "oneshot";
+      };
+      script = ''
+        ${connectivityWatchdog}
+      '';
     };
-  };
 
-  systemd.services.tailscale-exit-node = {
-    description = "Advertise Tailscale exit node";
-    after = [ "tailscaled.service" ];
-    wants = [ "tailscaled.service" ];
-    wantedBy = [ "multi-user.target" ];
-    path = [ pkgs.tailscale ];
-    serviceConfig = {
-      Type = "oneshot";
-      RemainAfterExit = true;
+    systemd.timers.mullvad-connectivity-watchdog = {
+      wantedBy = ["timers.target"];
+      timerConfig = {
+        OnBootSec = "2min";
+        OnUnitActiveSec = "60s";
+      };
     };
-    script = ''
-      sleep 5
-      tailscale set --advertise-exit-node
-    '';
-  };
+
+    systemd.services.tailscale-exit-node = {
+      description = "Advertise Tailscale exit node";
+      after = ["tailscaled.service"];
+      wants = ["tailscaled.service"];
+      wantedBy = ["multi-user.target"];
+      path = [pkgs.tailscale];
+      serviceConfig = {
+        Type = "oneshot";
+        RemainAfterExit = true;
+      };
+      script = ''
+        sleep 5
+        tailscale set --advertise-exit-node
+      '';
+    };
   };
 }

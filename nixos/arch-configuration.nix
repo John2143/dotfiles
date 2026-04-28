@@ -1,7 +1,6 @@
 # Edit this configuration file to define what should be installed on
 # your system. Help is available in the configuration.nix(5) man page, on
 # https://search.nixos.org/options and in the NixOS manual (`nixos-help`).
-
 {
   config,
   pkgs,
@@ -9,9 +8,7 @@
   inputs,
   lib,
   ...
-}:
-
-{
+}: {
   imports = [
     ./arch-hardware-configuration.nix
     ./modules/user-john.nix
@@ -22,7 +19,7 @@
 
   #nix.settings.trusted-users = [ "@wheel" ];
   #nix.settings.trusted-public-keys = [
-    #"ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFVckq0oXyXkxiLo39typ6PR039XrLwze/Cb0PZaTzmi john@office"
+  #"ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFVckq0oXyXkxiLo39typ6PR039XrLwze/Cb0PZaTzmi john@office"
   #];
 
   #services.getty.autologinUser = "john";
@@ -32,8 +29,8 @@
     efi.canTouchEfiVariables = true;
     systemd-boot.enable = true;
   };
-  boot.supportedFilesystems = [ "ntfs" ];
-  boot.binfmt.emulatedSystems = [ "aarch64-linux" ];
+  boot.supportedFilesystems = ["ntfs"];
+  boot.binfmt.emulatedSystems = ["aarch64-linux"];
   services.displayManager.lemurs = {
     enable = true;
   };
@@ -76,31 +73,30 @@
     keyMap = "us";
   };
 
-
   # Second keyboard (winkeyless ps2avrGB) remapped to F13-F24.
   # Hyprland binds in hyprland.conf map these to actual commands.
   services.keyd = {
     enable = true;
     keyboards.macropad = {
-      ids = [ "20a0:422d" ];
+      ids = ["20a0:422d"];
       settings.main = {
         esc = "f13";
-        q   = "f14";
-        w   = "f15";
-        e   = "f16";
-        r   = "f17";
-        t   = "f18";
+        q = "f14";
+        w = "f15";
+        e = "f16";
+        r = "f17";
+        t = "f18";
       };
     };
   };
 
-  custom.k3sNodeTaints = [ "seated=true:NoSchedule" ];
+  custom.k3sNodeTaints = ["seated=true:NoSchedule"];
   custom.backup.enable = true;
 
   systemd.services.screen-control = {
     description = "REST screen control server";
-    after = [ "network.target" ];
-    wantedBy = [ "multi-user.target" ];
+    after = ["network.target"];
+    wantedBy = ["multi-user.target"];
     serviceConfig = {
       ExecStart = "${inputs.screen-control.defaultPackage.x86_64-linux}/bin/screen-control";
       Restart = "always";
@@ -110,10 +106,10 @@
         "XDG_RUNTIME_DIR=/run/user/1000"
       ];
     };
-    path = [ pkgs.hyprland ];
+    path = [pkgs.hyprland];
   };
 
-  networking.firewall.allowedTCPPorts = [ 50051 ];
+  networking.firewall.allowedTCPPorts = [50051];
 
   # NAS CIFS mounts live in ./modules/nas-mounts.nix (shared across workstations).
 

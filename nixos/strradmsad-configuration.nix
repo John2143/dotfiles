@@ -1,7 +1,6 @@
 # Edit this configuration file to define what should be installed on
 # your system. Help is available in the configuration.nix(5) man page, on
 # https://search.nixos.org/options and in the NixOS manual (`nixos-help`).
-
 {
   config,
   lib,
@@ -9,9 +8,7 @@
   pkgs-stable,
   inputs,
   ...
-}:
-
-{
+}: {
   imports = [
     ./strradmsad-hardware-configuration.nix
     ./modules/user-john.nix
@@ -30,7 +27,6 @@
     enable = true;
     dockerCompat = true;
   };
-
 
   networking.hostName = "strradmsad"; # Define your hostname.
   networking.networkmanager.enable = true; # Easiest to use and most distros use this by default.
@@ -79,29 +75,29 @@
   };
 
   #services.k3s = {
-    #enable = true;
-    #role = "server";
+  #enable = true;
+  #role = "server";
   #};
 
   #services.postgresql = {
-    #enable = true;
-    #ensureDatabases = [ "openfrontpro" ];
-    #package = pkgs.postgresql_17;
-    #enableTCPIP = true;
-    #settings = {
-      #ssl = true;
-    #};
-    #authentication = pkgs.lib.mkOverride 10 ''
-      ##type databse DBuser auth-method
-      #local all all trust
+  #enable = true;
+  #ensureDatabases = [ "openfrontpro" ];
+  #package = pkgs.postgresql_17;
+  #enableTCPIP = true;
+  #settings = {
+  #ssl = true;
+  #};
+  #authentication = pkgs.lib.mkOverride 10 ''
+  ##type databse DBuser auth-method
+  #local all all trust
 
-      ## local trust
-      ##host all all 127.0.0.1/32 trust
-      ##host all all 192.168.1.1/24 trust
+  ## local trust
+  ##host all all 127.0.0.1/32 trust
+  ##host all all 192.168.1.1/24 trust
 
-      ## password login
-      #host all all 0.0.0.0/0 scram-sha-256
-    #'';
+  ## password login
+  #host all all 0.0.0.0/0 scram-sha-256
+  #'';
   #};
 
   # networking.firewall.allowedTCPPorts = [

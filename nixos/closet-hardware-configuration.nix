@@ -7,9 +7,7 @@
   pkgs,
   modulesPath,
   ...
-}:
-
-{
+}: {
   imports = [
     (modulesPath + "/installer/scan/not-detected.nix")
   ];
@@ -18,9 +16,9 @@
     "xhci_pci"
     "usbhid"
   ];
-  boot.initrd.kernelModules = [ ];
-  boot.kernelModules = [ ];
-  boot.extraModulePackages = [ ];
+  boot.initrd.kernelModules = [];
+  boot.kernelModules = [];
+  boot.extraModulePackages = [];
 
   fileSystems."/" = {
     device = "/dev/disk/by-label/MAIN";
@@ -36,9 +34,9 @@
     ];
   };
 
-  fileSystems."/mnt" =
-  { device = "/dev/disk/by-uuid/4557abd8-9b0b-4468-9337-26fe7ffa7c97";
-      fsType = "ext4";
+  fileSystems."/mnt" = {
+    device = "/dev/disk/by-uuid/4557abd8-9b0b-4468-9337-26fe7ffa7c97";
+    fsType = "ext4";
   };
 
   swapDevices = [

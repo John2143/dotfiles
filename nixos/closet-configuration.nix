@@ -1,7 +1,6 @@
 # Edit this configuration file to define what should be installed on
 # your system. Help is available in the configuration.nix(5) man page, on
 # https://search.nixos.org/options and in the NixOS manual (`nixos-help`).
-
 {
   config,
   lib,
@@ -11,9 +10,7 @@
   sshKeys,
   compName,
   ...
-}:
-
-{
+}: {
   imports = [
     ./closet-hardware-configuration.nix
     ./modules/user-john.nix
@@ -34,20 +31,20 @@
   };
 
   #virtualisation.oci-containers = {
-    #backend = "podman";
-    #containers.teamspeak = {
-      #image = "docker.io/teamspeak:latest";
-      #ports = [
-        #"9987:9987/udp"
-        #"30033:30033"
-      #];
-      #environment = {
-        #TS3SERVER_LICENSE = "accept";
-      #};
-      #volumes = [
-        #"/home/john/teamspeak/teamspeak3-server_linux_amd64_old:/var/ts3server"
-      #];
-    #};
+  #backend = "podman";
+  #containers.teamspeak = {
+  #image = "docker.io/teamspeak:latest";
+  #ports = [
+  #"9987:9987/udp"
+  #"30033:30033"
+  #];
+  #environment = {
+  #TS3SERVER_LICENSE = "accept";
+  #};
+  #volumes = [
+  #"/home/john/teamspeak/teamspeak3-server_linux_amd64_old:/var/ts3server"
+  #];
+  #};
   #};
 
   networking.hostName = compName; # Define your hostname.
@@ -83,7 +80,7 @@
         ${pkgs.sudo}/bin/sudo -u postgres ${pkgs.postgresql_17}/bin/pg_dumpall \
         | ${pkgs.gzip}/bin/gzip > /mnt/backup/postgres.sql.gz
     '';
-    extraPaths = [ "/mnt/backup/postgres.sql.gz" ];
+    extraPaths = ["/mnt/backup/postgres.sql.gz"];
   };
 
   # ================
@@ -141,7 +138,7 @@
 
   services.postgresql = {
     enable = true;
-    ensureDatabases = [ "openfrontpro" ];
+    ensureDatabases = ["openfrontpro"];
     package = pkgs.postgresql_17;
     enableTCPIP = true;
     settings = {

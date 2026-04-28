@@ -1,7 +1,6 @@
 # Edit this configuration file to define what should be installed on
 # your system. Help is available in the configuration.nix(5) man page, on
 # https://search.nixos.org/options and in the NixOS manual (`nixos-help`).
-
 {
   config,
   lib,
@@ -11,9 +10,7 @@
   compName,
   sshKeys,
   ...
-}:
-
-{
+}: {
   imports = [
     ./secu-hardware-configuration.nix
     ./modules/user-john.nix
@@ -38,7 +35,6 @@
     enable = true;
   };
   services.seatd.enable = true;
-
 
   networking.hostName = compName; # Define your hostname.
   networking.networkmanager.enable = true; # Easiest to use and most distros use this by default.

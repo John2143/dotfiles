@@ -7,9 +7,7 @@
   pkgs,
   modulesPath,
   ...
-}:
-
-{
+}: {
   imports = [
     (modulesPath + "/installer/scan/not-detected.nix")
   ];
@@ -32,14 +30,14 @@
     # "vfio"
     # "vfio_iommu_type1"
   ];
-  boot.kernelModules = [ "kvm-intel" ];
+  boot.kernelModules = ["kvm-intel"];
   boot.kernelParams = [
     # "video=DP-2:2560x1440@240"
     # "video=DP-1:1920x1080@144"
     # "intel_iommu=on"
     # "iommu=pt"
   ];
-  boot.extraModulePackages = [ ];
+  boot.extraModulePackages = [];
 
   fileSystems."/" = {
     device = "/dev/disk/by-uuid/003de88b-e5fb-4a42-8948-27398ddd94d6";
@@ -66,7 +64,7 @@
   };
 
   swapDevices = [
-     { device = "/dev/disk/by-label/swap"; }
+    {device = "/dev/disk/by-label/swap";}
   ];
 
   # Enables DHCP on each ethernet and wireless interface. In case of scripted networking

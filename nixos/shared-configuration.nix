@@ -2,7 +2,6 @@
 # your system. Help is available in the configuration.nix(5) man page, on
 # https://search.nixos.org/options and in the NixOS manual (`nixos-help`).
 # ./shared-games-configuration.nix
-
 {
   config,
   lib,
@@ -10,9 +9,7 @@
   pkgs-stable,
   inputs,
   ...
-}:
-
-{
+}: {
   # setup my two input channels
   nixpkgs.config = {
     permittedInsecurePackages = [
@@ -31,13 +28,13 @@
     pulse.enable = true;
     extraConfig = {
       pipewire-pulse."chrome-no-audio" = {
-          "pulse.rules" = [
-            {
-              # prevent all sources matching "Chromium" from messing with the volume
-              matches = [ { "application.name" = "~Chromium.*"; } ];
-              actions = { quirks = [ "block-source-volume" ]; };
-            }
-          ];
+        "pulse.rules" = [
+          {
+            # prevent all sources matching "Chromium" from messing with the volume
+            matches = [{"application.name" = "~Chromium.*";}];
+            actions = {quirks = ["block-source-volume"];};
+          }
+        ];
       };
     };
     wireplumber.extraConfig = {
@@ -114,21 +111,21 @@
   services.blueman.enable = true;
 
   #systemd.timers."kdeconnect-refresh" = {
-    #wantedBy = [ "timers.target" ];
-    #timerConfig = {
-      #OnBootSec = "5m";
-      #OnUnitActiveSec = "5m";
-      #Unit = "kdeconnect-refresh.service";
-    #};
+  #wantedBy = [ "timers.target" ];
+  #timerConfig = {
+  #OnBootSec = "5m";
+  #OnUnitActiveSec = "5m";
+  #Unit = "kdeconnect-refresh.service";
+  #};
   #};
 
   #systemd.services."kdeconnect-refresh" = {
-    #script = ''
-      #${pkgs.fish}/bin/fish -c "DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus kdeconnect-cli --refresh"
-    #'';
-    #serviceConfig = {
-      #Type = "oneshot";
-      #User = "john";
-    #};
+  #script = ''
+  #${pkgs.fish}/bin/fish -c "DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus kdeconnect-cli --refresh"
+  #'';
+  #serviceConfig = {
+  #Type = "oneshot";
+  #User = "john";
+  #};
   #};
 }
