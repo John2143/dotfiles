@@ -123,7 +123,7 @@
     e1s
     dbeaver-bin # db browser
 
-    code-cursor # agent terminal
+    # code-cursor # agent terminal: I swapped to omp
     obs-studio # streaming
     easyeffects
     evremap
@@ -131,6 +131,8 @@
     godot # game engine / gdscript
     gdtoolkit_4 # gdscript linter/formatter
     protonup-qt
+
+    #nvtop # unfree
   ];
 
   # If we are on office computer, then also add the following:
