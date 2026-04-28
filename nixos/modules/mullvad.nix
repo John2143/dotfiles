@@ -31,8 +31,8 @@ let
     HISTORY="${historyFile}"
     LOCK="${lockFile}"
     RELAYS="/var/cache/mullvad-vpn/relays.json"
-    HOME_LAT=38.889484
-    HOME_LON=-77.035278
+    HOME_LAT=%HOME_LAT%
+    HOME_LON=%HOME_LON%
     MAX_DIST=1000
 
     exec 9>"$LOCK"
@@ -421,8 +421,7 @@ let
   '';
 
   nuclearCooldownFile = "/run/mullvad-nuclear-cooldown";
-in
-{
+in {
   services.mullvad-vpn.enable = true;
 
   services.tailscale.useRoutingFeatures = "both";
