@@ -5,6 +5,8 @@
   ...
 }:
 let
+  cfg = config.services.mullvad-relay;
+
   historyFile = "/var/lib/mullvad-relay-history";
   lockFile = "/run/mullvad-relay-select.lock";
 
@@ -31,8 +33,8 @@ let
     HISTORY="${historyFile}"
     LOCK="${lockFile}"
     RELAYS="/var/cache/mullvad-vpn/relays.json"
-    HOME_LAT=%HOME_LAT%
-    HOME_LON=%HOME_LON%
+    HOME_LAT=${toString cfg.homeLatitude}
+    HOME_LON=${toString cfg.homeLongitude}
     MAX_DIST=1000
 
     exec 9>"$LOCK"
@@ -422,6 +424,20 @@ let
 
   nuclearCooldownFile = "/run/mullvad-nuclear-cooldown";
 in {
+  options.services.mullvad-relay = {
+    homeLatitude = lib.mkOption {
+      type = lib.types.float;
+      default = 38.8977;
+      description = "Latitude for nearby-city relay selection (default: White House, DC).";
+    };
+    homeLongitude = lib.mkOption {
+      type = lib.types.float;
+      default = -77.0365;
+      description = "Longitude for nearby-city relay selection (default: White House, DC).";
+    };
+  };
+
+  config = {
   services.mullvad-vpn.enable = true;
 
   services.tailscale.useRoutingFeatures = "both";
@@ -584,5 +600,6 @@ in {
       sleep 5
       tailscale set --advertise-exit-node
     '';
+  };
   };
 }
