@@ -170,7 +170,7 @@ in {
 
     ".omp/agent/config.yml".text = ''
       modelRoles:
-        default: office-ollama/gemma4
+        default: office-ollama/qwen3.6
         smol: office-ollama/qwen3.6
 
       modelProviderOrder:
@@ -353,7 +353,6 @@ in {
         set -l _pre_vars (set --names -x)
         llm-load-keys &>/dev/null
 
-        # Parse --debug / -v flag
         set -l debug 0
         set -l filtered_argv
         for arg in $argv
@@ -369,79 +368,35 @@ in {
           set days $filtered_argv[1]
         end
 
+        # --- OpenAI ---
+        # Amounts in the response are USD (decimal strings)
         if set -q OPENAI_ADMIN_KEY
           set -l now (date +%s)
           set -l start_time (math "$now - $days * 86400")
-          set -l oai_url "https://api.openai.com/v1/organization/costs?start_time=$start_time&group_by[]=line_item&limit=180"
-          set -l resp (curl -s "$oai_url" \
-            -H "Authorization: Bearer $OPENAI_ADMIN_KEY")
-          if test $debug -eq 1
-            set -l redacted_url (string replace -- "$OPENAI_ADMIN_KEY" "REDACTED" "$oai_url")
-            echo "DEBUG OpenAI URL: $redacted_url"
-            echo "DEBUG OpenAI response:"
-            printf '%s\n' $resp | jq . 2>/dev/null; or printf '%s\n' $resp
-            echo ""
-          end
-          set -l err (printf '%s\n' $resp | jq -r '.error.message // empty' 2>/dev/null)
-          if test -n "$err"
-            echo "OpenAI: $err"
-          else
-            set -l total (printf '%s\n' $resp | jq '[.data[].results[] | .amount.value | tonumber] | add // 0' 2>/dev/null)
-            if test -n "$total" -a "$total" != "null"
-              set_color --bold
-              printf "=== OpenAI (%d days) ===\n" $days
-              set_color normal
-              printf "Total: \$%.2f\n" $total
-              printf '%s\n' $resp | jq -r '
-                [.data[].results[] | select((.amount.value | tonumber) > 0)]
-                | group_by(.line_item)
-                | map({item: .[0].line_item, total: ([.[].amount.value | tonumber] | add)})
-                | sort_by(-.total)[]
-                | "  \(.item): $\(.total * 100 | round | . / 100)"'
-            else
-              echo "OpenAI: failed to fetch costs"
-            end
-          end
-        else
-          echo "OpenAI: no admin key set (OPENAI_ADMIN_KEY)"
-        end
-
-        echo ""
-
-        if set -q ANTHROPIC_ADMIN_KEY
-          set -l start_date (date -d "$days days ago" -u +%Y-%m-%dT00:00:00Z)
-          set -l end_date (date -d tomorrow -u +%Y-%m-%dT23:59:59Z)
-          set -l base_url "https://api.anthropic.com/v1/organizations/cost_report?starting_at=$start_date&ending_at=$end_date&bucket_width=1d&group_by[]=description&limit=31"
+          set -l base_url "https://api.openai.com/v1/organization/costs?start_time=$start_time&group_by[]=line_item&limit=180"
           set -l url "$base_url"
           set -l pages
           set -l fetch_err ""
 
           while true
-            set -l page (curl -s "$url" \
-              -H "anthropic-version: 2023-06-01" \
-              -H "x-api-key: $ANTHROPIC_ADMIN_KEY")
+            set -l resp (curl -s "$url" -H "Authorization: Bearer $OPENAI_ADMIN_KEY")
             if test $debug -eq 1
-              set -l redacted_url (string replace -- "$ANTHROPIC_ADMIN_KEY" "REDACTED" "$url")
-              echo "DEBUG Anthropic URL: $redacted_url"
-              echo "DEBUG Anthropic response:"
-              printf '%s\n' $page | jq . 2>/dev/null; or printf '%s\n' $page
+              echo "DEBUG OpenAI URL: "(string replace -- "$OPENAI_ADMIN_KEY" "REDACTED" "$url")
+              echo "DEBUG OpenAI response:"
+              printf '%s\n' $resp | jq . 2>/dev/null; or printf '%s\n' $resp
               echo ""
             end
-            set -l err (printf '%s\n' $page | jq -r '.error.message // empty' 2>/dev/null)
+            set -l err (printf '%s\n' $resp | jq -r '.error.message // empty' 2>/dev/null)
             if test -n "$err"
               set fetch_err "$err"
               break
             end
-            set -a pages (printf '%s\n' $page | jq -c '.data // []' 2>/dev/null)
-            set -l has_more (printf '%s\n' $page | jq -r '.has_more // "false"' 2>/dev/null)
+            set -a pages (printf '%s\n' $resp | jq -c '.data // []' 2>/dev/null)
+            set -l has_more (printf '%s\n' $resp | jq -r '.has_more // "false"' 2>/dev/null)
             if test "$has_more" = "true"
-              set -l next (printf '%s\n' $page | jq -r '.next_page // empty' 2>/dev/null)
+              set -l next (printf '%s\n' $resp | jq -r '.next_page // empty' 2>/dev/null)
               if test -n "$next"
-                if string match -q 'http*' "$next"
-                  set url "$next"
-                else
-                  set url "$base_url&page=$next"
-                end
+                set url "$base_url&page=$next"
               else
                 break
               end
@@ -451,7 +406,76 @@ in {
           end
 
           if test -n "$fetch_err"
-            echo "Anthropic: $fetch_err"
+            echo "OpenAI error: $fetch_err"
+          else if test (count $pages) -gt 0
+            set -l merged (printf '%s\n' $pages | jq -s 'add // []' 2>/dev/null)
+            set -l total (printf '%s\n' $merged | jq '[.[].results[].amount.value | tonumber] | add // 0' 2>/dev/null)
+            if test -n "$total" -a "$total" != "null"
+              set_color --bold
+              printf "=== OpenAI (%d days) ===\n" $days
+              set_color normal
+              printf "Total: \$%.2f\n" $total
+              printf '%s\n' $merged | jq -r '
+                [.[].results[] | select((.amount.value | tonumber) > 0)]
+                | group_by(.line_item)
+                | map({item: .[0].line_item, total: ([.[].amount.value | tonumber] | add)})
+                | sort_by(-.total)[]
+                | "  \(.item): $\(.total * 100 | round | . / 100)"'
+            else
+              echo "OpenAI: no data"
+            end
+          else
+            echo "OpenAI: failed to fetch costs"
+          end
+        else
+          echo "OpenAI: no admin key set (OPENAI_ADMIN_KEY)"
+        end
+
+        echo ""
+
+        # --- Anthropic ---
+        # Amounts in the response are in cents (divide by 100 for USD)
+        # Note: priority/fast-mode tier uses a subscription billing model
+        # and is excluded from this endpoint by design
+        if set -q ANTHROPIC_ADMIN_KEY
+          set -l start_date (date -d "$days days ago" -u +%Y-%m-%dT00:00:00Z)
+          set -l end_date (date -d tomorrow -u +%Y-%m-%dT00:00:00Z)
+          set -l base_url "https://api.anthropic.com/v1/organizations/cost_report?starting_at=$start_date&ending_at=$end_date&bucket_width=1d&group_by[]=model&limit=31"
+          set -l url "$base_url"
+          set -l pages
+          set -l fetch_err ""
+
+          while true
+            set -l resp (curl -s "$url" \
+              -H "anthropic-version: 2023-06-01" \
+              -H "x-api-key: $ANTHROPIC_ADMIN_KEY")
+            if test $debug -eq 1
+              echo "DEBUG Anthropic URL: "(string replace -- "$ANTHROPIC_ADMIN_KEY" "REDACTED" "$url")
+              echo "DEBUG Anthropic response:"
+              printf '%s\n' $resp | jq . 2>/dev/null; or printf '%s\n' $resp
+              echo ""
+            end
+            set -l err (printf '%s\n' $resp | jq -r '.error.message // empty' 2>/dev/null)
+            if test -n "$err"
+              set fetch_err "$err"
+              break
+            end
+            set -a pages (printf '%s\n' $resp | jq -c '.data // []' 2>/dev/null)
+            set -l has_more (printf '%s\n' $resp | jq -r '.has_more // "false"' 2>/dev/null)
+            if test "$has_more" = "true"
+              set -l next (printf '%s\n' $resp | jq -r '.next_page // empty' 2>/dev/null)
+              if test -n "$next"
+                set url "$base_url&page=$next"
+              else
+                break
+              end
+            else
+              break
+            end
+          end
+
+          if test -n "$fetch_err"
+            echo "Anthropic error: $fetch_err"
           else if test (count $pages) -gt 0
             set -l merged (printf '%s\n' $pages | jq -s 'add // []' 2>/dev/null)
             set -l total (printf '%s\n' $merged | jq '[.[].results[].amount | tonumber] | add // 0' 2>/dev/null)
@@ -459,7 +483,7 @@ in {
               set_color --bold
               printf "=== Anthropic (%d days) ===\n" $days
               set_color normal
-              printf "Total: \$%.2f (standard tier only)\n" (math "$total / 100")
+              printf "Total: \$%.2f (standard+batch tier)\n" (math "$total / 100")
               printf '%s\n' $merged | jq -r '
                 [.[].results[] | select((.amount | tonumber) > 0)]
                 | group_by(.model // "other")
@@ -467,10 +491,10 @@ in {
                 | sort_by(-.total)[]
                 | "  \(.model): $\(.total | round | . / 100)"'
               set_color brblack
-              echo "  See full breakdown: https://platform.claude.com/workspaces/default/cost"
+              echo "  (priority/fast-mode tier billed separately, not available via API)"
               set_color normal
             else
-              echo "Anthropic: failed to fetch costs"
+              echo "Anthropic: no data"
             end
           else
             echo "Anthropic: failed to fetch costs"

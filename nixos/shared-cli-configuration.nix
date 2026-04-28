@@ -15,9 +15,13 @@
     "flakes"
   ];
 
-  nix.settings.extra-substituters = ["https://cache.numtide.com"];
+  nix.settings.extra-substituters = [
+    "https://cache.numtide.com"
+    "https://claude-code.cachix.org"
+  ];
   nix.settings.extra-trusted-public-keys = [
     "niks3.numtide.com-1:DTx8wZduET09hRmMtKdQDxNNthLQETkc/yaX7M4qK0g="
+    "claude-code.cachix.org-1:YeXf2aNu7UTX8Vwrze0za1WEDS+4DuI2kVeWEE4fsRk="
   ];
 
   #nix.gc.automatic = true;
@@ -59,6 +63,17 @@
             set +a
           fi
           exec ${omp-unwrapped}/bin/omp "$@"
+        '')
+      (let
+        claude-unwrapped = inputs.claude-code-nix.packages.${pkgs.stdenv.hostPlatform.system}.default;
+      in
+        pkgs.writeShellScriptBin "claude" ''
+          if [ -f /run/agenix/llm-api-keys ]; then
+            set -a
+            . /run/agenix/llm-api-keys
+            set +a
+          fi
+          exec ${claude-unwrapped}/bin/claude "$@"
         '')
       (pkgs.writeShellScriptBin "ollama-sync" ''
         set -euo pipefail
