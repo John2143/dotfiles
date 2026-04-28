@@ -81,9 +81,21 @@
             --unshare-all --share-net --die-with-parent \
             ${omp-unwrapped}/bin/omp "$@"
         '')
-      # claude wrapper: lighter sandbox — claude needs to edit project files
-      # and run dev tools, so we use "bind / and mask" rather than build-up.
-      # Critical secrets directories are masked with tmpfs.
+      # claude wrapper: allowlist-style sandbox — explicitly bind only what
+      # claude needs. Default-deny on $HOME, /run, and the rest of the host.
+      #
+      # Why allowlist (vs. broad bind + tmpfs masks): all of these are
+      # john-readable on this host and would otherwise be exfiltratable:
+      #   /run/agenix/llm-admin-keys           (admin LLM keys we walled off in Phase A)
+      #   /run/agenix/rustfs-credentials       (S3/object-store credentials)
+      #   /run/agenix/gocryptfs-passphrase     (NAS encrypted-vault passphrase)
+      #   /run/agenix/hass-credentials         (Home Assistant API, on arch)
+      #   $HOME/.ssh/age                       (agenix MASTER decryption key)
+      #   $HOME/.ssh/id_*                      (SSH private keys)
+      #   $HOME/.gnupg/private-keys-v1.d/*     (GPG private keys)
+      # The agenix master key alone would let a compromised binary decrypt
+      # every .age file on disk, including root-owned secrets (restic,
+      # backup-ssh, k3s, smb). Allowlist binding eliminates this entire class.
       (let
         claude-unwrapped = inputs.claude-code-nix.packages.${pkgs.stdenv.hostPlatform.system}.default;
       in
@@ -93,19 +105,31 @@
             . /run/agenix/llm-runtime-keys
             set +a
           fi
-          # Mask the highest-value secret paths. The .age files in dotfiles/secrets
-          # are encrypted blobs and the host SSH key (used to decrypt them) is
-          # root-readable only, so we don't bother masking the dotfiles repo.
+          # Ensure claude's state dir exists so --bind succeeds.
+          mkdir -p "$HOME/.claude"
           exec ${pkgs.bubblewrap}/bin/bwrap \
-            --bind / / \
-            --dev-bind /dev /dev \
-            --tmpfs /run/agenix \
-            --tmpfs "$HOME/.ssh" \
-            --tmpfs "$HOME/.gnupg" \
+            --ro-bind /nix/store /nix/store \
+            --ro-bind /etc/resolv.conf /etc/resolv.conf \
+            --ro-bind /etc/ssl /etc/ssl \
+            --ro-bind /etc/static /etc/static \
+            --ro-bind /etc/passwd /etc/passwd \
+            --ro-bind /etc/group /etc/group \
+            --ro-bind-try /etc/nsswitch.conf /etc/nsswitch.conf \
+            --ro-bind-try /etc/hosts /etc/hosts \
+            --ro-bind-try "$HOME/.gitconfig" "$HOME/.gitconfig" \
+            --ro-bind-try "$HOME/.config/git" "$HOME/.config/git" \
+            --ro-bind-try "$HOME/.config/nix" "$HOME/.config/nix" \
+            --bind "$HOME/.claude" "$HOME/.claude" \
+            --bind "$PWD" "$PWD" \
+            --chdir "$PWD" \
+            --tmpfs /tmp --proc /proc --dev /dev \
             --setenv ANTHROPIC_API_KEY "''${ANTHROPIC_API_KEY:-}" \
+            --setenv HOME "$HOME" \
+            --setenv PATH "$PATH" \
+            --setenv TERM "''${TERM:-xterm}" \
             --unsetenv ANTHROPIC_ADMIN_KEY \
             --unsetenv OPENAI_ADMIN_KEY \
-            --die-with-parent \
+            --unshare-all --share-net --die-with-parent \
             ${claude-unwrapped}/bin/claude "$@"
         '')
       (pkgs.writeShellScriptBin "ollama-sync" ''
