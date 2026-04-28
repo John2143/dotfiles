@@ -1,4 +1,4 @@
-{pkgs, ...}: {
+{pkgs, compName, lib, ...}: {
   programs.waybar = {
     enable = true;
     style = ../../.config/waybar/style.css;
@@ -19,7 +19,9 @@
           "cpu"
           "memory"
           "temperature"
+        ] ++ (lib.optionals (compName == "arch") [
           "custom/thermostat"
+        ]) ++ [
           "custom/weather"
           "battery"
           "tray"
@@ -151,6 +153,7 @@
           ];
           tooltip = true;
         };
+      } // (lib.optionalAttrs (compName == "arch") {
         "custom/thermostat" = {
           exec = "hass-thermostat-status";
           return-type = "json";
@@ -159,6 +162,7 @@
           format = "{}";
           tooltip = true;
         };
+      }) // {
         "custom/weather" = {
           exec = "weather-status";
           return-type = "json";

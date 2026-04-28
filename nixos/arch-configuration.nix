@@ -33,6 +33,22 @@ let
           notify-send -h string:x-dunst-stack-tag:hass-thermostat "Thermostat" "Set to ''${new}°"
           pkill -RTMIN+8 waybar || true
           ;;
+        thermostat-toggle)
+          state=$(curl -sf -H "$AUTH" "$HA/api/states/climate.john_bedroom" \
+            | jq -r '.state')
+          if [ "$state" = "off" ]; then
+            curl -sf -X POST -H "$AUTH" -H "Content-Type: application/json" \
+              -d '{"entity_id":"climate.john_bedroom"}' \
+              "$HA/api/services/climate/turn_on" > /dev/null
+            notify-send -h string:x-dunst-stack-tag:hass-thermostat "Thermostat" "Turned on"
+          else
+            curl -sf -X POST -H "$AUTH" -H "Content-Type: application/json" \
+              -d '{"entity_id":"climate.john_bedroom"}' \
+              "$HA/api/services/climate/turn_off" > /dev/null
+            notify-send -h string:x-dunst-stack-tag:hass-thermostat "Thermostat" "Turned off"
+          fi
+          pkill -RTMIN+8 waybar || true
+          ;;
         fan-toggle)
           curl -sf -X POST -H "$AUTH" -H "Content-Type: application/json" \
             -d '{"entity_id":"fan.john_ac_combo_fans"}' \
@@ -40,7 +56,7 @@ let
           notify-send -h string:x-dunst-stack-tag:hass-fan "Fan" "Toggled"
           ;;
         *)
-          echo "Usage: hass-macro {thermostat-down|thermostat-up|fan-toggle}" >&2
+          echo "Usage: hass-macro {thermostat-down|thermostat-up|thermostat-toggle|fan-toggle}" >&2
           exit 1
           ;;
       esac
@@ -75,32 +91,6 @@ let
       tooltip="Room: ''${current}° | Target: ''${target}° | ''${action}"
 
       jq -nc --arg t "$text" --arg tt "$tooltip" --arg c "$action" \
-        '{text: $t, tooltip: $tt, class: $c}'
-    '';
-  };
-  weather-status = pkgs.writeShellApplication {
-    name = "weather-status";
-    runtimeInputs = [ pkgs.curl pkgs.jq ];
-    text = ''
-      response=$(curl -sf "wttr.in/?format=j1") || {
-        echo '{"text": "⚠", "class": "error", "tooltip": "Weather unavailable"}'
-        exit 0
-      }
-
-      temp_f=$(echo "$response" | jq -r '.current_condition[0].temp_F // empty')
-      feels_f=$(echo "$response" | jq -r '.current_condition[0].FeelsLikeF // empty')
-      desc=$(echo "$response" | jq -r '.current_condition[0].weatherDesc[0].value // "Unknown"')
-      humidity=$(echo "$response" | jq -r '.current_condition[0].humidity // empty')
-
-      if [ -z "$temp_f" ]; then
-        echo '{"text": "⚠", "class": "error", "tooltip": "Missing weather data"}'
-        exit 0
-      fi
-
-      text="''${temp_f}°F"
-      tooltip="''${desc} | Feels like ''${feels_f}°F | Humidity ''${humidity}%"
-
-      jq -nc --arg t "$text" --arg tt "$tooltip" --arg c "weather" \
         '{text: $t, tooltip: $tt, class: $c}'
     '';
   };
@@ -186,11 +176,12 @@ in
         a = "f19";
         s = "f20";
         d = "f21";
+        f = "f22";
       };
     };
   };
 
-  environment.systemPackages = [ hass-macro hass-thermostat-status weather-status ];
+  environment.systemPackages = [ hass-macro hass-thermostat-status ];
 
   age.secrets.hass-credentials = {
     file = ../secrets/hass-credentials.age;
