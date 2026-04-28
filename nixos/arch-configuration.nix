@@ -54,6 +54,7 @@ let
             -d '{"entity_id":"fan.john_ac_combo_fans"}' \
             "$HA/api/services/fan/toggle" > /dev/null
           notify-send -h string:x-dunst-stack-tag:hass-fan "Fan" "Toggled"
+          pkill -RTMIN+8 waybar || true
           ;;
         *)
           echo "Usage: hass-macro {thermostat-down|thermostat-up|thermostat-toggle|fan-toggle}" >&2
@@ -75,22 +76,34 @@ let
         exit 0
       }
 
+      state=$(echo "$response" | jq -r '.state')
       current=$(echo "$response" | jq -r '.attributes.current_temperature // empty')
       target=$(echo "$response" | jq -r '.attributes.temperature // empty')
       action=$(echo "$response" | jq -r '.attributes.hvac_action // "idle"')
 
-      if [ -z "$current" ] || [ -z "$target" ]; then
+      if [ -z "$current" ]; then
         echo '{"text": "⚠", "class": "error", "tooltip": "Missing temperature data"}'
         exit 0
       fi
 
       current_int=$(printf "%.0f" "$current")
-      target_int=$(printf "%.0f" "$target")
-      text="''${current_int}° → ''${target_int}°"
 
-      tooltip="Room: ''${current}° | Target: ''${target}° | ''${action}"
+      if [ "$state" = "off" ]; then
+        class="off"
+        text="''${current_int}° (off)"
+        tooltip="Room: ''${current}° | Off (not regulating)"
+      else
+        if [ -z "$target" ]; then
+          echo '{"text": "⚠", "class": "error", "tooltip": "Missing target temperature"}'
+          exit 0
+        fi
+        target_int=$(printf "%.0f" "$target")
+        class="$action"
+        text="''${current_int}° → ''${target_int}°"
+        tooltip="Room: ''${current}° | Target: ''${target}° | ''${action}"
+      fi
 
-      jq -nc --arg t "$text" --arg tt "$tooltip" --arg c "$action" \
+      jq -nc --arg t "$text" --arg tt "$tooltip" --arg c "$class" \
         '{text: $t, tooltip: $tt, class: $c}'
     '';
   };

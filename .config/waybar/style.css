@@ -21,6 +21,17 @@
     min-height: 0;
 }
 
+tooltip {
+    background: @right_background_color;
+    border: 1px solid @button_background_color;
+    border-radius: 8px;
+}
+
+tooltip label {
+    color: @right_text_color;
+    font-size: 22px;
+}
+
 window#waybar {
     background: rgba(17,17,27,1);
     color: @normal_text_color;
@@ -131,4 +142,8 @@ window#waybar {
 
 #custom-thermostat.cooling {
     color: #33ccff;
+}
+
+#custom-thermostat.off {
+    color: #FF8888;
 }
