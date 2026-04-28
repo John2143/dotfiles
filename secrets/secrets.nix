@@ -47,4 +47,6 @@ in {
   #   ANTHROPIC_ADMIN_KEY=sk-ant-admin-...  (for llm-costs, from console.anthropic.com/settings/admin-keys)
   #   OPENAI_ADMIN_KEY=sk-admin-...          (for llm-costs, optional if regular key has org access)
   "llm-api-keys.age".publicKeys = [office arch];
+
+  "hass-credentials.age".publicKeys = [arch];
 }
