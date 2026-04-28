@@ -65,21 +65,21 @@
             . /run/agenix/llm-runtime-keys
             set +a
           fi
-          exec ${pkgs.bubblewrap}/bin/bwrap \
-            --ro-bind /nix/store /nix/store \
-            --ro-bind /etc/resolv.conf /etc/resolv.conf \
-            --ro-bind /etc/ssl /etc/ssl \
-            --ro-bind /etc/static /etc/static \
-            --ro-bind /etc/passwd /etc/passwd \
-            --ro-bind /etc/group /etc/group \
-            --tmpfs /tmp --proc /proc --dev /dev \
-            --setenv ANTHROPIC_API_KEY "''${ANTHROPIC_API_KEY:-}" \
-            --setenv OPENAI_API_KEY "''${OPENAI_API_KEY:-}" \
-            --setenv HOME "$HOME" \
-            --setenv PATH "$PATH" \
-            --setenv TERM "''${TERM:-xterm}" \
-            --unshare-all --share-net --die-with-parent \
-            ${omp-unwrapped}/bin/omp "$@"
+          ${omp-unwrapped}/bin/omp "$@"
+          # exec ${pkgs.bubblewrap}/bin/bwrap \
+          #   --ro-bind /nix/store /nix/store \
+          #   --ro-bind /etc/resolv.conf /etc/resolv.conf \
+          #   --ro-bind /etc/ssl /etc/ssl \
+          #   --ro-bind /etc/static /etc/static \
+          #   --ro-bind /etc/passwd /etc/passwd \
+          #   --ro-bind /etc/group /etc/group \
+          #   --tmpfs /tmp --proc /proc --dev /dev \
+          #   --setenv ANTHROPIC_API_KEY "''${ANTHROPIC_API_KEY:-}" \
+          #   --setenv OPENAI_API_KEY "''${OPENAI_API_KEY:-}" \
+          #   --setenv HOME "$HOME" \
+          #   --setenv PATH "$PATH" \
+          #   --setenv TERM "''${TERM:-xterm}" \
+          #   --unshare-all --share-net --die-with-parent \
         '')
       # claude wrapper: allowlist-style sandbox — explicitly bind only what
       # claude needs. Default-deny on $HOME, /run, and the rest of the host.
@@ -107,30 +107,31 @@
           fi
           # Ensure claude's state dir exists so --bind succeeds.
           mkdir -p "$HOME/.claude"
-          exec ${pkgs.bubblewrap}/bin/bwrap \
-            --ro-bind /nix/store /nix/store \
-            --ro-bind /etc/resolv.conf /etc/resolv.conf \
-            --ro-bind /etc/ssl /etc/ssl \
-            --ro-bind /etc/static /etc/static \
-            --ro-bind /etc/passwd /etc/passwd \
-            --ro-bind /etc/group /etc/group \
-            --ro-bind-try /etc/nsswitch.conf /etc/nsswitch.conf \
-            --ro-bind-try /etc/hosts /etc/hosts \
-            --ro-bind-try "$HOME/.gitconfig" "$HOME/.gitconfig" \
-            --ro-bind-try "$HOME/.config/git" "$HOME/.config/git" \
-            --ro-bind-try "$HOME/.config/nix" "$HOME/.config/nix" \
-            --bind "$HOME/.claude" "$HOME/.claude" \
-            --bind "$PWD" "$PWD" \
-            --chdir "$PWD" \
-            --tmpfs /tmp --proc /proc --dev /dev \
-            --setenv ANTHROPIC_API_KEY "''${ANTHROPIC_API_KEY:-}" \
-            --setenv HOME "$HOME" \
-            --setenv PATH "$PATH" \
-            --setenv TERM "''${TERM:-xterm}" \
-            --unsetenv ANTHROPIC_ADMIN_KEY \
-            --unsetenv OPENAI_ADMIN_KEY \
-            --unshare-all --share-net --die-with-parent \
-            ${claude-unwrapped}/bin/claude "$@"
+          ${claude-unwrapped}/bin/claude "$@"
+          # exec ${pkgs.bubblewrap}/bin/bwrap \
+          #   --ro-bind /nix/store /nix/store \
+          #   --ro-bind /etc/resolv.conf /etc/resolv.conf \
+          #   --ro-bind /etc/ssl /etc/ssl \
+          #   --ro-bind /etc/static /etc/static \
+          #   --ro-bind /etc/passwd /etc/passwd \
+          #   --ro-bind /etc/group /etc/group \
+          #   --ro-bind-try /etc/nsswitch.conf /etc/nsswitch.conf \
+          #   --ro-bind-try /etc/hosts /etc/hosts \
+          #   --ro-bind-try "$HOME/.gitconfig" "$HOME/.gitconfig" \
+          #   --ro-bind-try "$HOME/.config/git" "$HOME/.config/git" \
+          #   --ro-bind-try "$HOME/.config/nix" "$HOME/.config/nix" \
+          #   --bind "$HOME/.claude" "$HOME/.claude" \
+          #   --bind "$PWD" "$PWD" \
+          #   --chdir "$PWD" \
+          #   --tmpfs /tmp --proc /proc --dev /dev \
+          #   --setenv ANTHROPIC_API_KEY "''${ANTHROPIC_API_KEY:-}" \
+          #   --setenv HOME "$HOME" \
+          #   --setenv PATH "$PATH" \
+          #   --setenv TERM "''${TERM:-xterm}" \
+          #   --unsetenv ANTHROPIC_ADMIN_KEY \
+          #   --unsetenv OPENAI_ADMIN_KEY \
+          #   --unshare-all --share-net --die-with-parent \
+          #  ${claude-unwrapped}/bin/claude "$@"
         '')
       (pkgs.writeShellScriptBin "ollama-sync" ''
         set -euo pipefail
