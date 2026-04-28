@@ -156,6 +156,7 @@
         #./nixos/security-configuration.nix
         ./nixos/modules/k3s-agent.nix
         ./nixos/tailscale.nix
+        ./nixos/pite-canary.nix
       ];
     };
 

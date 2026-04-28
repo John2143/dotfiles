@@ -41,12 +41,30 @@ in {
   # RustFS (minio) credentials for bigjuush/juush.
   # Format: RUSTFS_USER=...\nRUSTFS_PASSWORD=...\nJUUSH_KEY=...
   "rustfs-credentials.age".publicKeys = [office arch nas closet];
-  # LLM API keys for omp on workstations. Env-file format:
+  # LEGACY combined LLM keys file. Kept during transition; new code uses the
+  # split files below (llm-runtime-keys, llm-admin-keys). Remove once all hosts
+  # have rebuilt against the split files.
+  "llm-api-keys.age".publicKeys = [office arch];
+
+  # Runtime LLM keys — handed to wrapped third-party binaries (omp, claude).
+  # Format:
   #   ANTHROPIC_API_KEY=sk-ant-...
   #   OPENAI_API_KEY=sk-...
-  #   ANTHROPIC_ADMIN_KEY=sk-ant-admin-...  (for llm-costs, from console.anthropic.com/settings/admin-keys)
-  #   OPENAI_ADMIN_KEY=sk-admin-...          (for llm-costs, optional if regular key has org access)
-  "llm-api-keys.age".publicKeys = [office arch];
+  # pite is included so the canary host can decrypt a same-named bait file
+  # (overridden via mkForce in nixos/pite-canary.nix to point at the bait .age).
+  "llm-runtime-keys.age".publicKeys = [office arch pite];
+
+  # Admin LLM keys — only consumed by `llm-load-keys` (interactive shell helper),
+  # never by a wrapped third-party process. Kept off pite/canary entirely.
+  # Format:
+  #   ANTHROPIC_ADMIN_KEY=sk-ant-admin-...  (console.anthropic.com/settings/admin-keys)
+  #   OPENAI_ADMIN_KEY=sk-admin-...
+  "llm-admin-keys.age".publicKeys = [office arch];
+
+  # Bait runtime keys for the pite canary. Same env-var names as the real
+  # runtime file but with canarytokens.org-issued AWS-shaped tokens that ping
+  # a webhook on use. See nixos/pite-canary.nix.
+  "llm-runtime-keys-bait.age".publicKeys = [pite];
 
   "hass-credentials.age".publicKeys = [arch];
 }

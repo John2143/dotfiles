@@ -341,14 +341,18 @@ in {
       '';
       bigjuush.description = "Upload files to RustFS and get public share links";
       llm-load-keys.body = ''
-        set -l creds_file /run/agenix/llm-api-keys
+        # Loads admin LLM keys (ANTHROPIC_ADMIN_KEY, OPENAI_ADMIN_KEY) for use by
+        # llm-costs. Runtime keys (ANTHROPIC_API_KEY, OPENAI_API_KEY) are mounted
+        # at /run/agenix/llm-runtime-keys but only the admin file goes here —
+        # llm-costs needs admin scope to read org cost reports.
+        set -l creds_file /run/agenix/llm-admin-keys
         if not test -f $creds_file
-          echo "LLM keys not found at $creds_file" >&2
+          echo "LLM admin keys not found at $creds_file" >&2
           return 1
         end
         envsource $creds_file
       '';
-      llm-load-keys.description = "Load LLM API keys into current shell (on-demand)";
+      llm-load-keys.description = "Load LLM admin API keys into current shell (on-demand)";
       _llm-paginate-json.body = ''
         # Walk a paginated JSON API of the shape { data: [...], has_more, next_page }.
         # Outputs the merged .data array as compact JSON on stdout.
