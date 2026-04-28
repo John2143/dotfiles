@@ -386,16 +386,16 @@ in {
           if test -n "$err"
             echo "OpenAI: $err"
           else
-            set -l total (printf '%s\n' $resp | jq '[.data[].results[].amount.value // 0] | add // 0' 2>/dev/null)
+            set -l total (printf '%s\n' $resp | jq '[.data[].results[] | .amount.value | tonumber] | add // 0' 2>/dev/null)
             if test -n "$total" -a "$total" != "null"
               set_color --bold
               printf "=== OpenAI (%d days) ===\n" $days
               set_color normal
               printf "Total: \$%.2f\n" $total
               printf '%s\n' $resp | jq -r '
-                [.data[].results[] | select((.amount.value // 0) > 0)]
+                [.data[].results[] | select((.amount.value | tonumber) > 0)]
                 | group_by(.line_item)
-                | map({item: .[0].line_item, total: ([.[].amount.value] | add)})
+                | map({item: .[0].line_item, total: ([.[].amount.value | tonumber] | add)})
                 | sort_by(-.total)[]
                 | "  \(.item): $\(.total * 100 | round | . / 100)"'
             else
@@ -459,23 +459,16 @@ in {
               set_color --bold
               printf "=== Anthropic (%d days) ===\n" $days
               set_color normal
-              printf "Total: \$%.2f\n" (math "$total / 100")
+              printf "Total: \$%.2f (standard tier only)\n" (math "$total / 100")
               printf '%s\n' $merged | jq -r '
                 [.[].results[] | select((.amount | tonumber) > 0)]
                 | group_by(.model // "other")
                 | map({model: .[0].model // "other", total: ([.[].amount | tonumber] | add)})
                 | sort_by(-.total)[]
                 | "  \(.model): $\(.total | round | . / 100)"'
-              if test "$total" = "0"
-                echo ""
-                set_color yellow
-                echo "  Hint: \$0.00 may mean Priority Tier usage (not in cost_report),"
-                echo "        or the admin key belongs to a different organization."
-                if test $debug -eq 0
-                  echo "        Run with --debug to inspect the raw API response."
-                end
-                set_color normal
-              end
+              set_color brblack
+              echo "  See full breakdown: https://platform.claude.com/workspaces/default/cost"
+              set_color normal
             else
               echo "Anthropic: failed to fetch costs"
             end
