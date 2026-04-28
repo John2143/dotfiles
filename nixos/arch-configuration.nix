@@ -8,7 +8,45 @@
   inputs,
   lib,
   ...
-}: {
+}:
+let
+  hass-macro = pkgs.writeShellApplication {
+    name = "hass-macro";
+    runtimeInputs = [ pkgs.curl pkgs.jq pkgs.bc pkgs.libnotify ];
+    text = ''
+      TOKEN=$(cat /run/agenix/hass-credentials)
+      HA="https://home.ts.2143.me"
+      AUTH="Authorization: Bearer $TOKEN"
+
+      case "''${1:-}" in
+        thermostat-down|thermostat-up)
+          current=$(curl -sf -H "$AUTH" "$HA/api/states/climate.john_bedroom" \
+            | jq -r '.attributes.temperature')
+          if [ "$1" = "thermostat-down" ]; then
+            new=$(echo "$current - 1" | bc)
+          else
+            new=$(echo "$current + 1" | bc)
+          fi
+          curl -sf -X POST -H "$AUTH" -H "Content-Type: application/json" \
+            -d "{\"entity_id\":\"climate.john_bedroom\",\"temperature\":$new}" \
+            "$HA/api/services/climate/set_temperature" > /dev/null
+          notify-send "Thermostat" "Set to ''${new}°"
+          ;;
+        fan-toggle)
+          curl -sf -X POST -H "$AUTH" -H "Content-Type: application/json" \
+            -d '{"entity_id":"fan.john_ac_combo_fans"}' \
+            "$HA/api/services/fan/toggle" > /dev/null
+          notify-send "Fan" "Toggled"
+          ;;
+        *)
+          echo "Usage: hass-macro {thermostat-down|thermostat-up|fan-toggle}" >&2
+          exit 1
+          ;;
+      esac
+    '';
+  };
+in
+{
   imports = [
     ./arch-hardware-configuration.nix
     ./modules/user-john.nix
@@ -86,8 +124,20 @@
         e = "f16";
         r = "f17";
         t = "f18";
+        a = "f19";
+        s = "f20";
+        d = "f21";
       };
     };
+  };
+
+  environment.systemPackages = [ hass-macro ];
+
+  age.secrets.hass-credentials = {
+    file = ../secrets/hass-credentials.age;
+    owner = "john";
+    group = "root";
+    mode = "0400";
   };
 
   custom.k3sNodeTaints = ["seated=true:NoSchedule"];
