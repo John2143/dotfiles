@@ -19,6 +19,8 @@
           "cpu"
           "memory"
           "temperature"
+          "custom/thermostat"
+          "custom/weather"
           "battery"
           "tray"
           "pulseaudio"
@@ -147,6 +149,21 @@
             "" # Icon: temperature-three-quarters
             "" # Icon: temperature-full
           ];
+          tooltip = true;
+        };
+        "custom/thermostat" = {
+          exec = "hass-thermostat-status";
+          return-type = "json";
+          interval = 30;
+          signal = 8;
+          format = "{}";
+          tooltip = true;
+        };
+        "custom/weather" = {
+          exec = "weather-status";
+          return-type = "json";
+          interval = 900;
+          format = "{}";
           tooltip = true;
         };
         tray = {
