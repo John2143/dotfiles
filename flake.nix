@@ -57,7 +57,7 @@
       "ecdsa-sha2-nistp256 AAAAE2VjZHNhLXNoYTItbmlzdHAyNTYAAAAIbmlzdHAyNTYAAABBBHjc0NNrHCwjrBUvUByFoFPW9vKGVFsWVD6LoKp1FLtNaIjyigMTYXoCKZSNNguKdNwUiyqKIZfCExZmgc3Cccw= phone"
     ];
   in rec {
-    formatter.x86_64-linux = nixpkgs.legacyPackages.${system}.nixfmt-tree;
+    formatter.x86_64-linux = nixpkgs.legacyPackages.${system}.alejandra;
 
     nixosConfigurations.office = nixpkgs.lib.nixosSystem {
       inherit system;
