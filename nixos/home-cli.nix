@@ -349,6 +349,41 @@ in {
         envsource $creds_file
       '';
       llm-load-keys.description = "Load LLM API keys into current shell (on-demand)";
+      _llm-paginate-json.body = ''
+        # Walk a paginated JSON API of the shape { data: [...], has_more, next_page }.
+        # Outputs the merged .data array as compact JSON on stdout.
+        # On API error, outputs the error message and returns 1.
+        #
+        # Usage: _llm-paginate-json DEBUG BASE_URL [-H HEADER]...
+        set -l debug $argv[1]
+        set -l base_url $argv[2]
+        set -l headers $argv[3..]
+        set -l url $base_url
+        set -l pages
+
+        while true
+          set -l resp (curl -s $headers "$url")
+          if test "$debug" = "1"
+            echo "DEBUG GET $url" >&2
+            printf '%s\n' $resp | jq . >&2 2>/dev/null; or printf '%s\n' $resp >&2
+            echo "" >&2
+          end
+          set -l err (printf '%s\n' $resp | jq -r '.error.message // empty' 2>/dev/null)
+          if test -n "$err"
+            echo "$err"
+            return 1
+          end
+          set -a pages (printf '%s\n' $resp | jq -c '.data // []' 2>/dev/null)
+          set -l has_more (printf '%s\n' $resp | jq -r '.has_more // "false"' 2>/dev/null)
+          test "$has_more" = "true"; or break
+          set -l next (printf '%s\n' $resp | jq -r '.next_page // empty' 2>/dev/null)
+          test -n "$next"; or break
+          set url "$base_url&page=$next"
+        end
+
+        printf '%s\n' $pages | jq -sc 'add // []' 2>/dev/null
+      '';
+      _llm-paginate-json.description = "Internal: walk a paginated JSON API and emit the merged .data array";
       llm-costs.body = ''
         set -l _pre_vars (set --names -x)
         llm-load-keys &>/dev/null
@@ -368,64 +403,30 @@ in {
           set days $filtered_argv[1]
         end
 
-        # --- OpenAI ---
-        # Amounts in the response are USD (decimal strings)
+        # --- OpenAI: /v1/organization/costs ---
+        # Response amounts are USD (decimal strings); single endpoint, paginated by cursor.
         if set -q OPENAI_ADMIN_KEY
           set -l now (date +%s)
           set -l start_time (math "$now - $days * 86400")
-          set -l base_url "https://api.openai.com/v1/organization/costs?start_time=$start_time&group_by[]=line_item&limit=180"
-          set -l url "$base_url"
-          set -l pages
-          set -l fetch_err ""
-
-          while true
-            set -l resp (curl -s "$url" -H "Authorization: Bearer $OPENAI_ADMIN_KEY")
-            if test $debug -eq 1
-              echo "DEBUG OpenAI URL: "(string replace -- "$OPENAI_ADMIN_KEY" "REDACTED" "$url")
-              echo "DEBUG OpenAI response:"
-              printf '%s\n' $resp | jq . 2>/dev/null; or printf '%s\n' $resp
-              echo ""
-            end
-            set -l err (printf '%s\n' $resp | jq -r '.error.message // empty' 2>/dev/null)
-            if test -n "$err"
-              set fetch_err "$err"
-              break
-            end
-            set -a pages (printf '%s\n' $resp | jq -c '.data // []' 2>/dev/null)
-            set -l has_more (printf '%s\n' $resp | jq -r '.has_more // "false"' 2>/dev/null)
-            if test "$has_more" = "true"
-              set -l next (printf '%s\n' $resp | jq -r '.next_page // empty' 2>/dev/null)
-              if test -n "$next"
-                set url "$base_url&page=$next"
-              else
-                break
-              end
+          set -l url "https://api.openai.com/v1/organization/costs?start_time=$start_time&group_by[]=line_item&limit=180"
+          set -l data (_llm-paginate-json $debug $url \
+            -H "Authorization: Bearer $OPENAI_ADMIN_KEY")
+          if test $status -ne 0
+            echo "OpenAI error: $data"
+          else
+            set -l total (printf '%s\n' $data | jq '[.[].results[].amount.value | tonumber] | add // 0')
+            if test -z "$total" -o "$total" = "null" -o "$total" = "0"
+              echo "OpenAI: no data"
             else
-              break
-            end
-          end
-
-          if test -n "$fetch_err"
-            echo "OpenAI error: $fetch_err"
-          else if test (count $pages) -gt 0
-            set -l merged (printf '%s\n' $pages | jq -s 'add // []' 2>/dev/null)
-            set -l total (printf '%s\n' $merged | jq '[.[].results[].amount.value | tonumber] | add // 0' 2>/dev/null)
-            if test -n "$total" -a "$total" != "null"
-              set_color --bold
-              printf "=== OpenAI (%d days) ===\n" $days
-              set_color normal
+              set_color --bold; printf "=== OpenAI (%d days) ===\n" $days; set_color normal
               printf "Total: \$%.2f\n" $total
-              printf '%s\n' $merged | jq -r '
+              printf '%s\n' $data | jq -r '
                 [.[].results[] | select((.amount.value | tonumber) > 0)]
                 | group_by(.line_item)
                 | map({item: .[0].line_item, total: ([.[].amount.value | tonumber] | add)})
                 | sort_by(-.total)[]
                 | "  \(.item): $\(.total * 100 | round | . / 100)"'
-            else
-              echo "OpenAI: no data"
             end
-          else
-            echo "OpenAI: failed to fetch costs"
           end
         else
           echo "OpenAI: no admin key set (OPENAI_ADMIN_KEY)"
@@ -433,71 +434,74 @@ in {
 
         echo ""
 
-        # --- Anthropic ---
-        # Amounts in the response are in cents (divide by 100 for USD)
-        # Note: priority/fast-mode tier uses a subscription billing model
-        # and is excluded from this endpoint by design
+        # --- Anthropic: /v1/organizations/cost_report ---
+        # Response amounts are in cents (divide by 100 for USD).
+        # Standard + batch tier only; priority/fast-mode tier uses a separate billing
+        # model and is excluded by design — see Claude Code section below for that.
         if set -q ANTHROPIC_ADMIN_KEY
           set -l start_date (date -d "$days days ago" -u +%Y-%m-%dT00:00:00Z)
           set -l end_date (date -d tomorrow -u +%Y-%m-%dT00:00:00Z)
-          set -l base_url "https://api.anthropic.com/v1/organizations/cost_report?starting_at=$start_date&ending_at=$end_date&bucket_width=1d&group_by[]=model&limit=31"
-          set -l url "$base_url"
-          set -l pages
-          set -l fetch_err ""
-
-          while true
-            set -l resp (curl -s "$url" \
-              -H "anthropic-version: 2023-06-01" \
-              -H "x-api-key: $ANTHROPIC_ADMIN_KEY")
-            if test $debug -eq 1
-              echo "DEBUG Anthropic URL: "(string replace -- "$ANTHROPIC_ADMIN_KEY" "REDACTED" "$url")
-              echo "DEBUG Anthropic response:"
-              printf '%s\n' $resp | jq . 2>/dev/null; or printf '%s\n' $resp
-              echo ""
-            end
-            set -l err (printf '%s\n' $resp | jq -r '.error.message // empty' 2>/dev/null)
-            if test -n "$err"
-              set fetch_err "$err"
-              break
-            end
-            set -a pages (printf '%s\n' $resp | jq -c '.data // []' 2>/dev/null)
-            set -l has_more (printf '%s\n' $resp | jq -r '.has_more // "false"' 2>/dev/null)
-            if test "$has_more" = "true"
-              set -l next (printf '%s\n' $resp | jq -r '.next_page // empty' 2>/dev/null)
-              if test -n "$next"
-                set url "$base_url&page=$next"
-              else
-                break
-              end
+          set -l url "https://api.anthropic.com/v1/organizations/cost_report?starting_at=$start_date&ending_at=$end_date&bucket_width=1d&group_by[]=model&limit=31"
+          set -l data (_llm-paginate-json $debug $url \
+            -H "anthropic-version: 2023-06-01" \
+            -H "x-api-key: $ANTHROPIC_ADMIN_KEY")
+          if test $status -ne 0
+            echo "Anthropic error: $data"
+          else
+            set -l total (printf '%s\n' $data | jq '[.[].results[].amount | tonumber] | add // 0')
+            if test -z "$total" -o "$total" = "null" -o "$total" = "0"
+              echo "Anthropic: no data"
             else
-              break
-            end
-          end
-
-          if test -n "$fetch_err"
-            echo "Anthropic error: $fetch_err"
-          else if test (count $pages) -gt 0
-            set -l merged (printf '%s\n' $pages | jq -s 'add // []' 2>/dev/null)
-            set -l total (printf '%s\n' $merged | jq '[.[].results[].amount | tonumber] | add // 0' 2>/dev/null)
-            if test -n "$total" -a "$total" != "null"
-              set_color --bold
-              printf "=== Anthropic (%d days) ===\n" $days
-              set_color normal
+              set_color --bold; printf "=== Anthropic (%d days) ===\n" $days; set_color normal
               printf "Total: \$%.2f (standard+batch tier)\n" (math "$total / 100")
-              printf '%s\n' $merged | jq -r '
+              printf '%s\n' $data | jq -r '
                 [.[].results[] | select((.amount | tonumber) > 0)]
                 | group_by(.model // "other")
                 | map({model: .[0].model // "other", total: ([.[].amount | tonumber] | add)})
                 | sort_by(-.total)[]
                 | "  \(.model): $\(.total | round | . / 100)"'
               set_color brblack
-              echo "  (priority/fast-mode tier billed separately, not available via API)"
+              echo "  (priority/fast-mode tier billed separately, see Claude Code section)"
               set_color normal
-            else
-              echo "Anthropic: no data"
             end
+          end
+
+          # --- Anthropic Claude Code: /v1/organizations/usage_report/claude_code ---
+          # Anthropic's own per-day estimated cost across ALL tiers including priority/fast.
+          # Endpoint accepts a single date only, so we loop one paginated request per day.
+          # Per-record schema: .actor, .models[]{model, estimated_cost.amount (cents), ...}
+          set -l cc_pages
+          set -l cc_err ""
+          for offset in (seq (math "$days - 1") -1 0)
+            set -l day (date -d "$offset days ago" -u +%Y-%m-%d)
+            set -l cc_url "https://api.anthropic.com/v1/organizations/usage_report/claude_code?starting_at=$day&limit=1000"
+            set -l cc_data (_llm-paginate-json $debug $cc_url \
+              -H "anthropic-version: 2023-06-01" \
+              -H "x-api-key: $ANTHROPIC_ADMIN_KEY")
+            if test $status -ne 0
+              set cc_err "$cc_data"
+              break
+            end
+            set -a cc_pages $cc_data
+          end
+
+          if test -n "$cc_err"
+            echo ""
+            echo "Anthropic Claude Code error: $cc_err"
           else
-            echo "Anthropic: failed to fetch costs"
+            set -l merged (printf '%s\n' $cc_pages | jq -sc 'add // []')
+            set -l cc_total (printf '%s\n' $merged | jq '[.[].models[].estimated_cost.amount | tonumber] | add // 0')
+            if test -n "$cc_total" -a "$cc_total" != "null" -a "$cc_total" != "0"
+              echo ""
+              set_color --bold; printf "=== Anthropic Claude Code estimate (%d days) ===\n" $days; set_color normal
+              printf "Total: \$%.2f (all tiers, Anthropic estimate)\n" (math "$cc_total / 100")
+              printf '%s\n' $merged | jq -r '
+                [.[].models[] | select((.estimated_cost.amount | tonumber) > 0)]
+                | group_by(.model)
+                | map({model: .[0].model, total: ([.[].estimated_cost.amount | tonumber] | add)})
+                | sort_by(-.total)[]
+                | "  \(.model): $\(.total | round | . / 100)"'
+            end
           end
         else
           echo "Anthropic: no admin key set (ANTHROPIC_ADMIN_KEY)"
