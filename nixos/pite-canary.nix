@@ -4,6 +4,9 @@
   lib,
   ...
 }: {
+
+  #TODO: Not finished
+
   # On pite, /run/agenix/llm-runtime-keys decrypts to BAIT values rather than
   # real keys. Same path, same env-var names — but the AWS_ACCESS_KEY_ID /
   # AWS_SECRET_ACCESS_KEY entries inside are canarytokens.org honeytokens

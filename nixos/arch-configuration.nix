@@ -198,11 +198,7 @@ in
 
   # openrgb flakes occasionally — keep the unit out of "failed" state so it
   # doesn't trip exit-code-4 in switch-to-configuration's post-activation scan.
-  systemd.services.openrgb = {
-    wantedBy = pkgs.lib.mkForce [ ];
-    unitConfig.StartLimitIntervalSec = 0;
-    serviceConfig.RestartSec = lib.mkForce "1min";
-  };
+  systemd.services.openrgb.enable = lib.mkForce false;
 
   age.secrets.hass-credentials = {
     file = ../secrets/hass-credentials.age;

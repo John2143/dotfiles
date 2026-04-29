@@ -78,6 +78,7 @@
         ./nixos/shared-configuration.nix
         ./nixos/shared-games-configuration.nix
         ./nixos/office-configuration.nix
+        ./nixos/firejail-desktop.nix
         ./nixos/modules/k3s-agent.nix
         ./nixos/modules/restic-backup.nix
         ./nixos/modules/nas-mounts.nix
@@ -99,6 +100,7 @@
         ./nixos/shared-configuration.nix
         ./nixos/shared-games-configuration.nix
         ./nixos/arch-configuration.nix
+        ./nixos/firejail-desktop.nix
         ./nixos/modules/k3s-agent.nix
         ./nixos/modules/restic-backup.nix
         ./nixos/modules/nas-mounts.nix
@@ -156,7 +158,7 @@
         #./nixos/security-configuration.nix
         ./nixos/modules/k3s-agent.nix
         ./nixos/tailscale.nix
-        ./nixos/pite-canary.nix
+        #./nixos/pite-canary.nix
       ];
     };
 

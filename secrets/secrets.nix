@@ -67,4 +67,5 @@ in {
   "llm-runtime-keys-bait.age".publicKeys = [pite];
 
   "hass-credentials.age".publicKeys = [arch];
+  "canary-tokens.age".publicKeys = [office arch pite];
 }
