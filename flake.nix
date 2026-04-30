@@ -135,6 +135,7 @@
       };
       modules = [
         inputs.home-manager.nixosModules.default
+        agenix.nixosModules.default
         ./nixos/shared-cli-configuration.nix
         ./nixos/shared-configuration.nix
         ./nixos/security-configuration.nix
@@ -171,6 +172,7 @@
       };
       modules = [
         inputs.home-manager.nixosModules.default
+        agenix.nixosModules.default
         ./nixos/shared-cli-configuration.nix
         ./nixos/remote-cli-config.nix
         #./nixos/modules/k3s-agent.nix
@@ -194,6 +196,7 @@
       };
       modules = [
         inputs.home-manager.nixosModules.default
+        agenix.nixosModules.default
         ./nixos/shared-cli-configuration.nix
         ./nixos/remote-cli-config.nix
         #./nixos/modules/k3s-agent.nix
@@ -211,6 +214,7 @@
       };
       modules = [
         inputs.home-manager.nixosModules.default
+        agenix.nixosModules.default
         ./nixos/shared-cli-configuration.nix
         ./nixos/shared-configuration.nix
         ./nixos/security-configuration.nix
@@ -272,6 +276,7 @@
       };
       modules = [
         inputs.home-manager.nixosModules.default
+        agenix.nixosModules.default
         ./nixos/shared-cli-configuration.nix
         ./nixos/modules/user-john.nix
         ({modulesPath, ...}: {
