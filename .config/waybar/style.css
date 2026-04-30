@@ -21,6 +21,17 @@
     min-height: 0;
 }
 
+tooltip {
+    background: @right_background_color;
+    border: 1px solid @button_background_color;
+    border-radius: 8px;
+}
+
+tooltip label {
+    color: @right_text_color;
+    font-size: 22px;
+}
+
 window#waybar {
     background: rgba(17,17,27,1);
     color: @normal_text_color;
@@ -101,6 +112,7 @@ window#waybar {
 }
 
 #tray, #pulseaudio, #network, #battery, #temperature, #memory, #cpu, #clock,
+#custom-thermostat, #custom-weather,
 #custom-playerctl.backward, #custom-playerctl.play, #custom-playerctl.foward{
     /*font-family: Jet Brains Mono Nerd Font;*/
     /*font-weight: bold;*/
@@ -121,4 +133,17 @@ window#waybar {
     /*color: #f5f5f5;*/
     /*font-weight: normal;*/
     /*font-style: normal;*/
+}
+
+
+#custom-thermostat.heating {
+    color: #D86127;
+}
+
+#custom-thermostat.cooling {
+    color: #33ccff;
+}
+
+#custom-thermostat.off {
+    color: #FF8888;
 }

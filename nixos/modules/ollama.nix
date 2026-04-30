@@ -33,12 +33,9 @@
   pkgs,
   pkgs-stable,
   ...
-}:
-
-let
+}: let
   cfg = config.services.ollama;
-in
-{
+in {
   options.services.ollama.modelNames = lib.mkOption {
     type = lib.types.listOf lib.types.str;
     default = [];
@@ -64,9 +61,9 @@ in
 
     systemd.services.ollama-model-pull = lib.mkIf (cfg.modelNames != []) {
       description = "Pull declared ollama models";
-      after = [ "ollama.service" ];
-      requires = [ "ollama.service" ];
-      wantedBy = [ "multi-user.target" ];
+      after = ["ollama.service"];
+      requires = ["ollama.service"];
+      wantedBy = ["multi-user.target"];
       serviceConfig = {
         Type = "oneshot";
         User = "john";
@@ -74,9 +71,10 @@ in
       };
       script = ''
         ${lib.concatMapStringsSep "\n" (m: ''
-          echo "Ensuring model: ${m}"
-          ${cfg.package}/bin/ollama pull ${m}
-        '') cfg.modelNames}
+            echo "Ensuring model: ${m}"
+            ${cfg.package}/bin/ollama pull ${m}
+          '')
+          cfg.modelNames}
       '';
     };
   };

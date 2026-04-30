@@ -3,8 +3,9 @@
   lib,
   pkgs,
   ...
-}:
-let
+}: let
+  cfg = config.services.mullvad-relay;
+
   historyFile = "/var/lib/mullvad-relay-history";
   lockFile = "/run/mullvad-relay-select.lock";
 
@@ -21,16 +22,19 @@ let
     set -uo pipefail
     export PATH="${lib.makeBinPath [
       config.services.mullvad-vpn.package
-      pkgs.fping
+      pkgs.jq
       pkgs.gawk
       pkgs.coreutils
       pkgs.gnugrep
-      pkgs.gnused
       pkgs.util-linux
     ]}"
 
     HISTORY="${historyFile}"
     LOCK="${lockFile}"
+    RELAYS="/var/cache/mullvad-vpn/relays.json"
+    HOME_LAT=${toString cfg.homeLatitude}
+    HOME_LON=${toString cfg.homeLongitude}
+    MAX_DIST=1000
 
     exec 9>"$LOCK"
     if ! flock -n 9; then
@@ -41,83 +45,91 @@ let
     TMPDIR="$(mktemp -d)"
     trap 'rm -rf "$TMPDIR"' EXIT
 
-    # 1. Parse mullvad relay list -> one line per city: "cc city ip"
-    mullvad relay list | awk '
-      /^[A-Z].*\(/ {
-        match($0, /\(([a-z]+)\)/, m)
-        cc = m[1]
-      }
-      /^[[:space:]]+[A-Z].*\(.*\) @/ {
-        match($0, /\(([a-z]+)\)/, m)
-        city = m[1]
-        seen = 0
-      }
-      /^[[:space:]]+[a-z]+-[a-z]+-wg-/ && !seen {
-        match($0, /\(([0-9]+\.[0-9]+\.[0-9]+\.[0-9]+)/, m)
-        if (m[1] != "") { print cc, city, m[1]; seen = 1 }
-      }
-    ' > "$TMPDIR/cities.txt"
+    # 1. Extract cities with coordinates from relays.json
+    if [ -f "$RELAYS" ]; then
+      jq -r '
+        .countries[] | .code as $cc | .cities[] |
+        select(.relays | map(select(.hostname | test("wg"))) | length > 0) |
+        "\($cc) \(.code) \(.latitude) \(.longitude)"
+      ' "$RELAYS" > "$TMPDIR/all_cities.txt" 2>/dev/null || true
+    fi
 
-    TOTAL=$(wc -l < "$TMPDIR/cities.txt")
-    if [ "$TOTAL" -eq 0 ]; then
-      echo "ERROR: No cities parsed from relay list" >&2
+    if [ ! -s "$TMPDIR/all_cities.txt" ]; then
+      echo "ERROR: No cities from relays.json" >&2
       exit 1
     fi
-    echo "Parsed $TOTAL cities" >&2
 
-    # 2. Exclude last 5 used cities
-    RECENT=""
+    TOTAL=$(wc -l < "$TMPDIR/all_cities.txt")
+    echo "Parsed $TOTAL cities from relays.json" >&2
+
+    # 2. Load recent history for exclusion
+    RECENT_FILE="$TMPDIR/recent.txt"
     if [ -f "$HISTORY" ]; then
-      RECENT=$(tail -5 "$HISTORY")
+      tail -3 "$HISTORY" > "$RECENT_FILE"
+    else
+      touch "$RECENT_FILE"
     fi
 
-    while IFS=' ' read -r cc city ip; do
-      if [ -z "$RECENT" ] || ! echo "$RECENT" | grep -qx "$cc $city"; then
-        echo "$cc $city $ip"
-      fi
-    done < "$TMPDIR/cities.txt" > "$TMPDIR/candidates.txt"
+    # 3. Haversine filter + history exclusion + weighted random pick
+    pick_city() {
+      local exclude_recent="$1"
+      awk -v hlat="$HOME_LAT" -v hlon="$HOME_LON" -v maxd="$MAX_DIST" \
+          -v rfile="$RECENT_FILE" -v exclude="$exclude_recent" '
+        BEGIN {
+          PI=3.14159265358979; D=PI/180; R=3959
+          n=0; total_w=0
+          srand()
+          if (exclude) {
+            while ((getline line < rfile) > 0) {
+              if (line != "") recent[line] = 1
+            }
+            close(rfile)
+          }
+        }
+        {
+          cc=$1; city=$2; lat=$3; lon=$4
+          dlat=(lat-hlat)*D; dlon=(lon-hlon)*D
+          a=sin(dlat/2)^2 + cos(hlat*D)*cos(lat*D)*sin(dlon/2)^2
+          dist=R*2*atan2(sqrt(a),sqrt(1-a))
+          if (dist > maxd) next
+          key = cc " " city
+          if (exclude && (key in recent)) next
+          n++
+          w[n] = (dist < 1) ? 1000 : 1/dist
+          total_w += w[n]
+          cities[n] = key
+          dists[n] = dist
+        }
+        END {
+          if (n == 0) { print "NEED_RESET=1"; exit }
+          r = rand() * total_w
+          for (i=1; i<=n; i++) {
+            r -= w[i]
+            if (r <= 0 || i == n) {
+              split(cities[i], p, " ")
+              printf "best_cc=%s best_city=%s best_dist=%.0f\n", p[1], p[2], dists[i]
+              exit
+            }
+          }
+        }
+      ' "$TMPDIR/all_cities.txt"
+    }
 
-    if [ ! -s "$TMPDIR/candidates.txt" ]; then
-      echo "All cities recently used, resetting pool" >&2
-      cp "$TMPDIR/cities.txt" "$TMPDIR/candidates.txt"
+    eval "$(pick_city 1)"
+
+    # Fallback: if all nearby cities were recently used, reset pool
+    if [ "''${NEED_RESET:-0}" = "1" ]; then
+      echo "All nearby cities recently used, resetting pool" >&2
+      eval "$(pick_city 0)"
     fi
 
-    # 3. Ping one IP per candidate city
-    awk '{print $3}' "$TMPDIR/candidates.txt" \
-      | fping -c1 -t1000 -q 2>&1 \
-      | awk -F'[/ ]' '/min\/avg\/max/ {
-          ip = $1; avg = $(NF-1)
-          print ip, avg
-        }' > "$TMPDIR/ping.txt" || true
-
-    # 4. Join ping results with city data, sort by latency, pick best
-    best_cc="" best_city="" best_lat=""
-    if [ -s "$TMPDIR/ping.txt" ]; then
-      eval "$(awk '
-        NR==FNR { lat[$1]=$2; next }
-        ($3 in lat) { print lat[$3], $1, $2 }
-      ' "$TMPDIR/ping.txt" "$TMPDIR/candidates.txt" \
-        | sort -n \
-        | head -1 \
-        | awk '{ printf "best_lat=%s best_cc=%s best_city=%s\n", $1, $2, $3 }'
-      )"
-    fi
-
-    # Soft fallback: if no pings succeeded, pick the first candidate
-    if [ -z "$best_cc" ]; then
-      echo "No ping responses, falling back to first candidate" >&2
-      eval "$(head -1 "$TMPDIR/candidates.txt" \
-        | awk '{ printf "best_cc=%s best_city=%s\n", $1, $2 }')"
-      best_lat="n/a"
-    fi
-
-    if [ -z "$best_cc" ]; then
+    if [ -z "''${best_cc:-}" ]; then
       echo "ERROR: Could not determine a relay" >&2
       exit 1
     fi
 
-    # 5. Apply and persist
-    echo "Selected: $best_cc $best_city (rtt=$best_lat ms)" >&2
+    # 4. Apply and persist
+    echo "Selected: $best_cc $best_city (dist=''${best_dist}mi)" >&2
     mullvad relay set location "$best_cc" "$best_city"
 
     echo "$best_cc $best_city" >> "$HISTORY"
@@ -410,171 +422,187 @@ let
   '';
 
   nuclearCooldownFile = "/run/mullvad-nuclear-cooldown";
-in
-{
-  services.mullvad-vpn.enable = true;
-
-  services.tailscale.useRoutingFeatures = "both";
-
-  networking.firewall = {
-    enable = lib.mkForce true;
-    trustedInterfaces = [ "tailscale0" ];
-    allowedUDPPorts = [ config.services.tailscale.port ];
-    extraCommands = ''
-      iptables -t nat -A POSTROUTING -s 100.64.0.0/10 ! -o tailscale0 -j MASQUERADE
-    '';
-    extraStopCommands = ''
-      iptables -t nat -D POSTROUTING -s 100.64.0.0/10 ! -o tailscale0 -j MASQUERADE || true
-    '';
-  };
-
-  systemd.services.mullvad-auto-connect = {
-    description = "Auto-configure and connect Mullvad VPN";
-    after = [
-      "mullvad-daemon.service"
-      "tailscaled.service"
-    ];
-    requires = [ "mullvad-daemon.service" ];
-    wants = [ "tailscaled.service" ];
-    wantedBy = [ "multi-user.target" ];
-    path = commonPath ++ [
-      pkgs.procps
-      pkgs.fping
-      pkgs.util-linux
-    ];
-    serviceConfig = {
-      Type = "oneshot";
-      RemainAfterExit = true;
+in {
+  options.services.mullvad-relay = {
+    homeLatitude = lib.mkOption {
+      type = lib.types.float;
+      default = 38.8977;
+      description = "Latitude for nearby-city relay selection (default: White House, DC).";
     };
-    script = ''
-      mullvad lan set allow
-      mullvad auto-connect set on
-      mullvad tunnel set ipv6 on
-      mullvad tunnel set quantum-resistant on
-
-      ${reapplySplitTunnel} || true
-
-      # Clean stale ip rules from previous runs so Mullvad doesn't
-      # keep leapfrogging them with lower priority numbers.
-      while ip rule del to 100.64.0.0/10 lookup 52 2>/dev/null; do :; done
-      while ip -6 rule del to fd7a:115c:a1e0::/48 lookup 52 2>/dev/null; do :; done
-      ip rule del fwmark 0x40000/0x40000 table 200 2>/dev/null || true
-      ip route flush table 200 2>/dev/null || true
-
-      SELECT_RELAY_RC=0
-      ${selectRelay} || SELECT_RELAY_RC=$?
-      if [ "$SELECT_RELAY_RC" -ne 0 ] && [ "$SELECT_RELAY_RC" -ne 10 ]; then
-        exit "$SELECT_RELAY_RC"
-      fi
-
-      mullvad connect --wait
-
-      ${applyBypass}
-    '';
-  };
-
-  systemd.services.mullvad-rotate-relay = {
-    description = "Rotate Mullvad relay to a low-latency city";
-    after = [
-      "mullvad-daemon.service"
-      "network-online.target"
-      "mullvad-auto-connect.service"
-    ];
-    wants = [ "network-online.target" ];
-    path = commonPath ++ [
-      pkgs.fping
-      pkgs.util-linux
-    ];
-    serviceConfig = {
-      Type = "oneshot";
-    };
-    script = ''
-      SELECT_RELAY_RC=0
-      ${selectRelay} || SELECT_RELAY_RC=$?
-      if [ "$SELECT_RELAY_RC" -eq 10 ]; then
-        echo "Relay selection skipped due to lock contention; skipping reconnect" >&2
-        exit 0
-      fi
-      if [ "$SELECT_RELAY_RC" -ne 0 ]; then
-        exit "$SELECT_RELAY_RC"
-      fi
-
-      mullvad reconnect --wait
-      ${applyBypass}
-    '';
-  };
-
-  systemd.timers.mullvad-rotate-relay = {
-    wantedBy = [ "timers.target" ];
-    timerConfig = {
-      OnBootSec = "15min";
-      OnUnitActiveSec = "15min";
-      RandomizedDelaySec = "90s";
-      Persistent = true;
+    homeLongitude = lib.mkOption {
+      type = lib.types.float;
+      default = -77.0365;
+      description = "Longitude for nearby-city relay selection (default: White House, DC).";
     };
   };
 
-  # Safety net: re-apply bypass rules at a low frequency in case
-  # something other than rotation disturbs Mullvad's state.
-  systemd.services.mullvad-tailscale-keepalive = {
-    description = "Re-apply Tailscale bypass rules for Mullvad";
-    after = [ "mullvad-auto-connect.service" ];
-    wants = [ "mullvad-auto-connect.service" ];
-    path = commonPath;
-    serviceConfig = {
-      Type = "oneshot";
-    };
-    script = ''
-      ${applyBypass}
-      ${reapplySplitTunnel}
-    '';
-  };
+  config = {
+    services.mullvad-vpn.enable = true;
 
-  systemd.timers.mullvad-tailscale-keepalive = {
-    wantedBy = [ "timers.target" ];
-    timerConfig = {
-      OnBootSec = "5min";
-      OnUnitActiveSec = "10min";
-    };
-  };
+    services.tailscale.useRoutingFeatures = "both";
 
-  systemd.services.mullvad-connectivity-watchdog = {
-    description = "Connectivity watchdog: diagnose and recover internet/VPN failures";
-    after = [
-      "mullvad-auto-connect.service"
-      "tailscaled.service"
-      "network-online.target"
-    ];
-    wants = [ "network-online.target" ];
-    serviceConfig = {
-      Type = "oneshot";
+    networking.firewall = {
+      enable = lib.mkForce true;
+      trustedInterfaces = ["tailscale0"];
+      allowedUDPPorts = [config.services.tailscale.port];
+      extraCommands = ''
+        iptables -t nat -A POSTROUTING -s 100.64.0.0/10 ! -o tailscale0 -j MASQUERADE
+      '';
+      extraStopCommands = ''
+        iptables -t nat -D POSTROUTING -s 100.64.0.0/10 ! -o tailscale0 -j MASQUERADE || true
+      '';
     };
-    script = ''
-      ${connectivityWatchdog}
-    '';
-  };
 
-  systemd.timers.mullvad-connectivity-watchdog = {
-    wantedBy = [ "timers.target" ];
-    timerConfig = {
-      OnBootSec = "2min";
-      OnUnitActiveSec = "60s";
-    };
-  };
+    systemd.services.mullvad-auto-connect = {
+      description = "Auto-configure and connect Mullvad VPN";
+      after = [
+        "mullvad-daemon.service"
+        "tailscaled.service"
+      ];
+      requires = ["mullvad-daemon.service"];
+      wants = ["tailscaled.service"];
+      wantedBy = ["multi-user.target"];
+      path =
+        commonPath
+        ++ [
+          pkgs.procps
+          pkgs.util-linux
+        ];
+      serviceConfig = {
+        Type = "oneshot";
+        RemainAfterExit = true;
+      };
+      script = ''
+        mullvad lan set allow
+        mullvad auto-connect set on
+        mullvad tunnel set ipv6 on
+        mullvad tunnel set quantum-resistant on
 
-  systemd.services.tailscale-exit-node = {
-    description = "Advertise Tailscale exit node";
-    after = [ "tailscaled.service" ];
-    wants = [ "tailscaled.service" ];
-    wantedBy = [ "multi-user.target" ];
-    path = [ pkgs.tailscale ];
-    serviceConfig = {
-      Type = "oneshot";
-      RemainAfterExit = true;
+        ${reapplySplitTunnel} || true
+
+        # Clean stale ip rules from previous runs so Mullvad doesn't
+        # keep leapfrogging them with lower priority numbers.
+        while ip rule del to 100.64.0.0/10 lookup 52 2>/dev/null; do :; done
+        while ip -6 rule del to fd7a:115c:a1e0::/48 lookup 52 2>/dev/null; do :; done
+        ip rule del fwmark 0x40000/0x40000 table 200 2>/dev/null || true
+        ip route flush table 200 2>/dev/null || true
+
+        SELECT_RELAY_RC=0
+        ${selectRelay} || SELECT_RELAY_RC=$?
+        if [ "$SELECT_RELAY_RC" -ne 0 ] && [ "$SELECT_RELAY_RC" -ne 10 ]; then
+          exit "$SELECT_RELAY_RC"
+        fi
+
+        mullvad connect --wait
+
+        ${applyBypass}
+      '';
     };
-    script = ''
-      sleep 5
-      tailscale set --advertise-exit-node
-    '';
+
+    systemd.services.mullvad-rotate-relay = {
+      description = "Rotate Mullvad relay to a nearby city";
+      after = [
+        "mullvad-daemon.service"
+        "network-online.target"
+        "mullvad-auto-connect.service"
+      ];
+      wants = ["network-online.target"];
+      path =
+        commonPath
+        ++ [
+          pkgs.util-linux
+        ];
+      serviceConfig = {
+        Type = "oneshot";
+      };
+      script = ''
+        SELECT_RELAY_RC=0
+        ${selectRelay} || SELECT_RELAY_RC=$?
+        if [ "$SELECT_RELAY_RC" -eq 10 ]; then
+          echo "Relay selection skipped due to lock contention; skipping reconnect" >&2
+          exit 0
+        fi
+        if [ "$SELECT_RELAY_RC" -ne 0 ]; then
+          exit "$SELECT_RELAY_RC"
+        fi
+
+        mullvad reconnect --wait
+        ${applyBypass}
+      '';
+    };
+
+    systemd.timers.mullvad-rotate-relay = {
+      wantedBy = ["timers.target"];
+      timerConfig = {
+        OnBootSec = "5min";
+        OnUnitActiveSec = "5min";
+        RandomizedDelaySec = "90min";
+        Persistent = true;
+      };
+    };
+
+    # Safety net: re-apply bypass rules at a low frequency in case
+    # something other than rotation disturbs Mullvad's state.
+    systemd.services.mullvad-tailscale-keepalive = {
+      description = "Re-apply Tailscale bypass rules for Mullvad";
+      after = ["mullvad-auto-connect.service"];
+      wants = ["mullvad-auto-connect.service"];
+      path = commonPath;
+      serviceConfig = {
+        Type = "oneshot";
+      };
+      script = ''
+        ${applyBypass}
+        ${reapplySplitTunnel}
+      '';
+    };
+
+    systemd.timers.mullvad-tailscale-keepalive = {
+      wantedBy = ["timers.target"];
+      timerConfig = {
+        OnBootSec = "5min";
+        OnUnitActiveSec = "10min";
+      };
+    };
+
+    systemd.services.mullvad-connectivity-watchdog = {
+      description = "Connectivity watchdog: diagnose and recover internet/VPN failures";
+      after = [
+        "mullvad-auto-connect.service"
+        "tailscaled.service"
+        "network-online.target"
+      ];
+      wants = ["network-online.target"];
+      serviceConfig = {
+        Type = "oneshot";
+      };
+      script = ''
+        ${connectivityWatchdog}
+      '';
+    };
+
+    systemd.timers.mullvad-connectivity-watchdog = {
+      wantedBy = ["timers.target"];
+      timerConfig = {
+        OnBootSec = "2min";
+        OnUnitActiveSec = "60s";
+      };
+    };
+
+    systemd.services.tailscale-exit-node = {
+      description = "Advertise Tailscale exit node";
+      after = ["tailscaled.service"];
+      wants = ["tailscaled.service"];
+      wantedBy = ["multi-user.target"];
+      path = [pkgs.tailscale];
+      serviceConfig = {
+        Type = "oneshot";
+        RemainAfterExit = true;
+      };
+      script = ''
+        sleep 5
+        tailscale set --advertise-exit-node
+      '';
+    };
   };
 }

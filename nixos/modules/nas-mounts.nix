@@ -6,9 +6,7 @@
   pkgs,
   lib,
   ...
-}:
-
-let
+}: let
   mountOpts = [
     "x-systemd.automount"
     "noauto"
@@ -24,9 +22,8 @@ let
     "file_mode=0644"
     "dir_mode=0755"
   ];
-in
-{
-  environment.systemPackages = [ pkgs.cifs-utils ];
+in {
+  environment.systemPackages = [pkgs.cifs-utils];
 
   age.secrets.smb-credentials = {
     file = ../../secrets/smb-credentials.age;
@@ -35,8 +32,9 @@ in
     group = "root";
   };
 
-  age.secrets.gocryptfs-passphrase = lib.mkIf
-    (builtins.elem config.networking.hostName [ "arch" "office" "closet" ])
+  age.secrets.gocryptfs-passphrase =
+    lib.mkIf
+    (builtins.elem config.networking.hostName ["arch" "office" "closet"])
     {
       file = ../../secrets/gocryptfs-passphrase.age;
       mode = "0400";

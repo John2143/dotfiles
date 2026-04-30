@@ -34,26 +34,27 @@
 # The restic NixOS module initializes the repository automatically on the
 # first backup run.
 #
-
-{ config, lib, pkgs, ... }:
-
-let
+{
+  config,
+  lib,
+  pkgs,
+  ...
+}: let
   cfg = config.custom.backup;
   hostname = config.networking.hostName;
-in
-{
+in {
   options.custom.backup = {
     enable = lib.mkEnableOption "restic backup to NAS";
 
     extraPaths = lib.mkOption {
       type = lib.types.listOf lib.types.str;
-      default = [ ];
+      default = [];
       description = "Additional paths to back up beyond /home/john.";
     };
 
     extraExcludes = lib.mkOption {
       type = lib.types.listOf lib.types.str;
-      default = [ ];
+      default = [];
       description = "Additional exclude patterns.";
     };
 
@@ -71,7 +72,6 @@ in
   };
 
   config = lib.mkIf cfg.enable {
-
     age.secrets.restic-password = {
       file = ../../secrets/restic-password-${hostname}.age;
       mode = "0400";
@@ -90,26 +90,28 @@ in
       repository = "sftp:backup@nas.ts.2143.me:/${hostname}";
       passwordFile = config.age.secrets.restic-password.path;
 
-      paths = [ "/home/john" ] ++ cfg.extraPaths;
+      paths = ["/home/john"] ++ cfg.extraPaths;
 
-      exclude = [
-        "/home/john/.cache"
-        "/home/john/.local/share"
-        "/home/john/.mozilla/firefox"
-        "/home/john/.config"
-        "/home/john/.npm"
-        "/home/john/.cargo/registry"
-        "/home/john/.rustup/toolchains"
-        "**/.direnv"
-        "**/node_modules"
-        "**/target/debug"
-        "**/target/release"
-        "**/.git/objects"
-        "**/result"
-        "**/*.qcow2"
-        "**/*.img"
-        "**/*.iso"
-      ] ++ cfg.extraExcludes;
+      exclude =
+        [
+          "/home/john/.cache"
+          "/home/john/.local/share"
+          "/home/john/.mozilla/firefox"
+          "/home/john/.config"
+          "/home/john/.npm"
+          "/home/john/.cargo/registry"
+          "/home/john/.rustup/toolchains"
+          "**/.direnv"
+          "**/node_modules"
+          "**/target/debug"
+          "**/target/release"
+          "**/.git/objects"
+          "**/result"
+          "**/*.qcow2"
+          "**/*.img"
+          "**/*.iso"
+        ]
+        ++ cfg.extraExcludes;
 
       pruneOpts = [
         "--keep-daily 7"

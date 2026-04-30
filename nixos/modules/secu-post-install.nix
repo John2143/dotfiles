@@ -1,8 +1,7 @@
 # Post-install module for secu.
 # Enable this AFTER enrolling the USB keyfile with:
 #   sudo cryptsetup luksAddKey /dev/sda3 /dev/disk/by-partlabel/CRYPTKEY --new-keyfile-size 4096
-{ ... }:
-{
+{...}: {
   # USB keyfile unlock for LUKS (falls back to passphrase if USB is absent)
   boot.initrd.luks.devices."cryptroot" = {
     keyFile = "/dev/disk/by-partlabel/CRYPTKEY";

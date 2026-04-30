@@ -1,15 +1,12 @@
 # Edit this configuration file to define what should be installed on
 # your system. Help is available in the configuration.nix(5) man page, on
 # https://search.nixos.org/options and in the NixOS manual (`nixos-help`).
-
 {
   lib,
   pkgs,
   pkgs-stable,
   ...
-}:
-
-{
+}: {
   imports = [
     ./office-hardware-configuration.nix
     ./modules/user-john.nix
@@ -38,7 +35,7 @@
   networking.networkmanager.enable = true; # Easiest to use and most distros use this by default.
   #networking.wireless.secretsFile = "/run/secrets/wireless.env";
   #networking.wireless.networks = {
-    #jimmys_2G.pskRaw = "ext:PSK_HOME";
+  #jimmys_2G.pskRaw = "ext:PSK_HOME";
   #};
 
   # Set your time zone.
@@ -61,7 +58,7 @@
   # hardware.pulseaudio.enable = true;
 
   systemd.services.office-bad-cpu = {
-    wantedBy = [ "multi-user.target" ];
+    wantedBy = ["multi-user.target"];
     description = "CPU perf core 8 is bad on my office comp";
     script = ''${pkgs.fish}/bin/fish /home/john/bin/office.fish'';
     serviceConfig = {
@@ -71,7 +68,7 @@
   };
 
   systemd.timers."bad-cpu" = {
-    wantedBy = [ "timers.target" ];
+    wantedBy = ["timers.target"];
     timerConfig = {
       OnBootSec = "5";
       OnUnitActiveSec = "5";
@@ -81,7 +78,7 @@
 
   # I use this computer to rebuild my NixOS configuration daily.
   systemd.services.rebuild-nixos-boot = {
-    wantedBy = [ "multi-user.target" ];
+    wantedBy = ["multi-user.target"];
     description = "Update NixOS configuration fr";
     script = ''${pkgs.fish}/bin/fish -c "update; sudo nixos-rebuild --flake ~/dotfiles boot && git add flake.lock && git commit -m 'Update auto: '(date +%Y-%m-%dT%H:%M:%S) && git push || true"'';
     serviceConfig = {
@@ -94,7 +91,7 @@
   };
 
   systemd.timers."rebuild-nixos-boot" = {
-    wantedBy = [ "timers.target" ];
+    wantedBy = ["timers.target"];
     timerConfig = {
       Unit = "rebuild-nixos-boot.service";
       # At 2:00 PM every day
@@ -103,7 +100,7 @@
     };
   };
 
-  custom.k3sNodeTaints = [ "seated=true:NoSchedule" ];
+  custom.k3sNodeTaints = ["seated=true:NoSchedule"];
   custom.backup.enable = true;
 
   services.ollama = {

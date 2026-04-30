@@ -1,5 +1,4 @@
-{ pkgs, ... }:
-{
+{pkgs, compName, lib, ...}: {
   programs.waybar = {
     enable = true;
     style = ../../.config/waybar/style.css;
@@ -14,12 +13,16 @@
           "custom/newworkspace"
           "hyprland/window"
         ];
-        modules-center = [ ];
+        modules-center = [];
         modules-right = [
           #"custom/mullvad"
           "cpu"
           "memory"
           "temperature"
+        ] ++ (lib.optionals (compName == "arch") [
+          "custom/thermostat"
+        ]) ++ [
+          "custom/weather"
           "battery"
           "tray"
           "pulseaudio"
@@ -35,7 +38,7 @@
             "format" = "{icon}";
             "icon-size" = 20;
             "on-click-window" = "hyprctl dispatch focuswindow address:{address}";
-            "ignore-list" = [ "^xwaylandvideobridge$" ];
+            "ignore-list" = ["^xwaylandvideobridge$"];
           };
         };
 
@@ -65,12 +68,12 @@
         };
 
         #"custom/mullvad" = {
-          #interval = 20;
-          #exec = "~/.config/get_mullvad.fish";
-          #on-click = "${pkgs.mullvad-vpn}/bin/mullvad connect; sleep 2";
-          #on-click-right = "${pkgs.mullvad-vpn}/bin/mullvad disconnect; sleep 1";
-          #on-click-middle = "${pkgs.mullvad-vpn}/bin/mullvad reconnect; sleep 2";
-          #exec-on-event = true;
+        #interval = 20;
+        #exec = "~/.config/get_mullvad.fish";
+        #on-click = "${pkgs.mullvad-vpn}/bin/mullvad connect; sleep 2";
+        #on-click-right = "${pkgs.mullvad-vpn}/bin/mullvad disconnect; sleep 1";
+        #on-click-middle = "${pkgs.mullvad-vpn}/bin/mullvad reconnect; sleep 2";
+        #exec-on-event = true;
         #};
 
         "clock#time" = {
@@ -148,6 +151,23 @@
             "" # Icon: temperature-three-quarters
             "" # Icon: temperature-full
           ];
+          tooltip = true;
+        };
+      } // (lib.optionalAttrs (compName == "arch") {
+        "custom/thermostat" = {
+          exec = "hass-thermostat-status";
+          return-type = "json";
+          interval = 30;
+          signal = 8;
+          format = "{}";
+          tooltip = true;
+        };
+      }) // {
+        "custom/weather" = {
+          exec = "weather-status";
+          return-type = "json";
+          interval = 900;
+          format = "{}";
           tooltip = true;
         };
         tray = {

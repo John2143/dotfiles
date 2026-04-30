@@ -9,9 +9,7 @@
   pkgs,
   modulesPath,
   ...
-}:
-
-{
+}: {
   imports = [
     (modulesPath + "/installer/scan/not-detected.nix")
   ];
@@ -23,12 +21,12 @@
     "sd_mod"
     "usbhid"
   ];
-  boot.initrd.kernelModules = [ ];
-  boot.kernelModules = [ "kvm-intel" ];
-  boot.extraModulePackages = [ ];
+  boot.initrd.kernelModules = [];
+  boot.kernelModules = ["kvm-intel"];
+  boot.extraModulePackages = [];
 
-  boot.supportedFilesystems = [ "zfs" ];
-  boot.zfs.extraPools = [ "tank" "neo" ];
+  boot.supportedFilesystems = ["zfs"];
+  boot.zfs.extraPools = ["tank" "neo"];
 
   # fileSystems and swapDevices are managed by disko (see modules/disko_nas.nix)
 

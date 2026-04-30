@@ -6,9 +6,7 @@
   pkgs-stable,
   compName,
   ...
-}:
-
-let
+}: let
   primaryPackages = with pkgs; [
     # fonts
     # https://github.com/NixOS/nixpkgs/blob/master/pkgs/data/fonts/nerdfonts/shas.nix
@@ -157,8 +155,7 @@ let
     #winetricks
     #wineWowPackages.waylandFull
   ];
-in
-{
+in {
   # Include everything from home-cli.nix too
   imports = [
     ./home-cli.nix
@@ -167,9 +164,11 @@ in
 
   # Check hostname to determine what to install
   home.packages =
-    if compName == "office" then primaryPackages ++ optionalPackagesOffice ++ extensionPackages else
-    if compName == "arch" then primaryPackages ++ optionalPackagesUpstairs ++ extensionPackages else
-    primaryPackages;
+    if compName == "office"
+    then primaryPackages ++ optionalPackagesOffice ++ extensionPackages
+    else if compName == "arch"
+    then primaryPackages ++ optionalPackagesUpstairs ++ extensionPackages
+    else primaryPackages;
 
   nixpkgs.overlays = [
     #(import ./overlays/r2modman-overlay.nix)
@@ -198,8 +197,7 @@ in
     "alacritty".source = config.lib.file.mkOutOfStoreSymlink ../.config/alacritty;
     "dunst".source = config.lib.file.mkOutOfStoreSymlink ../.config/dunst;
     "hypr/hyprlock.conf".source = config.lib.file.mkOutOfStoreSymlink ../.config/hypr/hyprlock.conf;
-    "hypr/hyprpaper.conf".text =
-      "
+    "hypr/hyprpaper.conf".text = "
       preload = /home/john/backgrounds/luna_1.png
       wallpaper = , /home/john/backgrounds/luna_1.png
     ";

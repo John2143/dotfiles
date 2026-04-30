@@ -5,11 +5,8 @@
   lib,
   pkgs-stable,
   ...
-}:
-
-let
-  vimPluginFromGithub =
-    repo: rev:
+}: let
+  vimPluginFromGithub = repo: rev:
     pkgs.vimUtils.buildVimPlugin {
       pname = "${lib.strings.sanitizeDerivationName repo}";
       version = "HEAD";
@@ -19,8 +16,7 @@ let
         rev = rev;
       };
     };
-in
-{
+in {
   _module.args.pkgs-stable = import inputs.nixpkgs-stable {
     inherit (pkgs.stdenv.hostPlatform) system;
     inherit (config.nixpkgs) config;
@@ -130,73 +126,75 @@ in
     # '';
 
     ".omp/agent/models.yml".text = ''
-providers:
-  office-ollama:
-    baseUrl: http://office:11434/v1
-    api: openai-completions
-    auth: none
-    models:
-      - id: gemma4
-        name: Gemma 4 (Office ROCm)
-        reasoning: false
-        input: [text]
-        cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }
-        contextWindow: 128000
-        maxTokens: 8192
-      - id: qwen3.6
-        name: Qwen 3 (Office ROCm)
-        reasoning: true
-        input: [text]
-        cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }
-        contextWindow: 128000
-        maxTokens: 8192
+      providers:
+        office-ollama:
+          baseUrl: http://office:11434/v1
+          api: openai-completions
+          auth: none
+          models:
+            - id: gemma4
+              name: Gemma 4 (Office ROCm)
+              reasoning: false
+              input: [text]
+              cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }
+              contextWindow: 128000
+              maxTokens: 8192
+            - id: qwen3.6
+              name: Qwen 3 (Office ROCm)
+              reasoning: true
+              input: [text]
+              cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }
+              contextWindow: 128000
+              maxTokens: 8192
 
-  arch-ollama:
-    baseUrl: http://arch:11434/v1
-    api: openai-completions
-    auth: none
-    models:
-      - id: gemma4
-        name: Gemma 4 (Arch CUDA)
-        reasoning: false
-        input: [text]
-        cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }
-        contextWindow: 128000
-        maxTokens: 8192
-      - id: qwen3.6
-        name: Qwen 3 (Arch CUDA)
-        reasoning: true
-        input: [text]
-        cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }
-        contextWindow: 128000
-        maxTokens: 8192
+        arch-ollama:
+          baseUrl: http://arch:11434/v1
+          api: openai-completions
+          auth: none
+          models:
+            - id: gemma4
+              name: Gemma 4 (Arch CUDA)
+              reasoning: false
+              input: [text]
+              cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }
+              contextWindow: 128000
+              maxTokens: 8192
+            - id: qwen3.6
+              name: Qwen 3 (Arch CUDA)
+              reasoning: true
+              input: [text]
+              cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }
+              contextWindow: 128000
+              maxTokens: 8192
     '';
 
     ".omp/agent/config.yml".text = ''
-modelRoles:
-  default: office-ollama/gemma4
-  smol: office-ollama/qwen3.6
+      modelRoles:
+        default: office-ollama/qwen3.6
+        smol: office-ollama/qwen3.6
 
-modelProviderOrder:
-  - office-ollama
-  - arch-ollama
-  - anthropic
-  - google
+      modelProviderOrder:
+        - office-ollama
+        - arch-ollama
+        - anthropic
+        - openai
+        - google
 
-enabledModels:
-  - "office-ollama/*"
-  - "arch-ollama/*"
-  - "anthropic/*"
-  - "google/*"
+      enabledModels:
+        - "office-ollama/*"
+        - "arch-ollama/*"
+        - "anthropic/*"
+        - "openai/*"
+        - "google/*"
 
-retry:
-  enabled: true
-  maxRetries: 3
-  baseDelayMs: 2000
-  fallbackChains:
-    default:
-      - "arch-ollama/gemma4"
-      - "anthropic/claude-sonnet-4-6"
+      retry:
+        enabled: true
+        maxRetries: 3
+        baseDelayMs: 2000
+        fallbackChains:
+          default:
+            - "arch-ollama/gemma4"
+            - "anthropic/claude-sonnet-4-6"
     '';
 
     ".omp/agent/keybindings.json".text = ''
@@ -274,17 +272,17 @@ retry:
       vc.description = "Select a Tailscale exit node";
 
       #mullvad-split-tunnel.body = ''
-        #set appname "$argv[1]";
-        #set procs (ps aux | grep $appname | grep -v "0:00 rg" | choose 1)
-        #set num_procs (echo $procs | wc -l)
+      #set appname "$argv[1]";
+      #set procs (ps aux | grep $appname | grep -v "0:00 rg" | choose 1)
+      #set num_procs (echo $procs | wc -l)
 
-        ## Echo to stderr so that other scripts can use this command
-        #echo 1>&2 "Ignoring $appname ($num_procs matches)";
-        #for pid in $procs;
-            #echo -n "Split-tunneling $pid ... ";
-            #mullvad split-tunnel add $pid;
-        #end
-        #echo 1>&2 "Done"
+      ## Echo to stderr so that other scripts can use this command
+      #echo 1>&2 "Ignoring $appname ($num_procs matches)";
+      #for pid in $procs;
+      #echo -n "Split-tunneling $pid ... ";
+      #mullvad split-tunnel add $pid;
+      #end
+      #echo 1>&2 "Done"
       #'';
       test-program.body = ''
         set -f program "$argv[1]"
@@ -343,101 +341,179 @@ retry:
       '';
       bigjuush.description = "Upload files to RustFS and get public share links";
       llm-load-keys.body = ''
-        set -l creds_file /run/agenix/llm-api-keys
+        # Loads admin LLM keys (ANTHROPIC_ADMIN_KEY, OPENAI_ADMIN_KEY) for use by
+        # llm-costs. Runtime keys (ANTHROPIC_API_KEY, OPENAI_API_KEY) are mounted
+        # at /run/agenix/llm-runtime-keys but only the admin file goes here —
+        # llm-costs needs admin scope to read org cost reports.
+        set -l creds_file /run/agenix/llm-admin-keys
         if not test -f $creds_file
-          echo "LLM keys not found at $creds_file" >&2
+          echo "LLM admin keys not found at $creds_file" >&2
           return 1
         end
         envsource $creds_file
       '';
-      llm-load-keys.description = "Load LLM API keys into current shell (on-demand)";
-      llm-costs.body = ''
-        set -l _pre_vars (set --names -x)
-        llm-load-keys 2>/dev/null
+      llm-load-keys.description = "Load LLM admin API keys into current shell (on-demand)";
+      _llm-paginate-json.body = ''
+        # Walk a paginated JSON API of the shape { data: [...], has_more, next_page }.
+        # Outputs the merged .data array as compact JSON on stdout.
+        # On API error, outputs the error message and returns 1.
+        #
+        # Usage: _llm-paginate-json DEBUG BASE_URL [-H HEADER]...
+        set -l debug $argv[1]
+        set -l base_url $argv[2]
+        set -l headers $argv[3..]
+        set -l url $base_url
+        set -l pages
 
-        set -l days 30
-        if test (count $argv) -gt 0
-          set days $argv[1]
-        end
-
-        set -l oai_key ""
-        if set -q OPENAI_ADMIN_KEY
-          set oai_key $OPENAI_ADMIN_KEY
-        else if set -q OPENAI_API_KEY
-          set oai_key $OPENAI_API_KEY
-        end
-
-        if test -n "$oai_key"
-          set -l now (date +%s)
-          set -l start_time (math "$now - $days * 86400")
-          set -l resp (curl -s "https://api.openai.com/v1/organization/costs?start_time=$start_time&group_by[]=line_item&limit=180" \
-            -H "Authorization: Bearer $oai_key")
+        while true
+          set -l resp (curl -s $headers "$url")
+          if test "$debug" = "1"
+            echo "DEBUG GET $url" >&2
+            printf '%s\n' $resp | jq . >&2 2>/dev/null; or printf '%s\n' $resp >&2
+            echo "" >&2
+          end
           set -l err (printf '%s\n' $resp | jq -r '.error.message // empty' 2>/dev/null)
           if test -n "$err"
-            echo "OpenAI: $err"
+            echo "$err"
+            return 1
+          end
+          set -a pages (printf '%s\n' $resp | jq -c '.data // []' 2>/dev/null)
+          set -l has_more (printf '%s\n' $resp | jq -r '.has_more // "false"' 2>/dev/null)
+          test "$has_more" = "true"; or break
+          set -l next (printf '%s\n' $resp | jq -r '.next_page // empty' 2>/dev/null)
+          test -n "$next"; or break
+          set url "$base_url&page=$next"
+        end
+
+        printf '%s\n' $pages | jq -sc 'add // []' 2>/dev/null
+      '';
+      _llm-paginate-json.description = "Internal: walk a paginated JSON API and emit the merged .data array";
+      llm-costs.body = ''
+        set -l _pre_vars (set --names -x)
+        llm-load-keys &>/dev/null
+
+        set -l debug 0
+        set -l filtered_argv
+        for arg in $argv
+          if test "$arg" = "--debug" -o "$arg" = "-v"
+            set debug 1
           else
-            set -l total (printf '%s\n' $resp | jq '[.data[].results[].amount.value // 0] | add // 0' 2>/dev/null)
-            if test -n "$total" -a "$total" != "null"
-              set_color --bold
-              printf "=== OpenAI (%d days) ===\n" $days
-              set_color normal
+            set -a filtered_argv $arg
+          end
+        end
+
+        set -l days 30
+        if test (count $filtered_argv) -gt 0
+          set days $filtered_argv[1]
+        end
+
+        # --- OpenAI: /v1/organization/costs ---
+        # Response amounts are USD (decimal strings); single endpoint, paginated by cursor.
+        if set -q OPENAI_ADMIN_KEY
+          set -l now (date +%s)
+          set -l start_time (math "$now - $days * 86400")
+          set -l url "https://api.openai.com/v1/organization/costs?start_time=$start_time&group_by[]=line_item&limit=180"
+          set -l data (_llm-paginate-json $debug $url \
+            -H "Authorization: Bearer $OPENAI_ADMIN_KEY")
+          if test $status -ne 0
+            echo "OpenAI error: $data"
+          else
+            set -l total (printf '%s\n' $data | jq '[.[].results[].amount.value | tonumber] | add // 0')
+            if test -z "$total" -o "$total" = "null" -o "$total" = "0"
+              echo "OpenAI: no data"
+            else
+              set_color --bold; printf "=== OpenAI (%d days) ===\n" $days; set_color normal
               printf "Total: \$%.2f\n" $total
-              printf '%s\n' $resp | jq -r '
-                [.data[].results[] | select((.amount.value // 0) > 0)]
+              printf '%s\n' $data | jq -r '
+                [.[].results[] | select((.amount.value | tonumber) > 0)]
                 | group_by(.line_item)
-                | map({item: .[0].line_item, total: ([.[].amount.value] | add)})
+                | map({item: .[0].line_item, total: ([.[].amount.value | tonumber] | add)})
                 | sort_by(-.total)[]
                 | "  \(.item): $\(.total * 100 | round | . / 100)"'
-            else
-              echo "OpenAI: failed to fetch costs"
             end
           end
         else
-          echo "OpenAI: no API key set (OPENAI_API_KEY or OPENAI_ADMIN_KEY)"
+          echo "OpenAI: no admin key set (OPENAI_ADMIN_KEY)"
         end
 
         echo ""
 
-        set -l anthropic_key ""
+        # --- Anthropic: /v1/organizations/cost_report ---
+        # Response amounts are in cents (divide by 100 for USD).
+        # Standard + batch tier only; priority/fast-mode tier uses a separate billing
+        # model and is excluded by design — see Claude Code section below for that.
         if set -q ANTHROPIC_ADMIN_KEY
-          set anthropic_key $ANTHROPIC_ADMIN_KEY
-        else if set -q ANTHROPIC_API_KEY
-          set anthropic_key $ANTHROPIC_API_KEY
-        end
-
-        if test -n "$anthropic_key"
           set -l start_date (date -d "$days days ago" -u +%Y-%m-%dT00:00:00Z)
-          set -l end_date (date -u +%Y-%m-%dT23:59:59Z)
-          set -l resp (curl -s "https://api.anthropic.com/v1/organizations/cost_report?starting_at=$start_date&ending_at=$end_date&bucket_width=1d&group_by[]=description" \
+          set -l end_date (date -d tomorrow -u +%Y-%m-%dT00:00:00Z)
+          set -l url "https://api.anthropic.com/v1/organizations/cost_report?starting_at=$start_date&ending_at=$end_date&bucket_width=1d&group_by[]=model&limit=31"
+          set -l data (_llm-paginate-json $debug $url \
             -H "anthropic-version: 2023-06-01" \
-            -H "x-api-key: $anthropic_key")
-          set -l err (printf '%s\n' $resp | jq -r '.error.message // empty' 2>/dev/null)
-          if test -n "$err"
-            echo "Anthropic: $err"
+            -H "x-api-key: $ANTHROPIC_ADMIN_KEY")
+          if test $status -ne 0
+            echo "Anthropic error: $data"
           else
-            set -l total_cents (printf '%s\n' $resp | jq '[.data[].results[].amount | tonumber] | add // 0' 2>/dev/null)
-            if test -n "$total_cents" -a "$total_cents" != "null"
-              set_color --bold
-              printf "=== Anthropic (%d days) ===\n" $days
-              set_color normal
-              printf "Total: \$%.2f\n" (math "$total_cents / 100")
-              printf '%s\n' $resp | jq -r '
-                [.data[].results[] | select((.amount | tonumber) > 0)]
+            set -l total (printf '%s\n' $data | jq '[.[].results[].amount | tonumber] | add // 0')
+            if test -z "$total" -o "$total" = "null" -o "$total" = "0"
+              echo "Anthropic: no data"
+            else
+              set_color --bold; printf "=== Anthropic (%d days) ===\n" $days; set_color normal
+              printf "Total: \$%.2f (standard+batch tier)\n" (math "$total / 100")
+              printf '%s\n' $data | jq -r '
+                [.[].results[] | select((.amount | tonumber) > 0)]
                 | group_by(.model // "other")
                 | map({model: .[0].model // "other", total: ([.[].amount | tonumber] | add)})
                 | sort_by(-.total)[]
                 | "  \(.model): $\(.total | round | . / 100)"'
-            else
-              echo "Anthropic: failed to fetch costs"
+              set_color brblack
+              echo "  (priority/fast-mode tier billed separately, see Claude Code section)"
+              set_color normal
+            end
+          end
+
+          # --- Anthropic Claude Code: /v1/organizations/usage_report/claude_code ---
+          # Anthropic's own per-day estimated cost across ALL tiers including priority/fast.
+          # Endpoint accepts a single date only, so we loop one paginated request per day.
+          # Per-record schema: .actor, .models[]{model, estimated_cost.amount (cents), ...}
+          set -l cc_pages
+          set -l cc_err ""
+          for offset in (seq (math "$days - 1") -1 0)
+            set -l day (date -d "$offset days ago" -u +%Y-%m-%d)
+            set -l cc_url "https://api.anthropic.com/v1/organizations/usage_report/claude_code?starting_at=$day&limit=1000"
+            set -l cc_data (_llm-paginate-json $debug $cc_url \
+              -H "anthropic-version: 2023-06-01" \
+              -H "x-api-key: $ANTHROPIC_ADMIN_KEY")
+            if test $status -ne 0
+              set cc_err "$cc_data"
+              break
+            end
+            set -a cc_pages $cc_data
+          end
+
+          if test -n "$cc_err"
+            echo ""
+            echo "Anthropic Claude Code error: $cc_err"
+          else
+            set -l merged (printf '%s\n' $cc_pages | jq -sc 'add // []')
+            set -l cc_total (printf '%s\n' $merged | jq '[.[].models[].estimated_cost.amount | tonumber] | add // 0')
+            if test -n "$cc_total" -a "$cc_total" != "null" -a "$cc_total" != "0"
+              echo ""
+              set_color --bold; printf "=== Anthropic Claude Code estimate (%d days) ===\n" $days; set_color normal
+              printf "Total: \$%.2f (all tiers, Anthropic estimate)\n" (math "$cc_total / 100")
+              printf '%s\n' $merged | jq -r '
+                [.[].models[] | select((.estimated_cost.amount | tonumber) > 0)]
+                | group_by(.model)
+                | map({model: .[0].model, total: ([.[].estimated_cost.amount | tonumber] | add)})
+                | sort_by(-.total)[]
+                | "  \(.model): $\(.total | round | . / 100)"'
             end
           end
         else
-          echo "Anthropic: no API key set (ANTHROPIC_ADMIN_KEY or ANTHROPIC_API_KEY)"
+          echo "Anthropic: no admin key set (ANTHROPIC_ADMIN_KEY)"
         end
 
         env-cleanup $_pre_vars
       '';
-      llm-costs.description = "Show LLM API usage costs (default: last 30 days, pass N for custom)";
+      llm-costs.description = "Show LLM API usage costs (default: last 30 days; pass N for custom, --debug for raw responses)";
       env-cleanup.body = ''
         for _v in (set --names -x)
           if not contains $_v $argv
@@ -751,220 +827,220 @@ retry:
     };
   };
 
-## # https://starship.rs/config
-## "$schema" = 'https://starship.rs/config-schema.json'
-## format = """
-## $shell$time\
-## $username$hostname\
-## $directory$nix_shell\
-## $git_branch$git_commit$git_state$git_status\
-## $python\
-## $kubernetes\
-## $aws\
-## $status$cmd_duration$jobs\
-## $line_break\
-## $character
-## """
-## 
-## #add_newline = true
-## 
-## # Replace the '❯' symbol in the prompt with '➜'
-## [character] # The name of the module we are configuring is 'character'
-## success_symbol = '[\$](bold green)' # The 'success_symbol' segment is being set to '➜' with the color 'bold green'
-## error_symbol = '[\$](bold red)' # The 'success_symbol' segment is being set to '➜' with the color 'bold green'
-## vimcmd_symbol = '[\$](bold white bg:#ff1493)' 
-## 
-## [directory]
-## truncation_length = 3
-## truncate_to_repo = false
-## fish_style_pwd_dir_length = 2
-## style = "green"
-## 
-## [git_branch]
-## format = '[$symbol$branch(:$remote_branch)]($style)'
-## style = 'purple'
-## ignore_branches = []
-## #symbol = ' '
-## symbol = ''
-## 
-## [git_commit]
-## format = '[#$hash$tag]($style) '
-## tag_symbol = ''
-## style = 'purple'
-## 
-## [git_status]
-## style = 'purple'
-## stashed = ''
-## 
-## [hostname]
-## ssh_only = false
-## format = '[@](fg:#666666)[$hostname](bold white) '
-## trim_at = ''
-## 
-## [status]
-## format = '[$status](bold red) '
-## disabled = false
-## 
-## [username]
-## style_user = 'bold white'
-## format = '[$user]($style)'
-## show_always = true
-## 
-## [python]
-## format = '([🐍](yellow)[$virtualenv]($style) )'
-## style = "cyan"
-## 
-## [shell]
-## disabled = true
-## fish_indicator = ''
-## format = '[$indicator ]($style)'
-## 
-## [cmd_duration]
-## format = '[$duration]($style) '
-## min_time = 5000
-## 
-## [jobs]
-## number_threshold = 1
-## 
-## [time]
-## disabled = false
-## style = "fg:#777777"
-## format = '[$time]($style) '
-## 
-## [nix_shell]
-## format = '[$symbol$state]($style) '
-## #symbol = '❄️'
-## symbol = '*'
-## style = 'bold blue'
-## impure_msg = ''
-## pure_msg = ''
-## unknown_msg = ''
-## 
-## 
-## [kubernetes]
-## format = '[⛵$context](dimmed cyan) '
-## disabled = false
-## 
-## [aws]
-## format = '[$symbol($profile )(\($region\) )]($style)'
-## style = 'bold blue'
-## symbol = ''#'🅰 '
-## [aws.region_aliases]
-## us-east-1 = 'ue1'
-## [aws.profile_aliases]
-## "wbd-syndication-dev-/wbd-syndication-developer" = 'wbd-synd-dev'
-## "aws-aio-eks-poc2-/AWSAdmin" = 'eks-poc2'
-## "aws-aio-eks-poc1-/AWSAdmin" = 'eks-poc1'
-## "wbd-ms-rally-dev-/ms-rally-developer" = 'ms-rally-dev'
-## 
-## 
-## [[kubernetes.contexts]]
-## context_pattern = "kind-(?P<cluster>.+)"
-## context_alias = "kind-$cluster"
-## 
-## [[kubernetes.contexts]]
-## context_pattern = "(?P<cluster>[\\w-]+):(?P<account>\\d+):(?P<name>[\\w-]+)"
-## context_alias = "aws-$cluster"
-## 
-## [[kubernetes.contexts]]
-## context_pattern = "default"
-## context_alias = "home"
-## 
-## #[[kubernetes.contexts]]
-## #context_pattern = ".+"
-## #context_alias = "yipee"
+  ## # https://starship.rs/config
+  ## "$schema" = 'https://starship.rs/config-schema.json'
+  ## format = """
+  ## $shell$time\
+  ## $username$hostname\
+  ## $directory$nix_shell\
+  ## $git_branch$git_commit$git_state$git_status\
+  ## $python\
+  ## $kubernetes\
+  ## $aws\
+  ## $status$cmd_duration$jobs\
+  ## $line_break\
+  ## $character
+  ## """
+  ##
+  ## #add_newline = true
+  ##
+  ## # Replace the '❯' symbol in the prompt with '➜'
+  ## [character] # The name of the module we are configuring is 'character'
+  ## success_symbol = '[\$](bold green)' # The 'success_symbol' segment is being set to '➜' with the color 'bold green'
+  ## error_symbol = '[\$](bold red)' # The 'success_symbol' segment is being set to '➜' with the color 'bold green'
+  ## vimcmd_symbol = '[\$](bold white bg:#ff1493)'
+  ##
+  ## [directory]
+  ## truncation_length = 3
+  ## truncate_to_repo = false
+  ## fish_style_pwd_dir_length = 2
+  ## style = "green"
+  ##
+  ## [git_branch]
+  ## format = '[$symbol$branch(:$remote_branch)]($style)'
+  ## style = 'purple'
+  ## ignore_branches = []
+  ## #symbol = ' '
+  ## symbol = ''
+  ##
+  ## [git_commit]
+  ## format = '[#$hash$tag]($style) '
+  ## tag_symbol = ''
+  ## style = 'purple'
+  ##
+  ## [git_status]
+  ## style = 'purple'
+  ## stashed = ''
+  ##
+  ## [hostname]
+  ## ssh_only = false
+  ## format = '[@](fg:#666666)[$hostname](bold white) '
+  ## trim_at = ''
+  ##
+  ## [status]
+  ## format = '[$status](bold red) '
+  ## disabled = false
+  ##
+  ## [username]
+  ## style_user = 'bold white'
+  ## format = '[$user]($style)'
+  ## show_always = true
+  ##
+  ## [python]
+  ## format = '([🐍](yellow)[$virtualenv]($style) )'
+  ## style = "cyan"
+  ##
+  ## [shell]
+  ## disabled = true
+  ## fish_indicator = ''
+  ## format = '[$indicator ]($style)'
+  ##
+  ## [cmd_duration]
+  ## format = '[$duration]($style) '
+  ## min_time = 5000
+  ##
+  ## [jobs]
+  ## number_threshold = 1
+  ##
+  ## [time]
+  ## disabled = false
+  ## style = "fg:#777777"
+  ## format = '[$time]($style) '
+  ##
+  ## [nix_shell]
+  ## format = '[$symbol$state]($style) '
+  ## #symbol = '❄️'
+  ## symbol = '*'
+  ## style = 'bold blue'
+  ## impure_msg = ''
+  ## pure_msg = ''
+  ## unknown_msg = ''
+  ##
+  ##
+  ## [kubernetes]
+  ## format = '[⛵$context](dimmed cyan) '
+  ## disabled = false
+  ##
+  ## [aws]
+  ## format = '[$symbol($profile )(\($region\) )]($style)'
+  ## style = 'bold blue'
+  ## symbol = ''#'🅰 '
+  ## [aws.region_aliases]
+  ## us-east-1 = 'ue1'
+  ## [aws.profile_aliases]
+  ## "wbd-syndication-dev-/wbd-syndication-developer" = 'wbd-synd-dev'
+  ## "aws-aio-eks-poc2-/AWSAdmin" = 'eks-poc2'
+  ## "aws-aio-eks-poc1-/AWSAdmin" = 'eks-poc1'
+  ## "wbd-ms-rally-dev-/ms-rally-developer" = 'ms-rally-dev'
+  ##
+  ##
+  ## [[kubernetes.contexts]]
+  ## context_pattern = "kind-(?P<cluster>.+)"
+  ## context_alias = "kind-$cluster"
+  ##
+  ## [[kubernetes.contexts]]
+  ## context_pattern = "(?P<cluster>[\\w-]+):(?P<account>\\d+):(?P<name>[\\w-]+)"
+  ## context_alias = "aws-$cluster"
+  ##
+  ## [[kubernetes.contexts]]
+  ## context_pattern = "default"
+  ## context_alias = "home"
+  ##
+  ## #[[kubernetes.contexts]]
+  ## #context_pattern = ".+"
+  ## #context_alias = "yipee"
   programs.starship = {
     enable = true;
     settings = {
       add_newline = true;
       format = "$shell$time$username$hostname$directory$nix_shell$git_branch$git_commit$git_state$git_status$python$kubernetes$aws$status$cmd_duration$jobs$line_break$character";
-        character = {
-            success_symbol = "[\\$](bold green)";
-            error_symbol = "[\\$](bold red)";
-            vimcmd_symbol = "[\\$](bold white bg:#ff1493)";
+      character = {
+        success_symbol = "[\\$](bold green)";
+        error_symbol = "[\\$](bold red)";
+        vimcmd_symbol = "[\\$](bold white bg:#ff1493)";
+      };
+      directory = {
+        truncation_length = 3;
+        truncate_to_repo = false;
+        fish_style_pwd_dir_length = 2;
+        style = "green";
+      };
+      git_branch = {
+        format = "[$symbol$branch(:$remote_branch)]($style)";
+        style = "purple";
+        ignore_branches = [];
+        symbol = "";
+      };
+      git_commit = {
+        format = "[#$hash$tag]($style) ";
+        tag_symbol = "";
+        style = "purple";
+      };
+      git_status = {
+        style = "purple";
+        stashed = "";
+      };
+      hostname = {
+        ssh_only = false;
+        format = "[@](fg:#666666)[$hostname](bold white) ";
+        trim_at = "";
+      };
+      status = {
+        format = "[$status](bold red) ";
+        disabled = false;
+      };
+      username = {
+        style_user = "bold white";
+        format = "[$user]($style)";
+        show_always = true;
+      };
+      python = {
+        format = "([🐍](yellow)[$virtualenv]($style) )";
+        style = "cyan";
+      };
+      shell = {
+        disabled = true;
+        fish_indicator = "";
+        format = "[$indicator ]($style)";
+      };
+      cmd_duration = {
+        format = "[$duration]($style) ";
+        min_time = 5000;
+      };
+      jobs = {
+        number_threshold = 1;
+      };
+      time = {
+        disabled = false;
+        style = "fg:#777777";
+        format = "[$time]($style) ";
+      };
+      nix_shell = {
+        format = "[$symbol$state]($style) ";
+        symbol = "*";
+        style = "bold blue";
+        impure_msg = "";
+        pure_msg = "";
+        unknown_msg = "";
+      };
+      kubernetes = {
+        format = "[⛵$context](dimmed cyan) ";
+        disabled = false;
+      };
+      aws = {
+        format = "[$symbol($profile )(\($region\) )]($style)";
+        style = "bold blue";
+        symbol = "";
+        region_aliases = {
+          "us-east-1" = "ue1";
         };
-        directory = {
-            truncation_length = 3;
-            truncate_to_repo = false;
-            fish_style_pwd_dir_length = 2;
-            style = "green";
-        };
-        git_branch = {
-            format = "[$symbol$branch(:$remote_branch)]($style)";
-            style = "purple";
-            ignore_branches = [ ];
-            symbol = "";
-        };
-        git_commit = {
-            format = "[#$hash$tag]($style) ";
-            tag_symbol = "";
-            style = "purple";
-        };
-        git_status = {
-            style = "purple";
-            stashed = "";
-        };
-        hostname = {
-            ssh_only = false;
-            format = "[@](fg:#666666)[$hostname](bold white) ";
-            trim_at = "";
-        };
-        status = {
-            format = "[$status](bold red) ";
-            disabled = false;
-        };
-        username = {
-            style_user = "bold white";
-            format = "[$user]($style)";
-            show_always = true;
-        };
-        python = {
-            format = "([🐍](yellow)[$virtualenv]($style) )";
-            style = "cyan";
-        };
-        shell = {
-            disabled = true;
-            fish_indicator = "";
-            format = "[$indicator ]($style)";
-        };
-        cmd_duration = {
-            format = "[$duration]($style) ";
-            min_time = 5000;
-        };
-        jobs = {
-            number_threshold = 1;
-        };
-        time = {
-            disabled = false;
-            style = "fg:#777777";
-            format = "[$time]($style) ";
-        };
-        nix_shell = {
-            format = "[$symbol$state]($style) ";
-            symbol = "*";
-            style = "bold blue";
-            impure_msg = "";
-            pure_msg = "";
-            unknown_msg = "";
-        };
-        kubernetes = {
-            format = "[⛵$context](dimmed cyan) ";
-            disabled = false;
-        };
-        aws = {
-            format = "[$symbol($profile )(\($region\) )]($style)";
-            style = "bold blue";
-            symbol = "";
-            region_aliases = {
-              "us-east-1" = "ue1";
-            };
-            profile_aliases = {
-              "wbd-syndication-dev-/wbd-syndication-developer" = "wbd-synd-dev";
-              "aws-aio-eks-poc2-/AWSAdmin" = "eks-poc2";
-              "aws-aio-eks-poc1-/AWSAdmin" = "eks-poc1";
-              "wbd-ms-rally-dev-/ms-rally-developer" = "ms-rally-dev";
-            };
+        profile_aliases = {
+          "wbd-syndication-dev-/wbd-syndication-developer" = "wbd-synd-dev";
+          "aws-aio-eks-poc2-/AWSAdmin" = "eks-poc2";
+          "aws-aio-eks-poc1-/AWSAdmin" = "eks-poc1";
+          "wbd-ms-rally-dev-/ms-rally-developer" = "ms-rally-dev";
         };
       };
     };
+  };
 }

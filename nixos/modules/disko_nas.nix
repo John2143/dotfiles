@@ -52,8 +52,8 @@
                 type = "filesystem";
                 format = "vfat";
                 mountpoint = "/boot";
-                mountOptions = [ "umask=0077" ];
-                extraArgs = [ "-n" "BOOT" ];
+                mountOptions = ["umask=0077"];
+                extraArgs = ["-n" "BOOT"];
               };
             };
             swap = {
@@ -61,7 +61,7 @@
               content = {
                 type = "swap";
                 randomEncryption = true;
-                extraArgs = [ "-L" "SWAP" ];
+                extraArgs = ["-L" "SWAP"];
               };
             };
             zfs_special = {
@@ -79,7 +79,7 @@
                 type = "filesystem";
                 format = "ext4";
                 mountpoint = "/";
-                extraArgs = [ "-L" "NIXROOT" ];
+                extraArgs = ["-L" "NIXROOT"];
               };
             };
           };

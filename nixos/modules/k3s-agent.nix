@@ -1,10 +1,13 @@
-{ config, lib, ... }:
 {
+  config,
+  lib,
+  ...
+}: {
   options.custom.k3sNodeTaints = lib.mkOption {
     type = lib.types.listOf lib.types.str;
     default = [];
     description = "Node taints to apply when the k3s agent first registers.";
-    example = [ "seated=true:NoSchedule" ];
+    example = ["seated=true:NoSchedule"];
   };
 
   config = {

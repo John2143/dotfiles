@@ -18,34 +18,54 @@ let
   # generate with `ssh-keygen -f ~/.ssh/age; cat ~/.ssh/age.pub -p` on each host, then paste here
 
   # Collect all keys that should be able to re-encrypt / manage secrets.
-  allKeys = [ office arch ];
-in
-{
+  allKeys = [office arch];
+in {
   # Readable only by the office machine (k3s agent token).
-  "k3s-local-token.age".publicKeys = [ office arch pite ];
+  "k3s-local-token.age".publicKeys = [office arch pite];
   # Samba credentials for mounting NAS shares (username/password/domain).
-  "smb-credentials.age".publicKeys = [ arch office closet secu ];
+  "smb-credentials.age".publicKeys = [arch office closet secu];
   # Per-machine restic repository passwords (each machine can only decrypt its own).
   # Generate: agenix -e restic-password-<host>.age -i ~/.ssh/age
-  "restic-password-arch.age".publicKeys = [ arch office ];
-  "restic-password-office.age".publicKeys = [ office arch ];
-  "restic-password-closet.age".publicKeys = [ closet office arch ];
-  "restic-password-secu.age".publicKeys = [ secu office arch ];
+  "restic-password-arch.age".publicKeys = [arch office];
+  "restic-password-office.age".publicKeys = [office arch];
+  "restic-password-closet.age".publicKeys = [closet office arch];
+  "restic-password-secu.age".publicKeys = [secu office arch];
   # Private SSH key for the backup user on the NAS (all backup clients need this).
   # Generate once: ssh-keygen -t ed25519 -f /tmp/backup-key -N "" -C "backup@nas"
   # Then: agenix -e backup-ssh-key.age -i ~/.ssh/age  (paste the private key)
   # Add the public key to nas-configuration.nix backup user's authorizedKeys.
-  "backup-ssh-key.age".publicKeys = [ office arch closet secu ];
+  "backup-ssh-key.age".publicKeys = [office arch closet secu];
   # gocryptfs passphrase for encrypted vault on NAS scratch share.
   # Only workstations that mount the vault need this — the NAS never sees the key.
-  "gocryptfs-passphrase.age".publicKeys = [ arch office closet ];
+  "gocryptfs-passphrase.age".publicKeys = [arch office closet];
   # RustFS (minio) credentials for bigjuush/juush.
   # Format: RUSTFS_USER=...\nRUSTFS_PASSWORD=...\nJUUSH_KEY=...
-  "rustfs-credentials.age".publicKeys = [ office arch nas closet ];
-  # LLM API keys for omp on workstations. Env-file format:
+  "rustfs-credentials.age".publicKeys = [office arch nas closet];
+  # LEGACY combined LLM keys file. Kept during transition; new code uses the
+  # split files below (llm-runtime-keys, llm-admin-keys). Remove once all hosts
+  # have rebuilt against the split files.
+  "llm-api-keys.age".publicKeys = [office arch];
+
+  # Runtime LLM keys — handed to wrapped third-party binaries (omp, claude).
+  # Format:
   #   ANTHROPIC_API_KEY=sk-ant-...
   #   OPENAI_API_KEY=sk-...
-  #   ANTHROPIC_ADMIN_KEY=sk-ant-admin-...  (for llm-costs, from console.anthropic.com/settings/admin-keys)
-  #   OPENAI_ADMIN_KEY=sk-admin-...          (for llm-costs, optional if regular key has org access)
-  "llm-api-keys.age".publicKeys = [ office arch ];
+  # pite is included so the canary host can decrypt a same-named bait file
+  # (overridden via mkForce in nixos/pite-canary.nix to point at the bait .age).
+  "llm-runtime-keys.age".publicKeys = [office arch pite];
+
+  # Admin LLM keys — only consumed by `llm-load-keys` (interactive shell helper),
+  # never by a wrapped third-party process. Kept off pite/canary entirely.
+  # Format:
+  #   ANTHROPIC_ADMIN_KEY=sk-ant-admin-...  (console.anthropic.com/settings/admin-keys)
+  #   OPENAI_ADMIN_KEY=sk-admin-...
+  "llm-admin-keys.age".publicKeys = [office arch];
+
+  # Bait runtime keys for the pite canary. Same env-var names as the real
+  # runtime file but with canarytokens.org-issued AWS-shaped tokens that ping
+  # a webhook on use. See nixos/pite-canary.nix.
+  "llm-runtime-keys-bait.age".publicKeys = [pite];
+
+  "hass-credentials.age".publicKeys = [arch];
+  "canary-tokens.age".publicKeys = [office arch pite];
 }

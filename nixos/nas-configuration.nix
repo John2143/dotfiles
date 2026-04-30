@@ -96,7 +96,6 @@
 # 9. Rebuild:
 #      sudo nixos-rebuild switch --flake /home/john/dotfiles#nas
 #
-
 {
   config,
   lib,
@@ -106,9 +105,7 @@
   compName,
   sshKeys,
   ...
-}:
-
-{
+}: {
   imports = [
     ./nas-hardware-configuration.nix
     ./modules/user-john.nix
@@ -121,7 +118,7 @@
     host = lib.mkDefault "127.0.0.1";
     openFirewall = lib.mkForce false;
     models = "/tank/share/ollama/models";
-    modelNames = [ "gemma4" "qwen3.6" "kimi-k2.6" ];
+    modelNames = ["gemma4" "qwen3.6" "kimi-k2.6"];
   };
 
   boot.loader = {
@@ -141,19 +138,19 @@
   # instead:
   # nix flake at /tank/minecraft/AoC/flake.nix: nix flake run
   #virtualisation.oci-containers = {
-    #backend = "podman";
-    #containers.minecraft = {
-      #image = "docker.io/itzg/minecraft-server:latest";
-      #ports = [ "25565:25565" ];
-      #environment = {
-        #EULA = "TRUE";
-        #TYPE = "NEOFORGE";
-        #MEMORY = "6G";
-      #};
-      #volumes = [
-        #"/tank/minecraft:/data"
-      #];
-    #};
+  #backend = "podman";
+  #containers.minecraft = {
+  #image = "docker.io/itzg/minecraft-server:latest";
+  #ports = [ "25565:25565" ];
+  #environment = {
+  #EULA = "TRUE";
+  #TYPE = "NEOFORGE";
+  #MEMORY = "6G";
+  #};
+  #volumes = [
+  #"/tank/minecraft:/data"
+  #];
+  #};
   #};
 
   # ================
@@ -382,8 +379,8 @@
   networking.firewall = {
     #enable = true;
     allowedTCPPorts = [
-      2283   # immich
-      25565  # minecraft
+      2283 # immich
+      25565 # minecraft
     ];
   };
 
