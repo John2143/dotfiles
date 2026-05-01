@@ -136,7 +136,7 @@
     host = lib.mkDefault "127.0.0.1";
     openFirewall = lib.mkForce false;
     models = "/neo/ollama/models";
-    modelNames = ["gemma4" "qwen3.6:27b"];
+    modelNames = ["gemma4" "qwen3.6:27b" "qwen3.6:latest"];
   };
 
   boot.loader = {
