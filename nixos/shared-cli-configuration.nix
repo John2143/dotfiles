@@ -138,7 +138,7 @@
         exec sudo -E ${pkgs.rsync}/bin/rsync -ahP --delete \
           --chown=john:users \
           --rsh="sudo -u john ${pkgs.openssh}/bin/ssh" \
-          nas:/tank/share/ollama/models/ /var/lib/ollama/models/
+          nas:/neo/ollama/models/ /var/lib/ollama/models/
       '')
     ];
 

@@ -114,10 +114,28 @@
   home-manager.users."john" = import ./home-cli.nix;
   services.getty.autologinUser = "john";
 
+  # Ollama models live on the neo SSD pool, not tank. Cold loads hit SSD
+  # speed instead of HDD seek, and 31G of model blobs don't evict useful
+  # content from tank's 200G L2ARC. Models are reproducible via `ollama
+  # pull`, so the lack of redundancy on neo is acceptable.
+  #
+  # One-time dataset setup:
+  #   sudo systemctl stop ollama-model-pull ollama
+  #   sudo zfs create \
+  #     -o mountpoint=/neo/ollama \
+  #     -o recordsize=1M \
+  #     -o compression=off \
+  #     -o atime=off \
+  #     neo/ollama
+  #   sudo rsync -aHAX /tank/share/ollama/models/ /neo/ollama/models/
+  #   sudo chown -R john:users /neo/ollama
+  #   sudo nixos-rebuild switch --flake /home/john/dotfiles#nas
+  #   # verify, then drop the old copy:
+  #   sudo rm -rf /tank/share/ollama
   services.ollama = {
     host = lib.mkDefault "127.0.0.1";
     openFirewall = lib.mkForce false;
-    models = "/tank/share/ollama/models";
+    models = "/neo/ollama/models";
     modelNames = ["gemma4" "qwen3.6:27b" "kimi-k2.6"];
   };
 
