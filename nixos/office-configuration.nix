@@ -12,6 +12,7 @@
     ./modules/user-john.nix
     ./modules/ollama.nix
     ./modules/vllm.nix
+    ./modules/vllm-proxy.nix
     #./waybar.nix
     # inputs.home-manager.nixosModules.default
   ];
@@ -118,6 +119,16 @@
     languageModelOnly = true;
     gpuBackend = "rocm";
     image = "vllm/vllm-openai-rocm:latest";
+    autoStart = false;
+    conflictsServices = ["ollama.service"];
+    port = 8001;
+    openFirewall = false;
+  };
+
+  services.vllm-proxy = {
+    enable = true;
+    idleTimeoutSeconds = 600;
+    onIdleStart = ["ollama.service"];
   };
 
   # drones

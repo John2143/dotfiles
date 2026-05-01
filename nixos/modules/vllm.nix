@@ -152,6 +152,26 @@ in {
       default = [];
       description = "Extra CLI arguments appended to the vllm serve command.";
     };
+
+    autoStart = lib.mkOption {
+      type = lib.types.bool;
+      default = true;
+      description = ''
+        Whether to start vllm automatically at boot. Set false when another
+        service (e.g. ollama) should be the default GPU consumer; vllm then
+        runs only when started manually or via Conflicts= from another unit.
+      '';
+    };
+
+    conflictsServices = lib.mkOption {
+      type = lib.types.listOf lib.types.str;
+      default = [];
+      description = ''
+        Units that should be stopped whenever vllm starts (and vice versa).
+        Typically set to ["ollama.service"] on machines where both share a GPU.
+      '';
+      example = ["ollama.service"];
+    };
   };
 
   config = lib.mkIf cfg.enable {
@@ -169,6 +189,11 @@ in {
     systemd.tmpfiles.rules = [
       "d ${cfg.huggingfaceCacheDir} 0755 john users -"
     ];
+
+    systemd.services.podman-vllm = {
+      wantedBy = lib.mkIf (!cfg.autoStart) (lib.mkForce []);
+      conflicts = cfg.conflictsServices;
+    };
 
     virtualisation.oci-containers.backend = "podman";
     virtualisation.oci-containers.containers.vllm = {
