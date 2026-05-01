@@ -135,8 +135,15 @@
         '')
       (pkgs.writeShellScriptBin "ollama-sync" ''
         set -euo pipefail
+        # --chmod forces 0644/0755 on the destination regardless of source mode.
+        # The NAS daemon historically created 0600 manifests/blobs (umask 0077),
+        # which break the local daemon's runner subprocess under
+        # ProtectSystem=strict + NoNewPrivileges — symptom is `bad manifest …
+        # permission denied` and the model vanishing from `ollama list` even
+        # though john owns the files.
         exec sudo -E ${pkgs.rsync}/bin/rsync -ahP --delete \
           --chown=john:users \
+          --chmod=Du=rwx,Dgo=rx,Fu=rw,Fgo=r \
           --rsh="sudo -u john ${pkgs.openssh}/bin/ssh" \
           nas:/neo/ollama/models/ /var/lib/ollama/models/
       '')
