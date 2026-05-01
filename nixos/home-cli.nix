@@ -134,7 +134,7 @@ in {
           api: openai-completions
           auth: none
           models:
-            - id: qwen3.6
+            - id: qwen3.6:27b
               name: Qwen 3.6 (Office vLLM)
               reasoning: true
               input: [text]
@@ -154,7 +154,7 @@ in {
               cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }
               contextWindow: 128000
               maxTokens: 8192
-            - id: qwen3.6
+            - id: qwen3.6:27b
               name: Qwen 3 (Office ROCm)
               reasoning: true
               input: [text]
@@ -179,8 +179,8 @@ in {
 
     ".omp/agent/config.yml".text = ''
       modelRoles:
-        default: office-vllm/qwen3.6
-        smol: office-vllm/qwen3.6
+        default: office-vllm/qwen3.6:27b
+        smol: office-vllm/qwen3.6:27b
 
       modelProviderOrder:
         - office-vllm
