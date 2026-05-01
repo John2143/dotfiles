@@ -133,6 +133,8 @@
     gdtoolkit_4 # gdscript linter/formatter
     protonup-qt
 
+    openrct2
+
     #nvtop # unfree
   ];
 
