@@ -23,7 +23,7 @@
 #   services.vllm = {
 #     enable = true;
 #     model = "Qwen/Qwen3.6-35B-A3B";
-#     chatTemplate = ../../references/qwen3.6-chat-template.jinja;
+#     chatTemplate = ../references/qwen3.6-chat-template.jinja;
 #   };
 #
 {

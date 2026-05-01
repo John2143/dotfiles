@@ -244,7 +244,7 @@ in
     enable = true;
     model = "Qwen/Qwen3.6-35B-A3B";
     servedModelName = "qwen3.6";
-    chatTemplate = ../../references/qwen3.6-chat-template.jinja;
+    chatTemplate = ../references/qwen3.6-chat-template.jinja;
     toolCallParser = "qwen3_xml";
     reasoningParser = "qwen3";
     languageModelOnly = true;
