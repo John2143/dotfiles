@@ -235,20 +235,8 @@ in
     package = pkgs.ollama-cuda;
   };
 
-  # vLLM serves Qwen with proper tool calling (qwen3_xml parser + fixed template).
-  # Ollama's Qwen tool calling is unreliable (ollama#14745); vLLM + froggeric's
-  # fixed template resolves: argument serialization bugs, </thinking> hallucination,
-  # empty think block spam, and developer role rejection.
-  # See: https://www.reddit.com/r/Vllm/comments/1skks8n/
-  services.vllm = {
-    enable = true;
-    model = "Qwen/Qwen3.6-35B-A3B";
-    servedModelName = "qwen3.6";
-    chatTemplate = ../references/qwen3.6-chat-template.jinja;
-    toolCallParser = "qwen3_xml";
-    reasoningParser = "qwen3";
-    languageModelOnly = true;
-  };
+  # vLLM disabled: GPU has <8GB VRAM, can't fit Qwen3.6-35B-A3B.
+  # Only gemma4 fits via ollama on this box.
 
   # # Open ports in the firewall.
   # networking.firewall.allowedTCPPorts = [

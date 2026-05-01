@@ -162,21 +162,7 @@ in {
               contextWindow: 128000
               maxTokens: 8192
 
-        # vLLM on arch — reliable Qwen tool calling (qwen3_xml parser +
-        # froggeric fixed template). Prefer over ollama for agentic work.
-        arch-vllm:
-          baseUrl: http://arch:8000/v1
-          api: openai-completions
-          auth: none
-          models:
-            - id: qwen3.6
-              name: Qwen 3.6 (Arch vLLM)
-              reasoning: true
-              input: [text]
-              cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }
-              contextWindow: 65536
-              maxTokens: 8192
-
+        # arch GPU has <8GB VRAM — only gemma4 fits, no vLLM.
         arch-ollama:
           baseUrl: http://arch:11434/v1
           api: openai-completions
@@ -185,13 +171,6 @@ in {
             - id: gemma4
               name: Gemma 4 (Arch CUDA)
               reasoning: false
-              input: [text]
-              cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }
-              contextWindow: 128000
-              maxTokens: 8192
-            - id: qwen3.6
-              name: Qwen 3 (Arch CUDA)
-              reasoning: true
               input: [text]
               cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }
               contextWindow: 128000
@@ -205,7 +184,6 @@ in {
 
       modelProviderOrder:
         - office-vllm
-        - arch-vllm
         - office-ollama
         - arch-ollama
         - anthropic
@@ -214,7 +192,6 @@ in {
 
       enabledModels:
         - "office-vllm/*"
-        - "arch-vllm/*"
         - "office-ollama/*"
         - "arch-ollama/*"
         - "anthropic/*"
@@ -227,7 +204,6 @@ in {
         baseDelayMs: 2000
         fallbackChains:
           default:
-            - "arch-vllm/qwen3.6"
             - "arch-ollama/gemma4"
             - "anthropic/claude-sonnet-4-6"
     '';
