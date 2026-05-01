@@ -166,6 +166,10 @@ in {
 
     networking.firewall.allowedTCPPorts = lib.mkIf cfg.openFirewall [cfg.port];
 
+    systemd.tmpfiles.rules = [
+      "d ${cfg.huggingfaceCacheDir} 0755 john users -"
+    ];
+
     virtualisation.oci-containers.backend = "podman";
     virtualisation.oci-containers.containers.vllm = {
       image = cfg.image;
