@@ -118,7 +118,7 @@
     host = lib.mkDefault "127.0.0.1";
     openFirewall = lib.mkForce false;
     models = "/tank/share/ollama/models";
-    modelNames = ["gemma4" "qwen3.6" "kimi-k2.6"];
+    modelNames = ["gemma4" "qwen3.6:27b" "kimi-k2.6"];
   };
 
   boot.loader = {

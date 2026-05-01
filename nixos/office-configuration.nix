@@ -11,7 +11,6 @@
     ./office-hardware-configuration.nix
     ./modules/user-john.nix
     ./modules/ollama.nix
-    ./modules/vllm.nix
     #./waybar.nix
     # inputs.home-manager.nixosModules.default
   ];
@@ -106,18 +105,7 @@
 
   services.ollama = {
     package = pkgs.ollama-rocm;
-  };
-
-  services.vllm = {
-    enable = true;
-    model = "Qwen/Qwen3.6-35B-A3B";
-    servedModelName = "qwen3.6";
-    chatTemplate = ../references/qwen3.6-chat-template.jinja;
-    toolCallParser = "qwen3_xml";
-    reasoningParser = "qwen3";
-    languageModelOnly = true;
-    gpuBackend = "rocm";
-    image = "vllm/vllm-openai-rocm:latest";
+    modelNames = ["qwen3.6:27b"];
   };
 
   # drones
