@@ -99,8 +99,9 @@
     temurin-jre-bin-21 # java
 
     # both these depend on deno, which takes forever to compile on non-gui hosts
-    yt-dlp # youtube-dl
-    mpv # video player
+    # also clang ICE in rusty-v8 on unstable, so pull from stable
+    pkgs-stable.yt-dlp # youtube-dl
+    pkgs-stable.mpv # video player
 
     #mullvad-vpn # vpn
     plex-desktop # plex
