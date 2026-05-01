@@ -127,6 +127,21 @@ in {
 
     ".omp/agent/models.yml".text = ''
       providers:
+        # vLLM on office — reliable Qwen tool calling (qwen3_xml parser +
+        # froggeric fixed template). Prefer over ollama for agentic work.
+        office-vllm:
+          baseUrl: http://office:8000/v1
+          api: openai-completions
+          auth: none
+          models:
+            - id: qwen3.6
+              name: Qwen 3.6 (Office vLLM)
+              reasoning: true
+              input: [text]
+              cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }
+              contextWindow: 65536
+              maxTokens: 8192
+
         office-ollama:
           baseUrl: http://office:11434/v1
           api: openai-completions
@@ -145,6 +160,21 @@ in {
               input: [text]
               cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }
               contextWindow: 128000
+              maxTokens: 8192
+
+        # vLLM on arch — reliable Qwen tool calling (qwen3_xml parser +
+        # froggeric fixed template). Prefer over ollama for agentic work.
+        arch-vllm:
+          baseUrl: http://arch:8000/v1
+          api: openai-completions
+          auth: none
+          models:
+            - id: qwen3.6
+              name: Qwen 3.6 (Arch vLLM)
+              reasoning: true
+              input: [text]
+              cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }
+              contextWindow: 65536
               maxTokens: 8192
 
         arch-ollama:
@@ -170,10 +200,12 @@ in {
 
     ".omp/agent/config.yml".text = ''
       modelRoles:
-        default: office-ollama/qwen3.6
-        smol: office-ollama/qwen3.6
+        default: office-vllm/qwen3.6
+        smol: office-vllm/qwen3.6
 
       modelProviderOrder:
+        - office-vllm
+        - arch-vllm
         - office-ollama
         - arch-ollama
         - anthropic
@@ -181,6 +213,8 @@ in {
         - google
 
       enabledModels:
+        - "office-vllm/*"
+        - "arch-vllm/*"
         - "office-ollama/*"
         - "arch-ollama/*"
         - "anthropic/*"
@@ -193,6 +227,7 @@ in {
         baseDelayMs: 2000
         fallbackChains:
           default:
+            - "arch-vllm/qwen3.6"
             - "arch-ollama/gemma4"
             - "anthropic/claude-sonnet-4-6"
     '';
