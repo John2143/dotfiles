@@ -52,11 +52,19 @@ in {
     # The stock ollama unit uses DynamicUser, which can't write to paths owned by
     # john (NAS datasets, local state inherited from earlier setups).  Force the
     # service to run as john instead.
+    #
+    # UMask=0022: the upstream unit sets 0077, which yields mode-0600 manifests
+    # and blobs.  Those then break in two places: rsync -a preserves the mode,
+    # and the workstation daemon's runner subprocess fails to open them
+    # (EPERM) under the unit's ProtectSystem=strict + NoNewPrivileges sandbox,
+    # even though john owns the files.  0022 produces 0644 files that traverse
+    # cleanly NAS → workstation.
     systemd.services.ollama.serviceConfig = {
       User = lib.mkForce "john";
       Group = lib.mkForce "users";
       DynamicUser = lib.mkForce false;
       PrivateUsers = lib.mkForce false;
+      UMask = lib.mkForce "0022";
     };
 
     systemd.services.ollama-model-pull = lib.mkIf (cfg.modelNames != []) {

@@ -105,7 +105,6 @@
 
   services.ollama = {
     package = pkgs.ollama-rocm;
-    modelNames = ["qwen3.6:27b"];
   };
 
   # drones
