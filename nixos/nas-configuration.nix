@@ -254,6 +254,13 @@
         daily = 0;
         monthly = 0;
       };
+      # k8s Longhorn backup target. Long retention because this is the
+      # disaster-recovery layer for cluster PVCs.
+      "tank/longhorn-backups" = {
+        autosnap = true;
+        daily = 30;
+        monthly = 12;
+      };
     };
   };
 
@@ -329,6 +336,32 @@
   };
 
   # ================
+  # === NFS      ===
+  # ================
+  #
+  # NFSv4 export used SOLELY as a Longhorn backup target for the k3s cluster.
+  # No live PVCs sit on this — Longhorn replicates volume data on cluster
+  # NVMe (closet + arch) and pushes incremental backups here on a schedule.
+  # If this NFS server is unreachable, only new backup uploads pause; live
+  # cluster workloads are unaffected.
+  #
+  # One-time on the NAS before the first rebuild that flips this on:
+  #   sudo zfs create -o mountpoint=/tank/longhorn-backups -o recordsize=1M \
+  #     -o compression=lz4 -o atime=off tank/longhorn-backups
+  #   sudo chown nobody:nogroup /tank/longhorn-backups
+  #   sudo chmod 0777 /tank/longhorn-backups
+  #
+  # The export is scoped to the Tailscale CGNAT range, matching the Samba
+  # `hosts allow` line above. Single port (2049) — NFSv4 doesn't need
+  # rpcbind/mountd/lockd.
+  services.nfs.server = {
+    enable = true;
+    exports = ''
+      /tank/longhorn-backups 100.64.0.0/10(rw,sync,no_subtree_check,no_root_squash,fsid=0)
+    '';
+  };
+
+  # ================
   # === Immich   ===
   # ================
 
@@ -397,6 +430,7 @@
   networking.firewall = {
     #enable = true;
     allowedTCPPorts = [
+      2049 # nfsv4 (Longhorn backup target)
       2283 # immich
       25565 # minecraft
     ];
