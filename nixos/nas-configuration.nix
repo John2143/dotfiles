@@ -254,7 +254,25 @@
         daily = 0;
         monthly = 0;
       };
+      # Longhorn backup target — disaster-recovery layer for the k3s cluster.
+      # Low write rate, long retention.
+      "tank/longhorn-backups" = {
+        autosnap = true;
+        daily = 30;
+        monthly = 12;
+      };
     };
+  };
+
+  # NFSv4-only export of the Longhorn backup dataset, scoped to the Tailscale
+  # CGNAT range. This is async/non-critical from the cluster's perspective —
+  # if the NAS is down, only new Longhorn backups are paused; live PVCs are
+  # unaffected (they live on cluster NVMe).
+  services.nfs.server = {
+    enable = true;
+    exports = ''
+      /tank/longhorn-backups 100.64.0.0/10(rw,sync,no_subtree_check,no_root_squash,fsid=0)
+    '';
   };
 
   # ================
@@ -399,6 +417,7 @@
     allowedTCPPorts = [
       2283 # immich
       25565 # minecraft
+      2049 # nfsv4 (longhorn backup target)
     ];
   };
 
