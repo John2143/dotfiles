@@ -179,11 +179,10 @@ in {
 
     ".omp/agent/config.yml".text = ''
       modelRoles:
-        default: office-vllm/qwen3.6:27b
-        smol: office-vllm/qwen3.6:27b
+        default: office-ollama/qwen3.6:27b
+        smol: office-ollama/qwen3.6:27b
 
       modelProviderOrder:
-        - office-vllm
         - office-ollama
         - arch-ollama
         - anthropic
@@ -191,7 +190,6 @@ in {
         - google
 
       enabledModels:
-        - "office-vllm/*"
         - "office-ollama/*"
         - "arch-ollama/*"
         - "anthropic/*"
