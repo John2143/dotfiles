@@ -162,6 +162,29 @@ in {
               contextWindow: 128000
               maxTokens: 8192
 
+        # CPU-only instance on office (port 11435). Same model dir as ROCm
+        # instance — no extra storage needed. Useful when the GPU is busy or
+        # ROCm is misbehaving.
+        office-ollama-cpu:
+          baseUrl: http://office:11435/v1
+          api: openai-completions
+          auth: none
+          models:
+            - id: gemma4
+              name: Gemma 4 (Office CPU)
+              reasoning: false
+              input: [text]
+              cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }
+              contextWindow: 128000
+              maxTokens: 8192
+            - id: qwen3.6:27b
+              name: Qwen 3 (Office CPU)
+              reasoning: true
+              input: [text]
+              cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }
+              contextWindow: 128000
+              maxTokens: 8192
+
         # arch GPU has <8GB VRAM — only gemma4 fits, no vLLM.
         arch-ollama:
           baseUrl: http://arch:11434/v1
@@ -184,6 +207,7 @@ in {
 
       modelProviderOrder:
         - office-ollama
+        - office-ollama-cpu
         - arch-ollama
         - anthropic
         - openai
@@ -191,6 +215,7 @@ in {
 
       enabledModels:
         - "office-ollama/*"
+        - "office-ollama-cpu/*"
         - "arch-ollama/*"
         - "anthropic/*"
         - "openai/*"

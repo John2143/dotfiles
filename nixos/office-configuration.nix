@@ -111,6 +111,27 @@
     package = pkgs.ollama-rocm;
   };
 
+  # CPU-only Ollama on port 11435 — uses the same model directory as the GPU
+  # instance so no re-download is needed after ollama-sync.
+  systemd.services.ollama-cpu = {
+    description = "Ollama CPU-only instance";
+    after = ["network.target" "ollama.service"];
+    wantedBy = ["multi-user.target"];
+    environment = {
+      OLLAMA_HOST = "0.0.0.0:11435";
+      OLLAMA_MODELS = "/var/lib/ollama/models";
+      HOME = "/home/john";
+    };
+    serviceConfig = {
+      Type = "simple";
+      User = "john";
+      Group = "users";
+      ExecStart = "${pkgs.ollama}/bin/ollama serve";
+      Restart = "always";
+      RestartSec = "5s";
+    };
+  };
+
   # drones
   services.upower.enable = true;
 
