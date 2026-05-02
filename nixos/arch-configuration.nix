@@ -235,8 +235,9 @@ in
     package = pkgs.ollama-cuda;
   };
 
-  # vLLM disabled: GPU has <8GB VRAM, can't fit Qwen3.6-35B-A3B.
-  # Only gemma4 fits via ollama on this box.
+  # vLLM disabled: GPU VRAM too small for the models we'd want to serve here.
+  # No models are declared on this host — pull on demand via `ollama pull`,
+  # or rsync from the NAS with `ollama-sync`.
 
   # # Open ports in the firewall.
   # networking.firewall.allowedTCPPorts = [

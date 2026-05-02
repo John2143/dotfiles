@@ -102,6 +102,18 @@ in {
     fsType = "ext4";
   };
 
+  # Longhorn replica disk for the k3s cluster. The LV (pool1/longhorn, 700G)
+  # was created manually inside the existing pool1 LUKS volume. Bring up the
+  # filesystem on first deploy with:
+  #   sudo mkfs.ext4 -L longhorn /dev/mapper/pool1-longhorn
+  #   sudo install -d -m 0755 -o root -g root /mnt/longhorn
+  # `nofail` keeps the box bootable if the LV is ever absent.
+  fileSystems."/mnt/longhorn" = {
+    device = "/dev/disk/by-label/longhorn";
+    fsType = "ext4";
+    options = ["defaults" "noatime" "nofail"];
+  };
+
   #fileSystems."/mnt/games_b" = {
   #device = "/dev/pool1a/games_b";
   #fsType = "ext4";

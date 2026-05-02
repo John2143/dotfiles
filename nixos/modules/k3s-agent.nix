@@ -3,6 +3,8 @@
   lib,
   ...
 }: {
+  imports = [./longhorn-host.nix];
+
   options.custom.k3sNodeTaints = lib.mkOption {
     type = lib.types.listOf lib.types.str;
     default = [];
