@@ -50,7 +50,7 @@ in {
     bat # cat replacement
     eza # ls replacement
     ripgrep # grep replacement
-    (btop.override {rocmSupport = true;}) # btop++ > bpytop > htop > top
+    btop # btop++ > bpytop > htop > top
     choose # awk replacement
     dust # df/du replacement
     ncdu # du / disk usage
