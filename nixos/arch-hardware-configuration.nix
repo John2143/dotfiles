@@ -102,6 +102,12 @@ in {
     fsType = "ext4";
   };
 
+  fileSystems."/mnt/longhorn" = {
+    device = "/dev/disk/by-label/longhorn";
+    fsType = "ext4";
+    options = ["defaults" "noatime" "nofail"];
+  };
+
   #fileSystems."/mnt/games_b" = {
   #device = "/dev/pool1a/games_b";
   #fsType = "ext4";

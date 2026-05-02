@@ -120,6 +120,7 @@
         agenix.nixosModules.default
         ./nixos/shared-cli-configuration.nix
         ./nixos/closet-configuration.nix
+        ./nixos/modules/longhorn-host.nix
         ./nixos/modules/restic-backup.nix
         ./nixos/modules/nas-mounts.nix
         ./nixos/tailscale.nix
