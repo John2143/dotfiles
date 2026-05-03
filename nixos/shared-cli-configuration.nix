@@ -234,6 +234,19 @@
       group = "users";
     };
 
+  # Vast.ai rented-GPU connection info — sourced by the vast-* fish
+  # functions in home-cli.nix to bootstrap and tunnel into a temporarily
+  # rented Vast.ai instance running vLLM.
+  age.secrets.vast-connection =
+    lib.mkIf
+    (builtins.elem config.networking.hostName ["office" "arch"])
+    {
+      file = ../secrets/vast-connection.age;
+      mode = "0400";
+      owner = "john";
+      group = "users";
+    };
+
   security.rtkit.enable = true;
   services.udisks2.enable = true;
 

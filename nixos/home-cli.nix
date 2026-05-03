@@ -142,6 +142,26 @@ in {
               contextWindow: 65536
               maxTokens: 8192
 
+        # Cloud GPU rented via Vast.ai. Tunneled to localhost:8001 by the
+        # `vast-tunnel` fish function (which reads /run/agenix/vast-connection).
+        # Bring up: `vast-bootstrap` once after renting, then `vast-tunnel`.
+        # The contextWindow/served-model name reflect a typical DeepSeek V4
+        # Flash rental; if you serve a different model from the same secret,
+        # vLLM still answers requests for the id below as long as it's set
+        # via VAST_SERVED_MODEL_NAME.
+        vast-vllm:
+          baseUrl: http://localhost:8001/v1
+          api: openai-completions
+          auth: none
+          models:
+            - id: deepseek-v4-flash
+              name: DeepSeek V4 Flash (Vast.ai)
+              reasoning: true
+              input: [text]
+              cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }
+              contextWindow: 1000000
+              maxTokens: 384000
+
         office-ollama:
           baseUrl: http://office:11434/v1
           api: openai-completions
@@ -548,6 +568,199 @@ in {
         env-cleanup $_pre_vars
       '';
       llm-costs.description = "Show LLM API usage costs (default: last 30 days; pass N for custom, --debug for raw responses)";
+
+      # Vast.ai rented-GPU helpers. Reads /run/agenix/vast-connection (env-var
+      # format) for host/key/model. Re-edit that file via `agenix -e
+      # secrets/vast-connection.age` whenever you swap rentals — no nix
+      # rebuild needed afterward.
+      vast-bootstrap.body = ''
+        set -l _pre_vars (set --names -x)
+        set -l creds_file /run/agenix/vast-connection
+        if not test -f $creds_file
+          echo "Vast.ai connection info not found at $creds_file" >&2
+          echo "Edit it via: cd ~/dotfiles && agenix -e secrets/vast-connection.age" >&2
+          env-cleanup $_pre_vars
+          return 1
+        end
+        envsource $creds_file >/dev/null
+        for var in VAST_HOST VAST_SSH_PORT VAST_SSH_USER VAST_VLLM_PORT VAST_LOCAL_PORT VAST_MODEL VAST_SSH_PRIVATE_KEY_B64
+          if not set -q $var
+            echo "Required field $var missing from $creds_file" >&2
+            env-cleanup $_pre_vars
+            return 1
+          end
+        end
+
+        set -l key_file (mktemp -t vast-key.XXXXXX)
+        chmod 600 $key_file
+        echo $VAST_SSH_PRIVATE_KEY_B64 | base64 -d > $key_file
+
+        set -l served_name $VAST_SERVED_MODEL_NAME
+        test -z "$served_name"; and set served_name "deepseek-v4-flash"
+        set -l max_len $VAST_MAX_MODEL_LEN
+        test -z "$max_len"; and set max_len "1000000"
+        set -l mem_util $VAST_GPU_MEM_UTIL
+        test -z "$mem_util"; and set mem_util "0.95"
+
+        echo "Bootstrapping vLLM on $VAST_SSH_USER@$VAST_HOST:$VAST_SSH_PORT (model: $VAST_MODEL)"
+        ssh -i $key_file \
+            -p $VAST_SSH_PORT \
+            -o StrictHostKeyChecking=no \
+            -o UserKnownHostsFile=/dev/null \
+            -o LogLevel=ERROR \
+            $VAST_SSH_USER@$VAST_HOST \
+            "MODEL='$VAST_MODEL' SERVED='$served_name' VLLM_PORT='$VAST_VLLM_PORT' MAX_LEN='$max_len' MEM_UTIL='$mem_util' HF_TOKEN='$VAST_HF_TOKEN' TOOL_PARSER='$VAST_TOOL_CALL_PARSER' REASONING_PARSER='$VAST_REASONING_PARSER' EXTRA_ARGS='$VAST_EXTRA_ARGS' bash -s" < /home/john/dotfiles/.config/vast-bootstrap.bash
+        set -l rc $status
+
+        rm -f $key_file
+        env-cleanup $_pre_vars
+        return $rc
+      '';
+      vast-bootstrap.description = "Bootstrap vLLM on the currently-rented Vast.ai instance (idempotent).";
+
+      vast-tunnel.body = ''
+        set -l _pre_vars (set --names -x)
+        set -l creds_file /run/agenix/vast-connection
+        if not test -f $creds_file
+          echo "Vast.ai connection info not found at $creds_file" >&2
+          env-cleanup $_pre_vars
+          return 1
+        end
+        envsource $creds_file >/dev/null
+        for var in VAST_HOST VAST_SSH_PORT VAST_SSH_USER VAST_VLLM_PORT VAST_LOCAL_PORT VAST_SSH_PRIVATE_KEY_B64
+          if not set -q $var
+            echo "Required field $var missing from $creds_file" >&2
+            env-cleanup $_pre_vars
+            return 1
+          end
+        end
+
+        if systemctl --user is-active --quiet vast-tunnel.service
+          if contains -- --restart $argv
+            echo "Restarting existing tunnel ..."
+            systemctl --user stop vast-tunnel.service
+          else
+            echo "Tunnel already up on localhost:$VAST_LOCAL_PORT (pass --restart to recreate)."
+            env-cleanup $_pre_vars
+            return 0
+          end
+        end
+
+        # Persist key in /run/user/$UID (tmpfs, 0700 by systemd) for the duration
+        # of the tunnel; vast-tunnel-down removes it.
+        set -l key_file /run/user/(id -u)/vast-tunnel.key
+        echo $VAST_SSH_PRIVATE_KEY_B64 | base64 -d > $key_file
+        chmod 600 $key_file
+
+        set -l ssh_bin (command -v ssh)
+        echo "Opening tunnel: localhost:$VAST_LOCAL_PORT -> $VAST_HOST:$VAST_VLLM_PORT"
+        systemd-run --user --unit=vast-tunnel --collect \
+          $ssh_bin -N \
+            -o ServerAliveInterval=30 \
+            -o ServerAliveCountMax=3 \
+            -o ExitOnForwardFailure=yes \
+            -o StrictHostKeyChecking=no \
+            -o UserKnownHostsFile=/dev/null \
+            -o LogLevel=ERROR \
+            -i $key_file \
+            -p $VAST_SSH_PORT \
+            -L $VAST_LOCAL_PORT:localhost:$VAST_VLLM_PORT \
+            $VAST_SSH_USER@$VAST_HOST
+
+        for i in (seq 1 20)
+          if systemctl --user is-active --quiet vast-tunnel.service
+            echo "Tunnel up. Test: curl http://localhost:$VAST_LOCAL_PORT/v1/models"
+            env-cleanup $_pre_vars
+            return 0
+          end
+          sleep 0.3
+        end
+        echo "Tunnel failed to come up. Logs:" >&2
+        systemctl --user status vast-tunnel.service --no-pager >&2 || true
+        env-cleanup $_pre_vars
+        return 1
+      '';
+      vast-tunnel.description = "Open SSH tunnel from localhost:VAST_LOCAL_PORT to the rented vLLM port (--restart to recreate).";
+
+      vast-tunnel-down.body = ''
+        if systemctl --user is-active --quiet vast-tunnel.service
+          systemctl --user stop vast-tunnel.service
+          echo "Tunnel stopped."
+        else
+          echo "No tunnel running."
+        end
+        set -l key_file /run/user/(id -u)/vast-tunnel.key
+        if test -f $key_file
+          rm -f $key_file
+        end
+      '';
+      vast-tunnel-down.description = "Stop the vast-tunnel systemd user unit and clear its key.";
+
+      vast-status.body = ''
+        set -l _pre_vars (set --names -x)
+        set -l creds_file /run/agenix/vast-connection
+        if not test -f $creds_file
+          echo "No vast-connection secret mounted at $creds_file."
+          env-cleanup $_pre_vars
+          return 1
+        end
+        envsource $creds_file >/dev/null
+
+        echo "=== Vast.ai status ==="
+        echo "Host:   $VAST_SSH_USER@$VAST_HOST:$VAST_SSH_PORT"
+        echo "Model:  $VAST_MODEL"
+        if systemctl --user is-active --quiet vast-tunnel.service
+          echo "Tunnel: UP (localhost:$VAST_LOCAL_PORT -> remote :$VAST_VLLM_PORT)"
+        else
+          echo "Tunnel: DOWN (run: vast-tunnel)"
+        end
+
+        set -l models_url "http://localhost:$VAST_LOCAL_PORT/v1/models"
+        if curl -fsS --max-time 3 $models_url >/dev/null 2>&1
+          echo "vLLM:   READY at $models_url"
+          curl -s $models_url | jq -c '.data[] | {id: .id, max_len: .max_model_len}' 2>/dev/null
+        else
+          echo "vLLM:   not responding at $models_url"
+        end
+
+        env-cleanup $_pre_vars
+      '';
+      vast-status.description = "Show Vast.ai tunnel + vLLM readiness.";
+
+      vast-logs.body = ''
+        set -l _pre_vars (set --names -x)
+        set -l creds_file /run/agenix/vast-connection
+        if not test -f $creds_file
+          echo "No vast-connection secret mounted at $creds_file." >&2
+          env-cleanup $_pre_vars
+          return 1
+        end
+        envsource $creds_file >/dev/null
+
+        set -l key_file (mktemp -t vast-key.XXXXXX)
+        chmod 600 $key_file
+        echo $VAST_SSH_PRIVATE_KEY_B64 | base64 -d > $key_file
+
+        set -l n 200
+        if test (count $argv) -gt 0
+          set n $argv[1]
+        end
+
+        ssh -i $key_file \
+            -p $VAST_SSH_PORT \
+            -o StrictHostKeyChecking=no \
+            -o UserKnownHostsFile=/dev/null \
+            -o LogLevel=ERROR \
+            $VAST_SSH_USER@$VAST_HOST \
+            "tail -n $n -f /workspace/vllm.log"
+        set -l rc $status
+
+        rm -f $key_file
+        env-cleanup $_pre_vars
+        return $rc
+      '';
+      vast-logs.description = "Tail the remote vLLM log (vast-logs [N=200]).";
+
       env-cleanup.body = ''
         for _v in (set --names -x)
           if not contains $_v $argv

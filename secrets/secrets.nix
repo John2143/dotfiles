@@ -68,4 +68,27 @@ in {
 
   "hass-credentials.age".publicKeys = [arch];
   "canary-tokens.age".publicKeys = [office arch pite];
+
+  # Vast.ai rented-GPU connection info, sourced by the vast-* fish
+  # functions in home-cli.nix. Edited via `agenix -e` each time a new
+  # instance is rented — no nix rebuild needed.
+  # Format (envsource will read each line):
+  #   VAST_HOST=1.2.3.4
+  #   VAST_SSH_PORT=12345
+  #   VAST_SSH_USER=root
+  #   VAST_VLLM_PORT=8000          # remote port vLLM listens on
+  #   VAST_LOCAL_PORT=8001         # local port the tunnel binds (must match models.yml)
+  #   VAST_MODEL=deepseek-ai/DeepSeek-V4-Flash
+  #   VAST_SERVED_MODEL_NAME=deepseek-v4-flash   # optional; matches models.yml id
+  #   VAST_MAX_MODEL_LEN=1000000   # optional; defaults to 1000000
+  #   VAST_GPU_MEM_UTIL=0.95       # optional; defaults to 0.95
+  #   VAST_HF_TOKEN=hf_...         # optional; for gated models
+  #   VAST_TOOL_CALL_PARSER=       # optional; e.g. qwen3_xml
+  #   VAST_REASONING_PARSER=       # optional; e.g. qwen3
+  #   VAST_EXTRA_ARGS=             # optional; extra `vllm serve` flags
+  #   VAST_SSH_PRIVATE_KEY_B64=<base64 -w0 of an ed25519 private key>
+  # Generate the key once: `ssh-keygen -t ed25519 -f /tmp/vast-key -N ""`
+  # then paste its public half into the Vast.ai instance launch form and
+  # set VAST_SSH_PRIVATE_KEY_B64=$(base64 -w0 /tmp/vast-key).
+  "vast-connection.age".publicKeys = [office arch];
 }
