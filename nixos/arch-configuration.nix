@@ -233,11 +233,12 @@ in
 
   services.ollama = {
     package = pkgs.ollama-cuda;
+    # Disk-constrained host: only gemma4 is auto-pulled. Don't run ollama-sync
+    # here — it would mirror every model from the NAS and fill the SSD.
+    modelNames = ["gemma4"];
   };
 
   # vLLM disabled: GPU VRAM too small for the models we'd want to serve here.
-  # No models are declared on this host — pull on demand via `ollama pull`,
-  # or rsync from the NAS with `ollama-sync`.
 
   # # Open ports in the firewall.
   # networking.firewall.allowedTCPPorts = [

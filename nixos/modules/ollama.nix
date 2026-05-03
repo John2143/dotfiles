@@ -67,6 +67,14 @@ in {
       UMask = lib.mkForce "0022";
     };
 
+    # StateDirectory=ollama only creates /var/lib/ollama; the upstream unit's
+    # sandbox references /var/lib/ollama/models, so namespace setup fails
+    # (status 226/NAMESPACE) if the subdir is ever removed (e.g. to free disk).
+    systemd.tmpfiles.rules = [
+      "d /var/lib/ollama        0755 john users -"
+      "d /var/lib/ollama/models 0755 john users -"
+    ];
+
     systemd.services.ollama-model-pull = lib.mkIf (cfg.modelNames != []) {
       description = "Pull declared ollama models";
       after = ["ollama.service"];
