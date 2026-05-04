@@ -273,6 +273,8 @@ in {
         smol: office-ollama/qwen3.6:27b
 
       modelProviderOrder:
+        - vast-vllm
+        - office-vllm
         - office-ollama
         - office-ollama-cpu
         - arch-ollama
@@ -281,6 +283,8 @@ in {
         - google
 
       enabledModels:
+        - "vast-vllm/*"
+        - "office-vllm/*"
         - "office-ollama/*"
         - "office-ollama-cpu/*"
         - "arch-ollama/*"
