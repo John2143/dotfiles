@@ -10,59 +10,71 @@
   ...
 }:
 let
+  hass-lib = pkgs.writeText "hass-lib.sh" ''
+    TOKEN=$(cat /run/agenix/hass-credentials)
+    HA="https://home.ts.2143.me"
+    AUTH="Authorization: Bearer $TOKEN"
+
+    hass_get() {
+      curl -sf -H "$AUTH" "$HA/api/states/$1"
+    }
+
+    hass_post() {
+      curl -sf -X POST -H "$AUTH" -H "Content-Type: application/json" \
+        -d "$2" "$HA/api/services/$1" > /dev/null
+    }
+
+    hass_notify() {
+      notify-send -h "string:x-dunst-stack-tag:hass-$1" "$2" "$3"
+    }
+
+    signal_waybar() {
+      pkill -RTMIN+8 waybar || true
+    }
+  '';
+
   hass-macro = pkgs.writeShellApplication {
     name = "hass-macro";
     runtimeInputs = [ pkgs.curl pkgs.jq pkgs.bc pkgs.libnotify pkgs.procps ];
     text = ''
-      TOKEN=$(cat /run/agenix/hass-credentials)
-      HA="https://home.ts.2143.me"
-      AUTH="Authorization: Bearer $TOKEN"
+      source ${hass-lib}
 
       case "''${1:-}" in
         thermostat-down|thermostat-up)
-          current=$(curl -sf -H "$AUTH" "$HA/api/states/climate.john_bedroom" \
+          current=$(hass_get climate.john_bedroom \
             | jq -r '.attributes.temperature')
           if [ "$1" = "thermostat-down" ]; then
             new=$(echo "$current - 1" | bc)
           else
             new=$(echo "$current + 1" | bc)
           fi
-          curl -sf -X POST -H "$AUTH" -H "Content-Type: application/json" \
-            -d "{\"entity_id\":\"climate.john_bedroom\",\"temperature\":$new}" \
-            "$HA/api/services/climate/set_temperature" > /dev/null
-          notify-send -h string:x-dunst-stack-tag:hass-thermostat "Thermostat" "Set to ''${new}°"
-          pkill -RTMIN+8 waybar || true
+          hass_post climate/set_temperature \
+            "{\"entity_id\":\"climate.john_bedroom\",\"temperature\":$new}"
+          hass_notify thermostat "Thermostat" "Set to ''${new}°"
+          signal_waybar
           ;;
         thermostat-toggle)
-          state=$(curl -sf -H "$AUTH" "$HA/api/states/climate.john_bedroom" \
+          state=$(hass_get climate.john_bedroom \
             | jq -r '.state')
           if [ "$state" = "off" ]; then
-            curl -sf -X POST -H "$AUTH" -H "Content-Type: application/json" \
-              -d '{"entity_id":"climate.john_bedroom"}' \
-              "$HA/api/services/climate/turn_on" > /dev/null
-            notify-send -h string:x-dunst-stack-tag:hass-thermostat "Thermostat" "Turned on"
+            hass_post climate/turn_on '{"entity_id":"climate.john_bedroom"}'
+            hass_notify thermostat "Thermostat" "Turned on"
           else
-            curl -sf -X POST -H "$AUTH" -H "Content-Type: application/json" \
-              -d '{"entity_id":"climate.john_bedroom"}' \
-              "$HA/api/services/climate/turn_off" > /dev/null
-            notify-send -h string:x-dunst-stack-tag:hass-thermostat "Thermostat" "Turned off"
+            hass_post climate/turn_off '{"entity_id":"climate.john_bedroom"}'
+            hass_notify thermostat "Thermostat" "Turned off"
           fi
-          pkill -RTMIN+8 waybar || true
+          signal_waybar
           ;;
         fan-toggle)
-          curl -sf -X POST -H "$AUTH" -H "Content-Type: application/json" \
-            -d '{"entity_id":"fan.john_ac_combo_fans"}' \
-            "$HA/api/services/fan/toggle" > /dev/null
-          notify-send -h string:x-dunst-stack-tag:hass-fan "Fan" "Toggled"
-          pkill -RTMIN+8 waybar || true
+          hass_post fan/toggle '{"entity_id":"fan.john_ac_combo_fans"}'
+          hass_notify fan "Fan" "Toggled"
+          signal_waybar
           ;;
-      plug-toggle)
-        curl -sf -X POST -H "$AUTH" -H "Content-Type: application/json" \
-          -d '{"entity_id":"fan.plug_upstairs_desktop_computer_switch"}' \
-          "$HA/api/services/fan/toggle" > /dev/null
-        notify-send -h string:x-dunst-stack-tag:hass-plug "Plug" "Upstairs desktop computer toggled"
-        pkill -RTMIN+8 waybar || true
-        ;;
+        plug-toggle)
+          hass_post fan/toggle '{"entity_id":"fan.plug_upstairs_desktop_computer_switch"}'
+          hass_notify plug "Plug" "Upstairs desktop computer toggled"
+          signal_waybar
+          ;;
         *)
           echo "Usage: hass-macro {thermostat-down|thermostat-up|thermostat-toggle|fan-toggle|plug-toggle}" >&2
           exit 1
@@ -70,15 +82,14 @@ let
       esac
     '';
   };
+
   hass-thermostat-status = pkgs.writeShellApplication {
     name = "hass-thermostat-status";
     runtimeInputs = [ pkgs.curl pkgs.jq ];
     text = ''
-      TOKEN=$(cat /run/agenix/hass-credentials)
-      HA="https://home.ts.2143.me"
-      AUTH="Authorization: Bearer $TOKEN"
+      source ${hass-lib}
 
-      response=$(curl -sf -H "$AUTH" "$HA/api/states/climate.john_bedroom") || {
+      response=$(hass_get climate.john_bedroom) || {
         echo '{"text": "⚠", "class": "error", "tooltip": "Failed to fetch thermostat"}'
         exit 0
       }
