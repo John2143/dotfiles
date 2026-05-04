@@ -78,6 +78,9 @@ in {
   # Format (env-var, parsed line-by-line by `envsource`):
   #   VAST_API_KEY=<account API key from https://cloud.vast.ai/account/>
   #   VAST_SSH_PRIVATE_KEY_B64=<base64 -w0 of an ed25519 private key>
+  #   VAST_HF_TOKEN=<HuggingFace token>   # optional — much faster model
+  #                                       # downloads + access to gated models.
+  #                                       # Get one: https://huggingface.co/settings/tokens
   # Generate the SSH keypair once:
   #   ssh-keygen -t ed25519 -f /tmp/vast-key -N ""
   #   echo "VAST_SSH_PRIVATE_KEY_B64=$(base64 -w0 /tmp/vast-key)"

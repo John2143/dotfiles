@@ -146,8 +146,9 @@ in {
       VAST_SSH_USER=root
 
       # ---------- Optional ----------
-      # Hugging Face token for gated models.
-      # VAST_HF_TOKEN=hf_...
+      # NOTE: VAST_HF_TOKEN is a *secret*; put it in the encrypted
+      # vast-credentials.age file, not here. (envsource sources both,
+      # credentials wins.)
       # Tool/reasoning parsers for models that need them.
       # VAST_TOOL_CALL_PARSER=qwen3_xml
       # VAST_REASONING_PARSER=qwen3
@@ -188,8 +189,9 @@ in {
               maxTokens: 8192
 
         # Cloud GPU rented via Vast.ai. Tunneled to localhost:8001 by the
-        # `vast-tunnel` fish function (which reads /run/agenix/vast-connection).
-        # Bring up: `vast-bootstrap` once after renting, then `vast-tunnel`.
+        # `vast-tunnel` fish function (host discovered live via the
+        # vastai API; see _vast-load in this file).
+        # Bring up: `vast-create OFFER_ID`, then `vast-bootstrap`, then `vast-tunnel`.
         # The contextWindow/served-model name reflect a typical DeepSeek V4
         # Flash rental; if you serve a different model from the same secret,
         # vLLM still answers requests for the id below as long as it's set

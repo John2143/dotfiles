@@ -28,7 +28,7 @@ Three tiers, by rotation cadence:
 
 | Where | What | Edited |
 |---|---|---|
-| `/run/agenix/vast-credentials` | `VAST_API_KEY` + `VAST_SSH_PRIVATE_KEY_B64` (combined) | Rare (only on account API or SSH key rotation) |
+| `/run/agenix/vast-credentials` | `VAST_API_KEY` + `VAST_SSH_PRIVATE_KEY_B64` + optional `VAST_HF_TOKEN` | Rare (only on account API, SSH key, or HF token rotation) |
 | `/run/user/$UID/vast-ssh-key` | SSH private key materialized from b64 (0600, tmpfs) | Auto-created by `_vast-load`; wiped on logout |
 | Vast.ai API (live) | Current rental's `VAST_HOST` and `VAST_SSH_PORT` | Auto-discovered every command via `vastai show instances --label $VAST_LABEL` |
 | `~/.config/vast/profile` | Optional non-secret overrides (model, max_len, ports, manual host pin) | Anytime — plain file, no nix rebuild |
@@ -54,15 +54,18 @@ auto-added to every instance you launch.
 
 ### 2. Create the combined credentials file
 
-Get an API key at <https://cloud.vast.ai/account/>, then:
+Get an API key at <https://cloud.vast.ai/account/> and (strongly recommended)
+a Hugging Face token at <https://huggingface.co/settings/tokens> for faster
+model downloads and access to gated models. Then:
 
 ```fish
 cd ~/dotfiles
 echo "VAST_API_KEY=<your key>"
 echo "VAST_SSH_PRIVATE_KEY_B64=$(base64 -w0 /tmp/vast-key)"
-# Copy both lines, then:
+echo "VAST_HF_TOKEN=<your hf token>"   # optional but recommended
+# Copy the lines, then:
 agenix -e secrets/vast-credentials.age -i ~/.ssh/age
-# Paste both lines into the editor.
+# Paste them into the editor.
 ```
 
 Shred the local key files:

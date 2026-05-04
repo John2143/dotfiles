@@ -1,14 +1,15 @@
 #!/usr/bin/env bash
 # Runs on the rented Vast.ai instance via `ssh ... bash -s`. The caller
 # (vast-bootstrap fish function in nixos/home-cli.nix) sets these env vars
-# from /run/agenix/vast-connection:
+# from /run/agenix/vast-credentials + ~/.config/vast/profile + defaults:
 #
 #   MODEL              HF model id (required)
 #   SERVED             served-model-name exposed on the OpenAI API (default deepseek-v4-flash)
 #   VLLM_PORT          listen port inside the rental (default 8000)
 #   MAX_LEN            --max-model-len (default 1000000)
 #   MEM_UTIL           --gpu-memory-utilization (default 0.95)
-#   HF_TOKEN           HuggingFace token for gated models (optional)
+#   HF_TOKEN           HuggingFace token (optional but strongly recommended:
+#                      faster downloads, higher rate limits, gated models)
 #   TOOL_PARSER        --tool-call-parser, e.g. qwen3_xml (optional)
 #   REASONING_PARSER   --reasoning-parser, e.g. qwen3 (optional)
 #   EXTRA_ARGS         space-separated extra flags (optional)
@@ -16,8 +17,9 @@
 # Idempotent: if a vLLM server is already responding on $VLLM_PORT it exits 0.
 # Logs go to /workspace/vllm.log; pid goes to /workspace/vllm.pid.
 #
-# Assumes the rented image has python + CUDA + the vllm CLI (e.g.
-# vllm/vllm-openai:latest). Falls back to `pip install vllm` otherwise.
+# Recommended rental image: nvidia/cuda:12.8.0-devel-ubuntu24.04 (clean CUDA,
+# no auto-launched services). Script installs python3 + venv + vllm if
+# missing. The venv lives at /workspace/venv and persists across reboots.
 
 set -euo pipefail
 
@@ -83,10 +85,47 @@ if curl -fsS "http://localhost:${VLLM_PORT}/v1/models" >/dev/null 2>&1; then
   exit 0
 fi
 
+# Reuse a previously-created venv if it exists (subsequent bootstraps after
+# the first are near-instant — model weights are also cached on /workspace).
+if [ -x /workspace/venv/bin/vllm ]; then
+  export PATH="/workspace/venv/bin:$PATH"
+fi
+
 if ! command -v vllm >/dev/null 2>&1; then
-  echo "vllm CLI not found; installing via pip (this can take several minutes) ..."
-  pip install --quiet --upgrade pip
-  pip install --quiet vllm
+  echo "vllm CLI not found; bootstrapping python + venv + vllm ..."
+
+  # The minimal nvidia/cuda image we recommend has CUDA but no Python; the
+  # nvidia/cuda:*-devel image often ships python3 *without* the venv module.
+  # Ubuntu 24.04+ enforces PEP 668, so system-wide pip installs are blocked
+  # — we need a venv. Check both the binary and the venv module.
+  NEED_APT=0
+  command -v python3 >/dev/null 2>&1 || NEED_APT=1
+  python3 -c 'import ensurepip, venv' >/dev/null 2>&1 || NEED_APT=1
+  if [ "$NEED_APT" = 1 ]; then
+    echo "Installing python3 + pip + venv via apt ..."
+    apt-get update -qq
+    apt-get install -y -qq --no-install-recommends \
+      python3 python3-pip python3-venv ca-certificates curl
+  fi
+
+  # If a previous attempt left an incomplete venv (e.g. python but no pip,
+  # which happens when `python3 -m venv` runs without ensurepip available),
+  # nuke it so we can recreate cleanly.
+  if [ -d /workspace/venv ] && { [ ! -x /workspace/venv/bin/python3 ] || [ ! -x /workspace/venv/bin/pip ]; }; then
+    echo "Removing incomplete /workspace/venv from a previous failed attempt ..."
+    rm -rf /workspace/venv
+  fi
+
+  if [ ! -d /workspace/venv ]; then
+    echo "Creating venv at /workspace/venv ..."
+    python3 -m venv /workspace/venv
+  fi
+
+  echo "pip install vllm into /workspace/venv (~5 min) ..."
+  /workspace/venv/bin/pip install --quiet --upgrade pip
+  /workspace/venv/bin/pip install --quiet vllm
+
+  export PATH="/workspace/venv/bin:$PATH"
 fi
 
 if ! command -v nvidia-smi >/dev/null 2>&1; then
