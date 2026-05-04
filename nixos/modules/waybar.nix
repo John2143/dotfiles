@@ -168,8 +168,10 @@
           exec = "vast-waybar-status";
           return-type = "json";
           interval = 60;
+          signal = 9;
           format = "{}";
           tooltip = true;
+          on-click = "rm -f /tmp/vast-waybar-status.json && pkill -RTMIN+9 waybar";
         };
         "custom/weather" = {
           exec = "weather-status";
