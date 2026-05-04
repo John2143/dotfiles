@@ -10,7 +10,7 @@
   ...
 }:
 let
-  hass-lib = pkgs.writeText "hass-lib.sh" ''
+  hass-lib = ''
     TOKEN=$(cat /run/agenix/hass-credentials)
     HA="https://home.ts.2143.me"
     AUTH="Authorization: Bearer $TOKEN"
@@ -37,7 +37,7 @@ let
     name = "hass-macro";
     runtimeInputs = [ pkgs.curl pkgs.jq pkgs.bc pkgs.libnotify pkgs.procps ];
     text = ''
-      source ${hass-lib}
+      ${hass-lib}
 
       case "''${1:-}" in
         thermostat-down|thermostat-up)
@@ -87,7 +87,7 @@ let
     name = "hass-thermostat-status";
     runtimeInputs = [ pkgs.curl pkgs.jq ];
     text = ''
-      source ${hass-lib}
+      ${hass-lib}
 
       response=$(hass_get climate.john_bedroom) || {
         echo '{"text": "⚠", "class": "error", "tooltip": "Failed to fetch thermostat"}'
