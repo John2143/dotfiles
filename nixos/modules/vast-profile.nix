@@ -27,6 +27,10 @@
       # Tool/reasoning parsers for models that need them. DeepSeek V4
       # auto-gets deepseek_v4 parsers from vast-bootstrap.bash; only set
       # these for other models (e.g. Qwen3).
+      # Also auto-adds --default-chat-template-kwargs '{"thinking": true}'
+      # for DeepSeek V4 so that thinking is enabled by default (the V4
+      # template disables it otherwise). To force non-think, pass
+      # chat_template_kwargs: {"thinking": false} per request.
       # VAST_TOOL_CALL_PARSER=qwen3_xml
       # VAST_REASONING_PARSER=qwen3
       # Extra `vllm serve` flags. DeepSeek V4 auto-gets --kv-cache-dtype

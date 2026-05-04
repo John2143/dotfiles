@@ -204,6 +204,12 @@ in {
     };
   };
 
+  home.activation.flatpakOverrides = lib.hm.dag.entryAfter ["writeBoundary"] ''
+    ${pkgs.flatpak}/bin/flatpak override --user \
+      --talk-name=org.kde.StatusNotifierWatcher \
+      com.teamspeak.TeamSpeak3 || true
+  '';
+
   xdg.configFile = {
     "alacritty".source = config.lib.file.mkOutOfStoreSymlink ../.config/alacritty;
     "dunst".source = config.lib.file.mkOutOfStoreSymlink ../.config/dunst;

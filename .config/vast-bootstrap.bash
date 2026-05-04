@@ -182,6 +182,12 @@ if [ -n "${TOOL_PARSER}" ]; then
 fi
 if [ -n "${REASONING_PARSER}" ]; then
   ARGS+=(--reasoning-parser "${REASONING_PARSER}")
+  # DeepSeek V4's chat template disables thinking by default, unlike Qwen3
+  # which enables it. Without this, the model never emits reasoning tokens,
+  # so the reasoning parser has nothing to split and reasoning_content is
+  # always null. Enable thinking server-wide; clients can still disable
+  # per-request via chat_template_kwargs: {"thinking": false}.
+  ARGS+=(--default-chat-template-kwargs '{"thinking": true}')
 fi
 if [ -n "${EXTRA_ARGS}" ]; then
   # Word-splitting is intentional so EXTRA_ARGS can carry multiple flags.

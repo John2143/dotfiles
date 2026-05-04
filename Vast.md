@@ -154,8 +154,12 @@ DeepSeek V4 launches with `--reasoning-parser deepseek_v4`, so chat
 completions return `choices[].message.reasoning_content` (the chain of
 thought) separately from `choices[].message.content` (the final answer).
 Clients that don't know about `reasoning_content` see only the final answer,
-which is usually what you want. `reasoning_effort: low|medium|high` is
-honored as a top-level request parameter.
+which is usually what you want. Thinking is now enabled by default on the
+server via `--default-chat-template-kwargs '{"thinking": true}'` so the model
+emits chain-of-thought tokens on every request. Clients can still disable per
+request: `chat_template_kwargs: {"thinking": false}`. Use
+`reasoning_effort: "high"` or `"max"` (requires 384K+ context) in
+`chat_template_kwargs` to control effort level.
 
 Direct test:
 
@@ -277,17 +281,16 @@ to `/workspace` and clears `/tmp` if it's >50% full, but if the rental was
 created with a tiny disk, destroy it and re-create with `--disk 300` (the
 `vast-create` default).
 
-### Responses lack a `reasoning_content` field
-
-The running vLLM was started without `--reasoning-parser`. Confirm by
-grepping the remote log:
+The running vLLM was started without `--default-chat-template-kwargs`.
+Without `{"thinking": true}`, DeepSeek V4's chat template disables thinking,
+so the model never emits reasoning tokens and `reasoning_content` is always
+null. Confirm by grepping the remote log:
 
 ```fish
-fish -c 'vast-logs 200' | grep -i reasoning_parser
+fish -c 'vast-logs 200' | grep -i 'default-chat-template-kwargs'
 ```
 
-If you see `reasoning_parser=None` or "Auto-initialization of reasoning
-token IDs failed", re-launch with the current bootstrap flags:
+If missing, re-launch with the current bootstrap flags:
 
 ```fish
 fish -c 'vast-bootstrap --restart'
