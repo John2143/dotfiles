@@ -147,6 +147,32 @@
           --rsh="sudo -u john ${pkgs.openssh}/bin/ssh" \
           nas:/neo/ollama/models/ /var/lib/ollama/models/
       '')
+    ]
+    ++ lib.optionals (builtins.elem config.networking.hostName ["office" "arch"]) [
+      # Vast.ai CLI wrapper. Loads VAST_API_KEY from /run/agenix/vast-credentials
+      # (encrypted file declared above — also carries the SSH private key
+      # consumed by the _vast-load fish helper) and runs the upstream PyPI
+      # CLI via uvx — cached at ~/.cache/uv after first invocation, ~5s warm-up.
+      #
+      # Full workflow lives in ../Vast.md. Common tasks have fish helpers
+      # in home-cli.nix:
+      #   vast-search    — list verified B200 offers
+      #   vast-create    — launch with our minimal CUDA image, 300GB disk
+      #   vast-show      — list active rentals
+      #   vast-destroy   — tear down a rental
+      # Anything else (account info, billing, raw filters, etc.):
+      #   vastai show user
+      #   vastai search offers '<query>' -o '<sort>'
+      #   vastai logs <instance_id>
+      #   etc. — see `vastai --help` or https://vast.ai/docs/cli/
+      (pkgs.writeShellScriptBin "vastai" ''
+        if [ -f /run/agenix/vast-credentials ]; then
+          set -a
+          . /run/agenix/vast-credentials
+          set +a
+        fi
+        exec ${pkgs.uv}/bin/uvx --quiet vastai "$@"
+      '')
     ];
 
   programs.gnupg.agent = {
@@ -234,14 +260,16 @@
       group = "users";
     };
 
-  # Vast.ai rented-GPU connection info — sourced by the vast-* fish
-  # functions in home-cli.nix to bootstrap and tunnel into a temporarily
-  # rented Vast.ai instance running vLLM.
-  age.secrets.vast-connection =
+  # Vast.ai credentials (combined API key + SSH private key, see
+  # secrets/secrets.nix for format). Sourced by:
+  #   - the `vastai` wrapper below (reads VAST_API_KEY)
+  #   - the _vast-load fish helper in home-cli.nix (reads
+  #     VAST_SSH_PRIVATE_KEY_B64, materializes it to /run/user/$UID/...)
+  age.secrets.vast-credentials =
     lib.mkIf
     (builtins.elem config.networking.hostName ["office" "arch"])
     {
-      file = ../secrets/vast-connection.age;
+      file = ../secrets/vast-credentials.age;
       mode = "0400";
       owner = "john";
       group = "users";

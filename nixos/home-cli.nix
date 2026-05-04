@@ -119,6 +119,51 @@ in {
     # # symlink to the Nix store copy.
     ".vimrc".source = ../.vimrc;
 
+    # Optional Vast.ai per-rental profile template. Copy to
+    # ~/.config/vast/profile and edit if you want to override defaults
+    # (model, vLLM args, ports). Anything you omit falls back to the
+    # built-in defaults in the vast-* fish functions. Keep the .example
+    # suffix so home-manager doesn't fight your edits to the real file.
+    # See Vast.md for the full workflow.
+    ".config/vast/profile.example".text = ''
+      # ---------- Identifies which rental the helpers target ----------
+      # Must match the --label passed by `vast-create`. Multiple labels
+      # let you run different workloads in parallel (one rental per label).
+      VAST_LABEL=vllm-deepseek-v4
+
+      # ---------- Model + serving config ----------
+      VAST_MODEL=deepseek-ai/DeepSeek-V4-Flash
+      VAST_SERVED_MODEL_NAME=deepseek-v4-flash
+      VAST_MAX_MODEL_LEN=1000000
+      VAST_GPU_MEM_UTIL=0.95
+
+      # ---------- Networking ----------
+      # VAST_LOCAL_PORT is on your laptop; VAST_VLLM_PORT is inside the
+      # rental container. Must match the port in models.yml's vast-vllm
+      # provider URL (currently http://localhost:8001/v1).
+      VAST_LOCAL_PORT=8001
+      VAST_VLLM_PORT=8000
+      VAST_SSH_USER=root
+
+      # ---------- Optional ----------
+      # Hugging Face token for gated models.
+      # VAST_HF_TOKEN=hf_...
+      # Tool/reasoning parsers for models that need them.
+      # VAST_TOOL_CALL_PARSER=qwen3_xml
+      # VAST_REASONING_PARSER=qwen3
+      # Extra `vllm serve` flags. DeepSeek V4 auto-gets --kv-cache-dtype
+      # fp8 from vast-bootstrap.bash; only set this for other tweaks.
+      # VAST_EXTRA_ARGS=--quantization fp4
+
+      # ---------- Manual host override (skip API discovery) ----------
+      # By default, vast-bootstrap/vast-tunnel/vast-status discover
+      # VAST_HOST and VAST_SSH_PORT from `vastai show instances --label
+      # $VAST_LABEL`. Set them here to pin to a specific instance or
+      # if the API is unreachable.
+      # VAST_HOST=1.2.3.4
+      # VAST_SSH_PORT=12345
+    '';
+
     # # You can also set the file content immediately.
     # ".gradle/gradle.properties".text = ''
     #   org.gradle.console=verbose
@@ -569,70 +614,141 @@ in {
       '';
       llm-costs.description = "Show LLM API usage costs (default: last 30 days; pass N for custom, --debug for raw responses)";
 
-      # Vast.ai rented-GPU helpers. Reads /run/agenix/vast-connection (env-var
-      # format) for host/key/model. Re-edit that file via `agenix -e
-      # secrets/vast-connection.age` whenever you swap rentals — no nix
-      # rebuild needed afterward.
-      vast-bootstrap.body = ''
-        set -l _pre_vars (set --names -x)
-        set -l creds_file /run/agenix/vast-connection
+      # === Vast.ai cloud GPU helpers ===
+      #
+      # Full workflow + troubleshooting + market context: ../Vast.md
+      #
+      # Credential model (intentionally lightweight):
+      #   - One long-lived secret (rare rotation):
+      #       /run/agenix/vast-credentials   env-var format with both
+      #                                      VAST_API_KEY and
+      #                                      VAST_SSH_PRIVATE_KEY_B64
+      #     SSH key gets materialized to /run/user/$UID/vast-ssh-key
+      #     (per-user tmpfs, 0600) on first vast-* invocation each session.
+      #   - Per-rental host/port: discovered live via the Vast.ai API
+      #     (`vastai show instances --label $VAST_LABEL`), no file edits.
+      #   - Optional non-secret config: ~/.config/vast/profile (plain
+      #     KEY=VALUE file). Copy ~/.config/vast/profile.example to
+      #     ~/.config/vast/profile and override any defaults.
+      #
+      # Quick reference:
+      #   Rent      vast-search [query]                 # find offers
+      #             vast-create OFFER_ID                # launch with our minimal image
+      #   Spinup    vast-bootstrap                      # ~25 min first time (model download)
+      #             vast-tunnel                         # localhost:VAST_LOCAL_PORT -> rental
+      #             vast-status
+      #   Use       omp → vast-vllm/<model>
+      #             curl http://localhost:8001/v1/models
+      #             vast-logs [N]                       # tail remote vllm.log
+      #   Teardown  vast-tunnel-down
+      #             vast-destroy INSTANCE_ID
+      #
+      # Renting a fresh instance just requires `vast-create` — no agenix
+      # edit, no nix rebuild. The next `vast-bootstrap` discovers the new
+      # host automatically because it's tagged with the same VAST_LABEL.
+      _vast-load.body = ''
+        # Internal helper: load profile + agenix creds, apply defaults,
+        # discover host/port via Vast.ai API. Sets exported globals VAST_*
+        # used by the other vast-* helpers. Caller is responsible for
+        # env-cleanup.
+
+        # 1) Optional plain-file profile (non-secret config).
+        set -l profile $HOME/.config/vast/profile
+        if test -f $profile
+          envsource $profile >/dev/null
+        end
+
+        # 2) Combined credentials from agenix (VAST_API_KEY + b64 SSH key).
+        set -l creds_file /run/agenix/vast-credentials
         if not test -f $creds_file
-          echo "Vast.ai connection info not found at $creds_file" >&2
-          echo "Edit it via: cd ~/dotfiles && agenix -e secrets/vast-connection.age" >&2
-          env-cleanup $_pre_vars
+          echo "Vast.ai credentials not at $creds_file." >&2
+          echo "Create via: cd ~/dotfiles && agenix -e secrets/vast-credentials.age" >&2
+          echo "Format: VAST_API_KEY=...    VAST_SSH_PRIVATE_KEY_B64=..." >&2
+          echo "Then: nh os switch ." >&2
           return 1
         end
         envsource $creds_file >/dev/null
-        for var in VAST_HOST VAST_SSH_PORT VAST_SSH_USER VAST_VLLM_PORT VAST_LOCAL_PORT VAST_MODEL VAST_SSH_PRIVATE_KEY_B64
-          if not set -q $var
-            echo "Required field $var missing from $creds_file" >&2
-            env-cleanup $_pre_vars
-            return 1
-          end
+        if test -z "$VAST_SSH_PRIVATE_KEY_B64"
+          echo "VAST_SSH_PRIVATE_KEY_B64 missing from $creds_file" >&2
+          return 1
         end
 
-        set -l key_file (mktemp -t vast-key.XXXXXX)
-        chmod 600 $key_file
-        echo $VAST_SSH_PRIVATE_KEY_B64 | base64 -d > $key_file
+        # 3) Materialize SSH key to per-user tmpfs (0600). Persists for the
+        # session — auto-wiped on logout when /run/user/$UID tears down.
+        # Stable path so the systemd-run-launched tunnel can read it after
+        # this fish process exits.
+        set -gx VAST_SSH_KEY /run/user/(id -u)/vast-ssh-key
+        echo $VAST_SSH_PRIVATE_KEY_B64 | base64 -d > $VAST_SSH_KEY
+        chmod 600 $VAST_SSH_KEY
 
-        set -l served_name $VAST_SERVED_MODEL_NAME
-        test -z "$served_name"; and set served_name "deepseek-v4-flash"
-        set -l max_len $VAST_MAX_MODEL_LEN
-        test -z "$max_len"; and set max_len "1000000"
-        set -l mem_util $VAST_GPU_MEM_UTIL
-        test -z "$mem_util"; and set mem_util "0.95"
+        # 4) Defaults for anything still empty.
+        test -n "$VAST_LABEL"; or set -gx VAST_LABEL "vllm-deepseek-v4"
+        test -n "$VAST_MODEL"; or set -gx VAST_MODEL "deepseek-ai/DeepSeek-V4-Flash"
+        test -n "$VAST_SERVED_MODEL_NAME"; or set -gx VAST_SERVED_MODEL_NAME "deepseek-v4-flash"
+        test -n "$VAST_MAX_MODEL_LEN"; or set -gx VAST_MAX_MODEL_LEN "1000000"
+        test -n "$VAST_GPU_MEM_UTIL"; or set -gx VAST_GPU_MEM_UTIL "0.95"
+        test -n "$VAST_LOCAL_PORT"; or set -gx VAST_LOCAL_PORT "8001"
+        test -n "$VAST_VLLM_PORT"; or set -gx VAST_VLLM_PORT "8000"
+        test -n "$VAST_SSH_USER"; or set -gx VAST_SSH_USER "root"
+        set -q VAST_HF_TOKEN; or set -gx VAST_HF_TOKEN ""
+        set -q VAST_TOOL_CALL_PARSER; or set -gx VAST_TOOL_CALL_PARSER ""
+        set -q VAST_REASONING_PARSER; or set -gx VAST_REASONING_PARSER ""
+        set -q VAST_EXTRA_ARGS; or set -gx VAST_EXTRA_ARGS ""
+
+        # 5) Discover host/SSH port via API unless overridden in profile.
+        if test -z "$VAST_HOST"; or test -z "$VAST_SSH_PORT"
+          if not command -v vastai >/dev/null 2>&1
+            echo "vastai CLI not found and VAST_HOST/VAST_SSH_PORT not set in $profile." >&2
+            echo "Either install the wrapper (rebuild after enabling) or pin host manually." >&2
+            return 1
+          end
+          set -l raw (vastai show instances --raw 2>/dev/null)
+          if test -z "$raw"; or test "$raw" = "[]"
+            echo "Vast.ai API returned no instances. Run `vast-create OFFER_ID` first." >&2
+            return 1
+          end
+          set -l info (echo $raw | jq -r --arg label "$VAST_LABEL" '
+            [.[] | select(.label == $label) | select(.actual_status == "running")]
+            | first
+            | if . == null then "" else "\(.public_ipaddr)\t\(.ports["22/tcp"][0].HostPort)" end
+          ' 2>/dev/null)
+          if test -z "$info"; or test "$info" = "null"
+            echo "No running Vast.ai instance with label '$VAST_LABEL' found." >&2
+            echo "List with: vast-show    Launch with: vast-create OFFER_ID" >&2
+            return 1
+          end
+          set -gx VAST_HOST (echo $info | cut -f1)
+          set -gx VAST_SSH_PORT (echo $info | cut -f2)
+        end
+      '';
+      _vast-load.description = "Internal: load Vast profile, apply defaults, discover host/port via API.";
+
+      vast-bootstrap.body = ''
+        set -l _pre_vars (set --names -x)
+        if not _vast-load
+          env-cleanup $_pre_vars
+          return 1
+        end
 
         echo "Bootstrapping vLLM on $VAST_SSH_USER@$VAST_HOST:$VAST_SSH_PORT (model: $VAST_MODEL)"
-        ssh -i $key_file \
+        ssh -i $VAST_SSH_KEY \
             -p $VAST_SSH_PORT \
             -o StrictHostKeyChecking=no \
             -o UserKnownHostsFile=/dev/null \
             -o LogLevel=ERROR \
             $VAST_SSH_USER@$VAST_HOST \
-            "MODEL='$VAST_MODEL' SERVED='$served_name' VLLM_PORT='$VAST_VLLM_PORT' MAX_LEN='$max_len' MEM_UTIL='$mem_util' HF_TOKEN='$VAST_HF_TOKEN' TOOL_PARSER='$VAST_TOOL_CALL_PARSER' REASONING_PARSER='$VAST_REASONING_PARSER' EXTRA_ARGS='$VAST_EXTRA_ARGS' bash -s" < /home/john/dotfiles/.config/vast-bootstrap.bash
+            "MODEL='$VAST_MODEL' SERVED='$VAST_SERVED_MODEL_NAME' VLLM_PORT='$VAST_VLLM_PORT' MAX_LEN='$VAST_MAX_MODEL_LEN' MEM_UTIL='$VAST_GPU_MEM_UTIL' HF_TOKEN='$VAST_HF_TOKEN' TOOL_PARSER='$VAST_TOOL_CALL_PARSER' REASONING_PARSER='$VAST_REASONING_PARSER' EXTRA_ARGS='$VAST_EXTRA_ARGS' bash -s" < /home/john/dotfiles/.config/vast-bootstrap.bash
         set -l rc $status
-
-        rm -f $key_file
         env-cleanup $_pre_vars
         return $rc
       '';
-      vast-bootstrap.description = "Bootstrap vLLM on the currently-rented Vast.ai instance (idempotent).";
+      vast-bootstrap.description = "Bootstrap vLLM on the rented Vast.ai instance (host auto-discovered, idempotent).";
 
       vast-tunnel.body = ''
         set -l _pre_vars (set --names -x)
-        set -l creds_file /run/agenix/vast-connection
-        if not test -f $creds_file
-          echo "Vast.ai connection info not found at $creds_file" >&2
+        if not _vast-load
           env-cleanup $_pre_vars
           return 1
-        end
-        envsource $creds_file >/dev/null
-        for var in VAST_HOST VAST_SSH_PORT VAST_SSH_USER VAST_VLLM_PORT VAST_LOCAL_PORT VAST_SSH_PRIVATE_KEY_B64
-          if not set -q $var
-            echo "Required field $var missing from $creds_file" >&2
-            env-cleanup $_pre_vars
-            return 1
-          end
         end
 
         if systemctl --user is-active --quiet vast-tunnel.service
@@ -646,12 +762,6 @@ in {
           end
         end
 
-        # Persist key in /run/user/$UID (tmpfs, 0700 by systemd) for the duration
-        # of the tunnel; vast-tunnel-down removes it.
-        set -l key_file /run/user/(id -u)/vast-tunnel.key
-        echo $VAST_SSH_PRIVATE_KEY_B64 | base64 -d > $key_file
-        chmod 600 $key_file
-
         set -l ssh_bin (command -v ssh)
         echo "Opening tunnel: localhost:$VAST_LOCAL_PORT -> $VAST_HOST:$VAST_VLLM_PORT"
         systemd-run --user --unit=vast-tunnel --collect \
@@ -662,7 +772,7 @@ in {
             -o StrictHostKeyChecking=no \
             -o UserKnownHostsFile=/dev/null \
             -o LogLevel=ERROR \
-            -i $key_file \
+            -i $VAST_SSH_KEY \
             -p $VAST_SSH_PORT \
             -L $VAST_LOCAL_PORT:localhost:$VAST_VLLM_PORT \
             $VAST_SSH_USER@$VAST_HOST
@@ -689,24 +799,17 @@ in {
         else
           echo "No tunnel running."
         end
-        set -l key_file /run/user/(id -u)/vast-tunnel.key
-        if test -f $key_file
-          rm -f $key_file
-        end
       '';
-      vast-tunnel-down.description = "Stop the vast-tunnel systemd user unit and clear its key.";
+      vast-tunnel-down.description = "Stop the vast-tunnel systemd user unit.";
 
       vast-status.body = ''
         set -l _pre_vars (set --names -x)
-        set -l creds_file /run/agenix/vast-connection
-        if not test -f $creds_file
-          echo "No vast-connection secret mounted at $creds_file."
+        if not _vast-load
           env-cleanup $_pre_vars
           return 1
         end
-        envsource $creds_file >/dev/null
 
-        echo "=== Vast.ai status ==="
+        echo "=== Vast.ai status (label: $VAST_LABEL) ==="
         echo "Host:   $VAST_SSH_USER@$VAST_HOST:$VAST_SSH_PORT"
         echo "Model:  $VAST_MODEL"
         if systemctl --user is-active --quiet vast-tunnel.service
@@ -729,24 +832,17 @@ in {
 
       vast-logs.body = ''
         set -l _pre_vars (set --names -x)
-        set -l creds_file /run/agenix/vast-connection
-        if not test -f $creds_file
-          echo "No vast-connection secret mounted at $creds_file." >&2
+        if not _vast-load
           env-cleanup $_pre_vars
           return 1
         end
-        envsource $creds_file >/dev/null
-
-        set -l key_file (mktemp -t vast-key.XXXXXX)
-        chmod 600 $key_file
-        echo $VAST_SSH_PRIVATE_KEY_B64 | base64 -d > $key_file
 
         set -l n 200
         if test (count $argv) -gt 0
           set n $argv[1]
         end
 
-        ssh -i $key_file \
+        ssh -i $VAST_SSH_KEY \
             -p $VAST_SSH_PORT \
             -o StrictHostKeyChecking=no \
             -o UserKnownHostsFile=/dev/null \
@@ -754,12 +850,55 @@ in {
             $VAST_SSH_USER@$VAST_HOST \
             "tail -n $n -f /workspace/vllm.log"
         set -l rc $status
-
-        rm -f $key_file
         env-cleanup $_pre_vars
         return $rc
       '';
       vast-logs.description = "Tail the remote vLLM log (vast-logs [N=200]).";
+
+      # Helpers for finding and renting Vast.ai instances. Wrap the `vastai`
+      # CLI (provided by the wrapper in shared-cli-configuration.nix). Run
+      # `vast-search` first, copy an offer ID, then `vast-create <id>`.
+      vast-search.body = ''
+        set -l query 'reliability > 0.99 num_gpus=1 gpu_name=B200 inet_down > 5000 disk_space > 250 verified=true rentable=true'
+        if test (count $argv) -gt 0
+          set query $argv
+        end
+        vastai search offers $query -o 'dph_total'
+      '';
+      vast-search.description = "Search Vast.ai offers (default: verified 1xB200, ≥99% reliability, ≥5Gbps net, ≥250GB disk; pass extra args to override query).";
+
+      vast-create.body = ''
+        set -l offer_id $argv[1]
+        if test -z "$offer_id"
+          echo "Usage: vast-create OFFER_ID" >&2
+          echo "Find an offer with: vast-search" >&2
+          return 1
+        end
+        vastai create instance $offer_id \
+          --image nvidia/cuda:12.8.0-devel-ubuntu24.04 \
+          --disk 300 \
+          --ssh \
+          --direct \
+          --label vllm-deepseek-v4
+      '';
+      vast-create.description = "Create a Vast.ai instance with our minimal CUDA image (300GB disk, SSH-only, labelled vllm-deepseek-v4).";
+
+      vast-show.body = ''
+        vastai show instances --raw 2>/dev/null | jq -r '.[] | select(.label == "vllm-deepseek-v4") | "id=\(.id) status=\(.actual_status) host=\(.public_ipaddr) ssh_port=\(.ports."22/tcp"[0].HostPort // "?") gpu=\(.gpu_name) disk=\(.disk_space)GB hourly=\(.dph_total)"'
+      '';
+      vast-show.description = "Show currently-rented Vast.ai instances tagged vllm-deepseek-v4 (id, status, host, ssh port).";
+
+      vast-destroy.body = ''
+        set -l instance_id $argv[1]
+        if test -z "$instance_id"
+          echo "Usage: vast-destroy INSTANCE_ID" >&2
+          echo "List instances with: vast-show" >&2
+          return 1
+        end
+        echo "Destroying Vast.ai instance $instance_id ..."
+        vastai destroy instance $instance_id
+      '';
+      vast-destroy.description = "Destroy a Vast.ai instance by ID (run vast-show to find the ID).";
 
       env-cleanup.body = ''
         for _v in (set --names -x)
