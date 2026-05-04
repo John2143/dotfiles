@@ -11,6 +11,55 @@
   ...
 }:
 let
+  vast-waybar-status = pkgs.writeShellApplication {
+    name = "vast-waybar-status";
+    runtimeInputs = with pkgs; [ fish jq coreutils gnused gnugrep ];
+    text = ''
+      CACHE=/tmp/vast-waybar-status.json
+      MAX_AGE=55
+
+      if [ -f "$CACHE" ]; then
+          age=$(( $(date +%s) - $(stat -c %Y "$CACHE") ))
+          if [ "$age" -lt "$MAX_AGE" ]; then
+              content=$(cat "$CACHE")
+              if [ -n "$content" ]; then
+                  echo "$content"
+                  exit 0
+              else
+                  exit 1
+              fi
+          fi
+      fi
+
+      if output=$(timeout 15 fish -c "vast-status" 2>/dev/null); then
+          label=$(echo "$output" | sed -n 's/=== Vast.ai status (label: \(.*\)) ===/\1/p')
+          tunnel_line=$(echo "$output" | grep "^Tunnel:" || true)
+          vllm_line=$(echo "$output" | grep "^vLLM:" || true)
+
+          if echo "$tunnel_line" | grep -q "UP"; then
+              if echo "$vllm_line" | grep -q "READY"; then
+                  class="vast-ready"
+                  icons="▲●"
+              else
+                  class="vast-tunnel-up"
+                  icons="▲○"
+              fi
+          else
+              class="vast-tunnel-down"
+              icons="▼○"
+          fi
+
+          result=$(jq -nc --arg t "$label $icons" --arg tt "$output" --arg c "$class" \
+              '{text: $t, tooltip: $tt, class: $c}')
+          printf '%s' "$result" > "$CACHE"
+          echo "$result"
+      else
+          : > "$CACHE"
+          exit 1
+      fi
+    '';
+  };
+
   weather-status = pkgs.writeShellApplication {
     name = "weather-status";
     runtimeInputs = [ pkgs.curl pkgs.jq ];
@@ -169,5 +218,5 @@ in {
   #};
   #};
 
-  environment.systemPackages = [ weather-status ];
+  environment.systemPackages = [ vast-waybar-status weather-status ];
 }

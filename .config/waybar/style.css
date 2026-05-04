@@ -112,7 +112,7 @@ window#waybar {
 }
 
 #tray, #pulseaudio, #network, #battery, #temperature, #memory, #cpu, #clock,
-#custom-thermostat, #custom-weather,
+#custom-vast, #custom-thermostat, #custom-weather,
 #custom-playerctl.backward, #custom-playerctl.play, #custom-playerctl.foward{
     /*font-family: Jet Brains Mono Nerd Font;*/
     /*font-weight: bold;*/
@@ -145,5 +145,17 @@ window#waybar {
 }
 
 #custom-thermostat.off {
+    color: #FF8888;
+}
+
+#custom-vast.vast-ready {
+    color: #A0E080;
+}
+
+#custom-vast.vast-tunnel-up {
+    color: #FFD080;
+}
+
+#custom-vast.vast-tunnel-down {
     color: #FF8888;
 }

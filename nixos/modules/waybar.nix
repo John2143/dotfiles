@@ -22,6 +22,7 @@
         ] ++ (lib.optionals (compName == "arch") [
           "custom/thermostat"
         ]) ++ [
+          "custom/vast"
           "custom/weather"
           "battery"
           "tray"
@@ -163,6 +164,13 @@
           tooltip = true;
         };
       }) // {
+        "custom/vast" = {
+          exec = "vast-waybar-status";
+          return-type = "json";
+          interval = 60;
+          format = "{}";
+          tooltip = true;
+        };
         "custom/weather" = {
           exec = "weather-status";
           return-type = "json";
