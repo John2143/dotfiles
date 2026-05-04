@@ -507,7 +507,7 @@
     # CLI (provided by the wrapper in shared-cli-configuration.nix). Run
     # `vast-search` first, copy an offer ID, then `vast-create <id>`.
     vast-search.body = ''
-      set -l query 'reliability > 0.99 num_gpus=1 gpu_name=B200 inet_down > 5000 disk_space > 250 verified=true rentable=true'
+      set -l query 'reliability > 0.85 gpu_name=B200 disk_space > 170 rentable=true'
       if test (count $argv) -gt 0
         set query $argv
       end
