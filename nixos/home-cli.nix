@@ -149,7 +149,9 @@ in {
       # NOTE: VAST_HF_TOKEN is a *secret*; put it in the encrypted
       # vast-credentials.age file, not here. (envsource sources both,
       # credentials wins.)
-      # Tool/reasoning parsers for models that need them.
+      # Tool/reasoning parsers for models that need them. DeepSeek V4
+      # auto-gets deepseek_v4 parsers from vast-bootstrap.bash; only set
+      # these for other models (e.g. Qwen3).
       # VAST_TOOL_CALL_PARSER=qwen3_xml
       # VAST_REASONING_PARSER=qwen3
       # Extra `vllm serve` flags. DeepSeek V4 auto-gets --kv-cache-dtype

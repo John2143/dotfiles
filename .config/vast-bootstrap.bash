@@ -75,6 +75,14 @@ case "$MODEL" in
       echo "Auto-setting --kv-cache-dtype fp8 for DeepSeek V4."
       EXTRA_ARGS="--kv-cache-dtype fp8 ${EXTRA_ARGS}"
     fi
+    if [ -z "$TOOL_PARSER" ]; then
+      echo "Auto-setting --tool-call-parser deepseek_v4 for DeepSeek V4."
+      TOOL_PARSER=deepseek_v4
+    fi
+    if [ -z "$REASONING_PARSER" ]; then
+      echo "Auto-setting --reasoning-parser deepseek_v4 for DeepSeek V4."
+      REASONING_PARSER=deepseek_v4
+    fi
     ;;
 esac
 
