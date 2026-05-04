@@ -95,6 +95,11 @@ in {
       xdg-desktop-portal-gtk
     ];
     xdgOpenUsePortal = true;
+    config = {
+      Hyprland = {
+        default = [ "hyprland" "gtk" ];
+      };
+    };
   };
   xdg.mime = rec {
     enable = true;
