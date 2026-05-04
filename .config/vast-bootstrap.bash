@@ -13,8 +13,11 @@
 #   TOOL_PARSER        --tool-call-parser, e.g. qwen3_xml (optional)
 #   REASONING_PARSER   --reasoning-parser, e.g. qwen3 (optional)
 #   EXTRA_ARGS         space-separated extra flags (optional)
+#   FORCE_RESTART      if non-empty, kill any running vllm and re-launch
+#                      (otherwise the script is a no-op when vllm is up)
 #
-# Idempotent: if a vLLM server is already responding on $VLLM_PORT it exits 0.
+# Idempotent: if a vLLM server is already responding on $VLLM_PORT it exits 0
+# unless FORCE_RESTART is set.
 # Logs go to /workspace/vllm.log; pid goes to /workspace/vllm.pid.
 #
 # Recommended rental image: nvidia/cuda:12.8.0-devel-ubuntu24.04 (clean CUDA,
@@ -32,6 +35,7 @@ set -euo pipefail
 : "${TOOL_PARSER:=}"
 : "${REASONING_PARSER:=}"
 : "${EXTRA_ARGS:=}"
+: "${FORCE_RESTART:=}"
 
 mkdir -p /workspace /workspace/tmp /workspace/pip-cache /workspace/.hf_home
 cd /workspace
@@ -87,10 +91,20 @@ case "$MODEL" in
 esac
 
 if curl -fsS "http://localhost:${VLLM_PORT}/v1/models" >/dev/null 2>&1; then
-  echo "vLLM already responding on :${VLLM_PORT} — bootstrap is a no-op."
-  curl -s "http://localhost:${VLLM_PORT}/v1/models" | head -c 400
-  echo
-  exit 0
+  if [ -z "${FORCE_RESTART}" ]; then
+    echo "vLLM already responding on :${VLLM_PORT} — bootstrap is a no-op."
+    echo "(Pass --restart to vast-bootstrap to force a re-launch with new flags.)"
+    curl -s "http://localhost:${VLLM_PORT}/v1/models" | head -c 400
+    echo
+    exit 0
+  fi
+  echo "FORCE_RESTART set — stopping running vLLM to re-launch with new flags ..."
+  pkill -f 'vllm serve' 2>/dev/null || true
+  pkill -9 -f 'VLLM::EngineCore' 2>/dev/null || true
+  for _ in $(seq 1 30); do
+    curl -fsS "http://localhost:${VLLM_PORT}/v1/models" >/dev/null 2>&1 || break
+    sleep 1
+  done
 fi
 
 # Always ensure system build deps are present, regardless of whether the

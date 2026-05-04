@@ -137,7 +137,10 @@ for the current host/port on every invocation.
 2. Disables `hf-xet` / `hf-transfer` to avoid `Background writer channel
    closed` failures on overlayfs.
 3. Stops any supervisord-managed vLLM that ships with Vast.ai's vLLM templates.
-4. Auto-adds `--kv-cache-dtype fp8` for any DeepSeek V4 model.
+4. For DeepSeek V4 models, auto-adds `--kv-cache-dtype fp8`,
+   `--tool-call-parser deepseek_v4`, and `--reasoning-parser deepseek_v4` so
+   `reasoning_content` is split out from the final answer in OpenAI-API
+   responses.
 5. `pip install vllm` if not preinstalled (~5 min).
 6. `nohup vllm serve …` in the background, logging to `/workspace/vllm.log`.
 7. Polls `/v1/models` for up to 20 minutes.
@@ -146,6 +149,13 @@ for the current host/port on every invocation.
 
 In `omp` (or any OpenAI-compatible client), pick the
 **`vast-vllm/deepseek-v4-flash`** model. Traffic routes via the local tunnel.
+
+DeepSeek V4 launches with `--reasoning-parser deepseek_v4`, so chat
+completions return `choices[].message.reasoning_content` (the chain of
+thought) separately from `choices[].message.content` (the final answer).
+Clients that don't know about `reasoning_content` see only the final answer,
+which is usually what you want. `reasoning_effort: low|medium|high` is
+honored as a top-level request parameter.
 
 Direct test:
 
@@ -222,7 +232,7 @@ Each label is independently discoverable.
 | `vast-create OFFER_ID` | Launch a new rental with our minimal CUDA image |
 | `vast-show` | List active rentals tagged `vllm-deepseek-v4` |
 | `vast-destroy INSTANCE_ID` | Tear down a rental |
-| `vast-bootstrap` | SSH in and (re)launch vLLM remotely |
+| `vast-bootstrap [--restart]` | SSH in and (re)launch vLLM remotely. Idempotent by default; `--restart` kills the running vllm and re-launches (use after changing parsers/flags) |
 | `vast-tunnel` | Open localhost:8001 → rental:8000 SSH tunnel |
 | `vast-tunnel-down` | Close the tunnel |
 | `vast-status` | Show tunnel + vLLM readiness |
@@ -266,6 +276,25 @@ The container's `/` overlay filled up. Bootstrap pins `HF_HOME` and `TMPDIR`
 to `/workspace` and clears `/tmp` if it's >50% full, but if the rental was
 created with a tiny disk, destroy it and re-create with `--disk 300` (the
 `vast-create` default).
+
+### Responses lack a `reasoning_content` field
+
+The running vLLM was started without `--reasoning-parser`. Confirm by
+grepping the remote log:
+
+```fish
+fish -c 'vast-logs 200' | grep -i reasoning_parser
+```
+
+If you see `reasoning_parser=None` or "Auto-initialization of reasoning
+token IDs failed", re-launch with the current bootstrap flags:
+
+```fish
+fish -c 'vast-bootstrap --restart'
+```
+
+This kills the running vllm and relaunches it with the parsers the
+bootstrap script auto-sets for DeepSeek V4. No need to destroy the rental.
 
 ### `DeepseekV4 only supports fp8 kv-cache format`
 

@@ -373,6 +373,11 @@
         return 1
       end
 
+      set -l force_restart ""
+      if contains -- --restart $argv
+        set force_restart 1
+      end
+
       echo "Bootstrapping vLLM on $VAST_SSH_USER@$VAST_HOST:$VAST_SSH_PORT (model: $VAST_MODEL)"
       ssh -i $VAST_SSH_KEY \
           -p $VAST_SSH_PORT \
@@ -380,12 +385,12 @@
           -o UserKnownHostsFile=/dev/null \
           -o LogLevel=ERROR \
           $VAST_SSH_USER@$VAST_HOST \
-          "MODEL='$VAST_MODEL' SERVED='$VAST_SERVED_MODEL_NAME' VLLM_PORT='$VAST_VLLM_PORT' MAX_LEN='$VAST_MAX_MODEL_LEN' MEM_UTIL='$VAST_GPU_MEM_UTIL' HF_TOKEN='$VAST_HF_TOKEN' TOOL_PARSER='$VAST_TOOL_CALL_PARSER' REASONING_PARSER='$VAST_REASONING_PARSER' EXTRA_ARGS='$VAST_EXTRA_ARGS' bash -s" < /home/john/dotfiles/.config/vast-bootstrap.bash
+          "MODEL='$VAST_MODEL' SERVED='$VAST_SERVED_MODEL_NAME' VLLM_PORT='$VAST_VLLM_PORT' MAX_LEN='$VAST_MAX_MODEL_LEN' MEM_UTIL='$VAST_GPU_MEM_UTIL' HF_TOKEN='$VAST_HF_TOKEN' TOOL_PARSER='$VAST_TOOL_CALL_PARSER' REASONING_PARSER='$VAST_REASONING_PARSER' EXTRA_ARGS='$VAST_EXTRA_ARGS' FORCE_RESTART='$force_restart' bash -s" < /home/john/dotfiles/.config/vast-bootstrap.bash
       set -l rc $status
       env-cleanup $_pre_vars
       return $rc
     '';
-    vast-bootstrap.description = "Bootstrap vLLM on the rented Vast.ai instance (host auto-discovered, idempotent).";
+    vast-bootstrap.description = "Bootstrap vLLM on the rented Vast.ai instance (host auto-discovered, idempotent; pass --restart to re-launch with new flags).";
 
     vast-tunnel.body = ''
       set -l _pre_vars (set --names -x)
