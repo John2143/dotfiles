@@ -62,11 +62,11 @@ let
               hrs_str=$(jq -rn --arg b "$balance" --arg h "$hourly" '
                   ($b | tonumber) as $bal | ($h | tonumber) as $hr |
                   if $hr > 0 then
-                      ($bal / $hr) |
-                      if . >= 1 then "\(. * 10 | round / 10)h"
-                      else "\(. * 60 | round)m"
-                      end
-                  else "?h" end
+                      ($bal / $hr) as $total_hours |
+                      ($total_hours | floor) as $hours |
+                      (($total_hours - $hours) * 60 | round) as $minutes |
+                      "\($hours):\($minutes | tostring | if length == 1 then "0" + . else . end)"
+                  else "?:??" end
               ' 2>/dev/null) || hrs_str=""
           fi
 
