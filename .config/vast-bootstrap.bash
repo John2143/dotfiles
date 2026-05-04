@@ -15,6 +15,8 @@
 #   EXTRA_ARGS         space-separated extra flags (optional)
 #   FORCE_RESTART      if non-empty, kill any running vllm and re-launch
 #                      (otherwise the script is a no-op when vllm is up)
+#   TENSOR_PARALLEL    --tensor-parallel-size N (auto-detected from GPU count
+#                      if unset; set to 1 to disable on multi-GPU instances)
 #
 # Idempotent: if a vLLM server is already responding on $VLLM_PORT it exits 0
 # unless FORCE_RESTART is set.
@@ -36,6 +38,7 @@ set -euo pipefail
 : "${REASONING_PARSER:=}"
 : "${EXTRA_ARGS:=}"
 : "${FORCE_RESTART:=}"
+: "${TENSOR_PARALLEL:=}"
 
 mkdir -p /workspace /workspace/tmp /workspace/pip-cache /workspace/.hf_home
 cd /workspace
@@ -163,6 +166,17 @@ if ! command -v nvidia-smi >/dev/null 2>&1; then
   echo "Warning: nvidia-smi not found inside the rental. vLLM will likely fail to start." >&2
 fi
 
+# Auto-detect GPU count and enable tensor parallelism unless already configured.
+if [ -z "${TENSOR_PARALLEL}" ] && ! printf '%s\n' "$EXTRA_ARGS" | grep -q -- '--tensor-parallel-size'; then
+  if command -v nvidia-smi >/dev/null 2>&1; then
+    GPU_COUNT=$(nvidia-smi --list-gpus 2>/dev/null | wc -l)
+    if [ "${GPU_COUNT}" -gt 1 ]; then
+      echo "Detected ${GPU_COUNT} GPUs — auto-setting --tensor-parallel-size ${GPU_COUNT}."
+      TENSOR_PARALLEL="${GPU_COUNT}"
+    fi
+  fi
+fi
+
 if [ -n "${HF_TOKEN}" ]; then
   export HF_TOKEN HUGGING_FACE_HUB_TOKEN="${HF_TOKEN}"
 fi
@@ -188,6 +202,9 @@ if [ -n "${REASONING_PARSER}" ]; then
   # always null. Enable thinking server-wide; clients can still disable
   # per-request via chat_template_kwargs: {"thinking": false}.
   ARGS+=(--default-chat-template-kwargs '{"thinking": true}')
+fi
+if [ -n "${TENSOR_PARALLEL}" ]; then
+  ARGS+=(--tensor-parallel-size "${TENSOR_PARALLEL}")
 fi
 if [ -n "${EXTRA_ARGS}" ]; then
   # Word-splitting is intentional so EXTRA_ARGS can carry multiple flags.

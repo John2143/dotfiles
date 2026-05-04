@@ -337,6 +337,7 @@
       set -q VAST_TOOL_CALL_PARSER; or set -gx VAST_TOOL_CALL_PARSER ""
       set -q VAST_REASONING_PARSER; or set -gx VAST_REASONING_PARSER ""
       set -q VAST_EXTRA_ARGS; or set -gx VAST_EXTRA_ARGS ""
+      set -q VAST_TENSOR_PARALLEL; or set -gx VAST_TENSOR_PARALLEL ""
 
       # 5) Discover host/SSH port via API unless overridden in profile.
       if test -z "$VAST_HOST"; or test -z "$VAST_SSH_PORT"
@@ -385,7 +386,7 @@
           -o UserKnownHostsFile=/dev/null \
           -o LogLevel=ERROR \
           $VAST_SSH_USER@$VAST_HOST \
-          "MODEL='$VAST_MODEL' SERVED='$VAST_SERVED_MODEL_NAME' VLLM_PORT='$VAST_VLLM_PORT' MAX_LEN='$VAST_MAX_MODEL_LEN' MEM_UTIL='$VAST_GPU_MEM_UTIL' HF_TOKEN='$VAST_HF_TOKEN' TOOL_PARSER='$VAST_TOOL_CALL_PARSER' REASONING_PARSER='$VAST_REASONING_PARSER' EXTRA_ARGS='$VAST_EXTRA_ARGS' FORCE_RESTART='$force_restart' bash -s" < /home/john/dotfiles/.config/vast-bootstrap.bash
+          "MODEL='$VAST_MODEL' SERVED='$VAST_SERVED_MODEL_NAME' VLLM_PORT='$VAST_VLLM_PORT' MAX_LEN='$VAST_MAX_MODEL_LEN' MEM_UTIL='$VAST_GPU_MEM_UTIL' HF_TOKEN='$VAST_HF_TOKEN' TOOL_PARSER='$VAST_TOOL_CALL_PARSER' REASONING_PARSER='$VAST_REASONING_PARSER' EXTRA_ARGS='$VAST_EXTRA_ARGS' TENSOR_PARALLEL='$VAST_TENSOR_PARALLEL' FORCE_RESTART='$force_restart' bash -s" < /home/john/dotfiles/.config/vast-bootstrap.bash
       set -l rc $status
       env-cleanup $_pre_vars
       return $rc

@@ -36,6 +36,9 @@
       # Extra `vllm serve` flags. DeepSeek V4 auto-gets --kv-cache-dtype
       # fp8 from vast-bootstrap.bash; only set this for other tweaks.
       # VAST_EXTRA_ARGS=--quantization fp4
+      # Tensor parallelism: auto-detected from GPU count (2x GPU → 2).
+      # Override here to force a specific value or disable (set to 1).
+      # VAST_TENSOR_PARALLEL=1
 
       # ---------- Manual host override (skip API discovery) ----------
       # By default, vast-bootstrap/vast-tunnel/vast-status discover
