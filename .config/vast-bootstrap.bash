@@ -85,6 +85,29 @@ if curl -fsS "http://localhost:${VLLM_PORT}/v1/models" >/dev/null 2>&1; then
   exit 0
 fi
 
+# Always ensure system build deps are present, regardless of whether the
+# venv + vllm are already installed. Triton JIT-compiles helper kernels at
+# vllm startup using gcc + Python.h every time, so these need to be there
+# on every bootstrap, not just on the first install.
+#   - python3 + venv module (Ubuntu 24.04 enforces PEP 668; system pip blocked)
+#   - python3-dev (Python.h) for triton's JIT C compilation at vllm startup
+#   - build-essential for the gcc/headers used by triton + DeepGEMM
+# nvidia/cuda:*-devel ships CUDA + gcc but typically misses python3-dev
+# and python3-venv. apt is idempotent — already-installed pkgs are no-ops.
+NEED_APT=0
+command -v python3 >/dev/null 2>&1 || NEED_APT=1
+command -v gcc >/dev/null 2>&1 || NEED_APT=1
+python3 -c 'import ensurepip, venv' >/dev/null 2>&1 || NEED_APT=1
+PYVER=$(python3 -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")' 2>/dev/null || echo "")
+[ -n "$PYVER" ] && [ -e "/usr/include/python${PYVER}/Python.h" ] || NEED_APT=1
+if [ "$NEED_APT" = 1 ]; then
+  echo "Installing python3 + pip + venv + dev headers + build-essential via apt ..."
+  apt-get update -qq
+  apt-get install -y -qq --no-install-recommends \
+    python3 python3-pip python3-venv python3-dev \
+    build-essential ca-certificates curl
+fi
+
 # Reuse a previously-created venv if it exists (subsequent bootstraps after
 # the first are near-instant — model weights are also cached on /workspace).
 if [ -x /workspace/venv/bin/vllm ]; then
@@ -92,21 +115,7 @@ if [ -x /workspace/venv/bin/vllm ]; then
 fi
 
 if ! command -v vllm >/dev/null 2>&1; then
-  echo "vllm CLI not found; bootstrapping python + venv + vllm ..."
-
-  # The minimal nvidia/cuda image we recommend has CUDA but no Python; the
-  # nvidia/cuda:*-devel image often ships python3 *without* the venv module.
-  # Ubuntu 24.04+ enforces PEP 668, so system-wide pip installs are blocked
-  # — we need a venv. Check both the binary and the venv module.
-  NEED_APT=0
-  command -v python3 >/dev/null 2>&1 || NEED_APT=1
-  python3 -c 'import ensurepip, venv' >/dev/null 2>&1 || NEED_APT=1
-  if [ "$NEED_APT" = 1 ]; then
-    echo "Installing python3 + pip + venv via apt ..."
-    apt-get update -qq
-    apt-get install -y -qq --no-install-recommends \
-      python3 python3-pip python3-venv ca-certificates curl
-  fi
+  echo "vllm CLI not found; bootstrapping venv + vllm ..."
 
   # If a previous attempt left an incomplete venv (e.g. python but no pip,
   # which happens when `python3 -m venv` runs without ensurepip available),
