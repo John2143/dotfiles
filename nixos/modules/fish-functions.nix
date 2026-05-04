@@ -548,6 +548,17 @@
     '';
     vast-destroy.description = "Destroy a Vast.ai instance by ID (run vast-show to find the ID).";
 
+    vast-balance.body = ''
+      set -l creds_file /run/agenix/vast-credentials
+      if not test -f $creds_file
+        echo "Vast.ai credentials not at $creds_file." >&2
+        return 1
+      end
+      envsource $creds_file >/dev/null
+      vastai show user --raw | jq -r '"Credit: $\(.credit | . * 100 | round / 100)"'
+    '';
+    vast-balance.description = "Show current Vast.ai account credit balance.";
+
     env-cleanup.body = ''
       for _v in (set --names -x)
         if not contains $_v $argv

@@ -49,7 +49,41 @@ let
               icons="▼○"
           fi
 
-          result=$(jq -nc --arg t "$label $icons" --arg tt "$output" --arg c "$class" \
+          balance_out=$(timeout 10 fish -c "vast-balance" 2>/dev/null) || balance_out=""
+          show_out=$(timeout 10 fish -c "vast-show" 2>/dev/null) || show_out=""
+
+          # "Credit: $12.34" -> "12.34"
+          balance=$(echo "$balance_out" | sed -n 's/Credit: \$//p') || balance=""
+          # "... hourly=0.45 ..." -> "0.45"
+          hourly=$(echo "$show_out" | sed -n 's/.*hourly=\([0-9.]*\).*/\1/p') || hourly=""
+
+          hrs_str=""
+          if [ -n "$balance" ] && [ -n "$hourly" ]; then
+              hrs_str=$(jq -rn --arg b "$balance" --arg h "$hourly" '
+                  ($b | tonumber) as $bal | ($h | tonumber) as $hr |
+                  if $hr > 0 then
+                      ($bal / $hr) |
+                      if . >= 1 then "\(. * 10 | round / 10)h"
+                      else "\(. * 60 | round)m"
+                      end
+                  else "?h" end
+              ' 2>/dev/null) || hrs_str=""
+          fi
+
+          text="$label $icons"
+          [ -n "$balance" ] && text="$text \$$balance"
+          [ -n "$hrs_str" ] && text="$text $hrs_str"
+
+          tooltip="$output"
+          if [ -n "$balance" ] || [ -n "$hourly" ]; then
+              tooltip="$tooltip
+
+Balance:   \$$balance
+Rate:      \$$hourly/hr
+Remaining: ~$hrs_str"
+          fi
+
+          result=$(jq -nc --arg t "$text" --arg tt "$tooltip" --arg c "$class" \
               '{text: $t, tooltip: $tt, class: $c}')
           printf '%s' "$result" > "$CACHE"
           echo "$result"
