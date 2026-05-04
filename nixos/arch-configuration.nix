@@ -56,8 +56,15 @@ let
           notify-send -h string:x-dunst-stack-tag:hass-fan "Fan" "Toggled"
           pkill -RTMIN+8 waybar || true
           ;;
+      plug-toggle)
+        curl -sf -X POST -H "$AUTH" -H "Content-Type: application/json" \
+          -d '{"entity_id":"fan.plug_upstairs_desktop_computer_switch"}' \
+          "$HA/api/services/fan/toggle" > /dev/null
+        notify-send -h string:x-dunst-stack-tag:hass-plug "Plug" "Upstairs desktop computer toggled"
+        pkill -RTMIN+8 waybar || true
+        ;;
         *)
-          echo "Usage: hass-macro {thermostat-down|thermostat-up|thermostat-toggle|fan-toggle}" >&2
+          echo "Usage: hass-macro {thermostat-down|thermostat-up|thermostat-toggle|fan-toggle|plug-toggle}" >&2
           exit 1
           ;;
       esac
@@ -175,6 +182,9 @@ in
   };
 
   # Second keyboard (winkeyless ps2avrGB) remapped to F13-F24.
+  # F23 and F24 are the last standard Linux function keycodes (KEY_F23, KEY_F24).
+  # Any additional keys beyond F24 should use XF86Launch* (Launch8, Launch9, etc.)
+  # to continue the pattern from the existing XF86Launch5/6/7 mappings.
   # Hyprland binds in hyprland.conf map these to actual commands.
   services.keyd = {
     enable = true;
@@ -191,6 +201,8 @@ in
         s = "f20";
         d = "f21";
         f = "f22";
+        y = "f23";
+        g = "f24";
       };
     };
   };
