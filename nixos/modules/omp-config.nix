@@ -98,8 +98,8 @@
 
     ".omp/agent/config.yml".text = ''
       modelRoles:
-        default: office-ollama/qwen3.6:27b
-        smol: office-ollama/qwen3.6:27b
+        default: vast-vllm/deepseek-v4-flash
+        smol: office-ollama-cpu/gemma4
 
       modelProviderOrder:
         - vast-vllm
