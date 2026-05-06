@@ -294,6 +294,17 @@
   security.rtkit.enable = true;
   services.udisks2.enable = true;
 
+  # ArgoCD admin password — auto-login for `argocd` CLI.
+  age.secrets.argo-admin-password =
+    lib.mkIf
+    (builtins.elem config.networking.hostName ["office" "arch" "closet"])
+    {
+      file = ../secrets/argo-admin-password.age;
+      mode = "0400";
+      owner = "john";
+      group = "users";
+    };
+
   # # Open ports in the firewall.
   # networking.firewall.allowedTCPPorts = [
   #   5353 # avahi

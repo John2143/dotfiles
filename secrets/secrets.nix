@@ -22,6 +22,9 @@ let
 in {
   # Readable only by the office machine (k3s agent token).
   "k3s-local-token.age".publicKeys = [office arch pite nas];
+  # ArgoCD admin password — initial admin secret from the K3s cluster.
+  # Retrieve with: ssh closet kubectl get secret -n argocd argocd-initial-admin-secret -o jsonpath='{.data.password}' | base64 -d
+  "argo-admin-password.age".publicKeys = [office arch closet];
   # Samba credentials for mounting NAS shares (username/password/domain).
   "smb-credentials.age".publicKeys = [arch office closet secu];
   # Per-machine restic repository passwords (each machine can only decrypt its own).

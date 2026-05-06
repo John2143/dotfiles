@@ -89,6 +89,23 @@
       omp --hook=$HOME/.omp/agent/hooks/approve.ts $argv
     '';
     omp-safe.description = "Run omp with the approval hook (DRAFT) for risky tool calls";
+    try-check-prompt.body = ''
+      # Run omp with the approval hook and a safe prompt that exercises the
+      # approve/deny confirm dialog. The prompt instructs the model to run a command
+      # containing "rm -rf" (echo'd, not executed). Since the hook checks the
+      # command string for risky patterns, `echo rm -rf <dir>` triggers the
+      # confirm prompt even though the actual command is harmless.
+      #
+      # If the hook is working:
+      #   - The confirm dialog appears: "Approve tool call?"
+      #   - Approving runs: echo rm -rf /tmp/omp-hook-test
+      #   - Denying throws and the tool call is blocked.
+      #
+      # If NO dialog appears, the hook may not be wired correctly.
+      omp --hook=$HOME/.omp/agent/hooks/approve.ts $argv "Run: echo rm -rf /tmp/omp-hook-test  # verify the approval hook"
+    '';
+    try-check-prompt.description = "Verify the approval hook works — triggers the approve/deny confirm dialog with a safe echo'd rm -rf command";
+ 
 
     llm-load-keys.body = ''
       # Loads admin LLM keys (ANTHROPIC_ADMIN_KEY, OPENAI_ADMIN_KEY) for use by
@@ -103,6 +120,26 @@
       envsource $creds_file
     '';
     llm-load-keys.description = "Load LLM admin API keys into current shell (on-demand)";
+    argocd.body = ''
+      set -l creds_file /run/agenix/argo-admin-password
+      if not test -f $creds_file
+        echo "ArgoCD admin password not found at $creds_file" >&2
+        return 1
+      end
+      set -l password (cat $creds_file)
+      set -lx ARGOCD_SERVER argocd.ts.2143.me
+      set -lx ARGOCD_AUTH_TOKEN (
+        curl -sk https://argocd.ts.2143.me/api/v1/session \
+          -H 'Content-Type: application/json' \
+          -d '{"username":"admin","password":"'$password'"}' | jq -r '.token // empty'
+      )
+      if test -z "$ARGOCD_AUTH_TOKEN"
+        echo "Failed to obtain ArgoCD auth token" >&2
+        return 1
+      end
+      command argocd --grpc-web $argv
+    '';
+    argocd.description = "ArgoCD CLI with auto-authentication via age-encrypted admin password";
     _llm-paginate-json.body = ''
       # Walk a paginated JSON API of the shape { data: [...], has_more, next_page }.
       # Outputs the merged .data array as compact JSON on stdout.
