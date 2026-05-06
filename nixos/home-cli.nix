@@ -80,6 +80,7 @@ in {
     kubecolor # kubectl color
     k9s
     k3s
+    argocd
 
     direnv # nixos env manager: see also (direnv hook fish)
     # clang # compiler

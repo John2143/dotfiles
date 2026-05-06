@@ -82,6 +82,14 @@
       env-cleanup $_pre_vars
     '';
     bigjuush.description = "Upload files to RustFS and get public share links";
+    omp-safe.body = ''
+      # Run omp with the tool-call approval hook loaded. Default `omp` runs
+      # auto; `omp-safe` prompts before risky bash, force-pushes, etc.
+      # See `~/.omp/agent/hooks/approve.ts` for the rule list.
+      omp --hook=$HOME/.omp/agent/hooks/approve.ts $argv
+    '';
+    omp-safe.description = "Run omp with the approval hook (DRAFT) for risky tool calls";
+
     llm-load-keys.body = ''
       # Loads admin LLM keys (ANTHROPIC_ADMIN_KEY, OPENAI_ADMIN_KEY) for use by
       # llm-costs. Runtime keys (ANTHROPIC_API_KEY, OPENAI_API_KEY) are mounted
