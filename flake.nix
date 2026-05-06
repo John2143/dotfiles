@@ -263,6 +263,7 @@
         agenix.nixosModules.default
         ./nixos/shared-cli-configuration.nix
         ./nixos/nas-configuration.nix
+        ./nixos/modules/k3s-agent.nix
         ./nixos/modules/disko_nas.nix
         ./nixos/tailscale.nix
       ];

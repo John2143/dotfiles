@@ -93,8 +93,26 @@
 # 8. Set Samba password:
 #      sudo smbpasswd -a john
 #
-# 9. Rebuild:
-#      sudo nixos-rebuild switch --flake /home/john/dotfiles#nas
+#
+###########################
+# 10. Longhorn backing store — lives on the neo SSD pool, not tank.
+#     The neo dataset is mounted at /var/lib/longhorn, which is Longhorn's
+#     default data path. SSD speed means volume operations (attach, snapshot,
+#     rebuild) don't hit HDD seek latency.
+#
+#     One-time setup:
+#       sudo zfs create \
+#         -o mountpoint=/var/lib/longhorn \
+#         -o recordsize=1M \
+#         -o compression=lz4 \
+#         -o atime=off \
+#         neo/longhorn
+#       sudo zfs set mountpoint=/var/lib/longhorn neo/longhorn
+#       sudo chown root:root /var/lib/longhorn
+#       sudo chmod 755 /var/lib/longhorn
+#
+#     11. Rebuild:
+#       sudo nixos-rebuild switch --flake /home/john/dotfiles#nas
 #
 {
   config,
@@ -260,6 +278,14 @@
         autosnap = true;
         daily = 30;
         monthly = 12;
+      };
+      # neo/longhorn backs Longhorn's block-device store on the SSD pool.
+      # Keep daily snapshots for quick volume-level recovery; no monthly
+      # needed since Longhorn manages its own snapshot/backup lifecycle and
+      # monthly ZFS snaps would waste SSD space on stale block data.
+      "neo/longhorn" = {
+        autosnap = true;
+        daily = 7;
       };
     };
   };
