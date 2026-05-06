@@ -21,7 +21,7 @@ let
   allKeys = [office arch];
 in {
   # Readable only by the office machine (k3s agent token).
-  "k3s-local-token.age".publicKeys = [office arch pite];
+  "k3s-local-token.age".publicKeys = [office arch pite nas];
   # Samba credentials for mounting NAS shares (username/password/domain).
   "smb-credentials.age".publicKeys = [arch office closet secu];
   # Per-machine restic repository passwords (each machine can only decrypt its own).
