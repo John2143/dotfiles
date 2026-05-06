@@ -121,7 +121,66 @@
       omp --hook=$HOME/.omp/agent/hooks/approve.ts $argv "Run: echo rm -rf /tmp/omp-hook-test  # verify the approval hook"
     '';
     try-check-prompt.description = "Verify the approval hook works — triggers the approve/deny confirm dialog with a safe echo'd rm -rf command";
- 
+
+    my_claw.body = ''
+      # Run Claude Code with inference offloaded to the local DeepSeek V4 Flash
+      # behind vast-tunnel. Spawns a per-invocation LiteLLM proxy on a random
+      # high port that translates Anthropic /v1/messages → OpenAI /v1/chat/completions
+      # against http://localhost:$VAST_LOCAL_PORT/v1, then runs claude pointed at
+      # it. Assumes vast-tunnel is up (same convention as omp).
+      if not systemctl --user is-active --quiet vast-tunnel.service
+        echo "my_claw: vast-tunnel is down. Run: vast-tunnel" >&2
+        return 1
+      end
+      set -l _pre_vars (set --names -x)
+      if not _vast-load
+        env-cleanup $_pre_vars
+        return 1
+      end
+
+      # Random ephemeral port. TOCTOU collision risk is low across the 16k
+      # range; if litellm fails to bind, the readiness poll below catches it.
+      set -l port (random 49152 65535)
+      set -l log (mktemp -t my_claw.XXXXXX.log)
+
+      echo "my_claw: starting LiteLLM proxy on :$port → localhost:$VAST_LOCAL_PORT (model=$VAST_SERVED_MODEL_NAME, log=$log)"
+      uvx --quiet --from 'litellm[proxy]' litellm \
+          --model "openai/$VAST_SERVED_MODEL_NAME" \
+          --api_base "http://localhost:$VAST_LOCAL_PORT/v1" \
+          --port $port >$log 2>&1 &
+      set -l proxy_pid $last_pid
+
+      # First invocation downloads litellm[proxy] via uvx (~30s); subsequent
+      # runs are warm from ~/.cache/uv. Cap at 120s to cover the cold case.
+      set -l ready 0
+      for i in (seq 1 240)
+        if curl -fsS --max-time 1 "http://localhost:$port/v1/models" >/dev/null 2>&1
+          set ready 1
+          break
+        end
+        if not kill -0 $proxy_pid 2>/dev/null
+          break
+        end
+        sleep 0.5
+      end
+      if test $ready -ne 1
+        echo "my_claw: LiteLLM proxy never came up on :$port — see $log" >&2
+        kill $proxy_pid 2>/dev/null
+        env-cleanup $_pre_vars
+        return 1
+      end
+
+      set -gx ANTHROPIC_BASE_URL "http://localhost:$port"
+      set -gx ANTHROPIC_AUTH_TOKEN dummy
+      set -gx ANTHROPIC_MODEL "$VAST_SERVED_MODEL_NAME"
+      claude $argv
+      set -l rc $status
+      kill $proxy_pid 2>/dev/null
+      rm -f $log
+      env-cleanup $_pre_vars
+      return $rc
+    '';
+    my_claw.description = "Run Claude Code routed through a per-invocation LiteLLM proxy to the local DeepSeek (assumes vast-tunnel is up).";
 
     llm-load-keys.body = ''
       # Loads the admin LLM key (ANTHROPIC_ADMIN_KEY) for use by llm-costs and

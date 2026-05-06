@@ -573,6 +573,11 @@ nohup bash -c 'vllm "$@" 2>&1 | ts "%Y-%m-%dT%H:%M:%SZ "' \
 VLLM_PID=$!
 echo "${VLLM_PID}" >/workspace/vllm.pid
 
+# Start the monitor before the readiness wait so GPU/VRAM/power samples cover
+# the interesting window — weights load, torch.compile, warmup. Idempotent via
+# pidfile, so no-op on --restart.
+start_monitor_if_needed
+
 echo "Waiting for /v1/models on :${VLLM_PORT} (cold-cold start ~30 min; up to 40 min ceiling) ..."
 # 480 × 5s = 40 min ceiling. Cold-cold first launch on a fresh rental is
 # ~27-30 min in practice (8 min HF download + 9 min weights load + 2 min
@@ -585,15 +590,12 @@ for _ in $(seq 1 480); do
     emit_event vllm_ready ""
     curl -s "http://localhost:${VLLM_PORT}/v1/models" | head -c 400
     echo
-    start_monitor_if_needed
     exit 0
   fi
   if ! kill -0 "${VLLM_PID}" 2>/dev/null; then
     echo "vllm process exited unexpectedly. Last 50 log lines:" >&2
     tail -n 50 /workspace/vllm.log >&2 || true
     emit_event vllm_failed "process exited during startup"
-    # Start the monitor anyway — we want GPU stats during the failed run too.
-    start_monitor_if_needed
     exit 1
   fi
   sleep 5
@@ -602,5 +604,4 @@ done
 echo "Timed out waiting for vLLM readiness. Tail of /workspace/vllm.log:" >&2
 tail -n 50 /workspace/vllm.log >&2 || true
 emit_event vllm_failed "timeout waiting for /v1/models"
-start_monitor_if_needed
 exit 1

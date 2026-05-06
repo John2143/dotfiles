@@ -56,6 +56,9 @@
       inputs.agenix.packages.${pkgs.stdenv.hostPlatform.system}.default
     ]
     ++ lib.optionals (builtins.elem config.networking.hostName ["office" "arch" "pite"]) [
+      # uv on PATH so my_claw (in fish-functions.nix) can `uvx litellm`
+      # without needing a writeShellScriptBin nix-store substitution.
+      pkgs.uv
       # omp wrapper: sandboxed via bubblewrap so a compromised binary can't
       # read /run/agenix/*, ~/.ssh, or the dotfiles secrets directory.
       # omp is a status display tool that doesn't need broad filesystem access.
