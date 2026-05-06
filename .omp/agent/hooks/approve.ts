@@ -1,9 +1,8 @@
-// @ts-nocheck
 // Approval hook for risky tool calls.
 //
 // Triggers an interactive confirm dialog before executing:
 //   - bash commands matching known-risky patterns
-//   - write/edit calls (optional; comment out if too noisy)
+//   - write/edit calls (optional; uncomment if too noisy)
 //
 // Everything else runs uninterrupted.
 
@@ -21,38 +20,21 @@ const RISKY_BASH = [
   /\bmkfs\b/i,
 ];
 
-function isRisky(toolName: string, args: Record<string, unknown>): boolean {
-  if (toolName === "bash") {
-    const cmd = String(args?.command ?? "");
-    return RISKY_BASH.some((re) => re.test(cmd));
-  }
-  // Uncomment to also gate writes:
-  // if (toolName === "write" || toolName === "edit") return true;
-  return false;
-}
+export default function (pi) {
+  pi.on("session_start", async (_event, ctx) => {
+    ctx.ui.notify("Approval hook loaded", "info");
+  });
 
-function summarize(toolName: string, args: Record<string, unknown>): string {
-  if (toolName === "bash") return String(args?.command ?? "").slice(0, 200);
-  if (toolName === "write" || toolName === "edit") return String(args?.path ?? args?.file ?? "");
-  try { return JSON.stringify(args).slice(0, 200); } catch { return ""; }
-}
+  pi.on("tool_call", async (event, ctx) => {
+    if (event.toolName !== "bash") return;
 
-export default function approveDangerous(pi: { on: (event: string, handler: (...args: unknown[]) => void) => void }) {
-  pi.on("tool_call", async (event: { toolName: string; args: Record<string, unknown> }, ctx: { ui?: { confirm?: (opts: { title: string; message: string; timeout: number }) => Promise<boolean> } }) => {
-    if (!isRisky(event.toolName, event.args)) return;
+    const cmd = String(event.input.command ?? "");
+    if (!RISKY_BASH.some((re) => re.test(cmd))) return;
 
-    const ok = await ctx?.ui?.confirm?.({
-      title: "Approve tool call?",
-      message: `${event.toolName}: ${summarize(event.toolName, event.args)}`,
-      timeout: 60_000,
-    });
+    // No UI available (e.g. piped/non-interactive) -- block by default for safety.
+    if (!ctx.hasUI) return { block: true, reason: "Risky command blocked: no UI available for confirmation" };
 
-    if (!ok) {
-      // DRAFT: rejection shape is unverified. Throw is a reasonable
-      // first guess given how OMP wraps tool errors elsewhere
-      // (`ToolError` thrown -> tool result marked isError). Adjust
-      // after running once if this doesn't actually block execution.
-      throw new Error("Denied by approval hook");
-    }
+    const ok = await ctx.ui.confirm("Approve tool call?", `${event.toolName}: ${cmd.slice(0, 200)}`);
+    if (!ok) return { block: true, reason: "Denied by approval hook" };
   });
 }

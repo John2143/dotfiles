@@ -264,8 +264,8 @@
       group = "users";
     };
 
-  # Admin keys (ANTHROPIC_ADMIN_KEY, OPENAI_ADMIN_KEY) — only sourced by
-  # `llm-load-keys` for interactive `llm-costs` use. Never mounted on pite.
+  # Admin key (ANTHROPIC_ADMIN_KEY) — sourced by `llm-load-keys` for interactive
+  # `llm-costs` and `llm-topup-anthropic` use. Never mounted on pite.
   age.secrets.llm-admin-keys =
     lib.mkIf
     (builtins.elem config.networking.hostName ["office" "arch"])

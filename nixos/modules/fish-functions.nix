@@ -86,9 +86,10 @@
       # Run omp with the tool-call approval hook loaded. Default `omp` runs
       # auto; `omp-safe` prompts before risky bash, force-pushes, etc.
       # See `~/.omp/agent/hooks/approve.ts` for the rule list.
+      # Verify with: `try-check-prompt`
       omp --hook=$HOME/.omp/agent/hooks/approve.ts $argv
     '';
-    omp-safe.description = "Run omp with the approval hook (DRAFT) for risky tool calls";
+    omp-safe.description = "Run omp with the approval hook for risky tool calls";
     try-check-prompt.body = ''
       # Run omp with the approval hook and a safe prompt that exercises the
       # approve/deny confirm dialog. The prompt instructs the model to run a command
@@ -108,10 +109,10 @@
  
 
     llm-load-keys.body = ''
-      # Loads admin LLM keys (ANTHROPIC_ADMIN_KEY, OPENAI_ADMIN_KEY) for use by
-      # llm-costs. Runtime keys (ANTHROPIC_API_KEY, OPENAI_API_KEY) are mounted
+      # Loads the admin LLM key (ANTHROPIC_ADMIN_KEY) for use by llm-costs and
+      # llm-topup-anthropic. The runtime key (ANTHROPIC_API_KEY) is mounted
       # at /run/agenix/llm-runtime-keys but only the admin file goes here —
-      # llm-costs needs admin scope to read org cost reports.
+      # llm-costs and llm-topup-anthropic need admin scope for cost reports & billing.
       set -l creds_file /run/agenix/llm-admin-keys
       if not test -f $creds_file
         echo "LLM admin keys not found at $creds_file" >&2
@@ -119,7 +120,7 @@
       end
       envsource $creds_file
     '';
-    llm-load-keys.description = "Load LLM admin API keys into current shell (on-demand)";
+    llm-load-keys.description = "Load Anthropic admin API key into current shell (on-demand)";
     argocd.body = ''
       set -l creds_file /run/agenix/argo-admin-password
       if not test -f $creds_file
@@ -140,169 +141,128 @@
       command argocd --grpc-web $argv
     '';
     argocd.description = "ArgoCD CLI with auto-authentication via age-encrypted admin password";
-    _llm-paginate-json.body = ''
-      # Walk a paginated JSON API of the shape { data: [...], has_more, next_page }.
-      # Outputs the merged .data array as compact JSON on stdout.
-      # On API error, outputs the error message and returns 1.
-      #
-      # Usage: _llm-paginate-json DEBUG BASE_URL [-H HEADER]...
-      set -l debug $argv[1]
-      set -l base_url $argv[2]
-      set -l headers $argv[3..]
-      set -l url $base_url
-      set -l pages
 
-      while true
-        set -l resp (curl -s $headers "$url")
-        if test "$debug" = "1"
-          echo "DEBUG GET $url" >&2
-          printf '%s\n' $resp | jq . >&2 2>/dev/null; or printf '%s\n' $resp >&2
-          echo "" >&2
-        end
-        set -l err (printf '%s\n' $resp | jq -r '.error.message // empty' 2>/dev/null)
-        if test -n "$err"
-          echo "$err"
-          return 1
-        end
-        set -a pages (printf '%s\n' $resp | jq -c '.data // []' 2>/dev/null)
-        set -l has_more (printf '%s\n' $resp | jq -r '.has_more // "false"' 2>/dev/null)
-        test "$has_more" = "true"; or break
-        set -l next (printf '%s\n' $resp | jq -r '.next_page // empty' 2>/dev/null)
-        test -n "$next"; or break
-        set url "$base_url&page=$next"
-      end
-
-      printf '%s\n' $pages | jq -sc 'add // []' 2>/dev/null
-    '';
-    _llm-paginate-json.description = "Internal: walk a paginated JSON API and emit the merged .data array";
     llm-costs.body = ''
       set -l _pre_vars (set --names -x)
       llm-load-keys &>/dev/null
 
       set -l debug 0
-      set -l filtered_argv
+      set -l no_open 0
       for arg in $argv
         if test "$arg" = "--debug" -o "$arg" = "-v"
           set debug 1
-        else
-          set -a filtered_argv $arg
+        else if test "$arg" = "--no-open"
+          set no_open 1
         end
       end
 
-      set -l days 30
-      if test (count $filtered_argv) -gt 0
-        set days $filtered_argv[1]
-      end
-
-      # --- OpenAI: /v1/organization/costs ---
-      # Response amounts are USD (decimal strings); single endpoint, paginated by cursor.
-      if set -q OPENAI_ADMIN_KEY
-        set -l now (date +%s)
-        set -l start_time (math "$now - $days * 86400")
-        set -l url "https://api.openai.com/v1/organization/costs?start_time=$start_time&group_by[]=line_item&limit=180"
-        set -l data (_llm-paginate-json $debug $url \
-          -H "Authorization: Bearer $OPENAI_ADMIN_KEY")
-        if test $status -ne 0
-          echo "OpenAI error: $data"
-        else
-          set -l total (printf '%s\n' $data | jq '[.[].results[].amount.value | tonumber] | add // 0')
-          if test -z "$total" -o "$total" = "null" -o "$total" = "0"
-            echo "OpenAI: no data"
-          else
-            set_color --bold; printf "=== OpenAI (%d days) ===\n" $days; set_color normal
-            printf "Total: \$%.2f\n" $total
-            printf '%s\n' $data | jq -r '
-              [.[].results[] | select((.amount.value | tonumber) > 0)]
-              | group_by(.line_item)
-              | map({item: .[0].line_item, total: ([.[].amount.value | tonumber] | add)})
-              | sort_by(-.total)[]
-              | "  \(.item): $\(.total * 100 | round | . / 100)"'
-          end
+      # Open the Anthropic Console billing page so the user can see their balance.
+      # There is no public API for balance/credit queries, so the browser is the
+      # only way to check remaining credits programmatically from CLI.
+      set -l billing_url "https://platform.claude.com/settings/billing"
+      set -l did_open 0
+      if test $no_open -eq 0 -a -n "$DISPLAY"
+        if type -q xdg-open
+          echo "Opening Anthropic billing page..."
+          xdg-open "$billing_url" 2>/dev/null; and set did_open 1
         end
-      else
-        echo "OpenAI: no admin key set (OPENAI_ADMIN_KEY)"
+        if test $did_open -eq 0; and type -q open
+          echo "Opening Anthropic billing page..."
+          open "$billing_url" 2>/dev/null; and set did_open 1
+        end
       end
-
+      if test $did_open -eq 0
+        echo "Anthropic billing page: $billing_url"
+      end
       echo ""
 
-      # --- Anthropic: /v1/organizations/cost_report ---
-      # Response amounts are in cents (divide by 100 for USD).
-      # Standard + batch tier only; priority/fast-mode tier uses a separate billing
-      # model and is excluded by design — see Claude Code section below for that.
+      # Show a quick recent cost summary (last 7 days, single request).
+      # This only covers standard+batch tier; priority/fast-mode is billed separately.
       if set -q ANTHROPIC_ADMIN_KEY
-        set -l start_date (date -d "$days days ago" -u +%Y-%m-%dT00:00:00Z)
+        set -l start_date (date -d "7 days ago" -u +%Y-%m-%dT00:00:00Z)
         set -l end_date (date -d tomorrow -u +%Y-%m-%dT00:00:00Z)
-        set -l url "https://api.anthropic.com/v1/organizations/cost_report?starting_at=$start_date&ending_at=$end_date&bucket_width=1d&group_by[]=model&limit=31"
-        set -l data (_llm-paginate-json $debug $url \
+        set -l resp (curl -s \
+          "https://api.anthropic.com/v1/organizations/cost_report?starting_at=$start_date&ending_at=$end_date&bucket_width=1d&group_by[]=description&limit=7" \
           -H "anthropic-version: 2023-06-01" \
           -H "x-api-key: $ANTHROPIC_ADMIN_KEY")
-        if test $status -ne 0
-          echo "Anthropic error: $data"
+        if test "$debug" = "1"
+          echo "DEBUG cost_report response:" >&2
+          printf '%s\n' $resp | jq . >&2 2>/dev/null; or printf '%s\n' $resp >&2
+        end
+        set -l err (printf '%s\n' $resp | jq -r '.error.message // empty' 2>/dev/null)
+        if test -n "$err"
+          echo "Cost report error: $err"
         else
-          set -l total (printf '%s\n' $data | jq '[.[].results[].amount | tonumber] | add // 0')
+          set -l total (printf '%s\n' $resp | jq '[.data[].results[].amount | tonumber] | add // 0')
           if test -z "$total" -o "$total" = "null" -o "$total" = "0"
-            echo "Anthropic: no data"
+            echo "Recent spend (7d): no data"
           else
-            set_color --bold; printf "=== Anthropic (%d days) ===\n" $days; set_color normal
-            printf "Total: \$%.2f (standard+batch tier)\n" (math "$total / 100")
-            printf '%s\n' $data | jq -r '
-              [.[].results[] | select((.amount | tonumber) > 0)]
-              | group_by(.model // "other")
-              | map({model: .[0].model // "other", total: ([.[].amount | tonumber] | add)})
+            set_color --bold; printf "=== Recent Spend (last 7 days, standard+batch tier) ===\n"; set_color normal
+            printf "Total: \$%.2f\n" (math "$total / 100")
+            printf '%s\n' $resp | jq -r '
+              [.data[].results[] | select((.amount | tonumber) > 0)]
+              | group_by(.description.model // "other")
+              | map({model: .[0].description.model // "other", total: ([.[].amount | tonumber] | add)})
               | sort_by(-.total)[]
               | "  \(.model): $\(.total | round | . / 100)"'
             set_color brblack
-            echo "  (priority/fast-mode tier billed separately, see Claude Code section)"
+            echo "  (see billing page for full balance and all tiers)"
             set_color normal
           end
         end
-
-        # --- Anthropic Claude Code: /v1/organizations/usage_report/claude_code ---
-        # Anthropic's own per-day estimated cost across ALL tiers including priority/fast.
-        # Endpoint accepts a single date only, so we loop one paginated request per day.
-        # Per-record schema: .actor, .models[]{model, estimated_cost.amount (cents), ...}
-        set -l cc_pages
-        set -l cc_err ""
-        for offset in (seq (math "$days - 1") -1 0)
-          set -l day (date -d "$offset days ago" -u +%Y-%m-%d)
-          set -l cc_url "https://api.anthropic.com/v1/organizations/usage_report/claude_code?starting_at=$day&limit=1000"
-          set -l cc_data (_llm-paginate-json $debug $cc_url \
-            -H "anthropic-version: 2023-06-01" \
-            -H "x-api-key: $ANTHROPIC_ADMIN_KEY")
-          if test $status -ne 0
-            set cc_err "$cc_data"
-            break
-          end
-          set -a cc_pages $cc_data
-        end
-
-        if test -n "$cc_err"
-          echo ""
-          echo "Anthropic Claude Code error: $cc_err"
-        else
-          set -l merged (printf '%s\n' $cc_pages | jq -sc 'add // []')
-          set -l cc_total (printf '%s\n' $merged | jq '[.[].models[].estimated_cost.amount | tonumber] | add // 0')
-          if test -n "$cc_total" -a "$cc_total" != "null" -a "$cc_total" != "0"
-            echo ""
-            set_color --bold; printf "=== Anthropic Claude Code estimate (%d days) ===\n" $days; set_color normal
-            printf "Total: \$%.2f (all tiers, Anthropic estimate)\n" (math "$cc_total / 100")
-            printf '%s\n' $merged | jq -r '
-              [.[].models[] | select((.estimated_cost.amount | tonumber) > 0)]
-              | group_by(.model)
-              | map({model: .[0].model, total: ([.[].estimated_cost.amount | tonumber] | add)})
-              | sort_by(-.total)[]
-              | "  \(.model): $\(.total | round | . / 100)"'
-          end
-        end
-      else
-        echo "Anthropic: no admin key set (ANTHROPIC_ADMIN_KEY)"
       end
 
       env-cleanup $_pre_vars
     '';
-    llm-costs.description = "Show LLM API usage costs (default: last 30 days; pass N for custom, --debug for raw responses)";
+    llm-costs.description = "Open Anthropic billing page for balance and show recent spend (7d). Pass --no-open to suppress browser, --debug for raw API responses.";
 
     # === Vast.ai cloud GPU helpers ===
+    llm-topup-anthropic.body = ''
+      set -l _pre_vars (set --names -x)
+      llm-load-keys &>/dev/null
+
+      set -l usage_str "Usage: llm-topup-anthropic <dollar-amount>"
+
+      if test (count $argv) -lt 1
+        echo "$usage_str" >&2
+        env-cleanup $_pre_vars
+        return 1
+      end
+
+      set -l amount $argv[1]
+      if not string match -qr '^\d+(\.\d{0,2})?$' "$amount"
+        echo "Error: amount must be a number (e.g. 50 or 25.00)" >&2
+        env-cleanup $_pre_vars
+        return 1
+      end
+
+      # Open the Anthropic Console billing page for manual credit purchase.
+      # There is no public API for purchasing credits — the billing page is the
+      # only way to add funds programmatically from CLI.
+      set -l billing_url "https://platform.claude.com/settings/billing"
+      set -l did_open 0
+      if test -n "$DISPLAY"
+        if type -q xdg-open
+          echo "Opening Anthropic billing page to add \$$amount..."
+          xdg-open "$billing_url" 2>/dev/null; and set did_open 1
+        end
+        if test $did_open -eq 0; and type -q open
+          echo "Opening Anthropic billing page to add \$$amount..."
+          open "$billing_url" 2>/dev/null; and set did_open 1
+        end
+      end
+      if test $did_open -eq 0
+        echo "Anthropic billing page: $billing_url"
+      end
+      echo ""
+      echo "To add \$$amount in credits:"
+      echo "  1. Click \"Buy credits\" on the billing page"
+      echo "  2. Enter \"$amount\" as the amount"
+      echo "  3. Complete the purchase"
+
+      env-cleanup $_pre_vars
+    '';
+    llm-topup-anthropic.description = "Open Anthropic billing page to purchase \$AMOUNT in credits";
     #
     # Full workflow + troubleshooting + market context: ../Vast.md
     #

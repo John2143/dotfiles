@@ -151,14 +151,15 @@ in {
       }
     '';
 
-    # Tool-call approval hook (DRAFT). Loaded only when `--hook=<path>` is
+    # Tool-call approval hook. Loaded only when `--hook=<path>` is
     # passed -- intentionally NOT in `.omp/agent/extensions/` so default
     # `omp` stays auto. Use the `omp-safe` fish function to opt in.
     #
-    # Status: UNVERIFIED. The rejection mechanism (return vs throw vs sentinel)
-    # is inferred from strings in the OMP binary, not from real ExtensionAPI
-    # typings. Confirm by running `omp-safe` against a risky bash command and
-    # observing whether the call is actually blocked before relying on it.
+    # Uses the ExtensionAPI `pi.on("tool_call", ...)` returning `{ block: true }`
+    # to intercept risky bash commands (rm -rf, nixos-rebuild, git push --force, etc.).
+    # Confirm dialog via `ctx.ui.confirm()`. Falls back to blocking when no UI
+    # is available (non-interactive mode).
+    # Verify with: `try-check-prompt`
     ".omp/agent/hooks/approve.ts".source = ../../.omp/agent/hooks/approve.ts;
 
     ".omp/agent/system-prompt.md".text = ''
