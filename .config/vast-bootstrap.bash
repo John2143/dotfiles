@@ -56,6 +56,7 @@ set -euo pipefail
 : "${EXTRA_ARGS:=}"
 : "${FORCE_RESTART:=}"
 : "${TENSOR_PARALLEL:=}"
+: "${MAX_NUM_BATCHED_TOKENS:=8192}"
 
 mkdir -p /workspace /workspace/tmp /workspace/pip-cache /workspace/.hf_home
 cd /workspace
@@ -89,6 +90,10 @@ if command -v supervisorctl >/dev/null 2>&1; then
   fi
 fi
 # Belt-and-suspenders: kill any orphan vllm/EngineCore processes.
+# NOTE: `VLLM::EngineCore` is an internal vLLM process name (not a stable
+# interface) — could change in a future vLLM release. If it stops matching,
+# the supervisorctl stop + pkill -f 'vllm serve' above already cover the main
+# teardown; this is speculative cleanup.
 pkill -9 -f 'VLLM::EngineCore' 2>/dev/null || true
 
 # DeepSeek V4 currently asserts kv_cache_dtype starts with "fp8". Set it
@@ -144,10 +149,21 @@ PYVER=$(python3 -c 'import sys; print(f"{sys.version_info.major}.{sys.version_in
 [ -n "$PYVER" ] && [ -e "/usr/include/python${PYVER}/Python.h" ] || NEED_APT=1
 if [ "$NEED_APT" = 1 ]; then
   echo "Installing python3 + pip + venv + dev headers + build-essential via apt ..."
-  apt-get update -qq
-  apt-get install -y -qq --no-install-recommends \
-    python3 python3-pip python3-venv python3-dev \
-    build-essential ca-certificates curl
+  APT_OK=
+  for _ in 1 2 3; do
+    if apt-get update -qq && apt-get install -y -qq --no-install-recommends \
+      python3 python3-pip python3-venv python3-dev \
+      build-essential ca-certificates curl; then
+      APT_OK=1
+      break
+    fi
+    echo "apt attempt failed; waiting 5s before retry ..."
+    sleep 5
+  done
+  if [ -z "${APT_OK}" ]; then
+    echo "apt failed after 3 attempts." >&2
+    exit 1
+  fi
 fi
 
 # Reuse a previously-created venv if it exists (subsequent bootstraps after
@@ -174,6 +190,8 @@ if ! command -v vllm >/dev/null 2>&1; then
 
   echo "pip install vllm into /workspace/venv (~5 min) ..."
   /workspace/venv/bin/pip install --quiet --upgrade pip
+  # To pin a specific vLLM version for reproducibility, replace with:
+  #   /workspace/venv/bin/pip install --quiet "vllm==X.Y.Z"
   /workspace/venv/bin/pip install --quiet vllm
 
   export PATH="/workspace/venv/bin:$PATH"
@@ -221,7 +239,7 @@ fi
 # Single-GPU prefill activation can spike past the ~30 GB free after V4-Flash
 # weights; cap chunked-prefill batch size unless the caller already set it.
 if [ "${GPU_COUNT}" = "1" ] && ! printf '%s\n' "$EXTRA_ARGS" | grep -q -- '--max-num-batched-tokens'; then
-  EXTRA_ARGS="--max-num-batched-tokens 8192 ${EXTRA_ARGS}"
+  EXTRA_ARGS="--max-num-batched-tokens ${MAX_NUM_BATCHED_TOKENS} ${EXTRA_ARGS}"
 fi
 
 # DeepSeek V4 is MoE; shard experts across GPUs on multi-GPU rentals.
@@ -275,6 +293,7 @@ pkill -f 'vllm serve' 2>/dev/null || true
 sleep 1
 
 echo "Launching: vllm ${ARGS[*]}"
+echo "=== vllm launch args: ${ARGS[*]}" >> /workspace/vllm.log
 nohup vllm "${ARGS[@]}" >/workspace/vllm.log 2>&1 &
 VLLM_PID=$!
 echo "${VLLM_PID}" >/workspace/vllm.pid
