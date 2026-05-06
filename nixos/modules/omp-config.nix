@@ -136,5 +136,11 @@
         "app.model.select": ["alt+l"]
       }
     '';
+
+    # Skills — source of truth in dotfiles/.claude/skills/.
+    # Claude Code discovers from ~/.claude/skills/; OMP additionally picks
+    # them up via its native provider at ~/.omp/agent/skills/ (priority 100).
+    ".claude/skills/prompt-engineer/SKILL.md".source = ../../.claude/skills/prompt-engineer/SKILL.md;
+    ".omp/agent/skills/prompt-engineer/SKILL.md".source = ../../.claude/skills/prompt-engineer/SKILL.md;
   };
 }
