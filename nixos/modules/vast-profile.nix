@@ -41,10 +41,13 @@
       # VAST_TENSOR_PARALLEL=1
 
       # ---------- Manual host override (skip API discovery) ----------
-      # By default, vast-bootstrap/vast-tunnel/vast-status discover
-      # VAST_HOST and VAST_SSH_PORT from `vastai show instances --label
-      # $VAST_LABEL`. Set them here to pin to a specific instance or
-      # if the API is unreachable.
+      # By default, vast-bootstrap/vast-tunnel/vast-logs query the API and
+      # pick a running instance with VAST_LABEL — auto if exactly one
+      # matches, else error and ask for an explicit INSTANCE_ID. Set these
+      # to pin to a specific host (useful when the API is flaky or for a
+      # rental created outside the normal flow). The pin is incompatible
+      # with passing INSTANCE_ID to the helpers — comment these out to use
+      # the multi-instance picker.
       # VAST_HOST=1.2.3.4
       # VAST_SSH_PORT=12345
     '';

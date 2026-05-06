@@ -13,7 +13,7 @@
 let
   vast-waybar-status = pkgs.writeShellApplication {
     name = "vast-waybar-status";
-    runtimeInputs = with pkgs; [ fish jq coreutils gnused gnugrep ];
+    runtimeInputs = with pkgs; [ jq coreutils curl systemd ];
     text = ''
       CACHE=/tmp/vast-waybar-status.json
       MAX_AGE=55
@@ -31,66 +31,91 @@ let
           fi
       fi
 
-      if output=$(timeout 15 fish -c "vast-status" 2>/dev/null); then
-          label=$(echo "$output" | sed -n 's/=== Vast.ai status (label: \(.*\)) ===/\1/p')
-          tunnel_line=$(echo "$output" | grep "^Tunnel:" || true)
-          vllm_line=$(echo "$output" | grep "^vLLM:" || true)
+      # Non-secret config from the user profile (label, local port). The
+      # vastai wrapper handles its own VAST_API_KEY sourcing, so we don't
+      # need to touch /run/agenix/vast-credentials here.
+      LABEL=vllm-deepseek-v4
+      LOCAL_PORT=8001
+      PROFILE="$HOME/.config/vast/profile"
+      if [ -f "$PROFILE" ]; then
+          set -a
+          # shellcheck disable=SC1090
+          . "$PROFILE"
+          set +a
+          LABEL="''${VAST_LABEL:-$LABEL}"
+          LOCAL_PORT="''${VAST_LOCAL_PORT:-$LOCAL_PORT}"
+      fi
 
-          if echo "$tunnel_line" | grep -q "UP"; then
-              if echo "$vllm_line" | grep -q "READY"; then
-                  class="vast-ready"
-                  icons="▲●"
-              else
-                  class="vast-tunnel-up"
-                  icons="▲○"
-              fi
-          else
-              class="vast-tunnel-down"
-              icons="▼○"
-          fi
-
-          balance_out=$(timeout 10 fish -c "vast-balance" 2>/dev/null) || balance_out=""
-          show_out=$(timeout 10 fish -c "vast-show" 2>/dev/null) || show_out=""
-
-          # "Credit: $12.34" -> "12.34"
-          balance=$(echo "$balance_out" | sed -n 's/Credit: \$//p') || balance=""
-          # "... hourly=0.45 ..." -> "0.45"
-          hourly=$(echo "$show_out" | sed -n 's/.*hourly=\([0-9.]*\).*/\1/p') || hourly=""
-
-          hrs_str=""
-          if [ -n "$balance" ] && [ -n "$hourly" ]; then
-              hrs_str=$(jq -rn --arg b "$balance" --arg h "$hourly" '
-                  ($b | tonumber) as $bal | ($h | tonumber) as $hr |
-                  if $hr > 0 then
-                      ($bal / $hr) as $total_hours |
-                      ($total_hours | floor) as $hours |
-                      (($total_hours - $hours) * 60 | round) as $minutes |
-                      "\($hours):\($minutes | tostring | if length == 1 then "0" + . else . end)"
-                  else "?:??" end
-              ' 2>/dev/null) || hrs_str=""
-          fi
-
-          text="$label $icons"
-          [ -n "$balance" ] && text="$text \$$balance"
-          [ -n "$hrs_str" ] && text="$text $hrs_str"
-
-          tooltip="$output"
-          if [ -n "$balance" ] || [ -n "$hourly" ]; then
-              tooltip="$tooltip
-
-Balance:   \$$balance
-Rate:      \$$hourly/hr
-Remaining: ~$hrs_str"
-          fi
-
-          result=$(jq -nc --arg t "$text" --arg tt "$tooltip" --arg c "$class" \
-              '{text: $t, tooltip: $tt, class: $c}')
-          printf '%s' "$result" > "$CACHE"
-          echo "$result"
-      else
+      if ! raw=$(timeout 15 vastai show instances --raw 2>/dev/null); then
           : > "$CACHE"
           exit 1
       fi
+      if ! credit_raw=$(timeout 15 vastai show user --raw 2>/dev/null); then
+          : > "$CACHE"
+          exit 1
+      fi
+
+      running=$(echo "$raw" | jq -c --arg label "$LABEL" \
+          '[.[] | select(.label == $label) | select(.actual_status == "running")]')
+      count=$(echo "$running" | jq 'length')
+      hourly=$(echo "$running" | jq '[.[].dph_total | tonumber] | add // 0')
+      credit=$(echo "$credit_raw" | jq -r '.credit // 0')
+
+      tunnel_up=0
+      systemctl --user is-active --quiet vast-tunnel.service && tunnel_up=1
+      vllm_ready=0
+      curl -fsS --max-time 3 "http://localhost:$LOCAL_PORT/v1/models" \
+          >/dev/null 2>&1 && vllm_ready=1
+
+      if [ "$tunnel_up" = 1 ] && [ "$vllm_ready" = 1 ]; then
+          class="vast-ready"; icons="▲●"; state="tunnel UP, vLLM READY"
+      elif [ "$tunnel_up" = 1 ]; then
+          class="vast-tunnel-up"; icons="▲○"; state="tunnel UP, vLLM not responding"
+      else
+          class="vast-tunnel-down"; icons="▼○"; state="tunnel DOWN"
+      fi
+
+      hrs_str=""
+      if [ "$(echo "$hourly" | jq '. > 0')" = "true" ]; then
+          hrs_str=$(jq -rn --arg b "$credit" --arg h "$hourly" '
+              ($b | tonumber) as $bal | ($h | tonumber) as $hr |
+              ($bal / $hr) as $total_hours |
+              ($total_hours | floor) as $hours |
+              (($total_hours - $hours) * 60 | round) as $minutes |
+              "\($hours):\($minutes | tostring | if length == 1 then "0" + . else . end)"
+          ')
+      fi
+
+      count_suffix=""
+      [ "$count" -gt 1 ] && count_suffix="×$count"
+
+      balance_fmt=$(printf '%.2f' "$credit")
+      hourly_fmt=$(printf '%.2f' "$hourly")
+
+      text="''${LABEL}''${count_suffix} $icons \$$balance_fmt"
+      [ -n "$hrs_str" ] && text="$text $hrs_str"
+
+      if [ "$count" = "0" ]; then
+          per_instance="  (no running instances)"
+      else
+          per_instance=$(echo "$running" | jq -r '.[] |
+              "  inst \(.id): \(.gpu_name)×\(.num_gpus // 1) $\(.dph_total)/hr"')
+      fi
+
+      tooltip="Vast.ai (label: $LABEL)
+$per_instance
+
+State:     $state
+Balance:   \$$balance_fmt
+Rate:      \$$hourly_fmt/hr (sum)"
+      [ -n "$hrs_str" ] && tooltip="$tooltip
+Remaining: ~$hrs_str"
+
+      result=$(jq -nc --arg t "$text" --arg tt "$tooltip" --arg c "$class" \
+          '{text: $t, tooltip: $tt, class: $c}')
+      printf '%s' "$result" > "$CACHE"
+      echo "$result"
+
     '';
   };
 

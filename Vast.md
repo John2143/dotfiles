@@ -223,10 +223,39 @@ to resume auto-discovery.
 
 ## Multi-rental (parallel workloads)
 
-Different `--label` values let you run multiple rentals at once. Set a
-different `VAST_LABEL` in `~/.config/vast/profile` (or per-shell:
-`set -gx VAST_LABEL my-other-job`) and edit `vast-create` similarly.
-Each label is independently discoverable.
+Two ways to run more than one rental at the same time:
+
+1. **Different labels.** Set a different `VAST_LABEL` per shell or profile
+   (`set -gx VAST_LABEL my-other-job`) and edit `vast-create` similarly.
+   Each label is independently discoverable.
+2. **Same label, multiple instances.** Run `vast-create` twice. The
+   helpers below detect when ≥2 running instances share `VAST_LABEL` and
+   require an explicit `INSTANCE_ID` to disambiguate:
+
+   ```
+   vast-show                          # lists every rental with the label
+   vast-bootstrap 12345678            # bootstrap a specific instance
+   vast-tunnel 12345678               # tunnel to a specific instance
+   vast-tunnel-down                   # close before opening another tunnel
+   vast-tunnel 12345679               # switch the (single) tunnel target
+   vast-status                        # iterates all instances; marks the tunnel target
+   vast-logs --id 12345678            # tail logs from a specific instance
+   ```
+
+   Only one tunnel runs at a time (`localhost:$VAST_LOCAL_PORT` always
+   points at one rental). Use `vast-tunnel-down` before pointing it at a
+   different instance. The waybar `custom/vast` widget sums hourly burn
+   across all running instances and shows `LABEL×N …` when N>1.
+
+   `vast-balance` reports the total burn rate and projected hours
+   remaining computed from the summed hourly across all running
+   instances:
+
+   ```
+   Credit: $42.10
+   Rate: $0.90/hr (2 instances)
+   Remaining: ~46:46
+   ```
 
 ## Command reference
 
@@ -235,17 +264,22 @@ Each label is independently discoverable.
 | `vast-search [query]` | List verified B200 offers (default query: 1×B200, 99%+ reliability, ≥5 Gbps, ≥250 GB) |
 | `vast-create OFFER_ID` | Launch a new rental with our minimal CUDA image |
 | `vast-show` | List active rentals tagged `vllm-deepseek-v4` |
+| `vast-pause [INSTANCE_ID]` | Stop a running rental — disk preserved, compute billing pauses; storage still accrues. ID required when ≥2 running. |
+| `vast-unpause [INSTANCE_ID]` | Resume a stopped rental. Subject to host GPU availability — not guaranteed. ID required when ≥2 stopped. |
 | `vast-destroy INSTANCE_ID` | Tear down a rental |
-| `vast-bootstrap [--restart]` | SSH in and (re)launch vLLM remotely. Idempotent by default; `--restart` kills the running vllm and re-launches (use after changing parsers/flags) |
-| `vast-tunnel` | Open localhost:8001 → rental:8000 SSH tunnel |
+| `vast-bootstrap [INSTANCE_ID] [--restart]` | SSH in and (re)launch vLLM remotely. Idempotent by default; `--restart` kills the running vllm and re-launches. `INSTANCE_ID` is required when ≥2 instances share the label. |
+| `vast-tunnel [INSTANCE_ID] [--restart]` | Open localhost:`$VAST_LOCAL_PORT` → rental:`$VAST_VLLM_PORT` SSH tunnel. `INSTANCE_ID` required when ≥2 instances share the label. |
 | `vast-tunnel-down` | Close the tunnel |
-| `vast-status` | Show tunnel + vLLM readiness |
-| `vast-logs [N]` | Tail the remote vLLM log |
+| `vast-status` | Show all running instances + tunnel + vLLM readiness; annotates the instance the active tunnel targets |
+| `vast-balance` | Credit + summed hourly burn rate + projected hours remaining |
+| `vast-logs [--id INSTANCE_ID] [N]` | Tail the remote vLLM log. `--id` required when ≥2 instances share the label. |
 | `vastai …` | Raw upstream CLI (auto-loads `VAST_API_KEY`) |
 
-All `vast-*` helpers internally call `_vast-load`, which sources
-`~/.config/vast/profile`, applies defaults, and discovers the host via the
-Vast.ai API.
+All `vast-*` helpers call `_vast-load` (sources `~/.config/vast/profile` +
+agenix creds, applies defaults) followed by `_vast-resolve-instance`
+(picks which running rental to operate on). A `VAST_HOST` +
+`VAST_SSH_PORT` pin in the profile bypasses the picker — passing an
+`INSTANCE_ID` alongside such a pin is an error.
 
 ## File reference
 

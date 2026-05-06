@@ -290,10 +290,11 @@
     # edit, no nix rebuild. The next `vast-bootstrap` discovers the new
     # host automatically because it's tagged with the same VAST_LABEL.
     _vast-load.body = ''
-      # Internal helper: load profile + agenix creds, apply defaults,
-      # discover host/port via Vast.ai API. Sets exported globals VAST_*
-      # used by the other vast-* helpers. Caller is responsible for
-      # env-cleanup.
+      # Internal helper: load profile + agenix creds, apply defaults.
+      # Sets exported globals VAST_* used by the other vast-* helpers.
+      # Does NOT resolve VAST_HOST/VAST_SSH_PORT — call _vast-resolve-instance
+      # for that (so callers can target a specific instance by ID when several
+      # are rented under the same VAST_LABEL). Caller owns env-cleanup.
 
       # 1) Optional plain-file profile (non-secret config).
       set -l profile $HOME/.config/vast/profile
@@ -339,33 +340,136 @@
       set -q VAST_EXTRA_ARGS; or set -gx VAST_EXTRA_ARGS ""
       set -q VAST_TENSOR_PARALLEL; or set -gx VAST_TENSOR_PARALLEL ""
 
-      # 5) Discover host/SSH port via API unless overridden in profile.
-      if test -z "$VAST_HOST"; or test -z "$VAST_SSH_PORT"
-        if not command -v vastai >/dev/null 2>&1
-          echo "vastai CLI not found and VAST_HOST/VAST_SSH_PORT not set in $profile." >&2
-          echo "Either install the wrapper (rebuild after enabling) or pin host manually." >&2
-          return 1
-        end
-        set -l raw (vastai show instances --raw 2>/dev/null)
-        if test -z "$raw"; or test "$raw" = "[]"
-          echo "Vast.ai API returned no instances. Run `vast-create OFFER_ID` first." >&2
-          return 1
-        end
-        set -l info (echo $raw | jq -r --arg label "$VAST_LABEL" '
-          [.[] | select(.label == $label) | select(.actual_status == "running")]
-          | first
-          | if . == null then "" else "\(.public_ipaddr)\t\(.ports["22/tcp"][0].HostPort)" end
-        ' 2>/dev/null)
-        if test -z "$info"; or test "$info" = "null"
-          echo "No running Vast.ai instance with label '$VAST_LABEL' found." >&2
-          echo "List with: vast-show    Launch with: vast-create OFFER_ID" >&2
-          return 1
-        end
-        set -gx VAST_HOST (echo $info | cut -f1)
-        set -gx VAST_SSH_PORT (echo $info | cut -f2)
-      end
+      # Fish quirk: `set -q VAR; or set -gx VAR ""` returns 1 even when the
+      # set succeeds (the empty-list `set` doesn't override the prior `set -q`
+      # status), which would leak rc=1 out of this function. Force success.
+      return 0
     '';
-    _vast-load.description = "Internal: load Vast profile, apply defaults, discover host/port via API.";
+    _vast-load.description = "Internal: load Vast profile + creds, materialize SSH key, apply defaults.";
+
+    _vast-resolve-instance.body = ''
+      # Resolve which Vast.ai instance the caller targets. Sets exported
+      # VAST_HOST, VAST_SSH_PORT, and VAST_INSTANCE_ID for ssh / vastai
+      # calls that follow.
+      #
+      # Usage: _vast-resolve-instance [INSTANCE_ID] [STATUS]
+      #   STATUS = "running" (default) | "stopped" | "any"
+      #     - "running":  filter actual_status == "running" (bootstrap, tunnel, logs, pause)
+      #     - "stopped":  filter actual_status != "running" (covers stopped/exited/loading; for unpause)
+      #     - "any":      no status filter (rare; mostly for diagnostics)
+      #
+      # Behavior:
+      #   - INSTANCE_ID given → pick that one (must match label + status).
+      #   - Else if exactly one matches → pick it.
+      #   - Else (zero or 2+) print candidates to stderr and return 1.
+      #
+      # If $VAST_HOST and $VAST_SSH_PORT are already set (e.g. pinned in
+      # ~/.config/vast/profile), skip API discovery — but error if the caller
+      # also passed an instance ID. VAST_INSTANCE_ID is left unset on the pin
+      # path; callers that need it (vast-pause, vast-unpause) must check.
+
+      set -l want_id ""
+      if test (count $argv) -gt 0; and test -n "$argv[1]"
+        set want_id $argv[1]
+      end
+      set -l want_status running
+      if test (count $argv) -gt 1; and test -n "$argv[2]"
+        set want_status $argv[2]
+      end
+
+      if test -n "$VAST_HOST"; and test -n "$VAST_SSH_PORT"
+        if test -n "$want_id"
+          echo "VAST_HOST/VAST_SSH_PORT pinned in profile; cannot also pass INSTANCE_ID=$want_id." >&2
+          echo "Comment out the pin in ~/.config/vast/profile to use the multi-instance picker." >&2
+          return 1
+        end
+        return 0
+      end
+
+      if not command -v vastai >/dev/null 2>&1
+        echo "vastai CLI not found and VAST_HOST/VAST_SSH_PORT not set in profile." >&2
+        echo "Either install the wrapper (rebuild after enabling) or pin host manually." >&2
+        return 1
+      end
+
+      set -l raw (vastai show instances --raw 2>/dev/null)
+      if test -z "$raw"; or test "$raw" = "[]"
+        echo "Vast.ai API returned no instances. Run `vast-create OFFER_ID` first." >&2
+        return 1
+      end
+
+      set -l candidates
+      switch $want_status
+        case running
+          set candidates (echo $raw | jq -c --arg label "$VAST_LABEL" '
+            [.[] | select(.label == $label) | select(.actual_status == "running")]
+          ')
+        case stopped
+          set candidates (echo $raw | jq -c --arg label "$VAST_LABEL" '
+            [.[] | select(.label == $label) | select(.actual_status != "running")]
+          ')
+        case any
+          set candidates (echo $raw | jq -c --arg label "$VAST_LABEL" '
+            [.[] | select(.label == $label)]
+          ')
+        case '*'
+          echo "_vast-resolve-instance: unknown status '$want_status' (expected running|stopped|any)" >&2
+          return 2
+      end
+      set -l count (echo $candidates | jq 'length')
+
+      # Phrase candidate-list errors in the right voice for the chosen status.
+      set -l noun "running"
+      switch $want_status
+        case stopped
+          set noun "paused (non-running)"
+        case any
+          set noun ""
+      end
+
+      if test "$count" = "0"
+        if test -n "$noun"
+          echo "No $noun Vast.ai instance with label '$VAST_LABEL' found." >&2
+        else
+          echo "No Vast.ai instance with label '$VAST_LABEL' found." >&2
+        end
+        echo "List with: vast-show" >&2
+        return 1
+      end
+
+      set -l selected ""
+      if test -n "$want_id"
+        set selected (echo $candidates | jq -c --arg id "$want_id" '
+          map(select((.id | tostring) == $id))[0] // empty
+        ')
+        if test -z "$selected"
+          if test -n "$noun"
+            echo "No $noun Vast.ai instance with id=$want_id and label '$VAST_LABEL'." >&2
+          else
+            echo "No Vast.ai instance with id=$want_id and label '$VAST_LABEL'." >&2
+          end
+          echo "Candidates:" >&2
+          echo $candidates | jq -r '.[] | "  id=\(.id) status=\(.actual_status) gpu=\(.gpu_name)×\(.num_gpus // 1) hourly=$\(.dph_total)"' >&2
+          return 1
+        end
+      else if test "$count" = "1"
+        set selected (echo $candidates | jq -c '.[0]')
+      else
+        if test -n "$noun"
+          echo "Multiple $noun Vast.ai instances with label '$VAST_LABEL'. Pass an instance ID:" >&2
+        else
+          echo "Multiple Vast.ai instances with label '$VAST_LABEL'. Pass an instance ID:" >&2
+        end
+        echo $candidates | jq -r '.[] | "  id=\(.id) status=\(.actual_status) host=\(.public_ipaddr) ssh_port=\(.ports."22/tcp"[0].HostPort // "?") gpu=\(.gpu_name)×\(.num_gpus // 1) hourly=$\(.dph_total)"' >&2
+        return 1
+      end
+
+      set -gx VAST_INSTANCE_ID (echo $selected | jq -r '.id')
+      set -gx VAST_HOST (echo $selected | jq -r '.public_ipaddr // empty')
+      set -gx VAST_SSH_PORT (echo $selected | jq -r '.ports."22/tcp"[0].HostPort // empty')
+      echo "Targeting Vast.ai instance $VAST_INSTANCE_ID ($VAST_HOST:$VAST_SSH_PORT)" >&2
+    '';
+    _vast-resolve-instance.description = "Internal: pick a Vast instance by ID or auto-disambiguate (status filter: running|stopped|any). Sets VAST_INSTANCE_ID/VAST_HOST/VAST_SSH_PORT.";
 
     vast-bootstrap.body = ''
       set -l _pre_vars (set --names -x)
@@ -374,9 +478,22 @@
         return 1
       end
 
+      set -l instance_id ""
       set -l force_restart ""
-      if contains -- --restart $argv
-        set force_restart 1
+      for arg in $argv
+        switch $arg
+          case --restart
+            set force_restart 1
+          case '*'
+            if test -z "$instance_id"
+              set instance_id $arg
+            end
+        end
+      end
+
+      if not _vast-resolve-instance $instance_id
+        env-cleanup $_pre_vars
+        return 1
       end
 
       echo "Bootstrapping vLLM on $VAST_SSH_USER@$VAST_HOST:$VAST_SSH_PORT (model: $VAST_MODEL)"
@@ -391,7 +508,7 @@
       env-cleanup $_pre_vars
       return $rc
     '';
-    vast-bootstrap.description = "Bootstrap vLLM on the rented Vast.ai instance (host auto-discovered, idempotent; pass --restart to re-launch with new flags).";
+    vast-bootstrap.description = "Bootstrap vLLM on a rented Vast.ai instance (vast-bootstrap [INSTANCE_ID] [--restart]; ID required when ≥2 instances running with the same label).";
 
     vast-tunnel.body = ''
       set -l _pre_vars (set --names -x)
@@ -400,8 +517,26 @@
         return 1
       end
 
+      set -l instance_id ""
+      set -l want_restart 0
+      for arg in $argv
+        switch $arg
+          case --restart
+            set want_restart 1
+          case '*'
+            if test -z "$instance_id"
+              set instance_id $arg
+            end
+        end
+      end
+
+      if not _vast-resolve-instance $instance_id
+        env-cleanup $_pre_vars
+        return 1
+      end
+
       if systemctl --user is-active --quiet vast-tunnel.service
-        if contains -- --restart $argv
+        if test $want_restart -eq 1
           echo "Restarting existing tunnel ..."
           systemctl --user stop vast-tunnel.service
         else
@@ -439,7 +574,7 @@
       env-cleanup $_pre_vars
       return 1
     '';
-    vast-tunnel.description = "Open SSH tunnel from localhost:VAST_LOCAL_PORT to the rented vLLM port (--restart to recreate).";
+    vast-tunnel.description = "Open SSH tunnel localhost:VAST_LOCAL_PORT → rented vLLM (vast-tunnel [INSTANCE_ID] [--restart]; ID required when ≥2 instances running). One tunnel at a time — close before switching targets.";
 
     vast-tunnel-down.body = ''
       if systemctl --user is-active --quiet vast-tunnel.service
@@ -459,12 +594,52 @@
       end
 
       echo "=== Vast.ai status (label: $VAST_LABEL) ==="
-      echo "Host:   $VAST_SSH_USER@$VAST_HOST:$VAST_SSH_PORT"
       echo "Model:  $VAST_MODEL"
+
+      # Identify the host the active tunnel currently forwards to (if any),
+      # so we can mark the matching instance with "(tunnel target)".
+      set -l tunnel_host ""
+      if systemctl --user is-active --quiet vast-tunnel.service
+        set -l exec_line (systemctl --user show vast-tunnel.service -p ExecStart --value 2>/dev/null)
+        set tunnel_host (printf '%s\n' $exec_line | string match -r 'root@[0-9.]+' | string sub -s 6)
+      end
+
+      set -l running ""
+      set -l count 0
+      if command -v vastai >/dev/null 2>&1
+        set -l raw (vastai show instances --raw 2>/dev/null)
+        if test -n "$raw"; and test "$raw" != "[]"
+          set running (echo $raw | jq -c --arg label "$VAST_LABEL" '
+            [.[] | select(.label == $label) | select(.actual_status == "running")]
+          ')
+          set count (echo $running | jq 'length')
+        end
+      end
+
+      if test "$count" = "0"
+        echo "(no running instances with label '$VAST_LABEL')"
+      else
+        for idx in (seq 0 (math "$count - 1"))
+          set -l inst (echo $running | jq -c ".[$idx]")
+          set -l id    (echo $inst | jq -r '.id')
+          set -l gpu   (echo $inst | jq -r '.gpu_name')
+          set -l ngpu  (echo $inst | jq -r '.num_gpus // 1')
+          set -l rate  (echo $inst | jq -r '.dph_total')
+          set -l ihost (echo $inst | jq -r '.public_ipaddr')
+          set -l iport (echo $inst | jq -r '.ports."22/tcp"[0].HostPort // "?"')
+          set -l annot ""
+          if test -n "$tunnel_host"; and test "$ihost" = "$tunnel_host"
+            set annot "  (tunnel target)"
+          end
+          printf "Instance: %s  GPU: %s×%s  Hourly: \$%s%s\n" $id $gpu $ngpu $rate $annot
+          printf "Host:     %s@%s:%s\n" $VAST_SSH_USER $ihost $iport
+        end
+      end
+
       if systemctl --user is-active --quiet vast-tunnel.service
         echo "Tunnel: UP (localhost:$VAST_LOCAL_PORT -> remote :$VAST_VLLM_PORT)"
       else
-        echo "Tunnel: DOWN (run: vast-tunnel)"
+        echo "Tunnel: DOWN (run: vast-tunnel [INSTANCE_ID])"
       end
 
       set -l models_url "http://localhost:$VAST_LOCAL_PORT/v1/models"
@@ -477,7 +652,7 @@
 
       env-cleanup $_pre_vars
     '';
-    vast-status.description = "Show Vast.ai tunnel + vLLM readiness.";
+    vast-status.description = "Show Vast.ai tunnel + vLLM readiness across all running instances with VAST_LABEL.";
 
     vast-logs.body = ''
       set -l _pre_vars (set --names -x)
@@ -486,9 +661,28 @@
         return 1
       end
 
+      set -l instance_id ""
       set -l n 200
-      if test (count $argv) -gt 0
-        set n $argv[1]
+      set -l args $argv
+      while test (count $args) -gt 0
+        switch $args[1]
+          case --id
+            if test (count $args) -lt 2
+              echo "vast-logs: --id requires an INSTANCE_ID argument" >&2
+              env-cleanup $_pre_vars
+              return 2
+            end
+            set instance_id $args[2]
+            set args $args[3..-1]
+          case '*'
+            set n $args[1]
+            set args $args[2..-1]
+        end
+      end
+
+      if not _vast-resolve-instance $instance_id
+        env-cleanup $_pre_vars
+        return 1
       end
 
       ssh -i $VAST_SSH_KEY \
@@ -502,7 +696,7 @@
       env-cleanup $_pre_vars
       return $rc
     '';
-    vast-logs.description = "Tail the remote vLLM log (vast-logs [N=200]).";
+    vast-logs.description = "Tail the remote vLLM log (vast-logs [--id INSTANCE_ID] [N=200]; --id required when ≥2 instances running).";
 
     # Helpers for finding and renting Vast.ai instances. Wrap the `vastai`
     # CLI (provided by the wrapper in shared-cli-configuration.nix). Run
@@ -549,16 +743,168 @@
     '';
     vast-destroy.description = "Destroy a Vast.ai instance by ID (run vast-show to find the ID).";
 
-    vast-balance.body = ''
-      set -l creds_file /run/agenix/vast-credentials
-      if not test -f $creds_file
-        echo "Vast.ai credentials not at $creds_file." >&2
+    _vast-wait-status.body = ''
+      # Poll the Vast.ai API until instance $argv[1] reaches the desired
+      # state ($argv[2] = "running" or "stopped"), up to 60s (20 × 3s).
+      # Returns 0 on both match and timeout — the caller's API call already
+      # succeeded; this just gives the state change time to land before
+      # control returns to the prompt.
+      #
+      # Usage: _vast-wait-status INSTANCE_ID running|stopped
+      set -l id $argv[1]
+      set -l want $argv[2]
+      set -l cur ""
+      echo -n "Waiting for $want "
+      for i in (seq 1 20)
+        set cur (vastai show instances --raw 2>/dev/null | jq -r --arg id "$id" '
+          .[] | select((.id | tostring) == $id) | .actual_status
+        ')
+        switch $want
+          case running
+            if test "$cur" = "running"
+              echo " done (status=$cur)."
+              return 0
+            end
+          case stopped
+            if test -n "$cur"; and test "$cur" != "running"
+              echo " done (status=$cur)."
+              return 0
+            end
+        end
+        echo -n "."
+        sleep 3
+      end
+      echo " timeout after 60s (last status=$cur)."
+      return 0
+    '';
+    _vast-wait-status.description = "Internal: poll until a Vast instance reaches running/stopped state, up to 60s.";
+
+    vast-pause.body = ''
+      # Stops a running rental via `vastai stop instance`. Disk/data are
+      # preserved (storage charges still accrue at ~$0.10/GB-month); compute
+      # billing pauses. Resume with `vast-unpause` — subject to GPU
+      # availability on the host machine, which is NOT guaranteed.
+      set -l _pre_vars (set --names -x)
+      if not _vast-load
+        env-cleanup $_pre_vars
         return 1
       end
-      envsource $creds_file >/dev/null
-      vastai show user --raw | jq -r '"Credit: $\(.credit | . * 100 | round / 100)"'
+
+      set -l instance_id ""
+      if test (count $argv) -gt 0
+        set instance_id $argv[1]
+      end
+
+      if not _vast-resolve-instance $instance_id running
+        env-cleanup $_pre_vars
+        return 1
+      end
+
+      if not set -q VAST_INSTANCE_ID; or test -z "$VAST_INSTANCE_ID"
+        echo "vast-pause needs API discovery, but VAST_HOST/VAST_SSH_PORT pin is active." >&2
+        echo "Comment out the pin in ~/.config/vast/profile, or run: vastai stop instance <ID>" >&2
+        env-cleanup $_pre_vars
+        return 1
+      end
+
+      # Warn if the active tunnel targets this instance — it'll go stale.
+      if systemctl --user is-active --quiet vast-tunnel.service
+        set -l exec_line (systemctl --user show vast-tunnel.service -p ExecStart --value 2>/dev/null)
+        set -l tunnel_host (printf '%s\n' $exec_line | string match -r 'root@[0-9.]+' | string sub -s 6)
+        if test "$tunnel_host" = "$VAST_HOST"
+          echo "Note: active tunnel targets $VAST_HOST — run 'vast-tunnel-down' to clean up." >&2
+        end
+      end
+
+      echo "Pausing Vast.ai instance $VAST_INSTANCE_ID ..."
+      vastai stop instance $VAST_INSTANCE_ID
+      set -l rc $status
+      if test $rc -eq 0
+        _vast-wait-status $VAST_INSTANCE_ID stopped
+      end
+      env-cleanup $_pre_vars
+      return $rc
     '';
-    vast-balance.description = "Show current Vast.ai account credit balance.";
+    vast-pause.description = "Pause (stop) a running Vast.ai instance — disk preserved, compute billing pauses (vast-pause [INSTANCE_ID]; ID required when ≥2 running). Waits up to 60s for the state change to land.";
+
+    vast-unpause.body = ''
+      # Restarts a previously-stopped rental via `vastai start instance`.
+      # Vast.ai may refuse if the host machine no longer has the GPU
+      # capacity available — there is no guarantee. After a successful
+      # start the instance gets fresh public_ipaddr / ssh port, which
+      # vast-bootstrap & vast-tunnel will rediscover on next call.
+      set -l _pre_vars (set --names -x)
+      if not _vast-load
+        env-cleanup $_pre_vars
+        return 1
+      end
+
+      set -l instance_id ""
+      if test (count $argv) -gt 0
+        set instance_id $argv[1]
+      end
+
+      if not _vast-resolve-instance $instance_id stopped
+        env-cleanup $_pre_vars
+        return 1
+      end
+
+      if not set -q VAST_INSTANCE_ID; or test -z "$VAST_INSTANCE_ID"
+        echo "vast-unpause needs API discovery, but VAST_HOST/VAST_SSH_PORT pin is active." >&2
+        echo "Comment out the pin in ~/.config/vast/profile, or run: vastai start instance <ID>" >&2
+        env-cleanup $_pre_vars
+        return 1
+      end
+
+      echo "Unpausing Vast.ai instance $VAST_INSTANCE_ID ..."
+      echo "Note: starting is subject to GPU availability on the host machine." >&2
+      vastai start instance $VAST_INSTANCE_ID
+      set -l rc $status
+      if test $rc -eq 0
+        _vast-wait-status $VAST_INSTANCE_ID running
+      end
+      env-cleanup $_pre_vars
+      return $rc
+    '';
+    vast-unpause.description = "Resume (start) a stopped Vast.ai instance — subject to host GPU availability (vast-unpause [INSTANCE_ID]; ID required when ≥2 stopped). Waits up to 60s for the state change to land.";
+
+    vast-balance.body = ''
+      set -l _pre_vars (set --names -x)
+      if not _vast-load
+        env-cleanup $_pre_vars
+        return 1
+      end
+
+      set -l credit (vastai show user --raw 2>/dev/null | jq -r '.credit // 0')
+      set -l hourly 0
+      set -l count 0
+      set -l raw (vastai show instances --raw 2>/dev/null)
+      if test -n "$raw"; and test "$raw" != "[]"
+        set hourly (echo $raw | jq --arg label "$VAST_LABEL" '
+          [.[] | select(.label == $label) | select(.actual_status == "running") | .dph_total | tonumber] | add // 0
+        ')
+        set count (echo $raw | jq --arg label "$VAST_LABEL" '
+          [.[] | select(.label == $label) | select(.actual_status == "running")] | length
+        ')
+      end
+
+      printf "Credit: \$%.2f\n" $credit
+      printf "Rate: \$%.2f/hr (%d instances)\n" $hourly $count
+
+      if test (echo $hourly | jq '. > 0') = "true"
+        set -l hrs (jq -rn --arg b "$credit" --arg h "$hourly" '
+          ($b | tonumber) as $bal | ($h | tonumber) as $hr |
+          ($bal / $hr) as $total_hours |
+          ($total_hours | floor) as $hours |
+          (($total_hours - $hours) * 60 | round) as $minutes |
+          "\($hours):\($minutes | tostring | if length == 1 then "0" + . else . end)"
+        ')
+        printf "Remaining: ~%s\n" $hrs
+      end
+
+      env-cleanup $_pre_vars
+    '';
+    vast-balance.description = "Show Vast.ai credit balance + summed hourly burn rate across running instances + hours remaining.";
 
     env-cleanup.body = ''
       for _v in (set --names -x)
