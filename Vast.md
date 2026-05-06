@@ -305,6 +305,7 @@ Two ways to run more than one rental at the same time:
 | `vast-pause [INSTANCE_ID]` | Stop a running rental — disk preserved, compute billing pauses; storage still accrues. ID required when ≥2 running. |
 | `vast-unpause [INSTANCE_ID]` | Resume a stopped rental. Subject to host GPU availability — not guaranteed. ID required when ≥2 stopped. |
 | `vast-destroy INSTANCE_ID` | Tear down a rental |
+| `vast-fetch-metrics [INSTANCE_ID]` | Snapshot `/workspace/metrics` + `vllm.log` into `~/vast-metrics/<id>-<ts>/` and render PNGs. Non-destructive. ID required when ≥2 running. |
 | `vast-bootstrap [INSTANCE_ID] [--restart]` | SSH in and (re)launch vLLM remotely. Idempotent by default; `--restart` kills the running vllm and re-launches. `INSTANCE_ID` is required when ≥2 instances share the label. |
 | `vast-tunnel [INSTANCE_ID] [--restart]` | Open localhost:`$VAST_LOCAL_PORT` → rental:`$VAST_VLLM_PORT` SSH tunnel. `INSTANCE_ID` required when ≥2 instances share the label. |
 | `vast-tunnel-down` | Close the tunnel |

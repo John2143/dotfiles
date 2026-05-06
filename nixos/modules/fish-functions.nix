@@ -3,7 +3,7 @@
   programs.fish.interactiveShellInit = ''
     # Tab completion for vast-* commands that take an INSTANCE_ID.
     # Filters by VAST_LABEL (default vllm-deepseek-v4) and status:
-    #   running  → vast-bootstrap, vast-tunnel, vast-logs, vast-pause
+    #   running  → vast-bootstrap, vast-fetch-metrics, vast-tunnel, vast-logs, vast-pause
     #   stopped  → vast-unpause
     #   any      → vast-destroy
     complete -c vast-destroy  -f -a '(_vast-complete-ids any)'
@@ -11,6 +11,7 @@
     complete -c vast-tunnel    -f -a '(_vast-complete-ids running)'
     complete -c vast-logs      -f -a '(_vast-complete-ids running)'
     complete -c vast-pause     -f -a '(_vast-complete-ids running)'
+    complete -c vast-fetch-metrics -f -a '(_vast-complete-ids running)'
     complete -c vast-unpause   -f -a '(_vast-complete-ids stopped)'
   '';
 
@@ -825,6 +826,67 @@ ls -lh /workspace/metrics/vllm.prom 2>/dev/null || echo "  (none)"'
       return $rc
     '';
     vast-metrics.description = "Show live GPU+vLLM metrics state on the rental (vast-metrics [INSTANCE_ID] [--no-fzf]; monitor status, sample count, avg/peak util, latest samples).";
+    vast-fetch-metrics.body = ''
+      # Snapshot /workspace/metrics + vllm.log from a running rental into
+      # ~/vast-metrics/$id-$ts/, then render PNGs + summary.txt via
+      # vast-render-metrics. Non-destructive — instance keeps running.
+      # vast-destroy delegates to this for its teardown snapshot.
+      set -l _pre_vars (set --names -x)
+      if not _vast-load
+        env-cleanup $_pre_vars
+        return 1
+      end
+      set -l instance_id ""
+      set -l no_fzf ""
+      for arg in $argv
+        switch $arg
+          case --no-fzf
+            set no_fzf 1
+          case -h --help
+            echo "Usage: vast-fetch-metrics [--no-fzf] [INSTANCE_ID]" >&2
+            env-cleanup $_pre_vars
+            return 0
+          case '*'
+            set instance_id $arg
+        end
+      end
+      if not _vast-resolve-instance $instance_id running $no_fzf
+        env-cleanup $_pre_vars
+        return 1
+      end
+      set -l ts (date +%Y%m%d-%H%M%S)
+      set -l dest "$HOME/vast-metrics/$VAST_INSTANCE_ID-$ts"
+      mkdir -p $dest
+      echo "Fetching metrics from instance $VAST_INSTANCE_ID → $dest ..."
+      scp -i $VAST_SSH_KEY \
+          -P $VAST_SSH_PORT \
+          -o StrictHostKeyChecking=no \
+          -o UserKnownHostsFile=/dev/null \
+          -o LogLevel=ERROR \
+          -r $VAST_SSH_USER@$VAST_HOST:/workspace/metrics $dest/
+      set -l rc_metrics $status
+      scp -i $VAST_SSH_KEY \
+          -P $VAST_SSH_PORT \
+          -o StrictHostKeyChecking=no \
+          -o UserKnownHostsFile=/dev/null \
+          -o LogLevel=ERROR \
+          $VAST_SSH_USER@$VAST_HOST:/workspace/vllm.log $dest/
+      set -l rc_log $status
+      if test $rc_metrics -ne 0; or test $rc_log -ne 0
+        echo "Warning: scp partial/failed (metrics rc=$rc_metrics, log rc=$rc_log)." >&2
+      end
+      if test -d $dest/metrics
+        if command -q vast-render-metrics
+          vast-render-metrics $dest
+          or echo "Warning: vast-render-metrics failed; raw CSVs are still in $dest." >&2
+        else
+          echo "vast-render-metrics not on PATH (rebuild needed); raw CSVs in $dest." >&2
+        end
+      end
+      env-cleanup $_pre_vars
+      return 0
+    '';
+    vast-fetch-metrics.description = "Snapshot /workspace/metrics + vllm.log from a running rental into ~/vast-metrics/<id>-<ts>/ and render PNGs (vast-fetch-metrics [--no-fzf] [INSTANCE_ID]; non-destructive — instance keeps running).";
 
     # Helpers for finding and renting Vast.ai instances. Wrap the `vastai`
     # CLI (provided by the wrapper in shared-cli-configuration.nix). Run
@@ -916,49 +978,9 @@ ls -lh /workspace/metrics/vllm.prom 2>/dev/null || echo "  (none)"'
         return 1
       end
 
-      # Fetch /workspace/metrics + vllm.log before terminating, unless
-      # --no-fetch (or the instance is unreachable). scp failures only warn —
-      # the user's intent is to destroy, so we never block on metrics.
       if test -z "$no_fetch"
-        set -l _pre_vars (set --names -x)
-        if _vast-load
-          if _vast-resolve-instance $instance_id running $no_fzf
-            set -l ts (date +%Y%m%d-%H%M%S)
-            set -l dest "$HOME/vast-metrics/$instance_id-$ts"
-            mkdir -p $dest
-            echo "Fetching metrics from instance $instance_id → $dest ..."
-            scp -i $VAST_SSH_KEY \
-                -P $VAST_SSH_PORT \
-                -o StrictHostKeyChecking=no \
-                -o UserKnownHostsFile=/dev/null \
-                -o LogLevel=ERROR \
-                -r $VAST_SSH_USER@$VAST_HOST:/workspace/metrics $dest/
-            set -l rc_metrics $status
-            scp -i $VAST_SSH_KEY \
-                -P $VAST_SSH_PORT \
-                -o StrictHostKeyChecking=no \
-                -o UserKnownHostsFile=/dev/null \
-                -o LogLevel=ERROR \
-                $VAST_SSH_USER@$VAST_HOST:/workspace/vllm.log $dest/
-            set -l rc_log $status
-            if test $rc_metrics -ne 0; or test $rc_log -ne 0
-              echo "Warning: scp partial/failed (metrics rc=$rc_metrics, log rc=$rc_log); destroying anyway." >&2
-            end
-            if test -d $dest/metrics
-              if command -q vast-render-metrics
-                vast-render-metrics $dest
-                or echo "Warning: vast-render-metrics failed; raw CSVs are still in $dest." >&2
-              else
-                echo "vast-render-metrics not on PATH (rebuild needed); raw CSVs in $dest." >&2
-              end
-            end
-          else
-            echo "Warning: instance $instance_id not reachable; skipping metrics fetch." >&2
-          end
-        else
-          echo "Warning: failed to load Vast credentials; skipping metrics fetch." >&2
-        end
-        env-cleanup $_pre_vars
+        vast-fetch-metrics --no-fzf $instance_id
+        or echo "Warning: vast-fetch-metrics failed; destroying anyway." >&2
       end
 
       echo "Destroying Vast.ai instance $instance_id ..."

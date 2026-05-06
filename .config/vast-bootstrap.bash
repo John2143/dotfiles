@@ -146,19 +146,28 @@ fi
 # teardown; this is speculative cleanup.
 pkill -9 -f 'VLLM::EngineCore' 2>/dev/null || true
 
+# True iff EXTRA_ARGS already contains the named flag (whole-word, so
+# --tool-call-parser doesn't match --tool-call-parser-foo). Used to suppress
+# auto-defaults whenever the caller has overridden them via VAST_EXTRA_ARGS,
+# avoiding duplicate-flag arguments to vllm.
+has_extra_flag() {
+  printf '%s\n' "$EXTRA_ARGS" | grep -qE -- "(^|[[:space:]])$1([[:space:]]|=|\$)"
+}
+
 # DeepSeek V4 currently asserts kv_cache_dtype starts with "fp8". Set it
-# automatically if the caller didn't pass --kv-cache-dtype themselves.
+# automatically unless the caller passed --kv-cache-dtype / a parser flag
+# themselves (in EXTRA_ARGS or via the env-var equivalents).
 case "$MODEL" in
   *DeepSeek-V4*|*deepseek-v4*)
-    if ! printf '%s\n' "$EXTRA_ARGS" | grep -q -- '--kv-cache-dtype'; then
+    if ! has_extra_flag --kv-cache-dtype; then
       echo "Auto-setting --kv-cache-dtype fp8 for DeepSeek V4."
       EXTRA_ARGS="--kv-cache-dtype fp8 ${EXTRA_ARGS}"
     fi
-    if [ -z "$TOOL_PARSER" ]; then
+    if [ -z "$TOOL_PARSER" ] && ! has_extra_flag --tool-call-parser; then
       echo "Auto-setting --tool-call-parser deepseek_v4 for DeepSeek V4."
       TOOL_PARSER=deepseek_v4
     fi
-    if [ -z "$REASONING_PARSER" ]; then
+    if [ -z "$REASONING_PARSER" ] && ! has_extra_flag --reasoning-parser; then
       echo "Auto-setting --reasoning-parser deepseek_v4 for DeepSeek V4."
       REASONING_PARSER=deepseek_v4
     fi
@@ -468,7 +477,7 @@ esac
 echo "Topology: ${GPU_COUNT} GPU(s) → MAX_LEN=${MAX_LEN} MEM_UTIL=${MEM_UTIL} MAX_NUM_SEQS=${MAX_NUM_SEQS}"
 
 # TP=GPU_COUNT on multi-GPU; favors single-request latency over throughput.
-if [ -z "${TENSOR_PARALLEL}" ] && ! printf '%s\n' "$EXTRA_ARGS" | grep -q -- '--tensor-parallel-size'; then
+if [ -z "${TENSOR_PARALLEL}" ] && ! has_extra_flag --tensor-parallel-size; then
   if [ "${GPU_COUNT}" -gt 1 ]; then
     echo "Auto-setting --tensor-parallel-size ${GPU_COUNT}."
     TENSOR_PARALLEL="${GPU_COUNT}"
@@ -477,15 +486,23 @@ fi
 
 # Single-GPU prefill activation can spike past the ~30 GB free after V4-Flash
 # weights; cap chunked-prefill batch size unless the caller already set it.
-if [ "${GPU_COUNT}" = "1" ] && ! printf '%s\n' "$EXTRA_ARGS" | grep -q -- '--max-num-batched-tokens'; then
+if [ "${GPU_COUNT}" = "1" ] && ! has_extra_flag --max-num-batched-tokens; then
   EXTRA_ARGS="--max-num-batched-tokens ${MAX_NUM_BATCHED_TOKENS} ${EXTRA_ARGS}"
 fi
 
-# DeepSeek V4 is MoE; shard experts across GPUs on multi-GPU rentals.
+# DeepSeek V4 is MoE; auto-enable expert parallelism only at 4+ GPUs where
+# the weight footprint pressure makes EP+TP clearly worthwhile. At 2 GPUs
+# V4-Flash fits comfortably with TP alone (74 GB/GPU on B200's 192 GB) and
+# the all-to-all dispatch overhead from EP can dominate latency for 1-2
+# user workloads — the kind of thing this rental serves. Override:
+#   - force on at 2 GPUs:   EXTRA_ARGS="--enable-expert-parallel"
+#   - force off at any N:   DISABLE_EXPERT_PARALLEL=1
 case "$MODEL" in
   *DeepSeek-V4*|*deepseek-v4*)
-    if [ "${GPU_COUNT}" -gt 1 ] && ! printf '%s\n' "$EXTRA_ARGS" | grep -q -- '--enable-expert-parallel'; then
-      echo "Auto-enabling --enable-expert-parallel for multi-GPU MoE."
+    if [ -z "${DISABLE_EXPERT_PARALLEL:-}" ] \
+       && [ "${GPU_COUNT}" -ge 4 ] \
+       && ! has_extra_flag --enable-expert-parallel; then
+      echo "Auto-enabling --enable-expert-parallel for ${GPU_COUNT}-GPU MoE."
       EXTRA_ARGS="--enable-expert-parallel ${EXTRA_ARGS}"
     fi
     ;;
@@ -495,29 +512,32 @@ if [ -n "${HF_TOKEN}" ]; then
   export HF_TOKEN HUGGING_FACE_HUB_TOKEN="${HF_TOKEN}"
 fi
 
-ARGS=(
-  serve "${MODEL}"
-  --host 0.0.0.0
-  --port "${VLLM_PORT}"
-  --trust-remote-code
-  --max-model-len "${MAX_LEN}"
-  --gpu-memory-utilization "${MEM_UTIL}"
-  --max-num-seqs "${MAX_NUM_SEQS}"
-  --served-model-name "${SERVED}"
-)
-if [ -n "${TOOL_PARSER}" ]; then
+# Build ARGS such that anything the caller put in EXTRA_ARGS wins. Each base
+# flag is suppressed if EXTRA_ARGS already names it, avoiding duplicate-flag
+# crashes / undefined-precedence behavior in vllm's CLI parser.
+ARGS=(serve "${MODEL}")
+has_extra_flag --host                       || ARGS+=(--host 0.0.0.0)
+has_extra_flag --port                       || ARGS+=(--port "${VLLM_PORT}")
+has_extra_flag --trust-remote-code          || ARGS+=(--trust-remote-code)
+has_extra_flag --max-model-len              || ARGS+=(--max-model-len "${MAX_LEN}")
+has_extra_flag --gpu-memory-utilization     || ARGS+=(--gpu-memory-utilization "${MEM_UTIL}")
+has_extra_flag --max-num-seqs               || ARGS+=(--max-num-seqs "${MAX_NUM_SEQS}")
+has_extra_flag --served-model-name          || ARGS+=(--served-model-name "${SERVED}")
+
+if [ -n "${TOOL_PARSER}" ] && ! has_extra_flag --tool-call-parser; then
   ARGS+=(--enable-auto-tool-choice --tool-call-parser "${TOOL_PARSER}")
 fi
-if [ -n "${REASONING_PARSER}" ]; then
+if [ -n "${REASONING_PARSER}" ] && ! has_extra_flag --reasoning-parser; then
   ARGS+=(--reasoning-parser "${REASONING_PARSER}")
   # DeepSeek V4's chat template disables thinking by default, unlike Qwen3
   # which enables it. Without this, the model never emits reasoning tokens,
   # so the reasoning parser has nothing to split and reasoning_content is
   # always null. Enable thinking server-wide; clients can still disable
   # per-request via chat_template_kwargs: {"thinking": false}.
-  ARGS+=(--default-chat-template-kwargs '{"thinking": true}')
+  has_extra_flag --default-chat-template-kwargs \
+    || ARGS+=(--default-chat-template-kwargs '{"thinking": true}')
 fi
-if [ -n "${TENSOR_PARALLEL}" ]; then
+if [ -n "${TENSOR_PARALLEL}" ] && ! has_extra_flag --tensor-parallel-size; then
   ARGS+=(--tensor-parallel-size "${TENSOR_PARALLEL}")
 fi
 if [ -n "${EXTRA_ARGS}" ]; then
@@ -525,6 +545,15 @@ if [ -n "${EXTRA_ARGS}" ]; then
   # shellcheck disable=SC2206
   EXTRA=(${EXTRA_ARGS})
   ARGS+=("${EXTRA[@]}")
+fi
+
+# Final sanity scan: warn on any flag that ended up in ARGS twice. Catches
+# both EXTRA_ARGS containing a duplicate of itself and any future regression
+# in the suppress-if-set logic above.
+DUP_FLAGS=$(printf '%s\n' "${ARGS[@]}" | grep -E '^--' | sort | uniq -d)
+if [ -n "$DUP_FLAGS" ]; then
+  echo "Warning: duplicate vllm flag(s) in ARGS — vllm CLI may reject:" >&2
+  printf '  %s\n' $DUP_FLAGS >&2
 fi
 
 pkill -f 'vllm serve' 2>/dev/null || true
