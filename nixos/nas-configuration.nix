@@ -107,7 +107,6 @@
 #         -o compression=lz4 \
 #         -o atime=off \
 #         neo/longhorn
-#       sudo zfs set mountpoint=/var/lib/longhorn neo/longhorn
 #       sudo chown root:root /var/lib/longhorn
 #       sudo chmod 755 /var/lib/longhorn
 #
