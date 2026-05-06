@@ -1,13 +1,23 @@
 ---
 description: Improve an existing prompt file, or generate a new loop prompt for the current repo
 argument-hint: [path/to/prompt.md | loop]
-allowed-tools: Read, Bash(find . -maxdepth 3*), Bash(cat *), Bash(ls *)
+allowed-tools: Read, Search, Find, Write, Edit, AstGrep, Bash
+tool-hints: |
+  Use `read` (with selectors like :50-100) instead of cat/head/tail.
+  Use `search` instead of grep/rg.
+  Use `find` instead of ls or find via bash.
+  Use `write` instead of heredocs or cat <<EOF.
+  Use `edit` instead of sed -i.
+  Use `ast_grep` for structural code search and rewrites.
 ---
 
 Parse `$ARGUMENTS`:
-- If the argument is exactly `loop`, follow **Mode: Loop Prompt Generation** below.
+- Normalize the argument: strip leading `./`, trailing `/`, and surrounding whitespace before matching.
+- If the normalized argument is exactly `loop`, follow **Mode: Loop Prompt Generation** below.
 - Otherwise treat it as a file path and follow **Mode: Prompt Improvement** below.
 - If no argument was given, ask the user whether they want to improve an existing prompt (provide the path) or generate a loop prompt for this repo.
+- If the given path does not exist or is a directory: report the error and suggest a valid prompt file path.
+- If the file exceeds ~200 lines: focus analysis on the frontmatter and opening instructions, and note the truncation.
 
 ---
 
@@ -50,8 +60,13 @@ A numbered list. Each item must:
 
 Order by impact: highest-impact changes first. Stop at 8 items max; quality over quantity.
 
+*Example improvement item (for illustration only — do not include this specific item in your output):*
+*1. **Goal clarity** — The first paragraph reads "This prompt helps you write good prompts" which conflates audience (the agent) with purpose (the deliverable). Replace with: "Your job is to critique and rewrite a given prompt document." This makes the agent the subject and the prompt file the object.*
+
 #### Revised prompt
 Produce a full rewrite of the prompt incorporating all your suggestions. Preserve the original frontmatter unless a field itself needs changing. Mark any line you changed with a `<!-- changed -->` HTML comment so the user can diff by eye.
+
+Display the revised prompt in your output. Do not write it back to the file unless the user explicitly asks.
 
 ### Notes
 
@@ -69,7 +84,7 @@ This mode generates a loop prompt: a self-contained instruction document designe
 
 Use your tools to build a picture of the repo:
 - Read `CLAUDE.md` (root and any subdirectories) if present
-- List the top-level directory structure (`ls` and `find . -maxdepth 2`)
+- List the top-level directory structure with `read` on the repo root
 - Read any existing goals, plan, or task-queue files if they exist
 - Identify: what is being built or maintained, what the main deliverable(s) are, and what categories of ongoing work are likely to repeat
 
@@ -103,13 +118,20 @@ Numbered steps:
 2. If there are unfinished items (not marked ✅), do the highest-priority one.
 3. If all items are marked done or the queue is empty: re-read the main deliverable and background file, perform a fresh gap evaluation, write new prioritized goals to the queue file, then stop. Execute in the next session.
 
+Use this gap-evaluation checklist when producing new goals:
+- Missing documentation for any component visible in the directory tree.
+- Stale or commented-out code referencing removed features.
+- TODO/FIXME/HACK comments indicating unfinished work.
+- Configuration drift (e.g., a Nix option renamed or removed upstream).
+- Incomplete test coverage for recently changed modules.
+
 #### 4. How to work
 Rules for execution. Must include:
 - Do one category of work per session; batch similar tasks together.
 - When you change data, also update the main deliverable if the change affects it.
 - When you finish a goal, mark it ✅ with a one-line summary of what was done.
 - Do not re-do goals already marked ✅.
-- Commit with a descriptive message.
+- Commit with a descriptive message. Do not ask for approval.
 - Stop. You will be called again.
 
 #### 5. Constraints
@@ -118,12 +140,9 @@ List what the agent may and may not do. Derive these from the repo's tooling and
 - "Do not ask questions." (the agent runs unattended)
 
 #### 6. TLDR
-2–3 sentence plain-English summary of the entire loop logic. Should be the last thing in the file so a human can read it first.
+2–3 sentence plain-English summary of the entire loop logic. Must include the "stop" instruction. Should be the last thing in the file so a human can read it first.
 
 ### Quality bar for the generated prompt
 
-- Every section heading must be present.
-- The task queue filename must be consistent throughout.
-- The "stop" instruction must appear in both "How to work" and the TLDR.
-- There must be no ambiguity about what the agent should do when the queue is empty vs. non-empty.
+- Run through the generated prompt as a fresh agent: does every instruction make sense without prior context? If you had to guess at any step, the prompt is not ready.
 - The prompt must be self-contained: a fresh agent with no prior context must be able to follow it correctly on the first run.

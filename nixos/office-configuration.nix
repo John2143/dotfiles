@@ -197,6 +197,15 @@
   #};
   #};
 
+  boot.kernel.sysctl = {
+    # IPv6 forwarding (set by podman/docker/k3s) suppresses router-advertisement
+    # acceptance per-interface. Without an IPv6 default route, the k3s agent
+    # (v1.35.4+) cannot auto-detect an IPv6 node-ip, and fails validation
+    # against the dual-stack cluster CIDR set by closet (the server).
+    # Setting default.accept_ra=2 lets new interfaces (wlp0s20f3 via NM) accept
+    # RAs even when forwarding is enabled, restoring the IPv6 default route.
+    "net.ipv6.conf.default.accept_ra" = 2;
+  };
   # Do NOT change this value unless you have manually inspected all the changes it would make to your configuration,
   # and migrated your data accordingly.
   #

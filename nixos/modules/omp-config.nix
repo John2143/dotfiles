@@ -159,66 +159,7 @@ in {
     # is inferred from strings in the OMP binary, not from real ExtensionAPI
     # typings. Confirm by running `omp-safe` against a risky bash command and
     # observing whether the call is actually blocked before relying on it.
-    ".omp/agent/hooks/approve.ts".text = ''
-      // @ts-nocheck
-      // Approval hook for risky tool calls.
-      //
-      // Triggers an interactive confirm dialog before executing:
-      //   - bash commands matching known-risky patterns
-      //   - write/edit calls (optional; comment out if too noisy)
-      //
-      // Everything else runs uninterrupted.
-
-      const RISKY_BASH = [
-        /\brm\s+-rf?\b/i,
-        /\bnixos-rebuild\s+(switch|boot|test)\b/i,
-        /\bhome-manager\s+switch\b/i,
-        /\bnix-collect-garbage\b/i,
-        /\bgit\s+push.*--force\b/i,
-        /\bgit\s+reset\s+--hard\b/i,
-        /\bdrop\s+(table|database|schema)\b/i,
-        /\bcurl[^|]*\|\s*(ba)?sh\b/i,
-        /\bwget[^|]*\|\s*(ba)?sh\b/i,
-        /\bdd\s+if=/i,
-        /\bmkfs\b/i,
-      ];
-
-      function isRisky(toolName, args) {
-        if (toolName === "bash") {
-          const cmd = String(args?.command ?? "");
-          return RISKY_BASH.some((re) => re.test(cmd));
-        }
-        // Uncomment to also gate writes:
-        // if (toolName === "write" || toolName === "edit") return true;
-        return false;
-      }
-
-      function summarize(toolName, args) {
-        if (toolName === "bash") return String(args?.command ?? "").slice(0, 200);
-        if (toolName === "write" || toolName === "edit") return String(args?.path ?? args?.file ?? "");
-        try { return JSON.stringify(args).slice(0, 200); } catch { return ""; }
-      }
-
-      export default function approveDangerous(pi) {
-        pi.on("tool_call", async (event, ctx) => {
-          if (!isRisky(event.toolName, event.args)) return;
-
-          const ok = await ctx?.ui?.confirm?.({
-            title: "Approve tool call?",
-            message: `''${event.toolName}: ''${summarize(event.toolName, event.args)}`,
-            timeout: 60_000,
-          });
-
-          if (!ok) {
-            // DRAFT: rejection shape is unverified. Throw is a reasonable
-            // first guess given how OMP wraps tool errors elsewhere
-            // (`ToolError` thrown -> tool result marked isError). Adjust
-            // after running once if this doesn't actually block execution.
-            throw new Error("Denied by approval hook");
-          }
-        });
-      }
-    '';
+    ".omp/agent/hooks/approve.ts".source = ../../.omp/agent/hooks/approve.ts;
 
     ".omp/agent/system-prompt.md".text = ''
       You are a staff engineer operating in an agentic CLI harness. You may be running under Oh My Pi, Claude Code, or another harness; do not assume defaults from any specific one.
