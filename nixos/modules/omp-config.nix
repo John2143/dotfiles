@@ -1,4 +1,18 @@
-{...}: {
+{...}: let
+  # Skills — source of truth in dotfiles/.claude/skills/. Enumerate all skill
+  # directories and create symlinks for both Claude Code (~/.claude/skills/)
+  # and OMP (~/.omp/agent/skills/, native provider at priority 100).
+  skillsDir = ../../.claude/skills;
+  skills = builtins.readDir skillsDir;
+  skillNames = builtins.filter (name: skills.${name} == "directory") (builtins.attrNames skills);
+
+  mkSkillLinks = name: {
+    ".claude/skills/${name}/SKILL.md".source = "${skillsDir}/${name}/SKILL.md";
+    ".omp/agent/skills/${name}/SKILL.md".source = "${skillsDir}/${name}/SKILL.md";
+  };
+
+  skillLinks = builtins.foldl' (acc: name: acc // mkSkillLinks name) {} skillNames;
+in {
   home.file = {
     ".omp/agent/models.yml".text = ''
       providers:
@@ -137,10 +151,5 @@
       }
     '';
 
-    # Skills — source of truth in dotfiles/.claude/skills/.
-    # Claude Code discovers from ~/.claude/skills/; OMP additionally picks
-    # them up via its native provider at ~/.omp/agent/skills/ (priority 100).
-    ".claude/skills/prompt-engineer/SKILL.md".source = ../../.claude/skills/prompt-engineer/SKILL.md;
-    ".omp/agent/skills/prompt-engineer/SKILL.md".source = ../../.claude/skills/prompt-engineer/SKILL.md;
   };
 }
