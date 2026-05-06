@@ -81,8 +81,15 @@ emit_event() {
   local type="$1" msg="${2:-}"
   local ts
   ts=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+  # JSON string escape — backslash first (so subsequent escapes don't get
+  # double-escaped), then quote, then control chars. Skipping these would
+  # break a downstream JSONL parser the moment a stack trace or multi-line
+  # vllm arg gets passed in.
   msg="${msg//\\/\\\\}"
   msg="${msg//\"/\\\"}"
+  msg="${msg//$'\n'/\\n}"
+  msg="${msg//$'\r'/\\r}"
+  msg="${msg//$'\t'/\\t}"
   printf '{"ts":"%s","type":"%s","message":"%s"}\n' "$ts" "$type" "$msg" \
     >> /workspace/metrics/events.jsonl
 }
@@ -208,7 +215,11 @@ if [ ! -s "$SYS_CSV" ]; then
   echo "timestamp,cpu_pct,mem_used_gib,mem_total_gib,load1,disk_root_pct,disk_workspace_pct,net_rx_mibps,net_tx_mibps,disk_read_mibps,disk_write_mibps" > "$SYS_CSV"
 fi
 if [ ! -s "$GPROC_CSV" ]; then
-  echo "timestamp,pid,gpu_uuid,used_memory_mib,process_name" > "$GPROC_CSV"
+  # process_name is intentionally omitted: nvidia-smi --format=csv does not
+  # quote embedded commas (e.g. "python /workspace/venv/bin/vllm serve, x"),
+  # which corrupts row shape downstream. pid + gpu_uuid uniquely identify
+  # the process if a future reader needs the name.
+  echo "timestamp,pid,gpu_uuid,used_memory_mib" > "$GPROC_CSV"
 fi
 
 # Default route's interface is the one HF downloads land on.
@@ -249,7 +260,7 @@ while true; do
     --format=csv,noheader,nounits >> "$GPU_CSV" 2>/dev/null || true
 
   nvidia-smi \
-    --query-compute-apps=timestamp,pid,gpu_uuid,used_memory,process_name \
+    --query-compute-apps=timestamp,pid,gpu_uuid,used_memory \
     --format=csv,noheader,nounits >> "$GPROC_CSV" 2>/dev/null || true
 
   printf '# T=%s\n' "$TS" >> "$PMON_LOG"
@@ -533,8 +544,13 @@ nohup bash -c 'vllm "$@" 2>&1 | ts "%Y-%m-%dT%H:%M:%SZ "' \
 VLLM_PID=$!
 echo "${VLLM_PID}" >/workspace/vllm.pid
 
-echo "Waiting for /v1/models on :${VLLM_PORT} (model download dominates first-run time; ~minutes) ..."
-for _ in $(seq 1 240); do
+echo "Waiting for /v1/models on :${VLLM_PORT} (cold-cold start ~30 min; up to 40 min ceiling) ..."
+# 480 × 5s = 40 min ceiling. Cold-cold first launch on a fresh rental is
+# ~27-30 min in practice (8 min HF download + 9 min weights load + 2 min
+# torch.compile + 5 min profiling/warmup + 3 min DeepGEMM warmup + 4 min
+# flashinfer autotune + 10 s graph capture). 20 min was the old cap and
+# false-failed regularly on cold images.
+for _ in $(seq 1 480); do
   if curl -fsS "http://localhost:${VLLM_PORT}/v1/models" >/dev/null 2>&1; then
     echo "vLLM is ready."
     emit_event vllm_ready ""

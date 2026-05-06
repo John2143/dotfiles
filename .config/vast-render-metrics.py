@@ -136,8 +136,11 @@ def parse_vllm_log(path, fallback_year):
 def parse_vllm_prom(path):
     """Read the # T= separated Prometheus scrape file into a DataFrame.
 
-    Pulls just the gauges we plot. Histograms/counters are left in the raw
-    file for ad-hoc analysis.
+    Pulls just the gauges we plot. All three are aggregated by mean across
+    label sets within a scrape — this is correct for per-GPU gauges (e.g.
+    `gpu_cache_usage_perc` reported once per TP rank in some vLLM versions),
+    and harmless when there's only one label set (mean of one == that value).
+    Summing would multiply by GPU count and produce >100% cache occupancy.
     """
     if not path.exists() or path.stat().st_size == 0:
         return None
@@ -147,16 +150,18 @@ def parse_vllm_prom(path):
         "vllm:num_requests_running": "num_requests_running",
         "vllm:num_requests_waiting": "num_requests_waiting",
     }
-    metric_re = re.compile(
-        r"^([a-zA-Z_:][a-zA-Z0-9_:]*)(\{[^}]*\})?\s+([0-9eE+\-.NaIni]+)$"
-    )
+    metric_re = re.compile(r"^([a-zA-Z_:][a-zA-Z0-9_:]*)(\{[^}]*\})?\s+(\S+)$")
     rows = []
     cur_ts = None
-    cur = {}
+    cur = {}  # target -> list of values seen this scrape
+
+    def flush():
+        if cur_ts is not None and cur:
+            rows.append({"ts": cur_ts, **{k: sum(vs) / len(vs) for k, vs in cur.items()}})
+
     for line in path.read_text(errors="replace").splitlines():
         if line.startswith("# T="):
-            if cur_ts is not None and cur:
-                rows.append({"ts": cur_ts, **cur})
+            flush()
             cur_ts = pd.to_datetime(line[4:].strip(), utc=True, errors="coerce")
             cur = {}
             continue
@@ -165,18 +170,15 @@ def parse_vllm_prom(path):
         m = metric_re.match(line)
         if not m:
             continue
-        name = m.group(1)
-        target = keep.get(name)
+        target = keep.get(m.group(1))
         if not target:
             continue
         try:
             v = float(m.group(3))
         except ValueError:
             continue
-        # Sum across labels (e.g. per-finish-reason variants).
-        cur[target] = cur.get(target, 0.0) + v
-    if cur_ts is not None and cur:
-        rows.append({"ts": cur_ts, **cur})
+        cur.setdefault(target, []).append(v)
+    flush()
     if not rows:
         return None
     return pd.DataFrame(rows).sort_values("ts").reset_index(drop=True)

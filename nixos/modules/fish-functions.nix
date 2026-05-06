@@ -778,22 +778,16 @@
       end
       set -l instance_id ""
       set -l no_fzf ""
-      set -l want_id_mode ""
       for arg in $argv
         switch $arg
-          case --id
-            set want_id_mode 1
           case --no-fzf
             set no_fzf 1
+          case -h --help
+            echo "Usage: vast-metrics [--no-fzf] [INSTANCE_ID]" >&2
+            env-cleanup $_pre_vars
+            return 0
           case '*'
-            if test -n "$want_id_mode"
-              set instance_id $arg
-              set want_id_mode ""
-            else
-              echo "vast-metrics: unrecognized arg $arg" >&2
-              env-cleanup $_pre_vars
-              return 2
-            end
+            set instance_id $arg
         end
       end
       if not _vast-resolve-instance $instance_id running $no_fzf
@@ -830,7 +824,7 @@ ls -lh /workspace/metrics/vllm.prom 2>/dev/null || echo "  (none)"'
       env-cleanup $_pre_vars
       return $rc
     '';
-    vast-metrics.description = "Show live GPU+vLLM metrics state on the rental (monitor status, sample count, avg/peak util, latest samples).";
+    vast-metrics.description = "Show live GPU+vLLM metrics state on the rental (vast-metrics [INSTANCE_ID] [--no-fzf]; monitor status, sample count, avg/peak util, latest samples).";
 
     # Helpers for finding and renting Vast.ai instances. Wrap the `vastai`
     # CLI (provided by the wrapper in shared-cli-configuration.nix). Run
