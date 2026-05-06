@@ -180,7 +180,17 @@ in {
 
   fonts.packages = with pkgs; [
     scientifica
+    noto-fonts
+    noto-fonts-emoji
+    noto-fonts-cjk-sans
   ];
+
+  fonts.fontconfig.defaultFonts = {
+    monospace = ["JetBrainsMono Nerd Font" "Noto Sans Mono"];
+    sansSerif = ["Noto Sans"];
+    serif = ["Noto Serif"];
+    emoji = ["Noto Color Emoji"];
+  };
 
   # audio
   services.pipewire = {
