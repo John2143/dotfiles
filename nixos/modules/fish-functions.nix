@@ -352,16 +352,23 @@
       # VAST_HOST, VAST_SSH_PORT, and VAST_INSTANCE_ID for ssh / vastai
       # calls that follow.
       #
-      # Usage: _vast-resolve-instance [INSTANCE_ID] [STATUS]
+      # Usage: _vast-resolve-instance [INSTANCE_ID] [STATUS] [NO_FZF]
       #   STATUS = "running" (default) | "stopped" | "any"
       #     - "running":  filter actual_status == "running" (bootstrap, tunnel, logs, pause)
       #     - "stopped":  filter actual_status != "running" (covers stopped/exited/loading; for unpause)
       #     - "any":      no status filter (rare; mostly for diagnostics)
+      #   NO_FZF = "1" to skip the interactive picker on multi-candidate
+      #            (otherwise fzf is launched if available; falls back to
+      #            error-with-listing when fzf is missing).
       #
       # Behavior:
       #   - INSTANCE_ID given → pick that one (must match label + status).
       #   - Else if exactly one matches → pick it.
-      #   - Else (zero or 2+) print candidates to stderr and return 1.
+      #   - Else if 0 candidates → print message + return 1.
+      #   - Else (2+):
+      #       · Print the candidate list (always — useful as context).
+      #       · If NO_FZF=1 or fzf missing → return 1.
+      #       · Else launch fzf; ESC/empty selection → return 1.
       #
       # If $VAST_HOST and $VAST_SSH_PORT are already set (e.g. pinned in
       # ~/.config/vast/profile), skip API discovery — but error if the caller
@@ -375,6 +382,10 @@
       set -l want_status running
       if test (count $argv) -gt 1; and test -n "$argv[2]"
         set want_status $argv[2]
+      end
+      set -l no_fzf 0
+      if test (count $argv) -gt 2; and test "$argv[3]" = "1"
+        set no_fzf 1
       end
 
       if test -n "$VAST_HOST"; and test -n "$VAST_SSH_PORT"
@@ -456,12 +467,37 @@
         set selected (echo $candidates | jq -c '.[0]')
       else
         if test -n "$noun"
-          echo "Multiple $noun Vast.ai instances with label '$VAST_LABEL'. Pass an instance ID:" >&2
+          echo "Multiple $noun Vast.ai instances with label '$VAST_LABEL':" >&2
         else
-          echo "Multiple Vast.ai instances with label '$VAST_LABEL'. Pass an instance ID:" >&2
+          echo "Multiple Vast.ai instances with label '$VAST_LABEL':" >&2
         end
-        echo $candidates | jq -r '.[] | "  id=\(.id) status=\(.actual_status) host=\(.public_ipaddr) ssh_port=\(.ports."22/tcp"[0].HostPort // "?") gpu=\(.gpu_name)×\(.num_gpus // 1) hourly=$\(.dph_total)"' >&2
-        return 1
+        set -l lines (echo $candidates | jq -r '.[] | "id=\(.id) status=\(.actual_status) host=\(.public_ipaddr) ssh_port=\(.ports."22/tcp"[0].HostPort // "?") gpu=\(.gpu_name)×\(.num_gpus // 1) hourly=$\(.dph_total)"')
+        for line in $lines
+          echo "  $line" >&2
+        end
+
+        if test "$no_fzf" = "1"
+          echo "Pass an instance ID to disambiguate (omit --no-fzf for an interactive picker)." >&2
+          return 1
+        end
+        if not command -v fzf >/dev/null 2>&1
+          echo "Pass an instance ID to disambiguate (install fzf for an interactive picker)." >&2
+          return 1
+        end
+
+        set -l picked (printf '%s\n' $lines | fzf --prompt "Select Vast instance > " --height 40% --reverse --border --header "$VAST_LABEL ($want_status candidates)")
+        if test -z "$picked"
+          echo "No instance selected — aborting." >&2
+          return 1
+        end
+        set -l picked_id (string match -r '^id=([0-9]+)' -- $picked)[2]
+        if test -z "$picked_id"
+          echo "Could not parse selection: $picked" >&2
+          return 1
+        end
+        set selected (echo $candidates | jq -c --arg id "$picked_id" '
+          map(select((.id | tostring) == $id))[0]
+        ')
       end
 
       set -gx VAST_INSTANCE_ID (echo $selected | jq -r '.id')
@@ -480,10 +516,13 @@
 
       set -l instance_id ""
       set -l force_restart ""
+      set -l no_fzf ""
       for arg in $argv
         switch $arg
           case --restart
             set force_restart 1
+          case --no-fzf
+            set no_fzf 1
           case '*'
             if test -z "$instance_id"
               set instance_id $arg
@@ -491,7 +530,7 @@
         end
       end
 
-      if not _vast-resolve-instance $instance_id
+      if not _vast-resolve-instance $instance_id running $no_fzf
         env-cleanup $_pre_vars
         return 1
       end
@@ -503,12 +542,12 @@
           -o UserKnownHostsFile=/dev/null \
           -o LogLevel=ERROR \
           $VAST_SSH_USER@$VAST_HOST \
-          "MODEL='$VAST_MODEL' SERVED='$VAST_SERVED_MODEL_NAME' VLLM_PORT='$VAST_VLLM_PORT' MAX_LEN='$VAST_MAX_MODEL_LEN' MEM_UTIL='$VAST_GPU_MEM_UTIL' HF_TOKEN='$VAST_HF_TOKEN' TOOL_PARSER='$VAST_TOOL_CALL_PARSER' REASONING_PARSER='$VAST_REASONING_PARSER' EXTRA_ARGS='$VAST_EXTRA_ARGS' TENSOR_PARALLEL='$VAST_TENSOR_PARALLEL' FORCE_RESTART='$force_restart' bash -s" < /home/john/dotfiles/.config/vast-bootstrap.bash
+          "MODEL='$VAST_MODEL' SERVED='$VAST_SERVED_MODEL_NAME' VLLM_PORT='$VAST_VLLM_PORT' MAX_LEN='$VAST_MAX_MODEL_LEN' MEM_UTIL='$VAST_GPU_MEM_UTIL' MAX_NUM_SEQS='$VAST_MAX_NUM_SEQS' HF_TOKEN='$VAST_HF_TOKEN' TOOL_PARSER='$VAST_TOOL_CALL_PARSER' REASONING_PARSER='$VAST_REASONING_PARSER' EXTRA_ARGS='$VAST_EXTRA_ARGS' TENSOR_PARALLEL='$VAST_TENSOR_PARALLEL' FORCE_RESTART='$force_restart' bash -s" < /home/john/dotfiles/.config/vast-bootstrap.bash
       set -l rc $status
       env-cleanup $_pre_vars
       return $rc
     '';
-    vast-bootstrap.description = "Bootstrap vLLM on a rented Vast.ai instance (vast-bootstrap [INSTANCE_ID] [--restart]; ID required when ≥2 instances running with the same label).";
+    vast-bootstrap.description = "Bootstrap vLLM on a rented Vast.ai instance (vast-bootstrap [INSTANCE_ID] [--restart] [--no-fzf]; with ≥2 running instances opens an fzf picker unless --no-fzf or fzf is missing).";
 
     vast-tunnel.body = ''
       set -l _pre_vars (set --names -x)
@@ -519,10 +558,13 @@
 
       set -l instance_id ""
       set -l want_restart 0
+      set -l no_fzf ""
       for arg in $argv
         switch $arg
           case --restart
             set want_restart 1
+          case --no-fzf
+            set no_fzf 1
           case '*'
             if test -z "$instance_id"
               set instance_id $arg
@@ -530,7 +572,7 @@
         end
       end
 
-      if not _vast-resolve-instance $instance_id
+      if not _vast-resolve-instance $instance_id running $no_fzf
         env-cleanup $_pre_vars
         return 1
       end
@@ -574,7 +616,7 @@
       env-cleanup $_pre_vars
       return 1
     '';
-    vast-tunnel.description = "Open SSH tunnel localhost:VAST_LOCAL_PORT → rented vLLM (vast-tunnel [INSTANCE_ID] [--restart]; ID required when ≥2 instances running). One tunnel at a time — close before switching targets.";
+    vast-tunnel.description = "Open SSH tunnel localhost:VAST_LOCAL_PORT → rented vLLM (vast-tunnel [INSTANCE_ID] [--restart] [--no-fzf]; with ≥2 running instances opens an fzf picker unless --no-fzf or fzf is missing). One tunnel at a time — close before switching targets.";
 
     vast-tunnel-down.body = ''
       if systemctl --user is-active --quiet vast-tunnel.service
@@ -663,6 +705,7 @@
 
       set -l instance_id ""
       set -l n 200
+      set -l no_fzf ""
       set -l args $argv
       while test (count $args) -gt 0
         switch $args[1]
@@ -674,13 +717,16 @@
             end
             set instance_id $args[2]
             set args $args[3..-1]
+          case --no-fzf
+            set no_fzf 1
+            set args $args[2..-1]
           case '*'
             set n $args[1]
             set args $args[2..-1]
         end
       end
 
-      if not _vast-resolve-instance $instance_id
+      if not _vast-resolve-instance $instance_id running $no_fzf
         env-cleanup $_pre_vars
         return 1
       end
@@ -696,7 +742,7 @@
       env-cleanup $_pre_vars
       return $rc
     '';
-    vast-logs.description = "Tail the remote vLLM log (vast-logs [--id INSTANCE_ID] [N=200]; --id required when ≥2 instances running).";
+    vast-logs.description = "Tail the remote vLLM log (vast-logs [--id INSTANCE_ID] [N=200] [--no-fzf]; with ≥2 running instances opens an fzf picker unless --no-fzf or fzf is missing).";
 
     # Helpers for finding and renting Vast.ai instances. Wrap the `vastai`
     # CLI (provided by the wrapper in shared-cli-configuration.nix). Run
@@ -791,11 +837,19 @@
       end
 
       set -l instance_id ""
-      if test (count $argv) -gt 0
-        set instance_id $argv[1]
+      set -l no_fzf ""
+      for arg in $argv
+        switch $arg
+          case --no-fzf
+            set no_fzf 1
+          case '*'
+            if test -z "$instance_id"
+              set instance_id $arg
+            end
+        end
       end
 
-      if not _vast-resolve-instance $instance_id running
+      if not _vast-resolve-instance $instance_id running $no_fzf
         env-cleanup $_pre_vars
         return 1
       end
@@ -825,7 +879,7 @@
       env-cleanup $_pre_vars
       return $rc
     '';
-    vast-pause.description = "Pause (stop) a running Vast.ai instance — disk preserved, compute billing pauses (vast-pause [INSTANCE_ID]; ID required when ≥2 running). Waits up to 60s for the state change to land.";
+    vast-pause.description = "Pause (stop) a running Vast.ai instance — disk preserved, compute billing pauses (vast-pause [INSTANCE_ID] [--no-fzf]; with ≥2 running opens an fzf picker unless --no-fzf or fzf is missing). Waits up to 60s for the state change.";
 
     vast-unpause.body = ''
       # Restarts a previously-stopped rental via `vastai start instance`.
@@ -840,11 +894,19 @@
       end
 
       set -l instance_id ""
-      if test (count $argv) -gt 0
-        set instance_id $argv[1]
+      set -l no_fzf ""
+      for arg in $argv
+        switch $arg
+          case --no-fzf
+            set no_fzf 1
+          case '*'
+            if test -z "$instance_id"
+              set instance_id $arg
+            end
+        end
       end
 
-      if not _vast-resolve-instance $instance_id stopped
+      if not _vast-resolve-instance $instance_id stopped $no_fzf
         env-cleanup $_pre_vars
         return 1
       end
@@ -866,7 +928,7 @@
       env-cleanup $_pre_vars
       return $rc
     '';
-    vast-unpause.description = "Resume (start) a stopped Vast.ai instance — subject to host GPU availability (vast-unpause [INSTANCE_ID]; ID required when ≥2 stopped). Waits up to 60s for the state change to land.";
+    vast-unpause.description = "Resume (start) a stopped Vast.ai instance — subject to host GPU availability (vast-unpause [INSTANCE_ID] [--no-fzf]; with ≥2 stopped opens an fzf picker unless --no-fzf or fzf is missing). Waits up to 60s for the state change.";
 
     vast-balance.body = ''
       set -l _pre_vars (set --names -x)

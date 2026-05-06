@@ -6,8 +6,9 @@
 #   MODEL              HF model id (required)
 #   SERVED             served-model-name exposed on the OpenAI API (default deepseek-v4-flash)
 #   VLLM_PORT          listen port inside the rental (default 8000)
-#   MAX_LEN            --max-model-len (default 1000000)
-#   MEM_UTIL           --gpu-memory-utilization (default 0.95)
+#   MAX_LEN            --max-model-len ("auto" → tuned per GPU count, see below)
+#   MEM_UTIL           --gpu-memory-utilization ("auto" → tuned per GPU count)
+#   MAX_NUM_SEQS       --max-num-seqs ("auto" → tuned per GPU count)
 #   HF_TOKEN           HuggingFace token (optional but strongly recommended:
 #                      faster downloads, higher rate limits, gated models)
 #   TOOL_PARSER        --tool-call-parser, e.g. qwen3_xml (optional)
@@ -15,8 +16,23 @@
 #   EXTRA_ARGS         space-separated extra flags (optional)
 #   FORCE_RESTART      if non-empty, kill any running vllm and re-launch
 #                      (otherwise the script is a no-op when vllm is up)
-#   TENSOR_PARALLEL    --tensor-parallel-size N (auto-detected from GPU count
-#                      if unset; set to 1 to disable on multi-GPU instances)
+#   TENSOR_PARALLEL    --tensor-parallel-size N (auto-detected = GPU count;
+#                      set to 1 to disable on multi-GPU instances)
+#
+# Auto-tuning targets DeepSeek-V4-Flash with 1-2 light users (rare concurrent
+# big queries). V4-Flash KV at 1M ctx is only ~6 GiB/seq (7% of V3.2's, via
+# CSA+HCA), so the binding constraint is the ~150 GB weight footprint, not KV:
+#
+#   1 GPU  (B200, 192 GB): MAX_LEN=524288  MEM_UTIL=0.93 MAX_NUM_SEQS=16
+#                          (weights eat ~80% VRAM; tighter MEM_UTIL avoids
+#                          OOM during CUDA graph capture; --max-num-batched-tokens
+#                          capped at 8192 to bound prefill activation spikes)
+#   2 GPUs (2×B200, 384):  MAX_LEN=1000000 MEM_UTIL=0.95 MAX_NUM_SEQS=32
+#   4 GPUs (4×B200, 768):  MAX_LEN=1000000 MEM_UTIL=0.95 MAX_NUM_SEQS=64
+#
+# Topology choice: TP+EP (each request uses all GPUs) over the vLLM recipe's
+# DP+EP default. DP+EP optimizes throughput for many concurrent users; TP+EP
+# minimizes per-request latency, which matters more with 1-2 users.
 #
 # Idempotent: if a vLLM server is already responding on $VLLM_PORT it exits 0
 # unless FORCE_RESTART is set.
@@ -31,8 +47,9 @@ set -euo pipefail
 : "${MODEL:?missing MODEL}"
 : "${SERVED:=deepseek-v4-flash}"
 : "${VLLM_PORT:=8000}"
-: "${MAX_LEN:=1000000}"
-: "${MEM_UTIL:=0.95}"
+: "${MAX_LEN:=auto}"
+: "${MEM_UTIL:=auto}"
+: "${MAX_NUM_SEQS:=auto}"
 : "${HF_TOKEN:=}"
 : "${TOOL_PARSER:=}"
 : "${REASONING_PARSER:=}"
@@ -166,16 +183,56 @@ if ! command -v nvidia-smi >/dev/null 2>&1; then
   echo "Warning: nvidia-smi not found inside the rental. vLLM will likely fail to start." >&2
 fi
 
-# Auto-detect GPU count and enable tensor parallelism unless already configured.
+# Detect GPU count so we can pick topology-aware defaults.
+GPU_COUNT=1
+if command -v nvidia-smi >/dev/null 2>&1; then
+  DETECTED=$(nvidia-smi --list-gpus 2>/dev/null | wc -l)
+  [ "${DETECTED}" -ge 1 ] && GPU_COUNT="${DETECTED}"
+fi
+
+# Resolve "auto" defaults based on GPU count. See header for rationale.
+case "${GPU_COUNT}" in
+  1)
+    [ "$MAX_LEN" = auto ]      && MAX_LEN=524288
+    [ "$MEM_UTIL" = auto ]     && MEM_UTIL=0.93
+    [ "$MAX_NUM_SEQS" = auto ] && MAX_NUM_SEQS=16
+    ;;
+  2)
+    [ "$MAX_LEN" = auto ]      && MAX_LEN=1000000
+    [ "$MEM_UTIL" = auto ]     && MEM_UTIL=0.95
+    [ "$MAX_NUM_SEQS" = auto ] && MAX_NUM_SEQS=32
+    ;;
+  *)
+    [ "$MAX_LEN" = auto ]      && MAX_LEN=1000000
+    [ "$MEM_UTIL" = auto ]     && MEM_UTIL=0.95
+    [ "$MAX_NUM_SEQS" = auto ] && MAX_NUM_SEQS=64
+    ;;
+esac
+echo "Topology: ${GPU_COUNT} GPU(s) → MAX_LEN=${MAX_LEN} MEM_UTIL=${MEM_UTIL} MAX_NUM_SEQS=${MAX_NUM_SEQS}"
+
+# TP=GPU_COUNT on multi-GPU; favors single-request latency over throughput.
 if [ -z "${TENSOR_PARALLEL}" ] && ! printf '%s\n' "$EXTRA_ARGS" | grep -q -- '--tensor-parallel-size'; then
-  if command -v nvidia-smi >/dev/null 2>&1; then
-    GPU_COUNT=$(nvidia-smi --list-gpus 2>/dev/null | wc -l)
-    if [ "${GPU_COUNT}" -gt 1 ]; then
-      echo "Detected ${GPU_COUNT} GPUs — auto-setting --tensor-parallel-size ${GPU_COUNT}."
-      TENSOR_PARALLEL="${GPU_COUNT}"
-    fi
+  if [ "${GPU_COUNT}" -gt 1 ]; then
+    echo "Auto-setting --tensor-parallel-size ${GPU_COUNT}."
+    TENSOR_PARALLEL="${GPU_COUNT}"
   fi
 fi
+
+# Single-GPU prefill activation can spike past the ~30 GB free after V4-Flash
+# weights; cap chunked-prefill batch size unless the caller already set it.
+if [ "${GPU_COUNT}" = "1" ] && ! printf '%s\n' "$EXTRA_ARGS" | grep -q -- '--max-num-batched-tokens'; then
+  EXTRA_ARGS="--max-num-batched-tokens 8192 ${EXTRA_ARGS}"
+fi
+
+# DeepSeek V4 is MoE; shard experts across GPUs on multi-GPU rentals.
+case "$MODEL" in
+  *DeepSeek-V4*|*deepseek-v4*)
+    if [ "${GPU_COUNT}" -gt 1 ] && ! printf '%s\n' "$EXTRA_ARGS" | grep -q -- '--enable-expert-parallel'; then
+      echo "Auto-enabling --enable-expert-parallel for multi-GPU MoE."
+      EXTRA_ARGS="--enable-expert-parallel ${EXTRA_ARGS}"
+    fi
+    ;;
+esac
 
 if [ -n "${HF_TOKEN}" ]; then
   export HF_TOKEN HUGGING_FACE_HUB_TOKEN="${HF_TOKEN}"
@@ -189,6 +246,7 @@ ARGS=(
   --max-model-len "${MAX_LEN}"
   --gpu-memory-utilization "${MEM_UTIL}"
   --enable-prefix-caching
+  --max-num-seqs "${MAX_NUM_SEQS}"
   --served-model-name "${SERVED}"
 )
 if [ -n "${TOOL_PARSER}" ]; then

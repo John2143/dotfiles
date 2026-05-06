@@ -9,8 +9,14 @@
       # ---------- Model + serving config ----------
       VAST_MODEL=deepseek-ai/DeepSeek-V4-Flash
       VAST_SERVED_MODEL_NAME=deepseek-v4-flash
-      VAST_MAX_MODEL_LEN=1000000
-      VAST_GPU_MEM_UTIL=0.95
+      # "auto" → vast-bootstrap.bash picks values per GPU count. See its header
+      # for the per-topology table. Override with explicit numbers if needed.
+      #   1×B200: MAX_LEN=524288  MEM_UTIL=0.93 MAX_NUM_SEQS=16
+      #   2×B200: MAX_LEN=1000000 MEM_UTIL=0.95 MAX_NUM_SEQS=32
+      #   4×B200: MAX_LEN=1000000 MEM_UTIL=0.95 MAX_NUM_SEQS=64
+      VAST_MAX_MODEL_LEN=auto
+      VAST_GPU_MEM_UTIL=auto
+      VAST_MAX_NUM_SEQS=auto
 
       # ---------- Networking ----------
       # VAST_LOCAL_PORT is on your laptop; VAST_VLLM_PORT is inside the
