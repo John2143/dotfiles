@@ -23,12 +23,21 @@
 # big queries). V4-Flash KV at 1M ctx is only ~6 GiB/seq (7% of V3.2's, via
 # CSA+HCA), so the binding constraint is the ~150 GB weight footprint, not KV:
 #
-#   1 GPU  (B200, 192 GB): MAX_LEN=524288  MEM_UTIL=0.93 MAX_NUM_SEQS=16
-#                          (weights eat ~80% VRAM; tighter MEM_UTIL avoids
-#                          OOM during CUDA graph capture; --max-num-batched-tokens
-#                          capped at 8192 to bound prefill activation spikes)
-#   2 GPUs (2×B200, 384):  MAX_LEN=1000000 MEM_UTIL=0.95 MAX_NUM_SEQS=32
-#   4 GPUs (4×B200, 768):  MAX_LEN=1000000 MEM_UTIL=0.95 MAX_NUM_SEQS=64
+#   1 GPU  (B200, 192 GB):  MAX_LEN=524288  MEM_UTIL=0.93 MAX_NUM_SEQS=16
+#                           (weights eat ~80% VRAM; tighter MEM_UTIL avoids
+#                           OOM during CUDA graph capture; --max-num-batched-tokens
+#                           capped at 8192 to bound prefill activation spikes)
+#   2 GPUs (2×B200, 384):   MAX_LEN=1000000 MEM_UTIL=0.95 MAX_NUM_SEQS=32
+#   4 GPUs (4×B200, 768):   MAX_LEN=1000000 MEM_UTIL=0.95 MAX_NUM_SEQS=64
+#   8 GPUs (8×B200, 1536):  MAX_LEN=1000000 MEM_UTIL=0.95 MAX_NUM_SEQS=128
+#
+# DeepSeek-V4-Pro is the large MoE variant: 1.6T total / 49B activated.
+# Native quantization (FP4 experts + FP8 other) puts weights at ~865 GB on
+# disk, so 4×B200 (768 GB VRAM) CANNOT load it — 8×B200 (1536 GB) is the
+# realistic minimum. When MODEL matches *DeepSeek-V4-Pro* we override:
+#
+#   8 GPUs (8×B200, 1536):  MAX_LEN=524288 MEM_UTIL=0.94 MAX_NUM_SEQS=32
+#                           (~865 GB weights leaves ~580 GB for KV+activations)
 #
 # Topology choice: TP+EP (each request uses all GPUs) over the vLLM recipe's
 # DP+EP default. DP+EP optimizes throughput for many concurrent users; TP+EP
@@ -58,7 +67,8 @@ set -euo pipefail
 : "${TENSOR_PARALLEL:=}"
 : "${MAX_NUM_BATCHED_TOKENS:=8192}"
 
-mkdir -p /workspace /workspace/tmp /workspace/pip-cache /workspace/.hf_home
+mkdir -p /workspace /workspace/tmp /workspace/pip-cache /workspace/.hf_home \
+         /workspace/.vllm_cache /workspace/.triton_cache /workspace/.inductor_cache
 cd /workspace
 
 # Vast.ai's vLLM-flavored templates put a 32 GB overlay on / while the real
@@ -72,6 +82,22 @@ export PIP_CACHE_DIR=/workspace/pip-cache
 # Vast.ai overlays; the legacy resumable downloader is slower but reliable.
 export HF_HUB_DISABLE_XET=1
 export HF_HUB_ENABLE_HF_TRANSFER=0
+
+# Pin vLLM/Triton/Torch JIT caches to /workspace so they survive instance
+# pause/unpause cycles. Without these, each cold start spends 1-3 min
+# recompiling Triton helper kernels, capturing torch.compile graphs, and
+# rebuilding inductor artifacts — even though weights and venv are already
+# warm. Persisting these brings warm-start time from ~90s to ~10-15s on
+# pause/unpause of the same instance.
+#
+# Note: these only help on the SAME instance. A fresh rental (new
+# instance id) starts with empty /workspace and rebuilds them once. To
+# also share across rentals, push them to RustFS post-bootstrap — left as
+# future work; the JIT artifacts are GPU-arch specific (Blackwell vs
+# Hopper) so the cache is only valid for matching GPU SKU rentals.
+export VLLM_CACHE_ROOT=/workspace/.vllm_cache
+export TRITON_CACHE_DIR=/workspace/.triton_cache
+export TORCHINDUCTOR_CACHE_DIR=/workspace/.inductor_cache
 
 # Clear /tmp on the overlay if it's >50% full so existing junk doesn't
 # bottleneck a fresh download.
@@ -209,23 +235,40 @@ if command -v nvidia-smi >/dev/null 2>&1; then
 fi
 
 # Resolve "auto" defaults based on GPU count. See header for rationale.
+# Track which knobs the caller left as "auto" so the V4-Pro override below
+# only adjusts auto-resolved values, not explicit caller settings.
+MAX_LEN_AUTO=0; MEM_UTIL_AUTO=0; MAX_NUM_SEQS_AUTO=0
+[ "$MAX_LEN" = auto ]      && MAX_LEN_AUTO=1
+[ "$MEM_UTIL" = auto ]     && MEM_UTIL_AUTO=1
+[ "$MAX_NUM_SEQS" = auto ] && MAX_NUM_SEQS_AUTO=1
+
 case "${GPU_COUNT}" in
-  1)
-    [ "$MAX_LEN" = auto ]      && MAX_LEN=524288
-    [ "$MEM_UTIL" = auto ]     && MEM_UTIL=0.93
-    [ "$MAX_NUM_SEQS" = auto ] && MAX_NUM_SEQS=16
-    ;;
-  2)
-    [ "$MAX_LEN" = auto ]      && MAX_LEN=1000000
-    [ "$MEM_UTIL" = auto ]     && MEM_UTIL=0.95
-    [ "$MAX_NUM_SEQS" = auto ] && MAX_NUM_SEQS=32
-    ;;
-  *)
-    [ "$MAX_LEN" = auto ]      && MAX_LEN=1000000
-    [ "$MEM_UTIL" = auto ]     && MEM_UTIL=0.95
-    [ "$MAX_NUM_SEQS" = auto ] && MAX_NUM_SEQS=64
+  1) DEF_MAX_LEN=524288  DEF_MEM_UTIL=0.93 DEF_MAX_NUM_SEQS=16  ;;
+  2) DEF_MAX_LEN=1000000 DEF_MEM_UTIL=0.95 DEF_MAX_NUM_SEQS=32  ;;
+  4) DEF_MAX_LEN=1000000 DEF_MEM_UTIL=0.95 DEF_MAX_NUM_SEQS=64  ;;
+  8) DEF_MAX_LEN=1000000 DEF_MEM_UTIL=0.95 DEF_MAX_NUM_SEQS=128 ;;
+  *) DEF_MAX_LEN=1000000 DEF_MEM_UTIL=0.95 DEF_MAX_NUM_SEQS=64  ;;
+esac
+
+# DeepSeek-V4-Pro: 1.6T MoE, ~865 GB weights in native FP4/FP8 quant.
+# Needs 8×B200 (1536 GB) minimum — 4×B200 (768 GB) is short by ~100 GB of
+# weight storage alone. Pull MAX_LEN and MAX_NUM_SEQS down so KV fits in
+# the smaller post-weights headroom (~580 GB on 8×B200).
+case "$MODEL" in
+  *DeepSeek-V4-Pro*|*deepseek-v4-pro*)
+    if [ "${GPU_COUNT}" -lt 8 ]; then
+      echo "Error: DeepSeek V4 Pro needs ≥8 B200s (~865 GB weights); you have ${GPU_COUNT} GPU(s)." >&2
+      echo "       Use V4-Flash on smaller rentals, or rent an 8×B200 host." >&2
+      exit 1
+    fi
+    DEF_MAX_LEN=524288 DEF_MEM_UTIL=0.94 DEF_MAX_NUM_SEQS=32
     ;;
 esac
+
+[ "$MAX_LEN_AUTO" = 1 ]      && MAX_LEN="$DEF_MAX_LEN"
+[ "$MEM_UTIL_AUTO" = 1 ]     && MEM_UTIL="$DEF_MEM_UTIL"
+[ "$MAX_NUM_SEQS_AUTO" = 1 ] && MAX_NUM_SEQS="$DEF_MAX_NUM_SEQS"
+
 echo "Topology: ${GPU_COUNT} GPU(s) → MAX_LEN=${MAX_LEN} MEM_UTIL=${MEM_UTIL} MAX_NUM_SEQS=${MAX_NUM_SEQS}"
 
 # TP=GPU_COUNT on multi-GPU; favors single-request latency over throughput.

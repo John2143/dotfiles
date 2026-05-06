@@ -1,5 +1,19 @@
 { ... }:
 {
+  programs.fish.interactiveShellInit = ''
+    # Tab completion for vast-* commands that take an INSTANCE_ID.
+    # Filters by VAST_LABEL (default vllm-deepseek-v4) and status:
+    #   running  → vast-bootstrap, vast-tunnel, vast-logs, vast-pause
+    #   stopped  → vast-unpause
+    #   any      → vast-destroy
+    complete -c vast-destroy  -f -a '(_vast-complete-ids any)'
+    complete -c vast-bootstrap -f -a '(_vast-complete-ids running)'
+    complete -c vast-tunnel    -f -a '(_vast-complete-ids running)'
+    complete -c vast-logs      -f -a '(_vast-complete-ids running)'
+    complete -c vast-pause     -f -a '(_vast-complete-ids running)'
+    complete -c vast-unpause   -f -a '(_vast-complete-ids stopped)'
+  '';
+
   programs.fish.functions = {
     hostname.body = "/usr/bin/env cat /etc/hostname";
     kc.body = ''
@@ -764,6 +778,40 @@
     '';
     vast-search.description = "Search Vast.ai offers (default: verified 1xB200, ≥99% reliability, ≥5Gbps net, ≥250GB disk; pass extra args to override query).";
 
+    vast-search-big.body = ''
+      # Like vast-search but filters by total VRAM across the host instead
+      # of a specific GPU model. Default ≥1100 GB covers DeepSeek-V4-Pro
+      # (~865 GB weights + KV/activation headroom) — typically 8×B200 or
+      # 8×H200. gpu_total_ram is in GB per vastai's field schema.
+      #
+      # disk_space > 1000: V4-Pro weights are ~865 GB on disk; plus venv,
+      # HF download scratch, and vLLM runtime overhead. 1 TB is the safe
+      # floor — anything less risks an aborted download mid-bootstrap.
+      set -l query 'reliability > 0.85 gpu_total_ram > 1100 disk_space > 1000 rentable=true'
+      if test (count $argv) -gt 0
+        set query $argv
+      end
+      vastai search offers $query -o 'dph_total'
+    '';
+    vast-search-big.description = "Search Vast.ai offers with ≥1100 GB total host VRAM (sized for DeepSeek-V4-Pro). Pass extra args to override query.";
+
+    vast-search-any.body = ''
+      # Catch-all "modern big-VRAM card" search — doesn't pin a model name,
+      # just filters by capability. Matches B200 (192 GB, 8 TB/s) and any
+      # future Hopper-successor with HBM3e+. Excludes A100/H100/H200 by the
+      # 175 GB per-GPU floor, and excludes Ampere by compute_cap ≥ 900.
+      #
+      #   gpu_ram > 175       — per-GPU VRAM in GB; B200=192, MI300=192
+      #   gpu_mem_bw > 4000   — memory bandwidth in GB/s; B200~8000, H200~4800
+      #   compute_cap >= 900  — Hopper or newer (H100/H200=900, B200=1000)
+      set -l query 'reliability > 0.85 gpu_ram > 175 gpu_mem_bw > 4000 compute_cap >= 900 disk_space > 170 rentable=true'
+      if test (count $argv) -gt 0
+        set query $argv
+      end
+      vastai search offers $query -o 'dph_total'
+    '';
+    vast-search-any.description = "Search Vast.ai offers for any modern big-VRAM GPU (≥175 GB/GPU, ≥4 TB/s memory bw, Hopper+). Pass extra args to override query.";
+
     vast-create.body = ''
       set -l offer_id $argv[1]
       if test -z "$offer_id"
@@ -832,6 +880,40 @@
       return 0
     '';
     _vast-wait-status.description = "Internal: poll until a Vast instance reaches running/stopped state, up to 60s.";
+
+    _vast-complete-ids.body = ''
+      # Emit `id<TAB>description` lines for fish tab completion of vast-*
+      # commands that take an INSTANCE_ID. Must be silent on missing CLI,
+      # API errors, or empty results — completion callbacks should never
+      # noise the prompt.
+      #
+      # Usage: _vast-complete-ids running|stopped|any
+      #
+      # Defaults VAST_LABEL to vllm-deepseek-v4 (matches vast-create /
+      # vast-show) since completion runs in a fresh subshell without
+      # _vast-load having been called.
+      set -l want $argv[1]
+      set -l label vllm-deepseek-v4
+      test -n "$VAST_LABEL"; and set label $VAST_LABEL
+      if not command -v vastai >/dev/null 2>&1
+        return 0
+      end
+      set -l raw (vastai show instances --raw 2>/dev/null)
+      if test -z "$raw"; or test "$raw" = "[]"
+        return 0
+      end
+      echo $raw | jq -r --arg label "$label" --arg want "$want" '
+        .[]
+        | select(.label == $label)
+        | select(
+            $want == "any"
+            or ($want == "running" and .actual_status == "running")
+            or ($want == "stopped" and .actual_status != "running")
+          )
+        | "\(.id)\t\(.actual_status) \(.gpu_name)×\(.num_gpus // 1) $\(.dph_total)/hr"
+      ' 2>/dev/null
+    '';
+    _vast-complete-ids.description = "Internal: emit id<TAB>description lines for fish tab completion of vast-* INSTANCE_ID args.";
 
     vast-pause.body = ''
       # Stops a running rental via `vastai stop instance`. Disk/data are

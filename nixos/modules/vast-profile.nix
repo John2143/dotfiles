@@ -9,11 +9,23 @@
       # ---------- Model + serving config ----------
       VAST_MODEL=deepseek-ai/DeepSeek-V4-Flash
       VAST_SERVED_MODEL_NAME=deepseek-v4-flash
-      # "auto" → vast-bootstrap.bash picks values per GPU count. See its header
-      # for the per-topology table. Override with explicit numbers if needed.
-      #   1×B200: MAX_LEN=524288  MEM_UTIL=0.93 MAX_NUM_SEQS=16
-      #   2×B200: MAX_LEN=1000000 MEM_UTIL=0.95 MAX_NUM_SEQS=32
-      #   4×B200: MAX_LEN=1000000 MEM_UTIL=0.95 MAX_NUM_SEQS=64
+      # For the large 1.6T MoE variant, switch to:
+      #   VAST_MODEL=deepseek-ai/DeepSeek-V4-Pro
+      #   VAST_SERVED_MODEL_NAME=deepseek-v4-pro
+      # V4-Pro weights are ~865 GB in native FP4/FP8 quant — 8×B200 (1536 GB)
+      # is the minimum; vast-bootstrap exits on <8 GPUs to avoid a 30-min
+      # download that ends in OOM. It also tightens MAX_LEN / MAX_NUM_SEQS
+      # to fit the post-weights KV headroom (~580 GB free on 8×B200).
+      # "auto" → vast-bootstrap.bash picks values per GPU count + model. See
+      # its header for the full per-topology table. Override with explicit
+      # numbers if needed.
+      #   V4-Flash:
+      #     1×B200: MAX_LEN=524288  MEM_UTIL=0.93 MAX_NUM_SEQS=16
+      #     2×B200: MAX_LEN=1000000 MEM_UTIL=0.95 MAX_NUM_SEQS=32
+      #     4×B200: MAX_LEN=1000000 MEM_UTIL=0.95 MAX_NUM_SEQS=64
+      #     8×B200: MAX_LEN=1000000 MEM_UTIL=0.95 MAX_NUM_SEQS=128
+      #   V4-Pro (≥8 B200s required — 4×B200 short on weight storage):
+      #     8×B200: MAX_LEN=524288  MEM_UTIL=0.94 MAX_NUM_SEQS=32
       VAST_MAX_MODEL_LEN=auto
       VAST_GPU_MEM_UTIL=auto
       VAST_MAX_NUM_SEQS=auto
