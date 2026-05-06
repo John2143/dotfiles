@@ -35,6 +35,10 @@ export default function (pi) {
     if (!ctx.hasUI) return { block: true, reason: "Risky command blocked: no UI available for confirmation" };
 
     const ok = await ctx.ui.confirm("Approve tool call?", `${event.toolName}: ${cmd.slice(0, 200)}`);
-    if (!ok) return { block: true, reason: "Denied by approval hook" };
+    if (!ok) {
+      ctx.ui.notify("Command denied by approval hook", "error");
+      return { block: true, reason: "Denied by approval hook" };
+    }
+    ctx.ui.notify("Command approved by approval hook", "success");
   });
 }
