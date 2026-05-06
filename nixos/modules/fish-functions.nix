@@ -985,10 +985,13 @@
 
       set -l instance_id ""
       set -l no_fzf ""
+      set -l no_bootstrap 0
       for arg in $argv
         switch $arg
           case --no-fzf
             set no_fzf 1
+          case --no-bootstrap
+            set no_bootstrap 1
           case '*'
             if test -z "$instance_id"
               set instance_id $arg
@@ -1012,13 +1015,34 @@
       echo "Note: starting is subject to GPU availability on the host machine." >&2
       vastai start instance $VAST_INSTANCE_ID
       set -l rc $status
-      if test $rc -eq 0
-        _vast-wait-status $VAST_INSTANCE_ID running
+      if test $rc -ne 0
+        env-cleanup $_pre_vars
+        return $rc
       end
+
+      _vast-wait-status $VAST_INSTANCE_ID running
+
+      # Capture the id before env-cleanup wipes VAST_INSTANCE_ID — vast-bootstrap
+      # will call _vast-load + _vast-resolve-instance itself with a fresh API
+      # query, picking up the new public_ipaddr / ssh_port that Vast assigns
+      # on every start.
+      set -l unpaused_id $VAST_INSTANCE_ID
       env-cleanup $_pre_vars
-      return $rc
+
+      if test $no_bootstrap -eq 1
+        echo "Skipping auto-bootstrap (--no-bootstrap). Run manually: vast-bootstrap $unpaused_id" >&2
+        return 0
+      end
+
+      # Container status flips to "running" the moment vastd marks it up, but
+      # SSH inside the container often needs another few seconds to bind.
+      # Sleep briefly so the first bootstrap SSH doesn't race the daemon.
+      echo "Container running; waiting 10s for SSH to settle, then re-running vast-bootstrap ..."
+      sleep 10
+      vast-bootstrap $unpaused_id
+      return $status
     '';
-    vast-unpause.description = "Resume (start) a stopped Vast.ai instance — subject to host GPU availability (vast-unpause [INSTANCE_ID] [--no-fzf]; with ≥2 stopped opens an fzf picker unless --no-fzf or fzf is missing). Waits up to 60s for the state change.";
+    vast-unpause.description = "Resume (start) a stopped Vast.ai instance and re-launch vLLM via vast-bootstrap (vast-unpause [INSTANCE_ID] [--no-fzf] [--no-bootstrap]; with ≥2 stopped opens an fzf picker unless --no-fzf or fzf is missing). Pass --no-bootstrap to skip the vLLM relaunch.";
 
     vast-balance.body = ''
       set -l _pre_vars (set --names -x)
