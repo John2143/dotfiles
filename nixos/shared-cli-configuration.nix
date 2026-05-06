@@ -30,6 +30,9 @@
   nixpkgs.config = {
     allowUnfree = true;
   };
+  nixpkgs.overlays = [
+    (import ./overlays/claw-overlay.nix)
+  ];
 
   _module.args.pkgs-stable = import inputs.nixpkgs-stable {
     inherit (pkgs.stdenv.hostPlatform) system;
@@ -132,6 +135,19 @@
           #   --unsetenv OPENAI_ADMIN_KEY \
           #   --unshare-all --share-net --die-with-parent \
           #  ${claude-unwrapped}/bin/claude "$@"
+        '')
+      # claw wrapper: sources runtime API keys from agenix. No sandboxing
+      # yet (same pattern as claude/omp — bwrap commented out for now).
+      (let
+        claw-unwrapped = pkgs.claw;
+      in
+        pkgs.writeShellScriptBin "claw" ''
+          if [ -f /run/agenix/llm-runtime-keys ]; then
+            set -a
+            . /run/agenix/llm-runtime-keys
+            set +a
+          fi
+          exec ${claw-unwrapped}/bin/claw "$@"
         '')
       (pkgs.writeShellScriptBin "ollama-sync" ''
         set -euo pipefail
