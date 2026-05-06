@@ -42,6 +42,12 @@ let
           # shellcheck disable=SC1090
           . "$PROFILE"
           set +a
+          # If the profile uses fish syntax (set -gx ...) instead of bash-
+          # compatible KEY=value, sourcing silently sets nothing. Detect by
+          # checking whether key vars are empty despite a non-empty profile.
+          if [ -z "''${VAST_LABEL:-}" ] && [ -z "''${VAST_LOCAL_PORT:-}" ] && [ -s "$PROFILE" ]; then
+            echo "vast-waybar-status: $PROFILE sourced but no KEY=VALUE vars read (fish syntax?). Using defaults." >&2
+          fi
           LABEL="''${VAST_LABEL:-$LABEL}"
           LOCAL_PORT="''${VAST_LOCAL_PORT:-$LOCAL_PORT}"
       fi

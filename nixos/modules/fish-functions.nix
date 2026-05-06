@@ -329,8 +329,9 @@
       test -n "$VAST_LABEL"; or set -gx VAST_LABEL "vllm-deepseek-v4"
       test -n "$VAST_MODEL"; or set -gx VAST_MODEL "deepseek-ai/DeepSeek-V4-Flash"
       test -n "$VAST_SERVED_MODEL_NAME"; or set -gx VAST_SERVED_MODEL_NAME "deepseek-v4-flash"
-      test -n "$VAST_MAX_MODEL_LEN"; or set -gx VAST_MAX_MODEL_LEN "1000000"
-      test -n "$VAST_GPU_MEM_UTIL"; or set -gx VAST_GPU_MEM_UTIL "0.95"
+      test -n "$VAST_MAX_MODEL_LEN"; or set -gx VAST_MAX_MODEL_LEN "auto"
+      test -n "$VAST_GPU_MEM_UTIL"; or set -gx VAST_GPU_MEM_UTIL "auto"
+      test -n "$VAST_MAX_NUM_SEQS"; or set -gx VAST_MAX_NUM_SEQS "auto"
       test -n "$VAST_LOCAL_PORT"; or set -gx VAST_LOCAL_PORT "8001"
       test -n "$VAST_VLLM_PORT"; or set -gx VAST_VLLM_PORT "8000"
       test -n "$VAST_SSH_USER"; or set -gx VAST_SSH_USER "root"
@@ -706,24 +707,26 @@
       set -l instance_id ""
       set -l n 200
       set -l no_fzf ""
-      set -l args $argv
-      while test (count $args) -gt 0
-        switch $args[1]
+      set -l want_id_mode ""
+      for arg in $argv
+        switch $arg
           case --id
-            if test (count $args) -lt 2
-              echo "vast-logs: --id requires an INSTANCE_ID argument" >&2
-              env-cleanup $_pre_vars
-              return 2
-            end
-            set instance_id $args[2]
-            set args $args[3..-1]
+            set want_id_mode 1
           case --no-fzf
             set no_fzf 1
-            set args $args[2..-1]
           case '*'
-            set n $args[1]
-            set args $args[2..-1]
+            if test -n "$want_id_mode"
+              set instance_id $arg
+              set want_id_mode ""
+            else
+              set n $arg
+            end
         end
+      end
+      if test -n "$want_id_mode"
+        echo "vast-logs: --id requires an INSTANCE_ID argument" >&2
+        env-cleanup $_pre_vars
+        return 2
       end
 
       if not _vast-resolve-instance $instance_id running $no_fzf
