@@ -766,6 +766,72 @@
     '';
     vast-logs.description = "Tail the remote vLLM log (vast-logs [--id INSTANCE_ID] [N=200] [--no-fzf]; with ≥2 running instances opens an fzf picker unless --no-fzf or fzf is missing).";
 
+    vast-metrics.body = ''
+      # Check the per-rental metrics monitor (started by vast-bootstrap).
+      # Shows monitor status, sample count, avg/peak GPU util, latest rows.
+      # vast-destroy fetches the full /workspace/metrics/ at teardown; this
+      # is the live-view counterpart.
+      set -l _pre_vars (set --names -x)
+      if not _vast-load
+        env-cleanup $_pre_vars
+        return 1
+      end
+      set -l instance_id ""
+      set -l no_fzf ""
+      set -l want_id_mode ""
+      for arg in $argv
+        switch $arg
+          case --id
+            set want_id_mode 1
+          case --no-fzf
+            set no_fzf 1
+          case '*'
+            if test -n "$want_id_mode"
+              set instance_id $arg
+              set want_id_mode ""
+            else
+              echo "vast-metrics: unrecognized arg $arg" >&2
+              env-cleanup $_pre_vars
+              return 2
+            end
+        end
+      end
+      if not _vast-resolve-instance $instance_id running $no_fzf
+        env-cleanup $_pre_vars
+        return 1
+      end
+
+      ssh -i $VAST_SSH_KEY \
+          -p $VAST_SSH_PORT \
+          -o StrictHostKeyChecking=no \
+          -o UserKnownHostsFile=/dev/null \
+          -o LogLevel=ERROR \
+          $VAST_SSH_USER@$VAST_HOST \
+          'set -u
+echo "=== monitor ==="
+if [ -f /workspace/metrics/monitor.pid ] && kill -0 "$(cat /workspace/metrics/monitor.pid)" 2>/dev/null; then
+  echo "  running (pid $(cat /workspace/metrics/monitor.pid))"
+else
+  echo "  NOT RUNNING — run vast-bootstrap to start it"
+fi
+echo "=== files ==="
+ls -la /workspace/metrics/ 2>/dev/null || echo "  (none yet)"
+echo "=== gpu.csv summary ==="
+if [ -s /workspace/metrics/gpu.csv ]; then
+  awk -F, '"'"'NR>1 {n++; ng[$2]=1; s+=$3+0; if($3+0>p) p=$3+0; if(t0=="") t0=$1; t1=$1} END {ngc=0; for(k in ng) ngc++; if(n>0) printf "  %d samples × %d GPU(s)\n  span: %s →%s\n  avg util: %.1f%%, peak %.0f%%\n", n/ngc, ngc, t0, t1, s/n, p}'"'"' /workspace/metrics/gpu.csv
+  echo "=== latest rows ==="
+  tail -n 5 /workspace/metrics/gpu.csv
+else
+  echo "  (no gpu.csv yet)"
+fi
+echo "=== vllm.prom size ==="
+ls -lh /workspace/metrics/vllm.prom 2>/dev/null || echo "  (none)"'
+      set -l rc $status
+      env-cleanup $_pre_vars
+      return $rc
+    '';
+    vast-metrics.description = "Show live GPU+vLLM metrics state on the rental (monitor status, sample count, avg/peak util, latest samples).";
+
     # Helpers for finding and renting Vast.ai instances. Wrap the `vastai`
     # CLI (provided by the wrapper in shared-cli-configuration.nix). Run
     # `vast-search` first, copy an offer ID, then `vast-create <id>`.
@@ -834,16 +900,77 @@
     vast-show.description = "Show currently-rented Vast.ai instances tagged vllm-deepseek-v4 (id, status, host, ssh port).";
 
     vast-destroy.body = ''
-      set -l instance_id $argv[1]
+      set -l no_fetch ""
+      set -l no_fzf ""
+      set -l instance_id ""
+      for arg in $argv
+        switch $arg
+          case --no-fetch
+            set no_fetch 1
+          case --no-fzf
+            set no_fzf 1
+          case -h --help
+            echo "Usage: vast-destroy [--no-fetch] [--no-fzf] INSTANCE_ID" >&2
+            return 0
+          case '*'
+            set instance_id $arg
+        end
+      end
       if test -z "$instance_id"
-        echo "Usage: vast-destroy INSTANCE_ID" >&2
+        echo "Usage: vast-destroy [--no-fetch] [--no-fzf] INSTANCE_ID" >&2
         echo "List instances with: vast-show" >&2
         return 1
       end
+
+      # Fetch /workspace/metrics + vllm.log before terminating, unless
+      # --no-fetch (or the instance is unreachable). scp failures only warn —
+      # the user's intent is to destroy, so we never block on metrics.
+      if test -z "$no_fetch"
+        set -l _pre_vars (set --names -x)
+        if _vast-load
+          if _vast-resolve-instance $instance_id running $no_fzf
+            set -l ts (date +%Y%m%d-%H%M%S)
+            set -l dest "$HOME/vast-metrics/$instance_id-$ts"
+            mkdir -p $dest
+            echo "Fetching metrics from instance $instance_id → $dest ..."
+            scp -i $VAST_SSH_KEY \
+                -P $VAST_SSH_PORT \
+                -o StrictHostKeyChecking=no \
+                -o UserKnownHostsFile=/dev/null \
+                -o LogLevel=ERROR \
+                -r $VAST_SSH_USER@$VAST_HOST:/workspace/metrics $dest/
+            set -l rc_metrics $status
+            scp -i $VAST_SSH_KEY \
+                -P $VAST_SSH_PORT \
+                -o StrictHostKeyChecking=no \
+                -o UserKnownHostsFile=/dev/null \
+                -o LogLevel=ERROR \
+                $VAST_SSH_USER@$VAST_HOST:/workspace/vllm.log $dest/
+            set -l rc_log $status
+            if test $rc_metrics -ne 0; or test $rc_log -ne 0
+              echo "Warning: scp partial/failed (metrics rc=$rc_metrics, log rc=$rc_log); destroying anyway." >&2
+            end
+            if test -d $dest/metrics
+              if command -q vast-render-metrics
+                vast-render-metrics $dest
+                or echo "Warning: vast-render-metrics failed; raw CSVs are still in $dest." >&2
+              else
+                echo "vast-render-metrics not on PATH (rebuild needed); raw CSVs in $dest." >&2
+              end
+            end
+          else
+            echo "Warning: instance $instance_id not reachable; skipping metrics fetch." >&2
+          end
+        else
+          echo "Warning: failed to load Vast credentials; skipping metrics fetch." >&2
+        end
+        env-cleanup $_pre_vars
+      end
+
       echo "Destroying Vast.ai instance $instance_id ..."
       vastai destroy instance $instance_id
     '';
-    vast-destroy.description = "Destroy a Vast.ai instance by ID (run vast-show to find the ID).";
+    vast-destroy.description = "Destroy a Vast.ai instance, fetching /workspace/metrics first (--no-fetch to skip; --no-fzf to skip picker).";
 
     _vast-wait-status.body = ''
       # Poll the Vast.ai API until instance $argv[1] reaches the desired

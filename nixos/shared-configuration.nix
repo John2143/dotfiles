@@ -125,6 +125,19 @@ Remaining: ~$hrs_str"
     '';
   };
 
+  # Renders PNG graphs + ASCII summary from a vast-destroy metrics dir.
+  # vast-destroy invokes this after scp; user can also run it manually for
+  # re-rendering historical sessions in ~/vast-metrics/.
+  vast-render-metrics = pkgs.writeShellApplication {
+    name = "vast-render-metrics";
+    runtimeInputs = [
+      (pkgs.python3.withPackages (p: with p; [ pandas matplotlib numpy ]))
+    ];
+    text = ''
+      exec python3 ${../.config/vast-render-metrics.py} "$@"
+    '';
+  };
+
   weather-status = pkgs.writeShellApplication {
     name = "weather-status";
     runtimeInputs = [ pkgs.curl pkgs.jq ];
@@ -283,5 +296,5 @@ in {
   #};
   #};
 
-  environment.systemPackages = [ vast-waybar-status weather-status ];
+  environment.systemPackages = [ vast-waybar-status vast-render-metrics weather-status ];
 }
