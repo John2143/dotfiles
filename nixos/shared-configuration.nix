@@ -181,7 +181,7 @@ in {
   fonts.packages = with pkgs; [
     scientifica
     noto-fonts
-    noto-fonts-emoji
+    noto-fonts-color-emoji
     noto-fonts-cjk-sans
   ];
 
