@@ -3,7 +3,7 @@
   programs.fish.interactiveShellInit = ''
     # Tab completion for vast-* commands that take an INSTANCE_ID.
     # Filters by VAST_LABEL (default vllm-deepseek-v4) and status:
-    #   running  → vast-bootstrap, vast-tunnel, vast-logs, vast-pause
+    #   running  → vast-bootstrap, vast-fetch-metrics, vast-tunnel, vast-logs, vast-pause
     #   stopped  → vast-unpause
     #   any      → vast-destroy
     complete -c vast-destroy  -f -a '(_vast-complete-ids any)'
@@ -11,6 +11,7 @@
     complete -c vast-tunnel    -f -a '(_vast-complete-ids running)'
     complete -c vast-logs      -f -a '(_vast-complete-ids running)'
     complete -c vast-pause     -f -a '(_vast-complete-ids running)'
+    complete -c vast-fetch-metrics -f -a '(_vast-complete-ids running)'
     complete -c vast-unpause   -f -a '(_vast-complete-ids stopped)'
   '';
 
@@ -120,7 +121,66 @@
       omp --hook=$HOME/.omp/agent/hooks/approve.ts $argv "Run: echo rm -rf /tmp/omp-hook-test  # verify the approval hook"
     '';
     try-check-prompt.description = "Verify the approval hook works — triggers the approve/deny confirm dialog with a safe echo'd rm -rf command";
- 
+
+    my_claw.body = ''
+      # Run Claude Code with inference offloaded to the local DeepSeek V4 Flash
+      # behind vast-tunnel. Spawns a per-invocation LiteLLM proxy on a random
+      # high port that translates Anthropic /v1/messages → OpenAI /v1/chat/completions
+      # against http://localhost:$VAST_LOCAL_PORT/v1, then runs claude pointed at
+      # it. Assumes vast-tunnel is up (same convention as omp).
+      if not systemctl --user is-active --quiet vast-tunnel.service
+        echo "my_claw: vast-tunnel is down. Run: vast-tunnel" >&2
+        return 1
+      end
+      set -l _pre_vars (set --names -x)
+      if not _vast-load
+        env-cleanup $_pre_vars
+        return 1
+      end
+
+      # Random ephemeral port. TOCTOU collision risk is low across the 16k
+      # range; if litellm fails to bind, the readiness poll below catches it.
+      set -l port (random 49152 65535)
+      set -l log (mktemp -t my_claw.XXXXXX.log)
+
+      echo "my_claw: starting LiteLLM proxy on :$port → localhost:$VAST_LOCAL_PORT (model=$VAST_SERVED_MODEL_NAME, log=$log)"
+      uvx --quiet --from 'litellm[proxy]' litellm \
+          --model "openai/$VAST_SERVED_MODEL_NAME" \
+          --api_base "http://localhost:$VAST_LOCAL_PORT/v1" \
+          --port $port >$log 2>&1 &
+      set -l proxy_pid $last_pid
+
+      # First invocation downloads litellm[proxy] via uvx (~30s); subsequent
+      # runs are warm from ~/.cache/uv. Cap at 120s to cover the cold case.
+      set -l ready 0
+      for i in (seq 1 240)
+        if curl -fsS --max-time 1 "http://localhost:$port/v1/models" >/dev/null 2>&1
+          set ready 1
+          break
+        end
+        if not kill -0 $proxy_pid 2>/dev/null
+          break
+        end
+        sleep 0.5
+      end
+      if test $ready -ne 1
+        echo "my_claw: LiteLLM proxy never came up on :$port — see $log" >&2
+        kill $proxy_pid 2>/dev/null
+        env-cleanup $_pre_vars
+        return 1
+      end
+
+      set -gx ANTHROPIC_BASE_URL "http://localhost:$port"
+      set -gx ANTHROPIC_AUTH_TOKEN dummy
+      set -gx ANTHROPIC_MODEL "$VAST_SERVED_MODEL_NAME"
+      claude $argv
+      set -l rc $status
+      kill $proxy_pid 2>/dev/null
+      rm -f $log
+      env-cleanup $_pre_vars
+      return $rc
+    '';
+    my_claw.description = "Run Claude Code routed through a per-invocation LiteLLM proxy to the local DeepSeek (assumes vast-tunnel is up).";
 
     llm-load-keys.body = ''
       # Loads the admin LLM key (ANTHROPIC_ADMIN_KEY) for use by llm-costs and
@@ -766,6 +826,127 @@
     '';
     vast-logs.description = "Tail the remote vLLM log (vast-logs [--id INSTANCE_ID] [N=200] [--no-fzf]; with ≥2 running instances opens an fzf picker unless --no-fzf or fzf is missing).";
 
+    vast-metrics.body = ''
+      # Check the per-rental metrics monitor (started by vast-bootstrap).
+      # Shows monitor status, sample count, avg/peak GPU util, latest rows.
+      # vast-destroy fetches the full /workspace/metrics/ at teardown; this
+      # is the live-view counterpart.
+      set -l _pre_vars (set --names -x)
+      if not _vast-load
+        env-cleanup $_pre_vars
+        return 1
+      end
+      set -l instance_id ""
+      set -l no_fzf ""
+      for arg in $argv
+        switch $arg
+          case --no-fzf
+            set no_fzf 1
+          case -h --help
+            echo "Usage: vast-metrics [--no-fzf] [INSTANCE_ID]" >&2
+            env-cleanup $_pre_vars
+            return 0
+          case '*'
+            set instance_id $arg
+        end
+      end
+      if not _vast-resolve-instance $instance_id running $no_fzf
+        env-cleanup $_pre_vars
+        return 1
+      end
+
+      ssh -i $VAST_SSH_KEY \
+          -p $VAST_SSH_PORT \
+          -o StrictHostKeyChecking=no \
+          -o UserKnownHostsFile=/dev/null \
+          -o LogLevel=ERROR \
+          $VAST_SSH_USER@$VAST_HOST \
+          'set -u
+echo "=== monitor ==="
+if [ -f /workspace/metrics/monitor.pid ] && kill -0 "$(cat /workspace/metrics/monitor.pid)" 2>/dev/null; then
+  echo "  running (pid $(cat /workspace/metrics/monitor.pid))"
+else
+  echo "  NOT RUNNING — run vast-bootstrap to start it"
+fi
+echo "=== files ==="
+ls -la /workspace/metrics/ 2>/dev/null || echo "  (none yet)"
+echo "=== gpu.csv summary ==="
+if [ -s /workspace/metrics/gpu.csv ]; then
+  awk -F, '"'"'NR>1 {n++; ng[$2]=1; s+=$3+0; if($3+0>p) p=$3+0; if(t0=="") t0=$1; t1=$1} END {ngc=0; for(k in ng) ngc++; if(n>0) printf "  %d samples × %d GPU(s)\n  span: %s →%s\n  avg util: %.1f%%, peak %.0f%%\n", n/ngc, ngc, t0, t1, s/n, p}'"'"' /workspace/metrics/gpu.csv
+  echo "=== latest rows ==="
+  tail -n 5 /workspace/metrics/gpu.csv
+else
+  echo "  (no gpu.csv yet)"
+fi
+echo "=== vllm.prom size ==="
+ls -lh /workspace/metrics/vllm.prom 2>/dev/null || echo "  (none)"'
+      set -l rc $status
+      env-cleanup $_pre_vars
+      return $rc
+    '';
+    vast-metrics.description = "Show live GPU+vLLM metrics state on the rental (vast-metrics [INSTANCE_ID] [--no-fzf]; monitor status, sample count, avg/peak util, latest samples).";
+    vast-fetch-metrics.body = ''
+      # Snapshot /workspace/metrics + vllm.log from a running rental into
+      # ~/vast-metrics/$id-$ts/, then render PNGs + summary.txt via
+      # vast-render-metrics. Non-destructive — instance keeps running.
+      # vast-destroy delegates to this for its teardown snapshot.
+      set -l _pre_vars (set --names -x)
+      if not _vast-load
+        env-cleanup $_pre_vars
+        return 1
+      end
+      set -l instance_id ""
+      set -l no_fzf ""
+      for arg in $argv
+        switch $arg
+          case --no-fzf
+            set no_fzf 1
+          case -h --help
+            echo "Usage: vast-fetch-metrics [--no-fzf] [INSTANCE_ID]" >&2
+            env-cleanup $_pre_vars
+            return 0
+          case '*'
+            set instance_id $arg
+        end
+      end
+      if not _vast-resolve-instance $instance_id running $no_fzf
+        env-cleanup $_pre_vars
+        return 1
+      end
+      set -l ts (date +%Y%m%d-%H%M%S)
+      set -l dest "$HOME/vast-metrics/$VAST_INSTANCE_ID-$ts"
+      mkdir -p $dest
+      echo "Fetching metrics from instance $VAST_INSTANCE_ID → $dest ..."
+      scp -i $VAST_SSH_KEY \
+          -P $VAST_SSH_PORT \
+          -o StrictHostKeyChecking=no \
+          -o UserKnownHostsFile=/dev/null \
+          -o LogLevel=ERROR \
+          -r $VAST_SSH_USER@$VAST_HOST:/workspace/metrics $dest/
+      set -l rc_metrics $status
+      scp -i $VAST_SSH_KEY \
+          -P $VAST_SSH_PORT \
+          -o StrictHostKeyChecking=no \
+          -o UserKnownHostsFile=/dev/null \
+          -o LogLevel=ERROR \
+          $VAST_SSH_USER@$VAST_HOST:/workspace/vllm.log $dest/
+      set -l rc_log $status
+      if test $rc_metrics -ne 0; or test $rc_log -ne 0
+        echo "Warning: scp partial/failed (metrics rc=$rc_metrics, log rc=$rc_log)." >&2
+      end
+      if test -d $dest/metrics
+        if command -q vast-render-metrics
+          vast-render-metrics $dest
+          or echo "Warning: vast-render-metrics failed; raw CSVs are still in $dest." >&2
+        else
+          echo "vast-render-metrics not on PATH (rebuild needed); raw CSVs in $dest." >&2
+        end
+      end
+      env-cleanup $_pre_vars
+      return 0
+    '';
+    vast-fetch-metrics.description = "Snapshot /workspace/metrics + vllm.log from a running rental into ~/vast-metrics/<id>-<ts>/ and render PNGs (vast-fetch-metrics [--no-fzf] [INSTANCE_ID]; non-destructive — instance keeps running).";
+
     # Helpers for finding and renting Vast.ai instances. Wrap the `vastai`
     # CLI (provided by the wrapper in shared-cli-configuration.nix). Run
     # `vast-search` first, copy an offer ID, then `vast-create <id>`.
@@ -834,16 +1015,37 @@
     vast-show.description = "Show currently-rented Vast.ai instances tagged vllm-deepseek-v4 (id, status, host, ssh port).";
 
     vast-destroy.body = ''
-      set -l instance_id $argv[1]
+      set -l no_fetch ""
+      set -l no_fzf ""
+      set -l instance_id ""
+      for arg in $argv
+        switch $arg
+          case --no-fetch
+            set no_fetch 1
+          case --no-fzf
+            set no_fzf 1
+          case -h --help
+            echo "Usage: vast-destroy [--no-fetch] [--no-fzf] INSTANCE_ID" >&2
+            return 0
+          case '*'
+            set instance_id $arg
+        end
+      end
       if test -z "$instance_id"
-        echo "Usage: vast-destroy INSTANCE_ID" >&2
+        echo "Usage: vast-destroy [--no-fetch] [--no-fzf] INSTANCE_ID" >&2
         echo "List instances with: vast-show" >&2
         return 1
       end
+
+      if test -z "$no_fetch"
+        vast-fetch-metrics --no-fzf $instance_id
+        or echo "Warning: vast-fetch-metrics failed; destroying anyway." >&2
+      end
+
       echo "Destroying Vast.ai instance $instance_id ..."
       vastai destroy instance $instance_id
     '';
-    vast-destroy.description = "Destroy a Vast.ai instance by ID (run vast-show to find the ID).";
+    vast-destroy.description = "Destroy a Vast.ai instance, fetching /workspace/metrics first (--no-fetch to skip; --no-fzf to skip picker).";
 
     _vast-wait-status.body = ''
       # Poll the Vast.ai API until instance $argv[1] reaches the desired

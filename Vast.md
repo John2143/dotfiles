@@ -122,7 +122,7 @@ vast-show                         # id=… status=running host=… ssh_port=…
 Once `vast-show` reports `status=running`, just:
 
 ```fish
-fish -c vast-bootstrap            # ~25 min first time
+fish -c vast-bootstrap            # ~30 min cold-cold; ~30 s warm-warm
 fish -c vast-tunnel               # localhost:8001 → rental:8000
 fish -c vast-status               # confirm vLLM responds
 ```
@@ -141,9 +141,47 @@ for the current host/port on every invocation.
    `--tool-call-parser deepseek_v4`, and `--reasoning-parser deepseek_v4` so
    `reasoning_content` is split out from the final answer in OpenAI-API
    responses.
-5. `pip install vllm` if not preinstalled (~5 min).
-6. `nohup vllm serve …` in the background, logging to `/workspace/vllm.log`.
-7. Polls `/v1/models` for up to 20 minutes.
+5. `apt install` of `python3-dev`, `build-essential`, `moreutils`, `gawk`
+   (the latter two for the `ts` log-timestamper used in step 7).
+6. `pip install vllm` if not preinstalled (~5 min).
+7. `nohup vllm serve … 2>&1 | ts "%Y-%m-%dT%H:%M:%SZ "` in the background,
+   logging to `/workspace/vllm.log`. The `ts` prefix gives every line an
+   absolute UTC timestamp so the render script can align log events to the
+   metrics CSV — without it, vllm only emits `MM-DD HH:MM:SS` partials.
+8. Starts a 5 s-cadence metrics monitor that writes `gpu.csv`, `sys.csv`,
+   `gpu_proc.csv`, `pmon.log`, `nvlink.log`, `vllm.prom`, and a structured
+   `events.jsonl` of bootstrap lifecycle events to `/workspace/metrics/`.
+9. Polls `/v1/models` for up to 40 minutes (cold-cold ceiling, see below).
+
+### Cold-start timing breakdown
+
+A fresh rental on the minimal `nvidia/cuda:12.8.0-devel-ubuntu24.04` image
+takes **~27–30 minutes** wall time before vLLM starts answering requests.
+Observed phases on a 2×B200 rental booting DeepSeek-V4-Flash:
+
+| Phase                                         | Duration |
+|-----------------------------------------------|----------|
+| apt + venv + `pip install vllm`               | ~5 min   |
+| EngineCore spawn / NCCL init                  | ~3 min   |
+| HF download of weights (148 GiB)              | ~8 min   |
+| Weights load into VRAM                        | ~9 min   |
+| `torch.compile` (Dynamo + Inductor)           | ~2 min   |
+| Initial profiling / warmup run                | ~5 min   |
+| DeepGEMM warmup (1664 kernels)                | ~3 min   |
+| FlashInfer autotuner                          | ~4 min   |
+| CUDA graph capture                            | ~10 s    |
+| **Total to `Application startup complete`**   | **~27 min** |
+
+**Subsequent bootstraps** of the same instance reuse the cached venv, weights
+on `/workspace`, and the Triton/torch-inductor caches at
+`/workspace/.{vllm_cache,triton_cache,inductor_cache}`. Warm-warm restart
+(`vast-bootstrap --restart`) drops to **~30–60 s** — only torch.compile and
+graph capture re-run. `vast-pause` + `vast-unpause` preserves all of this.
+
+The bootstrap polling loop has a **40 min ceiling** (480 × 5 s) to absorb
+worst-case cold-cold. If it times out, the launched `vllm` keeps running in
+the background — `vast-logs` and `vast-status` will show it come up shortly
+after.
 
 ## Using
 
@@ -267,6 +305,7 @@ Two ways to run more than one rental at the same time:
 | `vast-pause [INSTANCE_ID]` | Stop a running rental — disk preserved, compute billing pauses; storage still accrues. ID required when ≥2 running. |
 | `vast-unpause [INSTANCE_ID]` | Resume a stopped rental. Subject to host GPU availability — not guaranteed. ID required when ≥2 stopped. |
 | `vast-destroy INSTANCE_ID` | Tear down a rental |
+| `vast-fetch-metrics [INSTANCE_ID]` | Snapshot `/workspace/metrics` + `vllm.log` into `~/vast-metrics/<id>-<ts>/` and render PNGs. Non-destructive. ID required when ≥2 running. |
 | `vast-bootstrap [INSTANCE_ID] [--restart]` | SSH in and (re)launch vLLM remotely. Idempotent by default; `--restart` kills the running vllm and re-launches. `INSTANCE_ID` is required when ≥2 instances share the label. |
 | `vast-tunnel [INSTANCE_ID] [--restart]` | Open localhost:`$VAST_LOCAL_PORT` → rental:`$VAST_VLLM_PORT` SSH tunnel. `INSTANCE_ID` required when ≥2 instances share the label. |
 | `vast-tunnel-down` | Close the tunnel |
