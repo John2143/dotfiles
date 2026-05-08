@@ -1,18 +1,18 @@
 // Approval hook for risky tool calls.
 //
-// Calls an LLM to classify whether each bash command is safe before execution.
-// Primary: vast-vllm at http://localhost:8001 (DeepSeek V4 Flash)
-// Fallback: office ollama at http://office:11434 (Qwen 3.6 27B)
-// If neither endpoint responds, blocks by default (fail-closed).
+// Uses OMP's configured smol model (from ~/.omp/agent/config.yml modelRoles.smol)
+// via completeSimple from @oh-my-pi/pi-ai. OMP handles provider selection,
+// API key resolution, retry, and the configured fallback chain automatically.
+//
+// If the smol model is unreachable after OMP retries, blocks by default (fail-closed).
 //
 // The LLM returns a JSON verdict { safe: boolean, reason: string }.
 // Safe commands pass through; unsafe ones trigger an interactive confirm dialog.
 
-const PRIMARY_API = "http://localhost:8001/v1/chat/completions";
-const PRIMARY_MODEL = "deepseek-v4-flash";
-const FALLBACK_API = "http://office:11434/v1/chat/completions";
-const FALLBACK_MODEL = "qwen3.6:27b";
-
+import { completeSimple } from "@oh-my-pi/pi-ai";
+import * as fs from "node:fs";
+import * as path from "node:path";
+import * as os from "node:os";
 const CLASSIFY_PROMPT = `You are a safety classifier for CLI commands in a NixOS dotfiles repo. Determine if the proposed command is safe to execute automatically (safe) or requires user confirmation (unsafe).
 
 Respond ONLY with a JSON object: { "safe": boolean, "reason": "brief explanation" }
@@ -39,67 +39,69 @@ UNSAFE (requires user confirmation):
 
 The user runs commands in a NixOS environment with home-manager. Commands touching /nix/store are sensitive. Commands inside /tmp or that just print/output are safe.`;
 
-// vLLM with the Outlines backend rejects { type: "json_object" } — it requires
-// a schema. Sending the schemaless form crashes EngineCore.
-const VERDICT_SCHEMA = {
-  name: "verdict",
-  strict: true,
-  schema: {
-    type: "object",
-    additionalProperties: false,
-    required: ["safe", "reason"],
-    properties: {
-      safe: { type: "boolean" },
-      reason: { type: "string" },
-    },
-  },
-};
+// Timeout for the classification call (ms). OMP's own retry runs within this window.
+const CLASSIFY_TIMEOUT_MS = 10000;
 
-const PRIMARY_RESPONSE_FORMAT = { type: "json_schema", json_schema: VERDICT_SCHEMA };
-const FALLBACK_RESPONSE_FORMAT = { type: "json_object" };
-
-async function tryEndpoint(url, model, responseFormat, timeoutMs, cmd) {
+function readSmolModelSpec(): string | null {
   try {
-    const ac = new AbortController();
-    const timer = setTimeout(() => ac.abort(), timeoutMs);
-
-    const resp = await fetch(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        model,
-        messages: [
-          { role: "system", content: CLASSIFY_PROMPT },
-          { role: "user", content: `Evaluate this command: ${cmd}` },
-        ],
-        response_format: responseFormat,
-        temperature: 0.1,
-        max_tokens: 256,
-      }),
-      signal: ac.signal,
-    });
-
-    clearTimeout(timer);
-    if (!resp.ok) return null;
-
-    const data = await resp.json();
-    const content = data.choices?.[0]?.message?.content;
-    if (!content) return null;
-
-    const parsed = JSON.parse(content);
-    if (typeof parsed?.safe !== "boolean") return null;
-    return { safe: parsed.safe, reason: String(parsed.reason ?? "") };
+    const cfg = path.join(os.homedir(), ".omp", "agent", "config.yml");
+    const raw = fs.readFileSync(cfg, "utf-8");
+    const m = raw.match(/^\s*smol:\s*(.+)$/m);
+    return m ? m[1].trim() : null;
   } catch {
     return null;
   }
 }
 
-async function classifyCommand(cmd, onPrimaryFail) {
-  const result = await tryEndpoint(PRIMARY_API, PRIMARY_MODEL, PRIMARY_RESPONSE_FORMAT, 5000, cmd);
-  if (result) return result;
+async function classifyCommand(cmd, modelRegistry) {
+  const spec = readSmolModelSpec();
+  if (!spec) return null;
 
-  onPrimaryFail?.();
-  return tryEndpoint(FALLBACK_API, FALLBACK_MODEL, FALLBACK_RESPONSE_FORMAT, 8000, cmd);
+  const slash = spec.indexOf("/");
+  if (slash === -1) return null;
+
+  const provider = spec.slice(0, slash);
+  const modelId = spec.slice(slash + 1);
+  const model = modelRegistry.find(provider, modelId);
+  if (!model) return null;
+
+  try {
+    const ac = new AbortController();
+    const timer = setTimeout(() => ac.abort(), CLASSIFY_TIMEOUT_MS);
+
+    const result = await completeSimple(
+      model,
+      {
+        systemPrompt: [CLASSIFY_PROMPT],
+        messages: [{ role: "user", content: `Evaluate this command: ${cmd}` }],
+      },
+      {
+        temperature: 0.1,
+        maxTokens: 256,
+        signal: ac.signal,
+        disableReasoning: true,
+      },
+    );
+
+    clearTimeout(timer);
+
+    // AssistantMessage.content is (TextContent | ThinkingContent | ToolCall)[]
+    let text = result.content
+      .filter((b) => b.type === "text" && b.text)
+      .map((b) => b.text)
+      .join("");
+
+    if (!text) return null;
+
+    // Strip markdown code fences if present
+    text = text.replace(/^```(?:json)?\s*\n?/i, "").replace(/\n?```\s*$/i, "");
+
+    const parsed = JSON.parse(text);
+    if (typeof parsed?.safe !== "boolean") return null;
+    return { safe: parsed.safe, reason: String(parsed.reason ?? "") };
+  } catch {
+    return null;
+  }
 }
 
 export default function (pi) {
@@ -112,14 +114,12 @@ export default function (pi) {
 
     const cmd = String(event.input.command ?? "");
 
-    const verdict = await classifyCommand(cmd, () => {
-      ctx.ui.notify("primary classifier unavailable, using fallback", "warn");
-    });
+    const verdict = await classifyCommand(cmd, ctx.modelRegistry);
 
     if (!verdict) {
-      // No endpoint reachable — block by default (fail-closed)
+      // Smol model unreachable after OMP retries — block by default (fail-closed)
       ctx.ui.notify("Safety classifier unreachable — command blocked", "error");
-      return { block: true, reason: "Command blocked: unable to reach safety classifier (vast-vllm and office both unreachable)" };
+      return { block: true, reason: "Command blocked: unable to reach safety classifier (smol model unreachable)" };
     }
 
     if (verdict.safe) return; // LLM says safe — let it through

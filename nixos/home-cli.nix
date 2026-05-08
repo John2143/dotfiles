@@ -19,6 +19,7 @@
 in {
   imports = [
     ./modules/fish-functions.nix
+    ./modules/vast-fish-functions.nix
     ./modules/omp-config.nix
     ./modules/vast-profile.nix
   ];

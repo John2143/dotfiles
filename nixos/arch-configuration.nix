@@ -75,8 +75,13 @@ let
           hass_notify plug "Plug" "Upstairs desktop computer toggled"
           signal_waybar
           ;;
+        light-toggle)
+          hass_post light/toggle '{"entity_id":"light.john_bedroom_lamp"}'
+          hass_notify lamp "Lamp" "Toggled"
+          signal_waybar
+          ;;
         *)
-          echo "Usage: hass-macro {thermostat-down|thermostat-up|thermostat-toggle|fan-toggle|plug-toggle}" >&2
+          echo "Usage: hass-macro {thermostat-down|thermostat-up|thermostat-toggle|fan-toggle|plug-toggle|light-toggle}" >&2
           exit 1
           ;;
       esac
