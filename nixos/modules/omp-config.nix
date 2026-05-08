@@ -144,8 +144,10 @@ in {
 
     ".omp/agent/config.yml".text = ''
       modelRoles:
-        default: vast-vllm/deepseek-v4-flash
-        smol: office-ollama-cpu/gemma4
+        #default: vast-vllm/deepseek-v4-flash
+        default: deepseek/deepseek-v4-pro
+        #smol: office-ollama-cpu/gemma4
+        smol: deepseek/deepseek-v4-flash
 
       modelProviderOrder:
         - vast-vllm
