@@ -80,8 +80,19 @@ let
           hass_notify lamp "Lamp" "Toggled"
           signal_waybar
           ;;
+
+        superbight-toggle)
+          hass_post light/toggle '{"entity_id":"light.plug_bedroom_superbright"}'
+          hass_notify superbight "Superbight" "Toggled"
+          signal_waybar
+          ;;
+        ac-switch-toggle)
+          hass_post light/toggle '{"entity_id":"light.plug_bedroom_ac_and_fan_switch"}'
+          hass_notify ac-switch "AC Switch" "Toggled"
+          signal_waybar
+          ;;
         *)
-          echo "Usage: hass-macro {thermostat-down|thermostat-up|thermostat-toggle|fan-toggle|plug-toggle|light-toggle}" >&2
+          echo "Usage: hass-macro {thermostat-down|thermostat-up|thermostat-toggle|fan-toggle|plug-toggle|light-toggle|superbight-toggle|ac-switch-toggle}" >&2
           exit 1
           ;;
       esac
@@ -210,7 +221,7 @@ in
         esc = "f13";
         q = "f14";
         w = "f15";
-        e = "f16";
+        e = "A-f24";
         r = "f17";
         t = "f18";
         a = "f19";

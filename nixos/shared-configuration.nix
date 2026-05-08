@@ -60,6 +60,14 @@ let
           : > "$CACHE"
           exit 1
       fi
+      # Hide the widget when there are zero instances at all (any status).
+      # A sleeping/stopped instance still counts — only truly empty → hidden.
+      total=$(echo "$raw" | jq --arg label "$LABEL" \
+          '[.[] | select(.label == $label)] | length')
+      if [ "$total" = "0" ]; then
+          : > "$CACHE"
+          exit 0
+      fi
 
       running=$(echo "$raw" | jq -c --arg label "$LABEL" \
           '[.[] | select(.label == $label) | select(.actual_status == "running")]')
