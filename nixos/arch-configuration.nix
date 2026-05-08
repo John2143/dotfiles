@@ -218,7 +218,11 @@ in
     };
   };
 
-  environment.systemPackages = [ hass-macro hass-thermostat-status ];
+  environment.systemPackages = [
+    hass-macro
+    hass-thermostat-status
+    inputs.hyprcap.packages.x86_64-linux.default
+  ];
 
   # openrgb flakes occasionally — keep the unit out of "failed" state so it
   # doesn't trip exit-code-4 in switch-to-configuration's post-activation scan.

@@ -35,6 +35,10 @@
       url = "github:sadjow/claude-code-nix";
       inputs.nixpkgs.follows = "nixpkgs";
     };
+    hyprcap = {
+      url = "github:alonso-herreros/hyprcap";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
   };
 
   outputs = {
