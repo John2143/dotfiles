@@ -52,6 +52,38 @@ in {
               contextWindow: 1000000
               maxTokens: 384000
 
+        # DeepSeek's official API. Cheaper than self-hosting on Vast for
+        # 1-2 user agentic load (break-even is ~600 req/hr at promo
+        # pricing) AND avoids vllm#41985 — DeepSeek runs their own
+        # tilelang stack, no vLLM MLA FP8 precision bug, no CJK token
+        # injection or repetition collapse. Pricing per 1M tokens
+        # (current 2026-05-08; promo on V4-Pro expires 2026-05-31 and
+        # prices 4x to $1.74 / $3.48):
+        #   v4-flash: $0.14 / $0.28      (no promo, stable)
+        #   v4-pro:   $0.435 / $0.87     (75% promo)
+        # Cache hits are ~50× cheaper on input.
+        # Requires DEEPSEEK_API_KEY in /run/agenix/llm-runtime-keys.
+        # Get one: https://platform.deepseek.com/api_keys
+        deepseek:
+          baseUrl: https://api.deepseek.com/v1
+          api: openai-completions
+          apiKey: DEEPSEEK_API_KEY
+          models:
+            - id: deepseek-v4-flash
+              name: DeepSeek V4 Flash (Direct API)
+              reasoning: true
+              input: [text]
+              cost: { input: 0.14, output: 0.28, cacheRead: 0.0028, cacheWrite: 0 }
+              contextWindow: 1000000
+              maxTokens: 65536
+            - id: deepseek-v4-pro
+              name: DeepSeek V4 Pro (Direct API)
+              reasoning: true
+              input: [text]
+              cost: { input: 0.435, output: 0.87, cacheRead: 0.003625, cacheWrite: 0 }
+              contextWindow: 1000000
+              maxTokens: 65536
+
         office-ollama:
           baseUrl: http://office:11434/v1
           api: openai-completions
@@ -117,6 +149,7 @@ in {
 
       modelProviderOrder:
         - vast-vllm
+        - deepseek
         - office-vllm
         - office-ollama
         - office-ollama-cpu
@@ -127,6 +160,7 @@ in {
 
       enabledModels:
         - "vast-vllm/*"
+        - "deepseek/*"
         - "office-vllm/*"
         - "office-ollama/*"
         - "office-ollama-cpu/*"

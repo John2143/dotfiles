@@ -18,6 +18,14 @@
 #                      (otherwise the script is a no-op when vllm is up)
 #   TENSOR_PARALLEL    --tensor-parallel-size N (auto-detected = GPU count;
 #                      set to 1 to disable on multi-GPU instances)
+#   LOGGING_PROXY      "1" (default) → run a Python reverse proxy in front
+#                      of vLLM that appends every OpenAI request + response
+#                      to /workspace/metrics/queries.jsonl. "0" → vLLM binds
+#                      VLLM_PORT directly (legacy). When enabled, vLLM binds
+#                      127.0.0.1:VLLM_INTERNAL_PORT and the proxy listens on
+#                      0.0.0.0:VLLM_PORT, so external clients are unchanged.
+#   VLLM_INTERNAL_PORT private port vLLM binds to under LOGGING_PROXY=1
+#                      (default 18000). Ignored otherwise.
 #
 # Auto-tuning targets DeepSeek-V4-Flash with 1-2 light users (rare concurrent
 # big queries). V4-Flash KV at 1M ctx is only ~6 GiB/seq (7% of V3.2's, via
@@ -66,6 +74,15 @@ set -euo pipefail
 : "${FORCE_RESTART:=}"
 : "${TENSOR_PARALLEL:=}"
 : "${MAX_NUM_BATCHED_TOKENS:=8192}"
+# Logging proxy: when 1, vLLM binds to 127.0.0.1:${VLLM_INTERNAL_PORT} and a
+# small Python reverse proxy listens on 0.0.0.0:${VLLM_PORT}. Every request
+# to OpenAI-compatible endpoints (chat/completions, completions, embeddings,
+# etc.) is appended as a JSONL record to /workspace/metrics/queries.jsonl,
+# which rides back with vast-fetch-metrics / vast-destroy. Set to 0 to keep
+# the original direct-bind behavior. VLLM_INTERNAL_PORT only matters when
+# LOGGING_PROXY=1.
+: "${LOGGING_PROXY:=1}"
+: "${VLLM_INTERNAL_PORT:=18000}"
 
 mkdir -p /workspace /workspace/tmp /workspace/pip-cache /workspace/.hf_home \
          /workspace/.vllm_cache /workspace/.triton_cache /workspace/.inductor_cache \
@@ -162,6 +179,42 @@ case "$MODEL" in
     if ! has_extra_flag --kv-cache-dtype; then
       echo "Auto-setting --kv-cache-dtype fp8 for DeepSeek V4."
       EXTRA_ARGS="--kv-cache-dtype fp8 ${EXTRA_ARGS}"
+    fi
+    # Sampling override — works around two distinct V4 failure modes
+    # observed 2026-05-08 under DeepSeek's recommended temp=1.0/top_p=1.0:
+    #
+    #   (1) CJK token injection mid-prose at fragile ASCII↔CJK boundaries.
+    #       Maps to vllm#41985: vLLM's MLA attention FP8 compute path
+    #       (deepseek_v4_attention.py) has insufficient precision vs
+    #       SGLang on the same model+hardware. KV-cache dtype was ruled
+    #       out by the reporter (E4M3 vs E5M2 identical bad-token rate).
+    #
+    #   (2) Repetition collapse during multi-step research turns: same
+    #       BPE token emitted back-to-back ("HyprlandHyprlandHyprland"),
+    #       short phrases looped hundreds of times ("Let's edit the"
+    #       repeated 30+ times), token-level mutations
+    #       (Hyprland → Hybridland). Classic no-escape regime where
+    #       top_p=1.0 leaves the deep tail open and the model latches
+    #       on a self-reinforcing prefix.
+    #
+    # temperature=0.6 alone (initial fix attempt) caught (1) but not (2)
+    # — repetition collapse needs tail truncation, not just temperature.
+    # top_p=0.95 cuts the deep tail; top_k=40 caps the candidate set as
+    # belt-and-suspenders against pathological prefixes. This is a
+    # deeper deviation from DeepSeek's vendor recommendation; intentional,
+    # treating the rec as broken under vLLM's V4 attention FP8 path.
+    # Drop this entire block and re-test 1.0/1.0 once vllm#41985 closes.
+    #
+    # Related (separate failure modes, tracked here for context):
+    #   vllm#41985 — primary, CJK token injection
+    #   vllm#41331 — garbled output w/ CUDA graph + concurrent identical reqs
+    #   vllm#40801 — DSML fragment leak in streaming tool-call parsing
+    #   vllm#41240 — V4 DSML parser wrapper/string handling (CLOSED, PR #41241)
+    #   vllm#40854 — V4 unresponsive when used via claude code path
+    #   vllm#41015 — FP4 rounding fix (greedy mode, MERGED upstream)
+    if ! has_extra_flag --override-generation-config; then
+      echo "Auto-overriding sampling: temp=0.6 top_p=0.95 top_k=40 (vllm#41985 + repetition collapse)."
+      EXTRA_ARGS="--override-generation-config {\"temperature\":0.6,\"top_p\":0.95,\"top_k\":40} ${EXTRA_ARGS}"
     fi
     if [ -z "$TOOL_PARSER" ] && ! has_extra_flag --tool-call-parser; then
       echo "Auto-setting --tool-call-parser deepseek_v4 for DeepSeek V4."
@@ -273,10 +326,10 @@ while true; do
     --format=csv,noheader,nounits >> "$GPROC_CSV" 2>/dev/null || true
 
   printf '# T=%s\n' "$TS" >> "$PMON_LOG"
-  nvidia-smi pmon -c 1 -s pucvmet >> "$PMON_LOG" 2>/dev/null || true
+  timeout 3 nvidia-smi pmon -c 1 -s pucvmet >> "$PMON_LOG" 2>/dev/null || true
 
   printf '# T=%s\n' "$TS" >> "$NVLINK_LOG"
-  nvidia-smi nvlink -gt d >> "$NVLINK_LOG" 2>/dev/null || true
+  timeout 3 nvidia-smi nvlink -gt d >> "$NVLINK_LOG" 2>/dev/null || true
 
   # System CSV — needs a previous sample for rate math.
   read CPU_TOTAL CPU_IDLE < <(read_cpu)
@@ -337,22 +390,270 @@ MONEOF
   emit_event monitor_start "pid=$(cat "$pidfile")"
 }
 
-if curl -fsS "http://localhost:${VLLM_PORT}/v1/models" >/dev/null 2>&1; then
+# Logging proxy: tiny Python reverse proxy that records every OpenAI-style
+# request + response to /workspace/metrics/queries.jsonl. vLLM binds to
+# 127.0.0.1:${VLLM_INTERNAL_PORT}; the proxy listens on 0.0.0.0:${VLLM_PORT}
+# and forwards transparently. High-frequency monitoring endpoints (/metrics,
+# /health, /v1/models) pass through without logging so the JSONL stays
+# signal-only. Idempotent via /workspace/proxy.pid.
+start_logging_proxy_if_needed() {
+  [ "$LOGGING_PROXY" = "1" ] || return 0
+  mkdir -p /workspace/metrics
+  local pidfile=/workspace/proxy.pid
+  if [ -f "$pidfile" ]; then
+    local oldpid
+    oldpid=$(cat "$pidfile" 2>/dev/null || true)
+    if [ -n "$oldpid" ] && kill -0 "$oldpid" 2>/dev/null; then
+      echo "Logging proxy already running (pid $oldpid) — leaving as-is."
+      return 0
+    fi
+  fi
+
+  # httpx isn't always pulled in by vllm directly; install on demand into
+  # the same venv. fastapi + uvicorn ship with vllm.
+  if ! /workspace/venv/bin/python -c 'import httpx, fastapi, uvicorn' >/dev/null 2>&1; then
+    echo "Installing logging-proxy deps (httpx) into /workspace/venv ..."
+    /workspace/venv/bin/pip install --quiet httpx fastapi uvicorn || {
+      echo "Warning: failed to install proxy deps — skipping logging proxy." >&2
+      return 0
+    }
+  fi
+
+  cat > /workspace/vllm-logging-proxy.py <<'PROXYEOF'
+#!/usr/bin/env python3
+"""Reverse proxy that logs every OpenAI-style request/response to JSONL.
+
+Started by vast-bootstrap when LOGGING_PROXY=1. Listens on $PROXY_PORT and
+forwards to http://127.0.0.1:$UPSTREAM_PORT. For paths in LOG_PATHS, the full
+request body and response body (or assembled SSE deltas) are appended to
+$LOG_FILE as one JSON record per line. Other paths pass through silently.
+
+Auth headers are preserved on the wire to upstream but redacted in the log.
+"""
+import asyncio
+import json
+import os
+import time
+import uuid
+from contextlib import asynccontextmanager
+
+import httpx
+import uvicorn
+from fastapi import FastAPI, Request
+from fastapi.responses import Response, StreamingResponse
+
+PROXY_PORT    = int(os.environ.get("PROXY_PORT", "8000"))
+UPSTREAM_PORT = int(os.environ.get("UPSTREAM_PORT", "18000"))
+LOG_FILE      = os.environ.get("LOG_FILE", "/workspace/metrics/queries.jsonl")
+UPSTREAM      = f"http://127.0.0.1:{UPSTREAM_PORT}"
+
+# Bodies of these paths land in the log. /metrics, /health, /v1/models are
+# scraped every 5s by metrics-monitor.sh — excluding them keeps the log
+# focused on actual user traffic.
+LOG_PATHS = {
+    "/v1/chat/completions",
+    "/v1/completions",
+    "/v1/embeddings",
+    "/v1/responses",
+    "/v1/rerank",
+    "/v1/score",
+    "/tokenize",
+    "/v1/audio/transcriptions",
+}
+
+# Hop-by-hop headers per RFC 7230 + Host (we are the host) + Content-Length
+# (httpx recomputes from the body it sees). Stripping these prevents httpx
+# from rejecting/duplicating them on the upstream request.
+HOP_BY_HOP = {"connection", "keep-alive", "transfer-encoding", "te",
+              "trailer", "proxy-authorization", "proxy-authenticate",
+              "upgrade", "host", "content-length"}
+SECRET_HEADERS = {"authorization", "x-api-key", "cookie",
+                  "proxy-authorization", "openai-api-key"}
+
+
+def _filter(headers):
+    return [(k, v) for k, v in headers.items() if k.lower() not in HOP_BY_HOP]
+
+
+def _redact(headers):
+    return {k: ("[redacted]" if k.lower() in SECRET_HEADERS else v)
+            for k, v in headers.items()}
+
+
+_log_lock = asyncio.Lock()
+
+
+def _append(line):
+    with open(LOG_FILE, "a", encoding="utf-8") as f:
+        f.write(line)
+
+
+async def _write_log(record):
+    line = json.dumps(record, ensure_ascii=False, default=str) + "\n"
+    async with _log_lock:
+        await asyncio.to_thread(_append, line)
+
+
+@asynccontextmanager
+async def lifespan(app):
+    # read=None: long completions on V4-Pro can stream for >10 min; a fixed
+    # read timeout would sever them mid-token.
+    timeout = httpx.Timeout(connect=5.0, read=None, write=60.0, pool=5.0)
+    limits = httpx.Limits(max_connections=256)
+    app.state.client = httpx.AsyncClient(base_url=UPSTREAM, timeout=timeout,
+                                          limits=limits)
+    try:
+        yield
+    finally:
+        await app.state.client.aclose()
+
+
+app = FastAPI(lifespan=lifespan)
+
+
+@app.api_route("/{path:path}",
+               methods=["GET", "POST", "PUT", "DELETE", "PATCH",
+                        "OPTIONS", "HEAD"])
+async def proxy(path: str, request: Request):
+    body = await request.body()
+    target = "/" + path
+    if request.url.query:
+        target = f"{target}?{request.url.query}"
+    headers = _filter(request.headers)
+    full_path = "/" + path
+    client: httpx.AsyncClient = request.app.state.client
+
+    if full_path not in LOG_PATHS:
+        upstream = await client.request(request.method, target,
+                                         content=body, headers=headers)
+        return Response(content=upstream.content,
+                        status_code=upstream.status_code,
+                        headers=dict(_filter(upstream.headers)))
+
+    started = time.time()
+    request_id = uuid.uuid4().hex[:16]
+    ts = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+
+    try:
+        req_json = json.loads(body.decode("utf-8")) if body else None
+    except Exception:
+        req_json = {"_raw": body.decode("utf-8", errors="replace")}
+
+    is_stream = isinstance(req_json, dict) and req_json.get("stream") is True
+
+    if not is_stream:
+        upstream = await client.request(request.method, target,
+                                         content=body, headers=headers)
+        elapsed_ms = round((time.time() - started) * 1000, 1)
+        try:
+            resp_json = json.loads(upstream.content.decode("utf-8"))
+        except Exception:
+            resp_json = {"_raw": upstream.content.decode("utf-8", errors="replace")}
+        await _write_log({
+            "ts": ts,
+            "request_id": request_id,
+            "path": full_path,
+            "method": request.method,
+            "duration_ms": elapsed_ms,
+            "status": upstream.status_code,
+            "stream": False,
+            "request_headers": _redact(request.headers),
+            "request": req_json,
+            "response": resp_json,
+        })
+        return Response(content=upstream.content,
+                        status_code=upstream.status_code,
+                        headers=dict(_filter(upstream.headers)))
+
+    # Streaming path: forward bytes to client unmodified, accumulate for the
+    # log record after the upstream stream closes.
+    req = client.build_request(request.method, target,
+                                content=body, headers=headers)
+    upstream = await client.send(req, stream=True)
+    chunks = []
+
+    async def streamer():
+        try:
+            async for chunk in upstream.aiter_raw():
+                chunks.append(chunk)
+                yield chunk
+        finally:
+            await upstream.aclose()
+            elapsed_ms = round((time.time() - started) * 1000, 1)
+            raw = b"".join(chunks).decode("utf-8", errors="replace")
+            events = []
+            # OpenAI SSE: lines beginning with "data: ", terminated by [DONE].
+            # We don't try to merge deltas here — the raw event stream is the
+            # most faithful record and downstream tools can re-assemble.
+            for line in raw.split("\n"):
+                line = line.strip()
+                if line.startswith("data:"):
+                    payload = line[5:].strip()
+                    if payload and payload != "[DONE]":
+                        try:
+                            events.append(json.loads(payload))
+                        except Exception:
+                            events.append({"_raw": payload})
+            await _write_log({
+                "ts": ts,
+                "request_id": request_id,
+                "path": full_path,
+                "method": request.method,
+                "duration_ms": elapsed_ms,
+                "status": upstream.status_code,
+                "stream": True,
+                "request_headers": _redact(request.headers),
+                "request": req_json,
+                "response_events": events,
+            })
+
+    return StreamingResponse(streamer(),
+                              status_code=upstream.status_code,
+                              headers=dict(_filter(upstream.headers)),
+                              media_type=upstream.headers.get("content-type"))
+
+
+if __name__ == "__main__":
+    uvicorn.run(app, host="0.0.0.0", port=PROXY_PORT,
+                log_level="warning", access_log=False)
+PROXYEOF
+  chmod +x /workspace/vllm-logging-proxy.py
+
+  PROXY_PORT="${VLLM_PORT}" UPSTREAM_PORT="${VLLM_INTERNAL_PORT}" \
+  LOG_FILE=/workspace/metrics/queries.jsonl \
+  nohup /workspace/venv/bin/python /workspace/vllm-logging-proxy.py \
+    >>/workspace/metrics/proxy.log 2>&1 &
+  echo "$!" > "$pidfile"
+  disown 2>/dev/null || true
+  echo "Started logging proxy (pid $(cat "$pidfile"), :${VLLM_PORT} → :${VLLM_INTERNAL_PORT}, log → /workspace/metrics/queries.jsonl)."
+  emit_event proxy_start "pid=$(cat "$pidfile") port=${VLLM_PORT} upstream=${VLLM_INTERNAL_PORT}"
+}
+
+# Probe vLLM directly. With LOGGING_PROXY=1, vllm binds to a private internal
+# port; probing $VLLM_PORT would also hit the proxy, but probing the internal
+# port lets us tell vllm-up-but-proxy-down apart from both-down.
+PROBE_PORT="${VLLM_PORT}"
+[ "$LOGGING_PROXY" = "1" ] && PROBE_PORT="${VLLM_INTERNAL_PORT}"
+
+if curl -fsS "http://localhost:${PROBE_PORT}/v1/models" >/dev/null 2>&1; then
   if [ -z "${FORCE_RESTART}" ]; then
     emit_event early_exit_already_running ""
-    echo "vLLM already responding on :${VLLM_PORT} — bootstrap is a no-op."
+    echo "vLLM already responding on :${PROBE_PORT} — bootstrap is a no-op."
     echo "(Pass --restart to vast-bootstrap to force a re-launch with new flags.)"
-    curl -s "http://localhost:${VLLM_PORT}/v1/models" | head -c 400
+    curl -s "http://localhost:${PROBE_PORT}/v1/models" | head -c 400
     echo
     start_monitor_if_needed
+    start_logging_proxy_if_needed
     exit 0
   fi
   emit_event force_restart ""
   echo "FORCE_RESTART set — stopping running vLLM to re-launch with new flags ..."
   pkill -f 'vllm serve' 2>/dev/null || true
   pkill -9 -f 'VLLM::EngineCore' 2>/dev/null || true
+  pkill -f 'vllm-logging-proxy.py' 2>/dev/null || true
+  rm -f /workspace/proxy.pid
   for _ in $(seq 1 30); do
-    curl -fsS "http://localhost:${VLLM_PORT}/v1/models" >/dev/null 2>&1 || break
+    curl -fsS "http://localhost:${PROBE_PORT}/v1/models" >/dev/null 2>&1 || break
     sleep 1
   done
 fi
@@ -515,9 +816,20 @@ fi
 # Build ARGS such that anything the caller put in EXTRA_ARGS wins. Each base
 # flag is suppressed if EXTRA_ARGS already names it, avoiding duplicate-flag
 # crashes / undefined-precedence behavior in vllm's CLI parser.
+#
+# When LOGGING_PROXY=1, vllm binds privately to 127.0.0.1:${VLLM_INTERNAL_PORT}
+# and the Python proxy on ${VLLM_PORT} is the only externally-reachable
+# listener. Otherwise vllm exposes ${VLLM_PORT} directly (legacy behavior).
+if [ "$LOGGING_PROXY" = "1" ]; then
+  VLLM_BIND_HOST=127.0.0.1
+  VLLM_BIND_PORT="${VLLM_INTERNAL_PORT}"
+else
+  VLLM_BIND_HOST=0.0.0.0
+  VLLM_BIND_PORT="${VLLM_PORT}"
+fi
 ARGS=(serve "${MODEL}")
-has_extra_flag --host                       || ARGS+=(--host 0.0.0.0)
-has_extra_flag --port                       || ARGS+=(--port "${VLLM_PORT}")
+has_extra_flag --host                       || ARGS+=(--host "${VLLM_BIND_HOST}")
+has_extra_flag --port                       || ARGS+=(--port "${VLLM_BIND_PORT}")
 has_extra_flag --trust-remote-code          || ARGS+=(--trust-remote-code)
 has_extra_flag --max-model-len              || ARGS+=(--max-model-len "${MAX_LEN}")
 has_extra_flag --gpu-memory-utilization     || ARGS+=(--gpu-memory-utilization "${MEM_UTIL}")
@@ -557,6 +869,8 @@ if [ -n "$DUP_FLAGS" ]; then
 fi
 
 pkill -f 'vllm serve' 2>/dev/null || true
+pkill -f 'vllm-logging-proxy.py' 2>/dev/null || true
+rm -f /workspace/proxy.pid
 sleep 1
 
 echo "Launching: vllm ${ARGS[*]}"
@@ -577,18 +891,22 @@ echo "${VLLM_PID}" >/workspace/vllm.pid
 # the interesting window — weights load, torch.compile, warmup. Idempotent via
 # pidfile, so no-op on --restart.
 start_monitor_if_needed
+# Start the logging proxy alongside vllm so external clients hitting :${VLLM_PORT}
+# get a clean 502 (not connection-refused) during warmup, and so the very first
+# successful request lands in queries.jsonl. No-op when LOGGING_PROXY=0.
+start_logging_proxy_if_needed
 
-echo "Waiting for /v1/models on :${VLLM_PORT} (cold-cold start ~30 min; up to 40 min ceiling) ..."
+echo "Waiting for /v1/models on :${VLLM_BIND_PORT} (cold-cold start ~30 min; up to 40 min ceiling) ..."
 # 480 × 5s = 40 min ceiling. Cold-cold first launch on a fresh rental is
 # ~27-30 min in practice (8 min HF download + 9 min weights load + 2 min
 # torch.compile + 5 min profiling/warmup + 3 min DeepGEMM warmup + 4 min
 # flashinfer autotune + 10 s graph capture). 20 min was the old cap and
 # false-failed regularly on cold images.
 for _ in $(seq 1 480); do
-  if curl -fsS "http://localhost:${VLLM_PORT}/v1/models" >/dev/null 2>&1; then
+  if curl -fsS "http://localhost:${VLLM_BIND_PORT}/v1/models" >/dev/null 2>&1; then
     echo "vLLM is ready."
     emit_event vllm_ready ""
-    curl -s "http://localhost:${VLLM_PORT}/v1/models" | head -c 400
+    curl -s "http://localhost:${VLLM_BIND_PORT}/v1/models" | head -c 400
     echo
     exit 0
   fi

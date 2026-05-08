@@ -622,7 +622,7 @@
           -o UserKnownHostsFile=/dev/null \
           -o LogLevel=ERROR \
           $VAST_SSH_USER@$VAST_HOST \
-          "MODEL='$VAST_MODEL' SERVED='$VAST_SERVED_MODEL_NAME' VLLM_PORT='$VAST_VLLM_PORT' MAX_LEN='$VAST_MAX_MODEL_LEN' MEM_UTIL='$VAST_GPU_MEM_UTIL' MAX_NUM_SEQS='$VAST_MAX_NUM_SEQS' HF_TOKEN='$VAST_HF_TOKEN' TOOL_PARSER='$VAST_TOOL_CALL_PARSER' REASONING_PARSER='$VAST_REASONING_PARSER' EXTRA_ARGS='$VAST_EXTRA_ARGS' TENSOR_PARALLEL='$VAST_TENSOR_PARALLEL' FORCE_RESTART='$force_restart' bash -s" < /home/john/dotfiles/.config/vast-bootstrap.bash
+          "MODEL='$VAST_MODEL' SERVED='$VAST_SERVED_MODEL_NAME' VLLM_PORT='$VAST_VLLM_PORT' MAX_LEN='$VAST_MAX_MODEL_LEN' MEM_UTIL='$VAST_GPU_MEM_UTIL' MAX_NUM_SEQS='$VAST_MAX_NUM_SEQS' HF_TOKEN='$VAST_HF_TOKEN' TOOL_PARSER='$VAST_TOOL_CALL_PARSER' REASONING_PARSER='$VAST_REASONING_PARSER' EXTRA_ARGS='$VAST_EXTRA_ARGS' TENSOR_PARALLEL='$VAST_TENSOR_PARALLEL' LOGGING_PROXY='$VAST_LOGGING_PROXY' FORCE_RESTART='$force_restart' bash -s" < /home/john/dotfiles/.config/vast-bootstrap.bash
       set -l rc $status
       env-cleanup $_pre_vars
       return $rc
@@ -827,62 +827,62 @@
     vast-logs.description = "Tail the remote vLLM log (vast-logs [--id INSTANCE_ID] [N=200] [--no-fzf]; with ≥2 running instances opens an fzf picker unless --no-fzf or fzf is missing).";
 
     vast-metrics.body = ''
-      # Check the per-rental metrics monitor (started by vast-bootstrap).
-      # Shows monitor status, sample count, avg/peak GPU util, latest rows.
-      # vast-destroy fetches the full /workspace/metrics/ at teardown; this
-      # is the live-view counterpart.
-      set -l _pre_vars (set --names -x)
-      if not _vast-load
-        env-cleanup $_pre_vars
-        return 1
-      end
-      set -l instance_id ""
-      set -l no_fzf ""
-      for arg in $argv
-        switch $arg
-          case --no-fzf
-            set no_fzf 1
-          case -h --help
-            echo "Usage: vast-metrics [--no-fzf] [INSTANCE_ID]" >&2
-            env-cleanup $_pre_vars
-            return 0
-          case '*'
-            set instance_id $arg
-        end
-      end
-      if not _vast-resolve-instance $instance_id running $no_fzf
-        env-cleanup $_pre_vars
-        return 1
-      end
+            # Check the per-rental metrics monitor (started by vast-bootstrap).
+            # Shows monitor status, sample count, avg/peak GPU util, latest rows.
+            # vast-destroy fetches the full /workspace/metrics/ at teardown; this
+            # is the live-view counterpart.
+            set -l _pre_vars (set --names -x)
+            if not _vast-load
+              env-cleanup $_pre_vars
+              return 1
+            end
+            set -l instance_id ""
+            set -l no_fzf ""
+            for arg in $argv
+              switch $arg
+                case --no-fzf
+                  set no_fzf 1
+                case -h --help
+                  echo "Usage: vast-metrics [--no-fzf] [INSTANCE_ID]" >&2
+                  env-cleanup $_pre_vars
+                  return 0
+                case '*'
+                  set instance_id $arg
+              end
+            end
+            if not _vast-resolve-instance $instance_id running $no_fzf
+              env-cleanup $_pre_vars
+              return 1
+            end
 
-      ssh -i $VAST_SSH_KEY \
-          -p $VAST_SSH_PORT \
-          -o StrictHostKeyChecking=no \
-          -o UserKnownHostsFile=/dev/null \
-          -o LogLevel=ERROR \
-          $VAST_SSH_USER@$VAST_HOST \
-          'set -u
-echo "=== monitor ==="
-if [ -f /workspace/metrics/monitor.pid ] && kill -0 "$(cat /workspace/metrics/monitor.pid)" 2>/dev/null; then
-  echo "  running (pid $(cat /workspace/metrics/monitor.pid))"
-else
-  echo "  NOT RUNNING — run vast-bootstrap to start it"
-fi
-echo "=== files ==="
-ls -la /workspace/metrics/ 2>/dev/null || echo "  (none yet)"
-echo "=== gpu.csv summary ==="
-if [ -s /workspace/metrics/gpu.csv ]; then
-  awk -F, '"'"'NR>1 {n++; ng[$2]=1; s+=$3+0; if($3+0>p) p=$3+0; if(t0=="") t0=$1; t1=$1} END {ngc=0; for(k in ng) ngc++; if(n>0) printf "  %d samples × %d GPU(s)\n  span: %s →%s\n  avg util: %.1f%%, peak %.0f%%\n", n/ngc, ngc, t0, t1, s/n, p}'"'"' /workspace/metrics/gpu.csv
-  echo "=== latest rows ==="
-  tail -n 5 /workspace/metrics/gpu.csv
-else
-  echo "  (no gpu.csv yet)"
-fi
-echo "=== vllm.prom size ==="
-ls -lh /workspace/metrics/vllm.prom 2>/dev/null || echo "  (none)"'
-      set -l rc $status
-      env-cleanup $_pre_vars
-      return $rc
+            ssh -i $VAST_SSH_KEY \
+                -p $VAST_SSH_PORT \
+                -o StrictHostKeyChecking=no \
+                -o UserKnownHostsFile=/dev/null \
+                -o LogLevel=ERROR \
+                $VAST_SSH_USER@$VAST_HOST \
+                'set -u
+      echo "=== monitor ==="
+      if [ -f /workspace/metrics/monitor.pid ] && kill -0 "$(cat /workspace/metrics/monitor.pid)" 2>/dev/null; then
+        echo "  running (pid $(cat /workspace/metrics/monitor.pid))"
+      else
+        echo "  NOT RUNNING — run vast-bootstrap to start it"
+      fi
+      echo "=== files ==="
+      ls -la /workspace/metrics/ 2>/dev/null || echo "  (none yet)"
+      echo "=== gpu.csv summary ==="
+      if [ -s /workspace/metrics/gpu.csv ]; then
+        awk -F, '"'"'NR>1 {n++; ng[$2]=1; s+=$3+0; if($3+0>p) p=$3+0; if(t0=="") t0=$1; t1=$1} END {ngc=0; for(k in ng) ngc++; if(n>0) printf "  %d samples × %d GPU(s)\n  span: %s →%s\n  avg util: %.1f%%, peak %.0f%%\n", n/ngc, ngc, t0, t1, s/n, p}'"'"' /workspace/metrics/gpu.csv
+        echo "=== latest rows ==="
+        tail -n 5 /workspace/metrics/gpu.csv
+      else
+        echo "  (no gpu.csv yet)"
+      fi
+      echo "=== vllm.prom size ==="
+      ls -lh /workspace/metrics/vllm.prom 2>/dev/null || echo "  (none)"'
+            set -l rc $status
+            env-cleanup $_pre_vars
+            return $rc
     '';
     vast-metrics.description = "Show live GPU+vLLM metrics state on the rental (vast-metrics [INSTANCE_ID] [--no-fzf]; monitor status, sample count, avg/peak util, latest samples).";
     vast-fetch-metrics.body = ''

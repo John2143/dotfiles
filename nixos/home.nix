@@ -134,6 +134,7 @@
     protonup-qt
 
     openrct2
+    #hyprcap # video screenshot tool for hyprland
 
     #nvtop # unfree
   ];

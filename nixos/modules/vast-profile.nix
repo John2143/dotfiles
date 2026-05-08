@@ -1,4 +1,5 @@
-{...}: {
+{ ... }:
+{
   home.file = {
     ".config/vast/profile.example".text = ''
       # ---------- Identifies which rental the helpers target ----------
@@ -57,6 +58,15 @@
       # Tensor parallelism: auto-detected from GPU count (2x GPU → 2).
       # Override here to force a specific value or disable (set to 1).
       # VAST_TENSOR_PARALLEL=1
+
+      # Logging proxy: when 1 (default), a tiny Python reverse proxy sits
+      # in front of vLLM and appends every OpenAI-style request + response
+      # to /workspace/metrics/queries.jsonl. vLLM binds privately to
+      # 127.0.0.1:18000; the proxy listens on $VAST_VLLM_PORT and forwards
+      # transparently — clients are unchanged. queries.jsonl rides back
+      # automatically with vast-fetch-metrics / vast-destroy. Set to 0 to
+      # disable and bind vLLM directly on $VAST_VLLM_PORT (legacy mode).
+      # VAST_LOGGING_PROXY=0
 
       # ---------- Manual host override (skip API discovery) ----------
       # By default, vast-bootstrap/vast-tunnel/vast-logs query the API and
