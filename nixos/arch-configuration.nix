@@ -220,18 +220,27 @@ in
     keyboards.macropad = {
       ids = ["20a0:422d"];
       settings.main = {
-        esc = "f13";
-        q = "f14";
-        w = "f15";
-        e = "A-f24";
-        r = "f17";
-        t = "f18";
-        a = "f19";
-        s = "f20";
-        d = "f21";
-        f = "f22";
-        y = "f24";
-        g = "f23";
+        # Binary modifier encoding: 3 base F-keys (F20, F21, F22) × 8 combos = 24 signals.
+        # Modifier bits: shift=bit0, ctrl=bit1. ALT combos (bit2) reserved for future.
+        #
+        # Base F20 — top row (q w e r):
+        #   000=f20, 001=S-f20, 010=C-f20, 011=C-S-f20
+        q   = "f20";       # 000  → monitors on
+        w   = "S-f20";     # 001  → monitors off
+        e   = "C-f20";     # 010  → light: dresser (superbight-toggle)
+        r   = "C-S-f20";   # 011  → light: window AC (ac-switch-toggle)
+        #
+        # Base F21 — home row (a s d f):
+        a   = "f21";       # 000  → thermostat −1° (thermostat-down)
+        s   = "S-f21";     # 001  → AC toggle (thermostat-toggle)
+        d   = "C-f21";     # 010  → thermostat +1° (thermostat-up)
+        f   = "C-S-f21";   # 011  → thermostat toggle (thermostat-toggle)
+        #
+        # Base F22 — bottom/edge (y g, esc t reserved):
+        y   = "f22";       # 000  → light: lamp (light-toggle)
+        g   = "S-f22";     # 001  → fan toggle (fan-toggle)
+        esc = "C-f22";     # 010  (reserved)
+        t   = "C-S-f22";   # 011  (reserved)
       };
     };
   };
