@@ -25,7 +25,7 @@ let
     }
 
     hass_notify() {
-      notify-send -h "string:x-dunst-stack-tag:hass-$1" "$2" "$3"
+      notify-send -h "string:x-dunst-stack-tag:hass-$1" "$2" "$3" || true
     }
 
     signal_waybar() {
@@ -50,46 +50,48 @@ let
           fi
           hass_post climate/set_temperature \
             "{\"entity_id\":\"climate.john_bedroom\",\"temperature\":$new}"
-          hass_notify thermostat "Thermostat" "Set to ''${new}°"
           signal_waybar
+          hass_notify thermostat "Thermostat" "Set to ''${new}°"
           ;;
         thermostat-toggle)
           state=$(hass_get climate.john_bedroom \
             | jq -r '.state')
           if [ "$state" = "off" ]; then
             hass_post climate/turn_on '{"entity_id":"climate.john_bedroom"}'
+            signal_waybar
             hass_notify thermostat "Thermostat" "Turned on"
           else
             hass_post climate/turn_off '{"entity_id":"climate.john_bedroom"}'
+            signal_waybar
             hass_notify thermostat "Thermostat" "Turned off"
           fi
-          signal_waybar
+
           ;;
         fan-toggle)
           hass_post fan/toggle '{"entity_id":"fan.john_ac_combo_fans"}'
-          hass_notify fan "Fan" "Toggled"
           signal_waybar
+          hass_notify fan "Fan" "Toggled"
           ;;
         plug-toggle)
           hass_post fan/toggle '{"entity_id":"fan.plug_upstairs_desktop_computer_switch"}'
-          hass_notify plug "Plug" "Upstairs desktop computer toggled"
           signal_waybar
+          hass_notify plug "Plug" "Upstairs desktop computer toggled"
           ;;
         light-toggle)
           hass_post light/toggle '{"entity_id":"light.john_bedroom_lamp"}'
-          hass_notify lamp "Lamp" "Toggled"
           signal_waybar
+          hass_notify lamp "Lamp" "Toggled"
           ;;
 
         superbight-toggle)
           hass_post light/toggle '{"entity_id":"light.plug_bedroom_superbright"}'
-          hass_notify superbight "Superbight" "Toggled"
           signal_waybar
+          hass_notify superbight "Superbight" "Toggled"
           ;;
         ac-switch-toggle)
           hass_post light/toggle '{"entity_id":"light.plug_bedroom_ac_and_fan_switch"}'
-          hass_notify ac-switch "AC Switch" "Toggled"
           signal_waybar
+          hass_notify ac-switch "AC Switch" "Toggled"
           ;;
         *)
           echo "Usage: hass-macro {thermostat-down|thermostat-up|thermostat-toggle|fan-toggle|plug-toggle|light-toggle|superbight-toggle|ac-switch-toggle}" >&2
@@ -228,8 +230,8 @@ in
         s = "f20";
         d = "f21";
         f = "f22";
-        y = "f23";
-        g = "f24";
+        y = "f24";
+        g = "f23";
       };
     };
   };

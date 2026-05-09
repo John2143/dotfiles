@@ -78,7 +78,9 @@ Display the revised prompt in your output. Do not write it back to the file unle
 
 ## Mode: Loop Prompt Generation
 
-This mode generates a loop prompt: a self-contained instruction document designed to be run against this repo thousands of times by an autonomous agent, where each invocation does a small, atomic unit of work and then stops. The agent maintains state between runs via files it writes to the repo.
+This mode generates a loop prompt: a self-contained instruction document designed for the `/loop` harness, which calls the same prompt repeatedly with no arguments. Each invocation does a small, atomic unit of work and then stops. The agent maintains state between runs via files it writes to the repo.
+
+**This is distinct from a multi-session skill** (user-invoked, user controls timing). A loop prompt must include a gap-evaluation step at the start of every session to decide whether work exists — if not, it must sleep rather than invent work. A multi-session skill assumes the user only invokes it when work is needed.
 
 ### Step 1 — Explore the repo
 
