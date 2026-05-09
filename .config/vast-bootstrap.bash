@@ -161,7 +161,7 @@ fi
 # interface) — could change in a future vLLM release. If it stops matching,
 # the supervisorctl stop + pkill -f 'vllm serve' above already cover the main
 # teardown; this is speculative cleanup.
-pkill -9 -f 'VLLM::EngineCore' 2>/dev/null || true
+pkill -f 'vllm' 2>/dev/null || true
 
 # True iff EXTRA_ARGS already contains the named flag (whole-word, so
 # --tool-call-parser doesn't match --tool-call-parser-foo). Used to suppress
@@ -648,8 +648,7 @@ if curl -fsS "http://localhost:${PROBE_PORT}/v1/models" >/dev/null 2>&1; then
   fi
   emit_event force_restart ""
   echo "FORCE_RESTART set — stopping running vLLM to re-launch with new flags ..."
-  pkill -f 'vllm serve' 2>/dev/null || true
-  pkill -9 -f 'VLLM::EngineCore' 2>/dev/null || true
+  pkill -f 'vllm' 2>/dev/null || true
   pkill -f 'vllm-logging-proxy.py' 2>/dev/null || true
   rm -f /workspace/proxy.pid
   for _ in $(seq 1 30); do
@@ -871,7 +870,7 @@ fi
 pkill -f 'vllm serve' 2>/dev/null || true
 pkill -f 'vllm-logging-proxy.py' 2>/dev/null || true
 rm -f /workspace/proxy.pid
-sleep 1
+sleep 3
 
 echo "Launching: vllm ${ARGS[*]}"
 echo "=== vllm launch args: ${ARGS[*]}" >> /workspace/vllm.log
