@@ -1,18 +1,22 @@
 // Approval hook for risky tool calls.
 //
 // Uses OMP's configured smol model (from ~/.omp/agent/config.yml modelRoles.smol)
-// via completeSimple from @oh-my-pi/pi-ai. OMP handles provider selection,
-// API key resolution, retry, and the configured fallback chain automatically.
+// via raw fetch to the OpenAI-compatible /chat/completions endpoint. The model's
+// baseUrl and API key are resolved through ctx.modelRegistry.
 //
-// If the smol model is unreachable after OMP retries, blocks by default (fail-closed).
+// If the smol model is unreachable, blocks by default (fail-closed).
 //
 // The LLM returns a JSON verdict { safe: boolean, reason: string }.
 // Safe commands pass through; unsafe ones trigger an interactive confirm dialog.
+//
+// json_schema is the safe default that works everywhere (OpenAI, DeepSeek,
+// vLLM, ollama ≥0.6). We also keep a text-parsing fallback for providers
+// that ignore responseFormat.
 
-import { completeSimple } from "@oh-my-pi/pi-ai";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as os from "node:os";
+
 const CLASSIFY_PROMPT = `You are a safety classifier for CLI commands in a NixOS dotfiles repo. Determine if the proposed command is safe to execute automatically (safe) or requires user confirmation (unsafe).
 
 Respond ONLY with a JSON object: { "safe": boolean, "reason": "brief explanation" }
@@ -39,7 +43,26 @@ UNSAFE (requires user confirmation):
 
 The user runs commands in a NixOS environment with home-manager. Commands touching /nix/store are sensitive. Commands inside /tmp or that just print/output are safe.`;
 
-// Timeout for the classification call (ms). OMP's own retry runs within this window.
+// json_schema is the safe default that works everywhere (OpenAI, DeepSeek,
+// vLLM, ollama ≥0.6). vLLM with the Outlines backend rejects
+// { type: "json_object" } — sending the schemaless form crashes EngineCore.
+const VERDICT_SCHEMA = {
+  name: "verdict",
+  strict: true,
+  schema: {
+    type: "object",
+    additionalProperties: false,
+    required: ["safe", "reason"],
+    properties: {
+      safe: { type: "boolean" },
+      reason: { type: "string" },
+    },
+  },
+};
+
+const RESPONSE_FORMAT = { type: "json_schema", json_schema: VERDICT_SCHEMA };
+
+// Timeout for the classification call (ms).
 const CLASSIFY_TIMEOUT_MS = 10000;
 
 function readSmolModelSpec(): string | null {
@@ -48,6 +71,22 @@ function readSmolModelSpec(): string | null {
     const raw = fs.readFileSync(cfg, "utf-8");
     const m = raw.match(/^\s*smol:\s*(.+)$/m);
     return m ? m[1].trim() : null;
+  } catch {
+    return null;
+  }
+}
+
+function parseVerdictText(text: string): { safe: boolean; reason: string } | null {
+  if (!text) return null;
+
+  // Strip markdown code fences if present (fallback for providers that
+  // ignore responseFormat)
+  text = text.replace(/^```(?:json)?\s*\n?/i, "").replace(/\n?```\s*$/i, "");
+
+  try {
+    const parsed = JSON.parse(text);
+    if (typeof parsed?.safe !== "boolean") return null;
+    return { safe: parsed.safe, reason: String(parsed.reason ?? "") };
   } catch {
     return null;
   }
@@ -65,40 +104,40 @@ async function classifyCommand(cmd, modelRegistry) {
   const model = modelRegistry.find(provider, modelId);
   if (!model) return null;
 
+  const apiKey = await modelRegistry.getApiKey(model);
+  if (!apiKey) return null;
+
   try {
     const ac = new AbortController();
     const timer = setTimeout(() => ac.abort(), CLASSIFY_TIMEOUT_MS);
 
-    const result = await completeSimple(
-      model,
-      {
-        systemPrompt: [CLASSIFY_PROMPT],
-        messages: [{ role: "user", content: `Evaluate this command: ${cmd}` }],
+    const url = `${model.baseUrl}/chat/completions`;
+    const response = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${apiKey}`,
       },
-      {
+      body: JSON.stringify({
+        model: model.id,
+        messages: [
+          { role: "system", content: CLASSIFY_PROMPT },
+          { role: "user", content: `Evaluate this command: ${cmd}` },
+        ],
         temperature: 0.1,
-        maxTokens: 256,
-        signal: ac.signal,
-        disableReasoning: true,
-      },
-    );
+        max_tokens: 256,
+        response_format: RESPONSE_FORMAT,
+      }),
+      signal: ac.signal,
+    });
 
     clearTimeout(timer);
 
-    // AssistantMessage.content is (TextContent | ThinkingContent | ToolCall)[]
-    let text = result.content
-      .filter((b) => b.type === "text" && b.text)
-      .map((b) => b.text)
-      .join("");
+    if (!response.ok) return null;
 
-    if (!text) return null;
-
-    // Strip markdown code fences if present
-    text = text.replace(/^```(?:json)?\s*\n?/i, "").replace(/\n?```\s*$/i, "");
-
-    const parsed = JSON.parse(text);
-    if (typeof parsed?.safe !== "boolean") return null;
-    return { safe: parsed.safe, reason: String(parsed.reason ?? "") };
+    const data = await response.json();
+    const contentText = data.choices?.[0]?.message?.content;
+    return parseVerdictText(contentText);
   } catch {
     return null;
   }
@@ -117,7 +156,7 @@ export default function (pi) {
     const verdict = await classifyCommand(cmd, ctx.modelRegistry);
 
     if (!verdict) {
-      // Smol model unreachable after OMP retries — block by default (fail-closed)
+      // Smol model unreachable — block by default (fail-closed)
       ctx.ui.notify("Safety classifier unreachable — command blocked", "error");
       return { block: true, reason: "Command blocked: unable to reach safety classifier (smol model unreachable)" };
     }

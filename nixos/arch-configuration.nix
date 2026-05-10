@@ -25,7 +25,7 @@ let
     }
 
     hass_notify() {
-      notify-send -h "string:x-dunst-stack-tag:hass-$1" "$2" "$3"
+      notify-send -h "string:x-dunst-stack-tag:hass-$1" "$2" "$3" || true
     }
 
     signal_waybar() {
@@ -50,46 +50,48 @@ let
           fi
           hass_post climate/set_temperature \
             "{\"entity_id\":\"climate.john_bedroom\",\"temperature\":$new}"
-          hass_notify thermostat "Thermostat" "Set to ''${new}°"
           signal_waybar
+          hass_notify thermostat "Thermostat" "Set to ''${new}°"
           ;;
         thermostat-toggle)
           state=$(hass_get climate.john_bedroom \
             | jq -r '.state')
           if [ "$state" = "off" ]; then
             hass_post climate/turn_on '{"entity_id":"climate.john_bedroom"}'
+            signal_waybar
             hass_notify thermostat "Thermostat" "Turned on"
           else
             hass_post climate/turn_off '{"entity_id":"climate.john_bedroom"}'
+            signal_waybar
             hass_notify thermostat "Thermostat" "Turned off"
           fi
-          signal_waybar
+
           ;;
         fan-toggle)
           hass_post fan/toggle '{"entity_id":"fan.john_ac_combo_fans"}'
-          hass_notify fan "Fan" "Toggled"
           signal_waybar
+          hass_notify fan "Fan" "Toggled"
           ;;
         plug-toggle)
           hass_post fan/toggle '{"entity_id":"fan.plug_upstairs_desktop_computer_switch"}'
-          hass_notify plug "Plug" "Upstairs desktop computer toggled"
           signal_waybar
+          hass_notify plug "Plug" "Upstairs desktop computer toggled"
           ;;
         light-toggle)
           hass_post light/toggle '{"entity_id":"light.john_bedroom_lamp"}'
-          hass_notify lamp "Lamp" "Toggled"
           signal_waybar
+          hass_notify lamp "Lamp" "Toggled"
           ;;
 
         superbight-toggle)
           hass_post light/toggle '{"entity_id":"light.plug_bedroom_superbright"}'
-          hass_notify superbight "Superbight" "Toggled"
           signal_waybar
+          hass_notify superbight "Superbight" "Toggled"
           ;;
         ac-switch-toggle)
           hass_post light/toggle '{"entity_id":"light.plug_bedroom_ac_and_fan_switch"}'
-          hass_notify ac-switch "AC Switch" "Toggled"
           signal_waybar
+          hass_notify ac-switch "AC Switch" "Toggled"
           ;;
         *)
           echo "Usage: hass-macro {thermostat-down|thermostat-up|thermostat-toggle|fan-toggle|plug-toggle|light-toggle|superbight-toggle|ac-switch-toggle}" >&2
@@ -218,18 +220,27 @@ in
     keyboards.macropad = {
       ids = ["20a0:422d"];
       settings.main = {
-        esc = "f13";
-        q = "f14";
-        w = "f15";
-        e = "A-f24";
-        r = "f17";
-        t = "f18";
-        a = "f19";
-        s = "f20";
-        d = "f21";
-        f = "f22";
-        y = "f23";
-        g = "f24";
+        # Binary modifier encoding: 3 base F-keys (F20, F21, F22) × 8 combos = 24 signals.
+        # Modifier bits: shift=bit0, ctrl=bit1. ALT combos (bit2) reserved for future.
+        #
+        # Base F20 — top row (q w e r):
+        #   000=f20, 001=S-f20, 010=C-f20, 011=C-S-f20
+        q   = "f20";       # 000  → monitors on
+        w   = "S-f20";     # 001  → monitors off
+        e   = "C-f20";     # 010  → light: dresser (superbight-toggle)
+        r   = "C-S-f20";   # 011  → light: window AC (ac-switch-toggle)
+        #
+        # Base F21 — home row (a s d f):
+        a   = "f21";       # 000  → thermostat −1° (thermostat-down)
+        s   = "S-f21";     # 001  → AC toggle (thermostat-toggle)
+        d   = "C-f21";     # 010  → thermostat +1° (thermostat-up)
+        f   = "C-S-f21";   # 011  → thermostat toggle (thermostat-toggle)
+        #
+        # Base F22 — bottom/edge (y g, esc t reserved):
+        y   = "f22";       # 000  → light: lamp (light-toggle)
+        g   = "S-f22";     # 001  → fan toggle (fan-toggle)
+        esc = "C-f22";     # 010  (reserved)
+        t   = "C-S-f22";   # 011  (reserved)
       };
     };
   };

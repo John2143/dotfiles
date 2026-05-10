@@ -28,8 +28,8 @@ Your job is to produce a complete skill document (SKILL.md) under `.claude/skill
 Ask clarifying questions to narrow scope. The user may have given only a one-line idea. Probe the following dimensions (skip any the user already answered):
 
 1. **Input / invocation** — How will this skill be invoked? What arguments does it take? (e.g., `[path] [--focus correctness]`, `[symptom]`, `[scope]`)
-2. **Output / deliverable** — What does the skill produce? A file? A report in chat? A side-effect like a commit? A loop prompt that writes state files?
-3. **Loop vs one-shot** — Does this skill run once (one-shot) and produce a result, or does it run in a loop (each invocation does a small unit of work, maintaining state between runs)?
+2. **Output / deliverable** — What does the skill produce? A file? A report in chat? A side-effect like a commit? State files that persist between user invocations?
+3. **Invocation pattern** — Is this a one-shot skill (run once, produce a result, done), a multi-session skill (user invokes it several times; each invocation does one unit of work, state persists in files), or a loop prompt (designed for the `/loop` harness, which calls the same prompt repeatedly with no arguments; must decide whether to sleep or work on each call)?
 4. **Allowed tools** — What tools does this skill need? (Review existing skills for common patterns: Read, Search, Find, Write, Edit, LSP, Bash, Debug, AstGrep)
 5. **Constraints** — What should the agent not do? Delete files? Modify production configs? Run destructive commands?
 6. **Target repo/context** — What codebase or environment does this skill operate in? Is it generic or repo-specific?
@@ -63,19 +63,25 @@ Parse `$ARGUMENTS`:       # Argument extraction rules
 
 For **one-shot skills**, the body contains sequential steps or phases in one or more modes.
 
-For **loop skills**, the body must contain exactly these sections:
-1. **One-line purpose**
-2. **Key files** — state file layout
-3. **How to start each session** — with a gap-evaluation checklist
-4. **How to work** — execution rules, one category per session
-5. **Constraints** — may/may-not rules
-6. **TLDR** — 2-3 sentence summary with "stop" instruction
+For **multi-session skills** (user invokes the skill several times; each invocation does one unit of work with state in files), the body should include:
+1. **Key files** — state file layout (what files track progress between sessions)
+2. **How to start each session** — read state, determine what to do next
+3. **How to work** — execution categories, one per session
+4. **Constraints** — may/may-not rules
+5. **TLDR** — 2-3 sentence summary with "stop" instruction
+
+For **loop prompts** (designed for the `/loop` harness, which calls the same prompt repeatedly with no arguments), the body must additionally include:
+- A **gap-evaluation checklist** in "How to start each session" — the agent must decide whether there is work to do before acting. If no work exists, it must sleep rather than invent work.
+- "Do not ask questions" in constraints (the agent runs unattended).
+- See `.claude/skills/prompt-engineer/SKILL.md` Mode: Loop Prompt Generation for the full template.
 
 Present the proposed design to the user as a structured outline. Ask for confirmation before proceeding.
 
 ### Phase 3 — Research
 
-Before writing, research the following using your tools:
+First, write the current skill draft — based on the Phase 2 design and all clarifications so far — to a temporary file: `.claude/skills/<skill-name>/SKILL.draft.md`. This serves as a persistent reference throughout the remaining phases. Use `write` to create it.
+
+Then research the following using your tools:
 
 - Read 2-3 existing skills from `.claude/skills/*/SKILL.md` to match conventions, argument patterns, and frontmatter style.
 - If the skill targets a specific tool or runtime (e.g., `nix`, `docker`, `kubectl`), check whether it's available in the environment.
@@ -106,7 +112,7 @@ After writing, present a brief **checklist** to the user:
 
 If the user passed `--refine`, run the prompt-engineer refinement automatically. Otherwise, offer to run it:
 
-- For one-shot skills: `/skill:prompt-engineer .claude/skills/<skill-name>/SKILL.md`
-- For loop skills: `/skill:prompt-engineer loop .claude/skills/<skill-name>/SKILL.md`
+- For one-shot and multi-session skills: `/skill:prompt-engineer .claude/skills/<skill-name>/SKILL.md`
+- For loop prompts (for `/loop` harness): `/skill:prompt-engineer loop .claude/skills/<skill-name>/SKILL.md`
 
 If the user accepts, follow the prompt-engineer skill instructions and apply the revised prompt back to the file.

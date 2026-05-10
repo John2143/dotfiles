@@ -10,6 +10,7 @@
   primaryPackages = with pkgs; [
     # fonts
     # https://github.com/NixOS/nixpkgs/blob/master/pkgs/data/fonts/nerdfonts/shas.nix
+    playerctl
     nerd-fonts.jetbrains-mono # font
     nerd-fonts.roboto-mono # font also, "FiraCode" "DejaVuSansMono" "FiraMono"
 
