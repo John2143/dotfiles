@@ -114,12 +114,21 @@
       "--service-cidr=10.43.0.0/16,fd42:42:43::/112"
       # Dual-stack nodes must use explicit IPv4+IPv6 addresses
       "--node-ip=192.168.5.35,2600:4040:2602:f801::35"
-      # Required for IPv6 pod egress when using flannel
-      "--flannel-ipv6-masq"
       # Keep standard per-node subnet sizing across families
       "--kube-controller-manager-arg=node-cidr-mask-size-ipv4=24"
       "--kube-controller-manager-arg=node-cidr-mask-size-ipv6=64"
+      # Cilium replaces flannel CNI, the k3s netpol controller, and kube-proxy.
+      "--flannel-backend=none"
+      "--disable-network-policy"
+      "--disable-kube-proxy"
+      # klipper-lb conflicts with Cilium kpr's service routing.
+      "--disable=servicelb"
+      # Phase 1.5 will add: "--disable=traefik"
     ];
+
+    # Traefik HelmChartConfig stays in Phase 1; removed at Phase 1.5 alongside
+    # --disable=traefik (the underlying chart is shipped by k3s itself, so the
+    # override block alone won't stop k3s from reinstalling Traefik).
     manifests.traefik-config.content = {
       apiVersion = "helm.cattle.io/v1";
       kind = "HelmChartConfig";
@@ -133,6 +142,58 @@
             enabled: true
             experimentalChannel: true
       '';
+    };
+
+    # Cilium installed via helm-controller — same pattern as Traefik. Bootstraps
+    # before ArgoCD so Argo never sees an inconsistent CNI state.
+    manifests.cilium.content = {
+      apiVersion = "helm.cattle.io/v1";
+      kind = "HelmChart";
+      metadata = {
+        name = "cilium";
+        namespace = "kube-system";
+      };
+      spec = {
+        chart = "cilium";
+        repo = "https://helm.cilium.io/";
+        version = "1.16.5";
+        targetNamespace = "kube-system";
+        valuesContent = ''
+          ipv4:
+            enabled: true
+          ipv6:
+            enabled: true
+          ipam:
+            mode: kubernetes
+          routingMode: tunnel
+          tunnelProtocol: vxlan
+          enableIPv4Masquerade: true
+          enableIPv6Masquerade: true
+          bpf:
+            masquerade: true
+          kubeProxyReplacement: true
+          k8sServiceHost: 192.168.5.35
+          k8sServicePort: 6443
+          operator:
+            replicas: 1
+          cni:
+            exclusive: true
+          hubble:
+            enabled: true
+            relay:
+              enabled: true
+            ui:
+              enabled: true
+          # Phase 1.5 — uncomment to enable Cilium Gateway API:
+          # gatewayAPI:
+          #   enabled: true
+          # Phase 1.7 — uncomment to enable transparent encryption:
+          # encryption:
+          #   enabled: true
+          #   type: wireguard
+          #   nodeEncryption: true
+        '';
+      };
     };
   };
 
