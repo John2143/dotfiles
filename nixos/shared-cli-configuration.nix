@@ -63,7 +63,22 @@
       # read /run/agenix/*, ~/.ssh, or the dotfiles secrets directory.
       # omp is a status display tool that doesn't need broad filesystem access.
       (let
-        omp-unwrapped = inputs.llm-agents.packages.${pkgs.stdenv.hostPlatform.system}.omp;
+        omp-src = pkgs.fetchFromGitHub {
+          owner = "John2143";
+          repo = "oh-my-pi";
+          rev = "322efaa7a83acedcfd0e0232b39adb59e4e21510";
+          hash = "sha256-MXr2qxb45UDuxckLxDK+diR6h0K/0iAzULlmWv5yWzI=";
+        };
+        omp-unwrapped = (inputs.llm-agents.packages.${pkgs.stdenv.hostPlatform.system}.omp.overrideAttrs (old: {
+          version = "14.9.1-fix1";
+          src = omp-src;
+          cargoDeps = pkgs.rustPlatform.fetchCargoVendor {
+            name = "omp-14.9.1-fix1-cargo-vendor";
+            src = omp-src;
+            hash = "sha256-qe6yF/oSF3yjsptzdlZFaTapKIQMZrja7ocLIf9ECys=";
+          };
+          cargoHash = "sha256-qe6yF/oSF3yjsptzdlZFaTapKIQMZrja7ocLIf9ECys=";
+        }));
       in
         pkgs.writeShellScriptBin "omp" ''
           if [ -f /run/agenix/llm-runtime-keys ]; then

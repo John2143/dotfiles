@@ -22,6 +22,7 @@ in {
     ./modules/vast-fish-functions.nix
     ./modules/omp-config.nix
     ./modules/vast-profile.nix
+    ./modules/language-servers.nix
   ];
 
   _module.args.pkgs-stable = import inputs.nixpkgs-stable {
