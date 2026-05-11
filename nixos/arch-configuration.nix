@@ -236,22 +236,20 @@ in
         #  │ z │ x │ c │ b │ent│   │
         #  └───┴───┴───┴───┴───┴───┘
 
-        # Requires `fkeys:basic_13-24` in hyprland kb_options (evdev defaults
-        # F13-F23 to XF86 keysyms like XF86Launch9, XF86AudioMicMute, etc.).
-        # Each target keycode can be combined with any subset of {Shift, Meta,
-        # Control, Alt, AltGr}, giving 2^6 = 64 possible binds per physical key.
-        esc = "f18";     # (reserved)
-        q   = "f19";    # monitors on
-        w   = "f20";    # monitors off
-        e   = "f21";    # light: dresser (light-dresser)
-        r   = "f22";    # light: window AC (light-ac)
-        y   = "f23";    # light: lamp (light-lamp)
-        a   = "f24";    # thermostat −1° (thermostat-down)
-        s   = "A-M-S-f18"; # AC toggle (ac-toggle) [TEST: 3-mod]
-        d   = "C-A-S-f19"; # thermostat +1° (thermostat-up) [TEST: 3-mod]
-        f   = "A-f20";  # thermostat toggle (thermostat-toggle)
-        g   = "A-f21";  # fan toggle (fan-toggle)
-        "5" = "XF86Launch8"; # light: bedroom overhead (light-bedroom)
+        # F18-F20 only: 3 keys × {-,C,A,M,CA,CM,AM,CAM} = 8 combos each.
+        # Shift deliberately unused — reserved as a future layer modifier.
+        # Requires `fkeys:basic_13-24` in hyprland kb_options.
+        q   = "f20";      # monitors on
+        w   = "C-f20";    # monitors off
+        e   = "C-f18";    # light: dresser (light-dresser)
+        r   = "A-f18";    # light: window AC (light-ac)
+        y   = "f18";      # light: lamp (light-lamp)
+        a   = "C-f19";    # thermostat −1° (thermostat-down)
+        s   = "M-f19";    # AC toggle (ac-toggle)
+        d   = "A-f19";    # thermostat +1° (thermostat-up)
+        f   = "f19";      # thermostat toggle (thermostat-toggle)
+        g   = "C-A-f19";  # fan toggle (fan-toggle)
+        "5" = "M-f18";    # light: bedroom overhead (light-bedroom)
     };
   };
   }; # close services.keyd

@@ -433,3 +433,66 @@ Complete bibliographies in individual research reports. Key primary sources:
 | **99.999% budget** | | | **5.26 min/yr** ✅ |
 
 **Critical risk**: All 6 VPS nodes are on Hetzner. A Hetzner outage takes down everything except the Home Pi DNS and B2. True 5-nines requires 1 multi-provider node (~$15/mo) for compute redundancy during a provider outage.
+
+---
+
+## 10. Final Enterprise Architecture (6-Node Symmetric HA, All-Hetzner)
+
+**Target**: Self-healing per region. HA demo platform. 3 independent k3s clusters.
+
+### Node Layout
+
+| Region | Node | Plan | Monthly |
+|--------|------|------|---------|
+| **Ashburn, VA** | k3s server | CPX31 (8GB / 4 vCPU / 160GB) | $24.99 |
+| | k3s agent (hot standby) | CPX31 (8GB / 4 vCPU / 160GB) | $24.99 |
+| **Hillsboro, OR** | k3s server | CPX31 (8GB / 4 vCPU / 160GB) | $24.99 |
+| | k3s agent (hot standby) | CPX31 (8GB / 4 vCPU / 160GB) | $24.99 |
+| **Nuremberg, DE** | k3s server | CPX32 (8GB / 4 vCPU / 160GB) | ~$15.20 |
+| | k3s agent (hot standby) | CPX32 (8GB / 4 vCPU / 160GB) | ~$15.20 |
+| **Home** | Raspberry Pi | PowerDNS #3, Uptime Kuma, RustFS | $0 + power |
+
+All 6 nodes symmetrically sized. Any node can run the full workload for its region. SeaweedFS uses local SSD (10GB per node, 3-way replication, ~10GB usable hot cache). B2 serves the full corpus. Popular images cached locally.
+
+### Full Stack
+
+| Layer | Component |
+|-------|-----------|
+| OS | NixOS on all nodes |
+| K8s | k3s (3 independent clusters, SQLite per cluster) |
+| CNI | Cilium (eBPF) |
+| Service mesh | Istio (mTLS, retries, circuit breaking) |
+| Ingress | Traefik + CrowdSec + split-IP DDoS |
+| DNS hosting | PowerDNS + MariaDB Galera (3 locations) |
+| DNS failover | k8gb (geoip) + ExternalDNS RFC2136 |
+| CDN overlay | Bunny CDN (GeoIP pull zone) |
+| Object storage | SeaweedFS (3-way replication on local SSD, 10GB hot cache, LUKS2 + encryptVolumeData) |
+| Cold backup | Backblaze B2 (rclone crypt) |
+| Warm backup | Home RustFS (rclone crypt) |
+| PVC storage | Longhorn |
+| MongoDB | Self-hosted, `--enableEncryption`, active-passive |
+| PostgreSQL | CloudNativePG (streaming replica per region) |
+| Temporal | Active-passive, MCR replication |
+| GitOps | ArgoCD (App-of-Apps) |
+| Monitoring | Prometheus + Grafana + Healthchecks.io |
+
+### Cost
+
+| Component | Monthly |
+|-----------|---------|
+| 6× 8GB nodes (Hetzner only) | ~$130.36 |
+| Backblaze B2 | $1.44 |
+| Bunny CDN | ~$2.00 |
+| DDoS extra IPs | $1.58 |
+| Home Pi | ~$5.00 |
+| All software | $0 |
+| **Total** | **~$140/mo** |
+
+### LA/HA Mode Toggle
+
+| Mode | Nodes | Cost | Use |
+|------|-------|------|-----|
+| **LA (Low Availability)** | 3 servers (1 per region) | ~$75/mo | Development, off-peak, cost saving |
+| **HA (High Availability)** | 6 nodes (2 per region) | ~$140/mo | Production, peak hours, demonstrations |
+
+Server nodes run 24/7 (host SeaweedFS volumes and DNS). Agent nodes are the HA toggle — provision/destroy via script. Agents join/leave k3s clusters. No data migration — all stateful workloads stay on server nodes.

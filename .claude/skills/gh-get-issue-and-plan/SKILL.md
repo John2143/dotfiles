@@ -1,5 +1,5 @@
 ---
-description: Discover or accept a GitHub issue, explore the codebase, gather requirements, and produce an implementation plan with exact file/line changes
+description: [Internal sub-skill] Discover or accept a GitHub issue, explore the codebase, gather requirements, and produce an implementation plan with exact file/line changes. Standalone entry point for planning; for full multi-phase workflows, use `do-gh-issue` instead.
 argument-hint: "[issue-number]"
 allowed-tools: Read, Search, Find, Task, Ask, Bash, Write
 tool-hints: |

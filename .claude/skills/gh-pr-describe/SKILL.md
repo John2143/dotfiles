@@ -1,5 +1,5 @@
 ---
-description: Update a PR body with AI-attribution metadata — what the agent did, what assumptions were made, what was not verified, and what requires human attention
+description: [Internal sub-skill] Update a PR body with AI-attribution metadata — what the agent did, what assumptions were made, what was not verified, and what requires human attention. Standalone entry point for PR description updates; for full multi-phase workflows, use `do-gh-issue` instead.
 argument-hint: "[--pr number]"
 allowed-tools: Bash, Read
 tool-hints: |

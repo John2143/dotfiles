@@ -1,5 +1,5 @@
 ---
-description: Deduplicate and filter automated review findings, removing false positives, speculative issues, and style-only nits before the implementer acts on them
+description: [Internal sub-skill] Deduplicate and filter automated review findings, removing false positives, speculative issues, and style-only nits before the implementer acts on them. Standalone entry point for findings triage; for full multi-phase workflows, use `do-gh-issue` instead.
 argument-hint: "[--pr number] [--input findings.json]"
 allowed-tools: Read, Bash, Search
 tool-hints: |

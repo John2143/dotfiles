@@ -130,7 +130,8 @@ Do not scroll past the STOP line to see what the next category requires. If you 
 - **Pending**: {comma-separated list of all sub-topic slugs}
 - **In progress**:
 - **Done**:
-```
+- **Failed**:
+- **Retries**: {}
 
 8. **STOP.** You have completed SETUP. The state file now reads `phase_status: dispatching`. Do not read the DISPATCH section. Do not dispatch sub-agents. The user will invoke the skill again for DISPATCH.
 
@@ -141,7 +142,7 @@ Do not scroll past the STOP line to see what the next category requires. If you 
 1. Read `research_plan.md` and `research_state.md`. Identify pending sub-topics from the `Pending:` list in `research_state.md`.
 2. If no sub-topics are pending and `Done:` is not empty: update `phase_status` to `synthesizing` in `research_state.md`. **STOP.** Do not proceed to synthesis in this session.
 3. Select up to 5 pending sub-topics to dispatch this session (or up to 10 if the user explicitly authorized more in `$CONTEXT`). If more than 5 remain pending, dispatch 5 now; the rest will be dispatched in future sessions.
-4. Rewrite `research_state.md` atomically: move each selected sub-topic's slug from the `Pending:` list to the `In progress:` list, and set `phase_status` to `synthesizing` (sub-agents will run independently; the next session collects results). The file is small — rewrite the whole thing in one `write` call rather than editing individual lines.
+4. Rewrite `research_state.md` atomically: move each selected sub-topic's slug from the `Pending:` list to the `In progress:` list, increment its retry count in `Retries:` (initialize to 1 if not present), and set `phase_status` to `synthesizing` (sub-agents will run independently; the next session collects results). The file is small — rewrite the whole thing in one `write` call rather than editing individual lines.
 5. Dispatch all selected sub-agents simultaneously using `Task(task)`. Each sub-agent receives a self-contained research brief. Construct the brief as follows (substitute `{placeholders}` with values from `research_plan.md`):
 
 ```
@@ -210,7 +211,7 @@ All sources in APA format. Each entry must include the full URL.
    - If the file exists and contains a complete report (all 5 required sections present): move the sub-topic's slug from `In progress:` to `Done:` in `research_state.md`. Rewrite the entire state file atomically.
    - If the file does not exist or is incomplete (missing sections): leave the slug under `In progress:`.
 3. If any slugs remain under `Pending:` or `In progress:` in `research_state.md`:
-   - If sub-agents for `In progress:` items appear to have failed (no output file after a reasonable attempt): move those slugs back to `Pending:`, set `phase_status` to `dispatching`, and **STOP.** Do not proceed to synthesis in this session.
+   - If sub-agents for `In progress:` items appear to have failed (no output file after a reasonable attempt): check `Retries:` for each. If retries < 3, move back to `Pending:`, set `phase_status` to `dispatching`, and **STOP.** If retries >= 3, move to `Failed:`, note in `research_state.md` that the sub-topic was abandoned after 3 attempts, set `phase_status` to `dispatching` (for remaining Pending items), and **STOP.**
    - Otherwise, set `phase_status` to `dispatching` and **STOP.** Do not proceed to synthesis in this session.
 4. If both `Pending:` and `In progress:` are empty in `research_state.md` (all sub-topics are in `Done:`):
    - Read every completed report in full.

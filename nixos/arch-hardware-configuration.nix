@@ -8,13 +8,269 @@
   pkgs,
   ...
 }: let
+
+  ps2avr_rgb = pkgs.writers.writePython3Bin "ps2avr-rgb"
+    { libraries = [ ]; }
+    ''
+    """Control RGB on ps2avrGB (winkeyless.kr) macropad via USB.
+
+    Usage: ps2avr-rgb off | on | color RRGGBB | brightness N |
+           rainbow [fade|static|flow|immediate|sequential] | mode N
+    """
+    import ctypes
+    import fcntl
+    import os
+    import sys
+    import sys
+    USBDEVFS_CONTROL = 0xc0185500
+
+    # Option indexes from ps2avrGB firmware
+    OPT_MODE = 0x20
+    OPT_BRIGHTNESS = 0x40
+    OPT_COLOR1 = 0x11
+    OPT_COLOR2 = 0x12
+    OPT_COLOR3 = 0x13
+    OPT_RAINBOW = 0x10
+    OPT_RAINBOW_INIT = 0x1F
+    OPT_FADE_TYPE = 0x23
+
+    # Mode values
+    MODE_OFF = 0
+    MODE_RAINBOW = 1
+    MODE_COLOR1 = 2
+    MODE_COLOR2 = 3
+    MODE_COLOR3 = 4
+
+    # Fade types
+    FADE_FADING = 0
+    FADE_IMMEDIATE = 1
+    FADE_SEQUENTIAL = 2
+    FADE_STATIC = 3
+    FADE_FLOW = 4
+
+
+    class usbdevfs_ctrltransfer(ctypes.Structure):
+        _fields_ = [
+            ("bRequestType", ctypes.c_uint8),
+            ("bRequest", ctypes.c_uint8),
+            ("wValue", ctypes.c_uint16),
+            ("wIndex", ctypes.c_uint16),
+            ("wLength", ctypes.c_uint16),
+            ("timeout", ctypes.c_uint32),
+            ("data", ctypes.c_void_p),
+        ]
+
+
+    def find_device():
+        """Find busnum, devnum, devpath for ps2avrGB device."""
+        for root, dirs, files in os.walk("/sys/devices"):
+            if "idVendor" not in files:
+                continue
+            with open(os.path.join(root, "idVendor")) as f:
+                if f.read().strip() != "20a0":
+                    continue
+            if "idProduct" not in files:
+                continue
+            with open(os.path.join(root, "idProduct")) as f:
+                if f.read().strip() != "422d":
+                    continue
+            d = root
+            while d != "/sys/devices" and d != "/":
+                if os.path.exists(os.path.join(d, "busnum")):
+                    with open(os.path.join(d, "busnum")) as f:
+                        busnum = f.read().strip()
+                    with open(os.path.join(d, "devnum")) as f:
+                        devnum = f.read().strip()
+                    with open(os.path.join(d, "devpath")) as f:
+                        devpath = f.read().strip()
+                    return busnum, devnum, devpath
+                d = os.path.dirname(d)
+        return None, None, None
+
+
+    def send_report(dev_path, data_bytes):
+        """Send a SET_REPORT control transfer to the device."""
+        ctrl = usbdevfs_ctrltransfer()
+        ctrl.bRequestType = 0x21  # OUT, CLASS, INTERFACE
+        ctrl.bRequest = 0x09       # SET_REPORT
+        ctrl.wValue = 0x0301       # Feature report, Report ID 1
+        ctrl.wIndex = 0x0001       # Interface 1
+        ctrl.wLength = len(data_bytes)
+        ctrl.timeout = 1000
+
+        data_buf = ctypes.create_string_buffer(data_bytes)
+        ctrl.data = ctypes.cast(data_buf, ctypes.c_void_p)
+
+        fd = os.open(dev_path, os.O_RDWR)
+        try:
+            fcntl.ioctl(fd, USBDEVFS_CONTROL, ctrl)
+        finally:
+            os.close(fd)
+
+
+    def parse_color(hexstr):
+        """Parse RRGGBB hex into (r, g, b) in ps2avrGB G,R,B order."""
+        if len(hexstr) != 6:
+            raise ValueError("Color must be 6 hex digits (RRGGBB)")
+        r = int(hexstr[0:2], 16)
+        g = int(hexstr[2:4], 16)
+        b = int(hexstr[4:6], 16)
+        return (g, r, b)
+
+
+    def cmd_off(dev_path):
+        """Turn LEDs off."""
+        send_report(dev_path, bytes([0x01, OPT_MODE, MODE_OFF]))
+        print("LEDs off")
+
+
+    def cmd_on(dev_path):
+        """Turn LEDs on with color1 mode."""
+        send_report(dev_path, bytes([0x01, OPT_MODE, MODE_COLOR1]))
+        print("LEDs on (color1)")
+
+
+    def cmd_color(dev_path, hexstr):
+        """Set color1 and switch to color1 mode."""
+        g, r, b = parse_color(hexstr)
+        send_report(dev_path, bytes([0x01, OPT_COLOR1, g, r, b]))
+        send_report(dev_path, bytes([0x01, OPT_MODE, MODE_COLOR1]))
+        print("Color set to #{}, LEDs on".format(hexstr))
+
+
+    def cmd_brightness(dev_path, val):
+        """Set LED brightness (0-255)."""
+        b = max(0, min(255, int(val)))
+        send_report(dev_path, bytes([0x01, OPT_BRIGHTNESS, b]))
+        print("Brightness set to {}".format(b))
+
+
+    def cmd_rainbow(dev_path, fade_type=None):
+        """Enable rainbow mode with optional fade type."""
+        if fade_type is not None:
+            ft = {
+                "fade": FADE_FADING,
+                "immediate": FADE_IMMEDIATE,
+                "sequential": FADE_SEQUENTIAL,
+                "static": FADE_STATIC,
+                "flow": FADE_FLOW,
+            }.get(fade_type)
+            if ft is None:
+                print(
+                    "Unknown fade type: {}".format(fade_type),
+                    file=sys.stderr,
+                )
+                print(
+                    "Options: fade, immediate, sequential, static,"
+                    " flow",
+                    file=sys.stderr,
+                )
+                return
+            send_report(dev_path, bytes([0x01, OPT_FADE_TYPE, ft]))
+        send_report(dev_path, bytes([0x01, OPT_MODE, MODE_RAINBOW]))
+        label = " ({})".format(fade_type) if fade_type else ""
+        print("Rainbow mode{}".format(label))
+
+
+    def cmd_mode(dev_path, mode):
+        """Set LED mode directly. 0=off, 1=rainbow, 2=color1, 3=color2, 4=color3."""
+        m = max(0, min(4, int(mode)))
+        names = ["off", "rainbow", "color1", "color2", "color3"]
+        send_report(dev_path, bytes([0x01, OPT_MODE, m]))
+        print("Mode set to {} ({})".format(m, names[m]))
+
+
+    def usage():
+        print(
+            "Usage: ps2avr-rgb off | on | color RRGGBB | brightness N |"
+            " rainbow [fade|static|flow|immediate|sequential] | mode N",
+            file=sys.stderr,
+        )
+
+
+    def main():
+        args = sys.argv[1:]
+        if not args:
+            usage()
+            return 1
+
+        busnum, devnum, devpath = find_device()
+        if busnum is None:
+            print("ps2avrGB not found", file=sys.stderr)
+            return 1
+
+        dev_path = (
+            f"/dev/bus/usb/{int(busnum):03d}/{int(devnum):03d}"
+        )
+        unbind_path = "/sys/bus/usb/drivers/usbhid/unbind"
+        bind_path = "/sys/bus/usb/drivers/usbhid/bind"
+        iface_id = f"{devpath}:1.1"
+
+        # Unbind interface 1 from usbhid
+        try:
+            with open(unbind_path, "w") as f:
+                f.write(iface_id)
+        except OSError as e:
+            print(
+                "Failed to unbind {}: {}".format(iface_id, e),
+                file=sys.stderr,
+            )
+            return 1
+
+        ok = True
+        try:
+            cmd = args[0]
+            if cmd == "off":
+                cmd_off(dev_path)
+            elif cmd == "on":
+                cmd_on(dev_path)
+            elif cmd == "color" and len(args) >= 2:
+                cmd_color(dev_path, args[1])
+            elif cmd == "brightness" and len(args) >= 2:
+                cmd_brightness(dev_path, args[1])
+            elif cmd == "rainbow":
+                ft = args[1] if len(args) >= 2 else None
+                cmd_rainbow(dev_path, ft)
+            elif cmd == "mode" and len(args) >= 2:
+                cmd_mode(dev_path, args[1])
+            else:
+                usage()
+                ok = False
+        except (ValueError, OSError) as e:
+            print("Error: {}".format(e), file=sys.stderr)
+            ok = False
+
+        # Rebind interface 1
+        try:
+            with open(bind_path, "w") as f:
+                f.write(iface_id)
+        except OSError as e:
+            print(
+                "Failed to rebind {}: {}".format(iface_id, e),
+                file=sys.stderr,
+            )
+            return 1
+
+        return 0 if ok else 1
+
+
+    if __name__ == "__main__":
+        sys.exit(main())
+    '';
   no-rgb = pkgs.writeScriptBin "no-rgb" ''
     #!/bin/sh
-    NUM_DEVICES=$(${pkgs.openrgb}/bin/openrgb --noautoconnect --list-devices | grep -E '^[0-9]+: ' | wc -l)
+    set -e
 
-    for i in $(seq 0 $(($NUM_DEVICES - 1))); do
-      ${pkgs.openrgb}/bin/openrgb --noautoconnect --device $i --mode static --color 000000
-    done
+    # Turn off ps2avrGB macropad RGB (unsupported by openrgb)
+    ${ps2avr_rgb}/bin/ps2avr-rgb off || true
+
+    # Turn off all other RGB devices via openrgb
+    if ${pkgs.openrgb}/bin/openrgb --noautoconnect --list-devices > /dev/null 2>&1; then
+      NUM_DEVICES=$(${pkgs.openrgb}/bin/openrgb --noautoconnect --list-devices | grep -E '^[0-9]+: ' | wc -l)
+      for i in $(seq 0 $(($NUM_DEVICES - 1))); do
+        ${pkgs.openrgb}/bin/openrgb --noautoconnect --device $i --mode static --color 000000 || true
+      done
+    fi
   '';
 in {
   imports = [
@@ -48,10 +304,14 @@ in {
     neededForBoot = true;
   };
   systemd.services.no-rgb = {
-    description = "no-rgb";
+    description = "Turn off all RGB lighting at boot";
+    after = ["multi-user.target"];
+    wants = ["multi-user.target"];
     serviceConfig = {
+      ExecStartPre = "${pkgs.coreutils}/bin/sleep 5";
       ExecStart = "${no-rgb}/bin/no-rgb";
       Type = "oneshot";
+      RemainAfterExit = false;
     };
     wantedBy = ["multi-user.target"];
   };

@@ -1,5 +1,5 @@
 ---
-description: Execute one unit of implementation work — read the plan, make a focused change, verify, commit, and push
+description: [Internal sub-skill] Execute one unit of implementation work — read the plan, make a focused change, verify, commit, and push. Standalone entry point for single-step fixes; for full multi-phase workflows, use `do-gh-issue` instead.
 argument-hint: "[--fix finding-id]"
 allowed-tools: Read, Write, Edit, Search, Bash, Find
 tool-hints: |

@@ -5,8 +5,7 @@ allowed-tools: Read, Write, Edit, Search, Find, Bash, Task, Ask
 tool-hints: |
   Use `gh` CLI for all GitHub operations. Use `git` for branch/commit/push — never force-push.
   State file `.gh-issue-state.json` tracks progress across invocations.
-  Sub-skill instructions (gh-get-issue-and-plan, gh-implement-step, gh-review, gh-triage, gh-pr-describe) are reproduced inline below.
-  Each invocation executes exactly one phase, then stops. Do not chain phases.
+  Each invocation executes exactly one phase, then stops. Do not chain phases. Sub-skills (`gh-get-issue-and-plan`, `gh-implement-step`, `gh-review`, `gh-triage`, `gh-pr-describe`) are standalone entry points for single-phase use; `do-gh-issue` is the recommended orchestrator for multi-phase workflows.
 ---
 
 Parse `$ARGUMENTS`:
@@ -29,6 +28,7 @@ This is a multi-session skill. The user invokes it repeatedly. Each invocation r
 State file schema:
 ```json
 {
+  "schema_version": 1,
   "issue_number": 7,
   "issue_title": "don't allow people to shoot to the side really far",
   "branch": "fix-issue-7",
@@ -42,14 +42,22 @@ State file schema:
   "reply_to_comments": [
     {"comment_id": "IC_kwABC123", "author": "reviewer1", "body_preview": "This should use a lookup table instead.", "resolved": false}
   ],
-  "last_comment_check": "2025-01-15T10:30:00Z"
+  "last_comment_check": "2025-01-15T10:30:00Z",
+  "iteration": null,
+  "last_action": null,
+  "stuck_reason": null
 }
 ```
 
+All state fields: `schema_version`, `issue_number`, `issue_title`, `branch`, `phase`, `pr_number`, `plan_file`, `incomplete_steps`, `last_review_findings`, `last_reviewed_commit`, `review_cycles`, `reply_to_comments`, `last_comment_check`, `iteration`, `last_action`, `stuck_reason`.
+
 ### How to start each session
 
+0. Validate state file if it exists: after reading, check that `schema_version`, `issue_number`, `phase` are present and non-null. If any required field is missing, report the parse error with the expected schema and stop.
 1. Check if `.gh-issue-state.json` exists.
    - **State file exists, phase is not `done`**: Read it. Jump to the phase stored in `phase`. Execute that phase and only that phase. This issue is still active — stay on it.
+   - **State file exists, phase is `stuck`**: Read `stuck_reason` and report: "This issue is stuck: <stuck_reason>. Options: (1) resolve the blocker and set phase back manually, (2) abandon the issue (`rm .gh-issue-state.json && gh issue edit <number> --remove-label in-progress`)." Stop.
+   - **State file exists, phase is not `done` or `stuck`**: Read it. Jump to the phase stored in `phase`. Execute that phase and only that phase. This issue is still active — stay on it.
    - **State file exists, phase is `done`**: The PR was finalized, but a human may have commented since. Check for new human comments on that specific PR (same procedure as review step 13). If new unresolved comments exist, add them to `reply_to_comments`, set `phase: "implement"`, and execute implement. If no new comments, delete `.gh-issue-state.json` and fall through to step 2.
 2. If no state file (or it was just deleted): **scan all open PRs for new human comments before reaching for new issues.** Existing PRs always take priority.
    - List open PRs: `gh pr list --state open --json number,comments --jq '.[] | select(.comments | length > 0) | .number'`
@@ -79,7 +87,7 @@ Find the next eligible issue, confirm with the user, label it, create state.
    - `gh issue edit <number> --add-label in-progress`
    - Create `.gh-issue-state.json`:
      ```json
-     {"issue_number": <number>, "issue_title": "<title>", "branch": null, "phase": "plan", "pr_number": null, "plan_file": "local://PLAN.md", "incomplete_steps": [], "last_review_findings": {}, "last_reviewed_commit": null, "review_cycles": 0, "reply_to_comments": [], "last_comment_check": null}
+     {"schema_version": 1, "issue_number": <number>, "issue_title": "<title>", "branch": null, "phase": "plan", "pr_number": null, "plan_file": "local://PLAN.md", "incomplete_steps": [], "last_review_findings": {}, "last_reviewed_commit": null, "review_cycles": 0, "reply_to_comments": [], "last_comment_check": null, "iteration": null, "last_action": null, "stuck_reason": null}
      ```
    - Next phase: `plan`.
 
@@ -192,11 +200,11 @@ Finalize the PR for human review.
 - Never modify files outside the repo root.
 - Never read, print, or commit secrets, `.env` files, or private keys.
 - Each invocation executes exactly one phase. Do not chain phases. Multiple review→implement cycles are normal — repeat invocations until ready.
-- If stuck (ambiguous issue, unclear requirement, unavailable tooling): surface the problem and stop — do not guess.
+- If stuck (ambiguous issue, unclear requirement, unavailable tooling): set `phase: "stuck"`, set `stuck_reason` to a one-line description of the blocker, and stop. On next invocation, the stuck handler will present resolution options.
 - If the issue touches more than 5 files or 3 subsystems, flag it for the user. Consider `plan-breakdown` for decomposition. Comment-response changes that touch additional files are expected — the 5-file limit applies to initial implementation, not follow-up responses.
-- If `gh` CLI returns an auth or permission error: report "gh CLI error — check `gh auth status`." and stop.
-- If `.gh-issue-state.json` is malformed or missing required fields: report the parse error, show the expected schema (from Key files above), and stop.
-- If `git push` is rejected (non-fast-forward): report "Push rejected — branch may have diverged. Manual intervention needed." and stop.
+- If `gh` CLI returns an auth or permission error: set `phase: "stuck"`, set `stuck_reason: "gh CLI auth/permission error — check gh auth status"`, and stop.
+- If `.gh-issue-state.json` is malformed or missing required fields: report the parse error, show the expected schema (from Key files above), and stop. Do not set stuck — this is a user-fixable file issue.
+- If `git push` is rejected (non-fast-forward): set `phase: "stuck"`, set `stuck_reason: "Push rejected — branch may have diverged"`, and stop.
 
 ### TLDR
 

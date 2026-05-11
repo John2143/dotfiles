@@ -36,6 +36,24 @@ Every subagent and the consolidator must use these definitions:
 
 Run a four-phase pipeline. **Phase 1 runs first.** Collect all recon results, then launch Phase 2 and Phase 3 in parallel. Phase 4 runs after all prior phases complete.
 
+### Checkpointing
+
+This skill may run for many subagent invocations. To avoid losing work if a phase times out, write findings to `.security-audit-state.json` after each phase completes. On invocation, if this file exists, read it to determine which phases are already complete and skip them.
+
+State file schema:
+```json
+{
+  "phases_complete": [],
+  "phase1_findings": [],
+  "phase2_findings": [],
+  "phase3_findings": [],
+  "scope": "full_audit",
+  "commit_range": null
+}
+```
+
+**On invocation**, if `.security-audit-state.json` exists: read `phases_complete` and skip any phase already listed there. Load findings from the matching arrays instead of re-running subagents. If the file does not exist, all phases are pending.
+
 ### Collecting findings across phases
 
 After each phase, read all subagent results. If a subagent's output is not in the expected schema, re-request it with the schema and an example. Index findings by file path so they can be routed to the correct Phase 2 review unit. Track which subagents returned results and which did not — the consolidator needs this information.
@@ -103,7 +121,7 @@ Search for high-risk code patterns across all non-skipped files. Use AstGrep for
 
 Return findings as: `[{severity, file, line, pattern, problem, fix_suggestion}]`
 
-**Wait for all five Phase 1 subagents to complete.** Read their results, index findings by file path. Then proceed to Phase 2 and Phase 3, which launch in parallel.
+**Wait for all five Phase 1 subagents to complete.** Read their results, index findings by file path. Write `.security-audit-state.json` with `phases_complete: ["phase1"]` and all phase 1 findings in `phase1_findings`. Then proceed to Phase 2 and Phase 3, which launch in parallel.
 
 ### Phase 2 — Deep Review (N parallel subagents)
 
@@ -188,6 +206,7 @@ Deep-dive on cryptographic usage:
 - Predictable PRNGs (`Math.random()`, `rand()` instead of `crypto.randomBytes`)
 - Key derivation: missing or weak KDF, hardcoded salts, insufficient iterations
 - Return findings using the standard schema.
+**Wait for all Phase 2 and Phase 3 subagents to complete.** Read their results. Append to `.security-audit-state.json`: add `"phase2"` and `"phase3"` to `phases_complete`, store Phase 2 findings in `phase2_findings`, Phase 3 findings in `phase3_findings`. Then proceed to Phase 4.
 
 ### Phase 4 — Consolidation (1 subagent)
 

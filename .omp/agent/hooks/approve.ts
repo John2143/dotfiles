@@ -55,29 +55,30 @@ The user runs commands in a NixOS environment with home-manager. Commands touchi
 
 const CLASSIFY_TIMEOUT_MS = 10000;
 
-// repoRoot captured at hook load time — OMP cwd is the repo directory.
-const repoRoot = process.cwd();
+// repoRoot — lazy; process may not be available in OMP sandbox
+let _repoRoot = null;
+function repoRoot() {
+  if (!_repoRoot) {
+    try { _repoRoot = process.cwd(); } catch { _repoRoot = "/"; }
+  }
+  return _repoRoot;
+}
 
 // ---- State management (mode + whitelist) ----
 // State file is per-repo: ~/.omp/agent/approve-state/<repo-path-sanitized>.json
 function stateFilePath(): string {
-  const safe = repoRoot.replace(/^\/+/, "").replace(/[\/:]/g, "-") || "root";
+  const safe = repoRoot().replace(/^\/+/, "").replace(/[\/:]/g, "-") || "root";
   return path.join(os.homedir(), ".omp", "agent", "approve-state", `${safe}.json`);
 }
-type Mode = "normal" | "edits" | "auto";
 
-interface WhitelistEntry {
-  pattern: string;
-  description: string;
-  created: number;
-}
+const VALID_MODES = ["normal", "edits", "auto"];
 
-interface ApproveState {
-  mode: Mode;
-  whitelist: WhitelistEntry[];
-}
+/**
+ * @typedef {{ pattern: string, description: string, created: number }} WhitelistEntry
+ * @typedef {{ mode: string, whitelist: WhitelistEntry[] }} ApproveState
+ */
 
-function loadState(): ApproveState {
+function loadState() {
   try {
     const raw = fs.readFileSync(stateFilePath(), "utf-8");
     const parsed = JSON.parse(raw);
@@ -90,7 +91,7 @@ function loadState(): ApproveState {
   }
 }
 
-function saveState(state: ApproveState): void {
+function saveState(state) {
   try {
     const sfp = stateFilePath();
     fs.mkdirSync(path.dirname(sfp), { recursive: true });
@@ -100,13 +101,16 @@ function saveState(state: ApproveState): void {
   }
 }
 
-function getMode(): Mode {
-  const envMode = (typeof process !== "undefined" && process.env?.OMP_APPROVE_MODE) || "";
-  if (envMode === "normal" || envMode === "edits" || envMode === "auto") return envMode;
+function getMode() {
+  // Try env var override, but process may not be available in OMP sandbox
+  try {
+    const envMode = process.env?.OMP_APPROVE_MODE || "";
+    if (VALID_MODES.includes(envMode)) return envMode;
+  } catch { /* process unavailable — use persisted mode */ }
   return loadState().mode;
 }
 
-function setMode(mode: Mode): void {
+function setMode(mode) {
   const state = loadState();
   state.mode = mode;
   saveState(state);
@@ -401,7 +405,7 @@ export default function (pi) {
       const cmd = String(event.input.command ?? "").trim();
       const modeSwitch = cmd.match(/^omp-approve-mode\s+(normal|edits|auto)$/);
       if (modeSwitch) {
-        const newMode = modeSwitch[1] as Mode;
+        const newMode = modeSwitch[1];
         setMode(newMode);
         ctx.ui.notify(`Mode changed to: ${newMode}`, "success");
         return { block: true, reason: `Mode changed to ${newMode}. Run your command again.` };
@@ -411,14 +415,14 @@ export default function (pi) {
     // ---- Edit/write interception (edits mode) ----
     if (mode === "edits" && (event.toolName === "edit" || event.toolName === "write")) {
       const filePath = event.input?.path || event.input?.file || "";
-      // Resolve local:// URIs and relative paths against repoRoot
+      // Resolve local:// URIs and relative paths against repoRoot()
       let resolved = filePath;
       if (filePath.startsWith("local://")) {
-        resolved = path.join(repoRoot, filePath.slice("local://".length));
+        resolved = path.join(repoRoot(), filePath.slice("local://".length));
       } else if (!path.isAbsolute(filePath)) {
-        resolved = path.resolve(repoRoot, filePath);
+        resolved = path.resolve(repoRoot(), filePath);
       }
-      if (resolved.startsWith(repoRoot + path.sep) || resolved === repoRoot) {
+      if (resolved.startsWith(repoRoot() + path.sep) || resolved === repoRoot()) {
         return; // auto-allow edits within repo
       }
       // External — prompt

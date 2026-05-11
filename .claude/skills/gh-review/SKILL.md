@@ -1,5 +1,5 @@
 ---
-description: Perform a structured code review on a PR diff, evaluating correctness, security, error handling, maintainability, and performance, then post findings as a PR comment
+description: [Internal sub-skill] Perform a structured code review on a PR diff, evaluating correctness, security, error handling, maintainability, and performance, then post findings as a PR comment. Standalone entry point for one-off reviews; for full multi-phase workflows, use `do-gh-issue` instead.
 argument-hint: "[branch] [--pr number] [--focus (correctness|security|error-handling|maintainability|performance)]"
 allowed-tools: Read, Search, Find, Bash, LSP
 tool-hints: |
