@@ -4,9 +4,6 @@
 # Listens on 0.0.0.0:8080 so closet's Traefik can reverse-proxy to it.
 # Default ACL policy allows all tailnet traffic.
 {
-  config,
-  lib,
-  pkgs,
   ...
 }: {
   services.headscale = {
