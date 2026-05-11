@@ -2,6 +2,8 @@
 description: Inspect Nix files for formatting, eval errors, common pitfalls, and outdated inputs
 argument-hint: [path] [--check (eval|format|audit|updates|all)]
 allowed-tools: Read, Bash, Search
+tool-hints: |
+  This skill may be invoked in loop mode (via `/loop` harness). When running in loop mode, call `exit_loop_mode(summary)` after producing the report to terminate the harness. When not in loop mode, just stop normally.
 ---
 
 Parse `$ARGUMENTS`:
@@ -71,3 +73,5 @@ Each finding includes:
 ### Summary
 
 Ordered by impact: prioritize eval errors first (blocking), then format (cosmetic but CI-breaking), then audit findings (best practices), then updates (optional).
+
+If invoked in loop mode (via `/loop` harness), call `exit_loop_mode('Nix checks complete — <N> passed, <M> failed')` after producing this report. If not in loop mode, just stop.

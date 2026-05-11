@@ -2,7 +2,10 @@
 #
 # Provides authoritative DNS. Backend: MariaDB Galera (gmysql).
 # RFC2136 enabled for ExternalDNS. Listens on public IP for k8gb queries.
+#
+# API key is derived from the TSIG key at runtime (systemd preStart).
 {
+  config,
   ...
 }: {
   age.secrets."hetzner/powerdns-tsig-key" = {
@@ -42,6 +45,12 @@
     after = ["mysql.service"];
     wants = ["mysql.service"];
     before = ["k3s.service"];
+
+    # Generate API key from TSIG key on first boot
+    preStart = ''
+      API_KEY=$(sha256sum "${config.age.secrets."hetzner/powerdns-tsig-key".path}" | head -c 32)
+      sed -i "s/@PDNS_API_KEY@/$API_KEY/" /etc/pdns/pdns.conf
+    '';
   };
 
   networking.firewall.allowedTCPPorts = [53 8081];

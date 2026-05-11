@@ -1,20 +1,22 @@
 # Hetzner k3s Agent Node
 #
-# Shared module for all 3 agent nodes (ashburn, hillsboro, nuremberg).
-# Imports: Longhorn, Tailscale. No PowerDNS, no Galera.
-# Provides: k3s agent joining the server's cluster + Cilium CNI + split-IP DDoS firewall.
-#
-# Agent nodes are the HA toggle — provisioned/destroyed via scripts.
+# Fully self-contained. Imported by all 3 agent flake configs identically.
+# Reads compName from specialArgs to set hostname and derive k3s serverAddr.
+# Imports: Longhorn, Tailscale, SSH. No PowerDNS, no Galera.
 {
   config,
   lib,
   pkgs,
+  compName,
   ...
 }: {
   imports = [
+    ./hetzner-ssh.nix
     ./longhorn-host.nix
     ./tailscale.nix
   ];
+
+  networking.hostName = compName;
 
   # agenix secret: k3s join token
   age.secrets."hetzner/k3s-token" = {
@@ -23,10 +25,12 @@
     group = "root";
   };
 
-  # k3s agent — serverAddr set in host config
+  # k3s agent — joins the server whose hostname matches (strip "-agent" suffix)
   services.k3s = {
     enable = true;
     role = "agent";
+    tokenFile = config.age.secrets."hetzner/k3s-token".path;
+    serverAddr = "https://${lib.removeSuffix "-agent" compName}:6443";
     extraFlags = toString [
       "--flannel-backend=none"
     ];

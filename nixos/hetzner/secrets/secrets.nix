@@ -14,14 +14,6 @@ in {
   "hetzner/rclone-b2-password.age".publicKeys = allKeys;
   "hetzner/rclone-rustfs-password.age".publicKeys = allKeys;
   "hetzner/seaweedfs-master-key.age".publicKeys = allKeys;
-  "powerdns-tsig-key.age".publicKeys = allKeys;
-  "galera-password.age".publicKeys = allKeys;
-  "mariadb-root-password.age".publicKeys = allKeys;
-  "k3s-token.age".publicKeys = allKeys;
-  "hcloud-token.age".publicKeys = allKeys;
-  "luks-passphrase.age".publicKeys = allKeys;
-  "mongodb-encryption-key.age".publicKeys = allKeys;
-  "rclone-b2-password.age".publicKeys = allKeys;
-  "rclone-rustfs-password.age".publicKeys = allKeys;
-  "seaweedfs-master-key.age".publicKeys = allKeys;
+  "hetzner/headscale-preauth-key.age".publicKeys = allKeys;
+  "hetzner/pdns-api-key.age".publicKeys = allKeys;
 }

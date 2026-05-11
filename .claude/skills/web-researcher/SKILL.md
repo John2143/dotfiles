@@ -57,8 +57,7 @@ All files live under `ai_research/{topic-slug}/` relative to the repo root. None
    | `setting_up` | SETUP (resume — plan was partially written) |
    | `dispatching` | DISPATCH |
    | `synthesizing` | SYNTHESIZE |
-   | `finalizing` | FINALIZE |
-   | `done` | Report: research is complete. Point the user to `ai_research/{topic-slug}/final_report.md`. |
+   | `done` | Report: research is complete. Point the user to `ai_research/{topic-slug}/final_report.md`. If invoked in loop mode, call `exit_loop_mode('Research complete — final report at ai_research/{topic-slug}/final_report.md')`. |
 
 3. Execute that one category. When its final step says **STOP**, stop immediately.
 
@@ -305,7 +304,7 @@ Consolidated bibliography from all phase summaries.
 
 3. If the answer is short enough to fit comfortably in a chat response (under ~500 words), you may write `final_report.md` yourself instead of dispatching a sub-agent. Either way, the file must exist when FINALIZE completes.
 4. Mark `phase_status` as `done` in `research_state.md`.
-5. Report to the user: state that research is complete, provide the answer if short, and point to `ai_research/{topic-slug}/final_report.md` for the full report.
+5. Report to the user: state that research is complete, provide the answer if short, and point to `ai_research/{topic-slug}/final_report.md` for the full report. If running in loop mode, call `exit_loop_mode('Research complete — final report at ai_research/{topic-slug}/final_report.md')`.
 
 6. **STOP.** You have completed FINALIZE. Research is done. `phase_status` is `done`.
 
@@ -323,6 +322,7 @@ Consolidated bibliography from all phase summaries.
 - You may not run more than 10 sub-agents per phase without explicit user approval in `$CONTEXT`.
 - You may not ask the user questions during active research phases — only at SETUP (if the question is unclear) or when genuinely stuck at SYNTHESIZE.
 - **You may not chain multiple categories in one session.** Execute exactly one category, update state, and stop. After writing a STOP line, your session is over — do not scroll further in this SKILL.md. Do not read the next category's instructions. Do not evaluate whether "it would be faster" to do the next step now. The state file is the only handoff mechanism between sessions.
+- If invoked in loop mode and `phase_status` reaches `done`, call `exit_loop_mode('<summary>')` to prevent infinite re-invocations.
 
 ## TLDR
 

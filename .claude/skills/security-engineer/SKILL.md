@@ -318,3 +318,4 @@ Same as Full Audit consolidation. Report title: `## Security Audit Report — Co
 - **Subagents must return structured findings.** Prose summaries without the schema fields are invalid — re-request with the schema and example.
 - **Do not ask questions.** The skill runs unattended once invoked; make decisions autonomously within the constraints above.
 - **No network calls** except `web_search` for CVE lookups (and only for CVE lookups). Do not call external APIs or download code.
+- **If invoked in loop mode**, call `exit_loop_mode('Security audit complete — overall risk: <RISK_LEVEL>')` after rendering the final report.

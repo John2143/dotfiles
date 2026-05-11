@@ -1,11 +1,39 @@
-# Tailscale / Headscale VPN
+# Tailscale / Headscale VPN client
 #
-# Currently points at tailscale.com. Once Headscale is running on the Home Pi,
-# swap to:
-#   services.tailscale.extraUpFlags = ["--login-server=https://headscale.<YOUR_DOMAIN>"];
+# Parameterized: Home Pi connects to local headscale (http://localhost:8080),
+# Hetzner nodes connect to the Home Pi's headscale server via its Tailscale FQDN.
 #
-# The Home Pi runs: services.headscale.enable = true
-# Hetzner nodes are Headscale clients — same tailscale binary, different server.
-{...}: {
-  services.tailscale.enable = true;
+# All nodes use a preauth key from agenix to auto-join the tailnet.
+{
+  config,
+  lib,
+  ...
+}: {
+  options.custom.headscaleServer = lib.mkOption {
+    type = lib.types.str;
+    default = "https://home-pi.9s.pics";
+    description = "Headscale server URL for tailscale up --login-server";
+    example = "http://localhost:8080";
+  };
+
+  config = {
+    services.tailscale = {
+      enable = true;
+      extraUpFlags = [
+        "--login-server=${config.custom.headscaleServer}"
+      ];
+
+      # Preauth key for auto-joining the tailnet
+      # Generated on the Home Pi after Headscale is provisioned
+      authKeyFile = config.age.secrets."hetzner/headscale-preauth-key".path;
+    };
+
+    # agenix secret: Headscale preauth key
+    age.secrets."hetzner/headscale-preauth-key" = {
+      file = ../secrets/hetzner/headscale-preauth-key.age;
+      owner = "root";
+      group = "root";
+      mode = "0400";
+    };
+  };
 }

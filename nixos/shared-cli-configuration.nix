@@ -66,8 +66,8 @@
         omp-src = pkgs.fetchFromGitHub {
           owner = "John2143";
           repo = "oh-my-pi";
-          rev = "18e8add928a55e4905220371c9fb1dde20d2e6b0";
-          hash = "sha256-cD0HxxPB2omi9uyY9qYQ8QEtsRiekS/T9IsXirYAr2M=";
+          rev = "958c3dd104af88f198bcf7a04db4024bc15fd0c9";
+          hash = "sha256-Xi+/bEZdgl+AQNcEGS4jKX6xFSf8gXN6sj/uU2ztihE=";
         };
         omp-unwrapped = (inputs.llm-agents.packages.${pkgs.stdenv.hostPlatform.system}.omp.overrideAttrs (old: {
           version = "14.9.3";

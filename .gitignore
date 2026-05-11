@@ -9,3 +9,6 @@ vimfiles/*
 .DS_Store
 */.DS_Store
 .config/**/*.bak
+
+# Claude Code local settings (personal permissions, not shared)
+.claude/settings.local.json

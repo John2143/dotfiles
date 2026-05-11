@@ -31,16 +31,22 @@
 
       wsrep_provider = "${pkgs.mariadb-galera}/lib/galera/libgalera_smm.so";
       wsrep_cluster_name = "powerdns";
-      wsrep_cluster_address = "gcomm://"; # Override per-node in host config
-      wsrep_node_name = "${config.networking.hostName}";
-      wsrep_node_address = "${lib.head config.networking.interfaces.eth0.ipv4.addresses}.address";
+      wsrep_cluster_address = lib.mkDefault "gcomm://";
+      wsrep_node_name = lib.mkDefault "${config.networking.hostName}";
+      wsrep_node_address = lib.mkDefault "${if config.networking.interfaces ? eth0 then (lib.head config.networking.interfaces.eth0.ipv4.addresses).address else "127.0.0.1"}";
 
       wsrep_sst_method = "rsync";
       wsrep_slave_threads = 2;
       wsrep_certify_nonPK = 1;
 
       auto_increment_increment = 3;
-      auto_increment_offset = 1;
+      auto_increment_offset = lib.mkDefault 1;
     };
+  };
+
+  # Wait for Tailscale DNS before starting MariaDB (Galera needs cross-node resolution)
+  systemd.services.mysql = {
+    after = ["tailscaled.service"];
+    wants = ["tailscaled.service"];
   };
 }

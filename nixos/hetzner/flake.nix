@@ -22,100 +22,63 @@
     ...
   } @ inputs: let
     system = "x86_64-linux";
+    piSystem = "aarch64-linux";
     my-keys = [
       "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOktI2Vry/5fbhZiG35o5mf7w3dnaTEDqkRJVM07cu3a john@arch"
       "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFVckq0oXyXkxiLo39typ6PR039XrLwze/Cb0PZaTzmi john@office"
       "ecdsa-sha2-nistp256 AAAAE2VjZHNhLXNoYTItbmlzdHAyNTYAAAAIbmlzdHAyNTYAAABBBHjc0NNrHCwjrBUvUByFoFPW9vKGVFsWVD6LoKp1FLtNaIjyigMTYXoCKZSNNguKdNwUiyqKIZfCExZmgc3Cccw= phone"
     ];
+
+    # All 3 server nodes are identical. Hillsboro runs PowerDNS + Galera too
+    # (enables rolling node rotation — every node is a drop-in replacement).
+    mkServer = { compName, galeraOffset }: nixpkgs.lib.nixosSystem {
+      inherit system;
+      specialArgs = { inherit inputs compName galeraOffset; sshKeys = my-keys; };
+      modules = [
+        disko.nixosModules.default
+        agenix.nixosModules.default
+        ./modules/hetzner-disko.nix
+        ./modules/hetzner-ssh.nix
+        ./modules/hetzner-k3s-server.nix
+        ./modules/tailscale.nix
+      ];
+    };
+
+    # Agent nodes join the corresponding server's k3s cluster.
+    # serverAddr is derived from compName (strip "-agent" suffix).
+    mkAgent = { compName }: nixpkgs.lib.nixosSystem {
+      inherit system;
+      specialArgs = { inherit inputs compName; sshKeys = my-keys; };
+      modules = [
+        disko.nixosModules.default
+        agenix.nixosModules.default
+        ./modules/hetzner-disko.nix
+        ./modules/hetzner-ssh.nix
+        ./modules/hetzner-k3s-agent.nix
+        ./modules/tailscale.nix
+      ];
+    };
   in {
-    nixosConfigurations.k3s-ashburn = nixpkgs.lib.nixosSystem {
-      inherit system;
-      specialArgs = {
-        inherit inputs;
-        compName = "k3s-ashburn";
-        sshKeys = my-keys;
-      };
-      modules = [
-        disko.nixosModules.default
-        agenix.nixosModules.default
-        ./hosts/ashburn-server.nix
-        ./modules/tailscale.nix
-      ];
-    };
+    nixosConfigurations = {
+      # ── Server nodes (LA mode, 24/7) ──
+      k3s-ashburn   = mkServer { compName = "k3s-ashburn";   galeraOffset = 1; };
+      k3s-hillsboro = mkServer { compName = "k3s-hillsboro"; galeraOffset = 2; };
+      k3s-nuremberg = mkServer { compName = "k3s-nuremberg"; galeraOffset = 3; };
 
-    nixosConfigurations.k3s-ashburn-agent = nixpkgs.lib.nixosSystem {
-      inherit system;
-      specialArgs = {
-        inherit inputs;
-        compName = "k3s-ashburn-agent";
-        sshKeys = my-keys;
-      };
-      modules = [
-        disko.nixosModules.default
-        agenix.nixosModules.default
-        ./hosts/ashburn-agent.nix
-        ./modules/tailscale.nix
-      ];
-    };
+      # ── Agent nodes (HA toggle, provisioned/destroyed via scripts) ──
+      k3s-ashburn-agent   = mkAgent { compName = "k3s-ashburn-agent";   };
+      k3s-hillsboro-agent = mkAgent { compName = "k3s-hillsboro-agent"; };
+      k3s-nuremberg-agent = mkAgent { compName = "k3s-nuremberg-agent"; };
 
-    nixosConfigurations.k3s-hillsboro = nixpkgs.lib.nixosSystem {
-      inherit system;
-      specialArgs = {
-        inherit inputs;
-        compName = "k3s-hillsboro";
-        sshKeys = my-keys;
+      # ── Home Pi (Headscale + Galera #4 + PowerDNS #4) ──
+      home-pi = nixpkgs.lib.nixosSystem {
+        system = piSystem;
+        specialArgs = { inherit inputs; compName = "home-pi"; sshKeys = my-keys; };
+        modules = [
+          agenix.nixosModules.default
+          ./hosts/home-pi.nix
+        ];
       };
-      modules = [
-        disko.nixosModules.default
-        agenix.nixosModules.default
-        ./hosts/hillsboro-server.nix
-        ./modules/tailscale.nix
-      ];
-    };
-
-    nixosConfigurations.k3s-hillsboro-agent = nixpkgs.lib.nixosSystem {
-      inherit system;
-      specialArgs = {
-        inherit inputs;
-        compName = "k3s-hillsboro-agent";
-        sshKeys = my-keys;
-      };
-      modules = [
-        disko.nixosModules.default
-        agenix.nixosModules.default
-        ./hosts/hillsboro-agent.nix
-        ./modules/tailscale.nix
-      ];
-    };
-
-    nixosConfigurations.k3s-nuremberg = nixpkgs.lib.nixosSystem {
-      inherit system;
-      specialArgs = {
-        inherit inputs;
-        compName = "k3s-nuremberg";
-        sshKeys = my-keys;
-      };
-      modules = [
-        disko.nixosModules.default
-        agenix.nixosModules.default
-        ./hosts/nuremberg-server.nix
-        ./modules/tailscale.nix
-      ];
-    };
-
-    nixosConfigurations.k3s-nuremberg-agent = nixpkgs.lib.nixosSystem {
-      inherit system;
-      specialArgs = {
-        inherit inputs;
-        compName = "k3s-nuremberg-agent";
-        sshKeys = my-keys;
-      };
-      modules = [
-        disko.nixosModules.default
-        agenix.nixosModules.default
-        ./hosts/nuremberg-agent.nix
-        ./modules/tailscale.nix
-      ];
     };
   };
 }

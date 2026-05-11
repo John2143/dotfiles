@@ -11,7 +11,11 @@
 //
 // Three modes: normal (prompt+whitelist), edits (auto-allow in-repo edits), auto (LLM classifier).
 // Switch via: omp-approve-mode normal|edits|auto
-// State persisted to ~/.omp/agent/approve-state/<repo>.json
+//
+// State stored per-repo in .claude/settings.local.json using the Claude Code
+// settings schema (https://json.schemastore.org/claude-code-settings.json).
+// Whitelisted commands become Bash(...) entries in permissions.allow.
+// Mode is persisted as permissions.defaultMode.
 
 import * as fs from "node:fs";
 import * as path from "node:path";
@@ -51,12 +55,24 @@ The user runs commands in a NixOS environment with home-manager. Commands touchi
   const CLASSIFY_TIMEOUT_MS = 10000;
   const VALID_MODES = ["normal", "edits", "auto"];
 
+  const MODE_TO_DEFAULT_MODE: Record<string, string> = {
+    normal: "default",
+    edits: "acceptEdits",
+    auto: "auto",
+  };
+
+  const DEFAULT_MODE_TO_MODE: Record<string, string> = {
+    default: "normal",
+    acceptedits: "edits",
+    auto: "auto",
+  };
+
   // ============================================================
   // Repo root (lazy — process may not be available in OMP sandbox)
   // ============================================================
 
-  let _repoRoot = null;
-  function repoRoot() {
+  let _repoRoot: string | null = null;
+  function repoRoot(): string {
     if (!_repoRoot) {
       try { _repoRoot = process.cwd(); } catch { _repoRoot = "/"; }
     }
@@ -64,156 +80,448 @@ The user runs commands in a NixOS environment with home-manager. Commands touchi
   }
 
   // ============================================================
-  // State management (mode + whitelist, per-repo)
+  // State management — .claude/settings.local.json (Claude Code format)
   // ============================================================
 
-  function stateFilePath() {
+  function settingsFilePath(): string {
+    return path.join(repoRoot(), ".claude", "settings.local.json");
+  }
+
+  function oldStateFilePath(): string {
     const safe = repoRoot().replace(/^\/+/, "").replace(/[\/:]/g, "-") || "root";
     return path.join(os.homedir(), ".omp", "agent", "approve-state", safe + ".json");
   }
 
-  function loadState() {
+  /** Ensure the parent directory exists. */
+  function ensureDir(fp: string): void {
+    fs.mkdirSync(path.dirname(fp), { recursive: true });
+  }
+
+  /**
+   * Read the full settings.local.json (Claude Code format).
+   * Performs one-time migration from the old ~/.omp/agent/approve-state/ format.
+   */
+  function loadSettings(): Record<string, unknown> {
+    const sfp = settingsFilePath();
     try {
-      const raw = fs.readFileSync(stateFilePath(), "utf-8");
-      const parsed = JSON.parse(raw);
-      return {
-        mode: parsed.mode || "normal",
-        whitelist: Array.isArray(parsed.whitelist) ? parsed.whitelist : [],
-      };
+      const raw = fs.readFileSync(sfp, "utf-8");
+      return JSON.parse(raw);
     } catch {
-      return { mode: "normal", whitelist: [] };
+      // File doesn't exist or is unparseable — try migration from old state
+      return migrateFromOldState();
     }
   }
 
-  function saveState(state) {
+  /** Migrate old ~/.omp/agent/approve-state/<repo>.json → .claude/settings.local.json */
+  function migrateFromOldState(): Record<string, unknown> {
+    const oldPath = oldStateFilePath();
     try {
-      const sfp = stateFilePath();
-      fs.mkdirSync(path.dirname(sfp), { recursive: true });
-      fs.writeFileSync(sfp, JSON.stringify(state, null, 2), "utf-8");
-    } catch (err) {
-      console.error("[approve] failed to save state:", err?.message || err);
+      const raw = fs.readFileSync(oldPath, "utf-8");
+      const parsed = JSON.parse(raw);
+      const oldMode: string = parsed.mode || "normal";
+      const oldWhitelist: Array<{ pattern: string; description: string }> =
+        Array.isArray(parsed.whitelist) ? parsed.whitelist : [];
+
+      const allow: string[] = [];
+      for (const entry of oldWhitelist) {
+        // Convert old regex patterns to Claude Code Bash(...) rules.
+        // The old patterns were regexes like "^git\\s+status\\b".
+        // We do our best to convert them to glob-style rules.
+        const rule = regexToPermissionRule(entry.pattern, entry.description);
+        if (rule && !allow.includes(rule)) {
+          allow.push(rule);
+        }
+      }
+
+      const settings: Record<string, unknown> = {
+        "$schema": "https://json.schemastore.org/claude-code-settings.json",
+        permissions: {
+          allow,
+          deny: [],
+          defaultMode: MODE_TO_DEFAULT_MODE[oldMode] || "default",
+        },
+      };
+
+      // Write the migrated settings
+      const sfp = settingsFilePath();
+      ensureDir(sfp);
+      fs.writeFileSync(sfp, JSON.stringify(settings, null, 2), "utf-8");
+
+      // Remove the old state file so migration doesn't repeat
+      try { fs.unlinkSync(oldPath); } catch { /* ignore */ }
+
+      console.error("[approve] migrated old state to .claude/settings.local.json");
+      return settings;
+    } catch {
+      return {};
     }
   }
 
-  function getMode() {
+  /**
+   * Best-effort conversion of an old regex pattern to a Claude Code permission rule.
+   * The old format used anchored regexes like "^git\\s+status\\b".
+   */
+  function regexToPermissionRule(pattern: string, description: string): string | null {
+    // Try to extract a command prefix from the description first (most reliable)
+    if (description && description.endsWith(" *")) {
+      const base = description.slice(0, -2); // strip trailing " *"
+      return "Bash(" + base.trim() + " *)";
+    }
+
+    // Try to extract from the regex pattern
+    // Remove ^ anchor
+    let p = pattern.replace(/^\\?\^/, "");
+    // Replace \\s+ with a single space
+    p = p.replace(/\\s\+/g, " ");
+    // Remove \\b word boundaries
+    p = p.replace(/\\b/g, "");
+    // Remove $ anchor
+    p = p.replace(/\\?\$/, "");
+
+    if (!p || p === ".*") return null;
+
+    // If it's a simple command prefix, generate a Bash rule
+    if (/^[a-zA-Z0-9_./-]+(?:\s+[a-zA-Z0-9_./*-]+)?$/.test(p)) {
+      return "Bash(" + p + " *)";
+    }
+
+    return null;
+  }
+
+  function saveSettings(settings: Record<string, unknown>): void {
+    try {
+      const sfp = settingsFilePath();
+      ensureDir(sfp);
+      fs.writeFileSync(sfp, JSON.stringify(settings, null, 2), "utf-8");
+    } catch (err: any) {
+      console.error("[approve] failed to save settings:", err?.message || err);
+    }
+  }
+
+  /** Ensure the permissions object exists in settings. */
+  function ensurePermissions(settings: Record<string, unknown>): Record<string, unknown> {
+    if (!settings.permissions || typeof settings.permissions !== "object") {
+      settings.permissions = { allow: [], deny: [], defaultMode: "default" };
+    }
+    const perms = settings.permissions as Record<string, unknown>;
+    if (!Array.isArray(perms.allow)) perms.allow = [];
+    if (!Array.isArray(perms.deny)) perms.deny = [];
+    if (!perms.defaultMode) perms.defaultMode = "default";
+    return perms;
+  }
+
+  // ---- Mode (stored as permissions.defaultMode) ----
+
+  function getMode(): string {
     try {
       const envMode = process.env?.OMP_APPROVE_MODE || "";
       if (VALID_MODES.includes(envMode)) return envMode;
     } catch { /* process unavailable */ }
-    return loadState().mode;
+    const settings = loadSettings();
+    const perms = settings.permissions as Record<string, unknown> | undefined;
+    if (perms?.defaultMode && typeof perms.defaultMode === "string") {
+      return DEFAULT_MODE_TO_MODE[perms.defaultMode.toLowerCase()] || "normal";
+    }
+    return "normal";
   }
 
-  function setMode(mode) {
-    const state = loadState();
-    state.mode = mode;
-    saveState(state);
+  function setMode(mode: string): void {
+    const settings = loadSettings();
+    const perms = ensurePermissions(settings);
+    perms.defaultMode = MODE_TO_DEFAULT_MODE[mode] || "default";
+    saveSettings(settings);
   }
 
-  function checkWhitelist(cmd) {
-    const state = loadState();
+  // ---- Bash permission rule matching ----
+
+  /**
+   * Split a compound command on shell operators.
+   * Claude Code splits on: &&, ||, ;, |, |&, &, newline
+   * Each subcommand must independently match a permission rule.
+   */
+  function splitCompoundCommands(cmd: string): string[] {
+    // Simple split on common shell operators. This is a best-effort
+    // approximation of Claude Code's AST-aware parser.
+    return cmd
+      .split(/\s*(?:&&|\|\||[;&|])\s*/)
+      .map(s => s.trim())
+      .filter(Boolean);
+  }
+
+  /**
+   * Strip process wrappers Claude Code ignores before matching.
+   * Recognized: timeout, time, nice, nohup, stdbuf, bare xargs.
+   */
+  function stripWrappers(cmd: string): string {
+    let result = cmd.trim();
+    for (let i = 0; i < 5; i++) {
+      const prev = result;
+      result = result.replace(/^timeout\s+(?:\S+\s+)?/, "");
+      result = result.replace(/^time\s+/, "");
+      result = result.replace(/^nice\s+(?:-n\s+\S+\s+)?/, "");
+      result = result.replace(/^nohup\s+/, "");
+      result = result.replace(/^stdbuf\s+(?:-[ioe]\S+\s+)+/, "");
+      result = result.replace(/^xargs\s+/, ""); // bare xargs only
+      if (result === prev) break;
+    }
+    return result.trim();
+  }
+
+  /**
+   * Convert a Claude Code Bash permission glob to a RegExp.
+   * `*` matches any sequence of characters including spaces.
+   * Patterns are implicitly anchored.
+   */
+  function globToRegex(glob: string): RegExp {
+    // Escape regex specials except *
+    let escaped = glob.replace(/[.+^${}()|[\]\\]/g, "\\$&");
+    // Replace * with .* (greedy, spans spaces)
+    escaped = escaped.replace(/\*/g, ".*");
+    return new RegExp("^" + escaped + "$");
+  }
+
+  /**
+   * Test whether a Bash permission rule matches a command.
+   * Rule format: "Bash(<glob>)" where glob uses * wildcards.
+   *
+   * Compound commands (&&, ||, ;, |, |&, &) are split — every
+   * subcommand must independently match.
+   *
+   * Process wrappers (timeout, time, nice, nohup, stdbuf, bare xargs)
+   * are stripped before matching.
+   */
+  function bashRuleMatches(rule: string, cmd: string): boolean {
+    if (!rule.startsWith("Bash(") || !rule.endsWith(")")) return false;
+    const glob = rule.slice(5, -1); // Extract content between Bash( and )
+
+    // Special case: "Bash" or "Bash(*)" matches everything
+    if (glob === "*" || glob === "") return true;
+
+    const subcommands = splitCompoundCommands(cmd);
+    if (subcommands.length === 0) return false;
+
+    const regex = globToRegex(glob);
+    return subcommands.every(sub => {
+      const stripped = stripWrappers(sub);
+      return regex.test(stripped);
+    });
+  }
+
+  // ============================================================
+  // Path permission matching — Read(), Edit(), Write() rules
+  // ============================================================
+
+  /**
+   * Convert a gitignore-style glob to a RegExp.
+   * * matches within one directory (no slash); ** matches recursively.
+   * Pattern is anchored at the resolved base path.
+   */
+  function gitignoreToRegex(glob: string): RegExp {
+    let out = "";
+    let i = 0;
+    while (i < glob.length) {
+      if (glob[i] === "*" && glob[i + 1] === "*") {
+        // ** matches anything including slashes
+        out += ".*";
+        i += 2;
+        // Skip trailing slash after ** (e.g., **/foo → .*/foo)
+        if (glob[i] === "/") i++;
+      } else if (glob[i] === "*") {
+        // * matches anything except /
+        out += "[^/]*";
+        i++;
+      } else if (glob[i] === "?") {
+        out += "[^/]";
+        i++;
+      } else {
+        // Escape regex specials
+        if (/[.+^${}()|[\]\\]/.test(glob[i])) out += "\\";
+        out += glob[i];
+        i++;
+      }
+    }
+    return new RegExp("^" + out + "$");
+  }
+
+  /**
+   * Resolve a Claude Code permission rule path to an absolute path.
+   *  //path → absolute filesystem path
+   *  ~/path → home directory
+   *  /path  → relative to project root
+   *  path or ./path → relative to current directory (repo root)
+   */
+  function resolvePermissionPath(rulePath: string): string {
+    if (rulePath.startsWith("//")) {
+      return path.resolve(rulePath.slice(1)); // //Users/... → /Users/...
+    }
+    if (rulePath.startsWith("~/")) {
+      return path.join(os.homedir(), rulePath.slice(2));
+    }
+    if (rulePath.startsWith("/")) {
+      return path.join(repoRoot(), rulePath.slice(1));
+    }
+    if (rulePath.startsWith("./")) {
+      return path.join(repoRoot(), rulePath.slice(2));
+    }
+    return path.join(repoRoot(), rulePath);
+  }
+
+  /**
+   * Test whether a file path matches a Read()/Edit()/Write() permission rule.
+   * Splits the rule path into a literal prefix and a gitignore glob suffix,
+   * resolves the prefix against the rule anchor (// ~/ / ./), then matches
+   * the relative remainder with gitignore semantics.
+   */
+  function pathRuleMatches(rule: string, filePath: string): boolean {
+    const m = rule.match(/^(Read|Edit|Write)\((.+)\)$/);
+    if (!m) return false;
+    const raw = m[2];
+
+    // Split into literal prefix (before first glob char) and glob suffix
+    const globIdx = raw.search(/[*?[]/);
+    const literal = globIdx === -1 ? raw : raw.slice(0, globIdx);
+    const glob = globIdx === -1 ? "" : raw.slice(globIdx);
+
+    // Resolve the literal prefix to an absolute directory
+    let base: string;
+    if (literal.startsWith("//")) {
+      base = path.resolve(literal.slice(1));
+    } else if (literal.startsWith("~/")) {
+      base = path.join(os.homedir(), literal.slice(2));
+    } else if (literal.startsWith("/")) {
+      base = path.join(repoRoot(), literal.slice(1));
+    } else if (literal.startsWith("./")) {
+      base = path.join(repoRoot(), literal.slice(2));
+    } else {
+      base = path.join(repoRoot(), literal);
+    }
+    // Remove trailing / so path.relative works clean
+    base = base.replace(/\/+$/, "") || "/";
+
+    // Resolve the target file path
+    let resolvedFile = filePath;
+    if (!path.isAbsolute(resolvedFile)) {
+      resolvedFile = path.resolve(repoRoot(), resolvedFile);
+    }
+    // Bare filename (no /, no glob, no anchor) → matches at any depth
+    // Gitignore semantics: Read(.env) ≡ Read(**/.env)
+    if (!glob && !raw.includes("/") &&
+        !raw.startsWith("//") && !raw.startsWith("~/") &&
+        !raw.startsWith("/") && !raw.startsWith("./")) {
+      // Base for bare filenames is the enclosing directory (repo root)
+      const bareBase = path.join(repoRoot());
+      if (!resolvedFile.startsWith(bareBase + path.sep) && resolvedFile !== bareBase) return false;
+      return path.basename(resolvedFile) === raw;
+    }
+    // No glob → exact path match
+    if (!glob) {
+      return resolvedFile === base;
+    }
+
+    // Get file path relative to the resolved base
+    const relative = path.relative(base, resolvedFile);
+    if (relative.startsWith("..")) return false; // file is above the base
+
+    // Match gitignore glob against the relative path
+    // Prepend any trailing separator from the literal for correct anchoring
+    const matchGlob = (literal.endsWith("/") ? "" : "") + glob;
+    return gitignoreToRegex(matchGlob).test(relative);
+  }
+
+  /**
+   * Check file access permissions (Read/Edit/Write rules) against a file path.
+   * Returns: true if allowed, false if denied or no matching rule.
+   */
+  function checkFilePermission(filePath: string): boolean {
+    const settings = loadSettings();
+    const perms = settings.permissions as Record<string, unknown> | undefined;
+    const allow: string[] = Array.isArray(perms?.allow) ? perms.allow as string[] : [];
+    const deny: string[] = Array.isArray(perms?.deny) ? perms.deny as string[] : [];
+
+    // Deny takes precedence
+    for (const rule of deny) {
+      if (pathRuleMatches(rule, filePath)) return false;
+    }
+
+    for (const rule of allow) {
+      if (pathRuleMatches(rule, filePath)) return true;
+    }
+
+    // No matching rule → not pre-authorized
+    return false;
+  }
+
+  // ---- Whitelist (permissions.allow) ----
+
+  function checkWhitelist(cmd: string): boolean {
+    const settings = loadSettings();
+    const perms = settings.permissions as Record<string, unknown> | undefined;
+    const allow: string[] = Array.isArray(perms?.allow) ? perms.allow as string[] : [];
+    const deny: string[] = Array.isArray(perms?.deny) ? perms.deny as string[] : [];
     const trimmed = cmd.trim();
-    for (const entry of state.whitelist) {
-      try {
-        if (new RegExp(entry.pattern).test(trimmed)) return true;
-      } catch { /* bad regex in whitelist */ }
+
+    // Deny takes precedence (Claude Code semantics: deny → ask → allow)
+    for (const rule of deny) {
+      if (bashRuleMatches(rule, trimmed)) return false;
+    }
+
+    for (const rule of allow) {
+      if (bashRuleMatches(rule, trimmed)) return true;
     }
     return false;
   }
 
-  function addToWhitelist(pattern, description) {
-    const state = loadState();
-    if (!state.whitelist.some(e => e.pattern === pattern)) {
-      state.whitelist.push({ pattern, description, created: Date.now() });
-      saveState(state);
+  function addToWhitelist(rule: string): void {
+    const settings = loadSettings();
+    const perms = ensurePermissions(settings);
+    const allow = perms.allow as string[];
+    if (!allow.includes(rule)) {
+      allow.push(rule);
+      saveSettings(settings);
+      console.error("[approve] added permission:", rule);
     }
   }
 
   // ============================================================
-  // Pattern generation for whitelist suggestions
+  // Permission rule generation for whitelist suggestions
   // ============================================================
 
-  function escapeRegex(s) {
-    return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  }
-
-  function generatePattern(cmd) {
+  function generatePermissionRule(cmd: string): { rule: string; description: string } {
     const trimmed = cmd.trim();
+    const base = extractCommandBase(trimmed);
+    const rule = "Bash(" + base + " *)";
+    return { rule, description: base + " *" };
+  }
 
-    // /nix/store/ path → generalize the path
-    const nixStore = trimmed.match(/^(\S+)\s+\/nix\/store\//);
-    if (nixStore) {
-      return {
-        pattern: "^" + escapeRegex(nixStore[1]) + "\\s+/nix/store/",
-        description: nixStore[1] + " /nix/store/*",
-      };
+  function extractCommandBase(cmd: string): string {
+    const words = cmd.split(/\s+/);
+    if (words.length === 0) return cmd;
+
+    // git <subcommand> — "git status"
+    if (words[0] === "git" && words.length >= 2) {
+      return words.slice(0, 2).join(" ");
     }
-
-    // kubectl get → generalize
-    const kubeGet = trimmed.match(/^(kubectl\s+get)\b/);
-    if (kubeGet) {
-      return {
-        pattern: "^" + escapeRegex(kubeGet[1]) + "\\b",
-        description: kubeGet[1] + " *",
-      };
+    // nix <subcommand> — "nix build"
+    if (words[0] === "nix" && words.length >= 2) {
+      return words.slice(0, 2).join(" ");
     }
-
-    // systemctl status/user info → generalize
-    const sysctl = trimmed.match(/^(systemctl\s+(status|list-units|show))\b/);
-    if (sysctl) {
-      return {
-        pattern: "^" + escapeRegex(sysctl[1]) + "\\b",
-        description: sysctl[1] + " *",
-      };
+    // systemctl <action> — "systemctl status"
+    if (words[0] === "systemctl" && words.length >= 2) {
+      return words.slice(0, 2).join(" ");
     }
-
-    // ssh → exact match
-    if (/^ssh\s/.test(trimmed)) {
-      return {
-        pattern: "^" + escapeRegex(trimmed) + "$",
-        description: trimmed,
-      };
+    // kubectl <action> — "kubectl get"
+    if (words[0] === "kubectl" && words.length >= 2) {
+      return words.slice(0, 2).join(" ");
     }
-
-    // git subcommand → allow that subcommand
-    const gitCmd = trimmed.match(/^(git\s+\S+)/);
-    if (gitCmd) {
-      return {
-        pattern: "^" + escapeRegex(gitCmd[1]) + "\\b",
-        description: gitCmd[1] + " *",
-      };
-    }
-
-    // Simple command → exact
-    if (/^\S+$/.test(trimmed)) {
-      return {
-        pattern: "^" + escapeRegex(trimmed) + "$",
-        description: trimmed,
-      };
-    }
-
-    // Build commands → match first two words
-    const buildCmd = trimmed.match(/^(nix\s+(build|develop|shell|search)|cargo\s+build|go\s+build)\b/);
-    if (buildCmd) {
-      return {
-        pattern: "^" + escapeRegex(buildCmd[1]) + "\\b",
-        description: buildCmd[1] + " *",
-      };
-    }
-
-    // Default: first two words
-    const words = trimmed.split(/\s+/);
-    const base = words.length >= 2 ? words.slice(0, 2).join(" ") : words[0];
-    return {
-      pattern: "^" + escapeRegex(base) + "\\b",
-      description: base + " *",
-    };
+    // Default: just first word
+    return words[0];
   }
 
   // ============================================================
   // Config reading helpers
   // ============================================================
 
-  function readSmolModelSpec() {
+  function readSmolModelSpec(): string | null {
     try {
       const cfg = path.join(os.homedir(), ".omp", "agent", "config.yml");
       const raw = fs.readFileSync(cfg, "utf-8");
@@ -224,7 +532,7 @@ The user runs commands in a NixOS environment with home-manager. Commands touchi
     }
   }
 
-  function readFallbackChain() {
+  function readFallbackChain(): string[] {
     try {
       const cfg = path.join(os.homedir(), ".omp", "agent", "config.yml");
       const raw = fs.readFileSync(cfg, "utf-8");
@@ -241,7 +549,7 @@ The user runs commands in a NixOS environment with home-manager. Commands touchi
   // LLM verdict parsing
   // ============================================================
 
-  function parseVerdictText(text) {
+  function parseVerdictText(text: string): { safe: boolean; reason: string } | null {
     if (!text) return null;
     text = text.replace(/^```(?:json)?\s*\n?/i, "").replace(/\n?```\s*$/i, "");
     try {
@@ -257,10 +565,10 @@ The user runs commands in a NixOS environment with home-manager. Commands touchi
   // Local regex classifier (no LLM needed)
   // ============================================================
 
-  function localClassify(cmd) {
+  function localClassify(cmd: string): { safe: boolean; reason: string; definite: boolean } {
     const trimmed = cmd.trim();
 
-    const unsafePatterns = [
+    const unsafePatterns: Array<[RegExp, string]> = [
       [/^git\s+(add|commit|push|pull|checkout|merge|rebase|reset|clean|tag\s+(?!(-l|--list))|stash\s+(push|drop|pop|apply|save)|branch\s+(-d|-D|--delete|--move|-m|--force))\b/, "git mutation"],
       [/\bgit\s+push\s+.*(--force|-f|--delete)\b/, "git force push or branch delete"],
       [/\bnixos-rebuild\s+(switch|boot|test)\b/, "nixos-rebuild system mutation"],
@@ -277,11 +585,11 @@ The user runs commands in a NixOS environment with home-manager. Commands touchi
 
     for (const [pat, reason] of unsafePatterns) {
       if (pat.test(trimmed)) {
-        return { safe: false, reason: "local: UNSAFE — " + reason };
+        return { safe: false, reason: "local: UNSAFE — " + reason, definite: true };
       }
     }
 
-    const safePatterns = [
+    const safePatterns: Array<[RegExp, string]> = [
       [/^git\s+(status\b|log\b|diff\b|show\b|stash\s+list\b|branch(?:\s|$)|remote\b|grep\b|blame\b|ls-files\b|ls-tree\b|rev-parse\b|rev-list\b|describe\b|tag(?:\s+(-l|--list)|$))/, "git read-only"],
       [/^(cat|ls|find|grep|head|tail|less|stat|file|du|df)\b/, "file reading"],
       [/^(read|wc|sort|uniq|cut|tr|awk|sed|jq)\b/, "text processing"],
@@ -295,18 +603,18 @@ The user runs commands in a NixOS environment with home-manager. Commands touchi
 
     for (const [pat, reason] of safePatterns) {
       if (pat.test(trimmed)) {
-        return { safe: true, reason: "local: SAFE — " + reason };
+        return { safe: true, reason: "local: SAFE — " + reason, definite: true };
       }
     }
 
-    return { safe: false, reason: "local: unrecognized command — blocking by default" };
+    return { safe: false, reason: "local: unrecognized command — blocking by default", definite: false };
   }
 
   // ============================================================
   // LLM-based classification
   // ============================================================
 
-  async function tryModel(spec, cmd, modelRegistry) {
+  async function tryModel(spec: string, cmd: string, modelRegistry: any): Promise<{ safe: boolean; reason: string } | null> {
     const slash = spec.indexOf("/");
     if (slash === -1) { console.error("[approve] invalid model spec:", spec); return null; }
 
@@ -360,13 +668,13 @@ The user runs commands in a NixOS environment with home-manager. Commands touchi
         console.error("[approve] model", spec, "verdict:", verdict.safe ? "SAFE" : "UNSAFE", "-", verdict.reason);
       }
       return verdict;
-    } catch (err) {
+    } catch (err: any) {
       console.error("[approve] fetch exception for", spec, ":", err?.message || err);
       return null;
     }
   }
 
-  async function classifyCommand(cmd, modelRegistry) {
+  async function classifyCommand(cmd: string, modelRegistry: any): Promise<{ safe: boolean; reason: string } | null> {
     const primary = readSmolModelSpec();
     if (!primary) { console.error("[approve] no smol model spec found"); return null; }
 
@@ -388,12 +696,13 @@ The user runs commands in a NixOS environment with home-manager. Commands touchi
   // Hook handlers
   // ============================================================
 
-  pi.on("session_start", async (_event, ctx) => {
+  pi.on("session_start", async (_event: any, ctx: any) => {
     const mode = getMode();
-    ctx.ui.notify("Approval hook loaded — mode: " + mode, "info");
+    const sfp = settingsFilePath();
+    ctx.ui.notify("Approval hook loaded — mode: " + mode + " (state: " + sfp + ")", "info");
   });
 
-  pi.on("tool_call", async (event, ctx) => {
+  pi.on("tool_call", async (event: any, ctx: any) => {
     const mode = getMode();
 
     // ---- Mode switching via omp-approve-mode command ----
@@ -408,8 +717,8 @@ The user runs commands in a NixOS environment with home-manager. Commands touchi
       }
     }
 
-    // ---- Edit/write interception (edits mode) ----
-    if (mode === "edits" && (event.toolName === "edit" || event.toolName === "write")) {
+    // ---- Edit/write tools (all modes — enforce Read/Edit/Write deny/allow rules) ----
+    if (event.toolName === "edit" || event.toolName === "write") {
       const filePath = event.input?.path || event.input?.file || "";
       let resolved = filePath;
       if (filePath.startsWith("local://")) {
@@ -417,39 +726,99 @@ The user runs commands in a NixOS environment with home-manager. Commands touchi
       } else if (!path.isAbsolute(filePath)) {
         resolved = path.resolve(repoRoot(), filePath);
       }
-      if (resolved.startsWith(repoRoot() + path.sep) || resolved === repoRoot()) {
-        return; // auto-allow edits within repo
+
+      // 1. Deny rules always enforced (all modes)
+      const settings = loadSettings();
+      const perms = settings.permissions as Record<string, unknown> | undefined;
+      const deny: string[] = Array.isArray(perms?.deny) ? perms.deny as string[] : [];
+      for (const rule of deny) {
+        if (pathRuleMatches(rule, resolved)) {
+          return { block: true, reason: "File blocked by deny rule: " + rule };
+        }
       }
+
+      // 2. Allow rules → auto-approve (all modes)
+      const allow: string[] = Array.isArray(perms?.allow) ? perms.allow as string[] : [];
+      for (const rule of allow) {
+        if (pathRuleMatches(rule, resolved)) return;
+      }
+
+      // 3. Mode-specific auto-approval
+      if (mode === "edits") {
+        if (resolved.startsWith(repoRoot() + path.sep) || resolved === repoRoot()) {
+          return; // auto-allow edits within repo in edits mode
+        }
+      }
+
+      // 4. Fall through: prompt or block
       if (ctx.hasUI) {
-        const ok = await ctx.ui.confirm("Edit outside repo", "Allow edit to: " + filePath + "?");
-        if (!ok) return { block: true, reason: "Edit outside repo denied" };
+        const ok = await ctx.ui.confirm("Edit file", "Allow edit to: " + filePath + "?");
+        if (!ok) return { block: true, reason: "Edit denied" };
         return;
       }
-      return { block: true, reason: "Edit outside repo blocked (no UI)" };
+      return { block: true, reason: "Edit blocked (no UI)" };
     }
 
     // ---- Bash commands ----
     if (event.toolName !== "bash") return;
     const cmd = String(event.input.command ?? "");
 
-    // 1. Whitelist check (all modes)
+    // 1. Whitelist check (all modes) — checks permissions.allow / permissions.deny
     if (checkWhitelist(cmd)) return;
 
     // 2. Per-mode behavior
     if (mode === "auto") {
+      // Local classifier runs first — deny patterns are non-negotiable.
+      // Claude Code's architecture: allow/deny rules → file ops → classifier.
+      // A compromised LLM must never override hardcoded unsafe patterns.
+      const localVerdict = localClassify(cmd);
+
+      if (!localVerdict.safe && localVerdict.definite) {
+        // Matched a hardcoded unsafe pattern → always prompt, skip LLM entirely
+        if (!ctx.hasUI) {
+          return { block: true, reason: "Command blocked: " + localVerdict.reason };
+        }
+        const ok = await ctx.ui.confirm(
+          "⚠ Unsafe command (policy)", cmd.slice(0, 200) + "\n\n" + localVerdict.reason + "\n\nAllow?");
+        if (!ok) {
+          ctx.ui.notify("Command denied", "error");
+          return { block: true, reason: "Denied: " + localVerdict.reason };
+        }
+        ctx.ui.notify("Command approved by user", "success");
+        return;
+      }
+
+      if (localVerdict.safe && localVerdict.definite) {
+        // Local classifier says definitely safe → auto-allow
+        return;
+      }
+
+      // Unrecognized by local classifier → consult LLM
       let verdict = await classifyCommand(cmd, ctx.modelRegistry);
       if (!verdict) {
-        console.error("[approve] all LLM classifiers unreachable, using local regex classifier");
-        ctx.ui.notify("LLM safety classifiers unreachable — using local fallback", "warning");
-        verdict = localClassify(cmd);
+        console.error("[approve] all LLM classifiers unreachable, using local fallback");
+        ctx.ui.notify("LLM safety classifiers unreachable — blocking unrecognized command", "warning");
+        // Unrecognized + LLM unavailable → block (conservative)
+        if (!ctx.hasUI) {
+          return { block: true, reason: "Command blocked (unrecognized, LLM unreachable): " + localVerdict.reason };
+        }
+        const ok2 = await ctx.ui.confirm(
+          "Unrecognized command", cmd.slice(0, 200) + "\n\n" + localVerdict.reason + "\n\nAllow?");
+        if (!ok2) {
+          ctx.ui.notify("Command denied", "error");
+          return { block: true, reason: "Denied: " + localVerdict.reason };
+        }
+        ctx.ui.notify("Command approved by user", "success");
+        return;
       }
       if (verdict.safe) return;
 
       if (!ctx.hasUI) {
         return { block: true, reason: "Command blocked: " + verdict.reason };
       }
-      const ok = await ctx.ui.confirm("Unsafe command", cmd.slice(0, 200) + "\n\n" + verdict.reason + "\n\nAllow?");
-      if (!ok) {
+      const ok3 = await ctx.ui.confirm(
+        "Unsafe command", cmd.slice(0, 200) + "\n\n" + verdict.reason + "\n\nAllow?");
+      if (!ok3) {
         ctx.ui.notify("Command denied", "error");
         return { block: true, reason: "Denied: " + verdict.reason };
       }
@@ -475,15 +844,15 @@ The user runs commands in a NixOS environment with home-manager. Commands touchi
       return { block: true, reason: "Denied: " + localVerdict.reason };
     }
 
-    // Offer to whitelist
-    const pattern = generatePattern(cmd);
+    // Offer to whitelist — saves as Bash(...) rule in permissions.allow
+    const { rule, description } = generatePermissionRule(cmd);
     const whitelistOk = await ctx.ui.confirm(
       "Always allow?",
-      "Pattern: " + pattern.pattern + "\nDescription: " + pattern.description + "\n\nFuture matching commands will run without confirmation."
+      "Rule: " + rule + "\nDescription: " + description + "\n\nSaved to .claude/settings.local.json\nFuture matching commands will run without confirmation."
     );
     if (whitelistOk) {
-      addToWhitelist(pattern.pattern, pattern.description);
-      ctx.ui.notify("Whitelisted: " + pattern.description, "success");
+      addToWhitelist(rule);
+      ctx.ui.notify("Allowed: " + rule, "success");
     }
 
     ctx.ui.notify("Command approved by user", "success");
