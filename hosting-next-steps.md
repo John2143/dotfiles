@@ -13,13 +13,13 @@
 | **Ashburn, VA** | server + agent | CPX31 (8GB / 4 vCPU / 160GB) | $24.99 | $49.98 |
 | **Hillsboro, OR** | server + agent | CPX31 (8GB / 4 vCPU / 160GB) | $24.99 | $49.98 |
 | **Nuremberg, DE** | server + agent | CPX32 (8GB / 4 vCPU / 160GB) | ~$15.20 | ~$30.40 |
-| **Home** | Raspberry Pi | PowerDNS #3, Uptime Kuma, RustFS | — | $0 + power |
+| **Home** | Raspberry Pi | Headscale (VPN coordination), PowerDNS #3, Uptime Kuma, RustFS | — | $0 + power |
 
 All 6 nodes symmetrically sized. Any node can run the full workload for its region. SeaweedFS uses local SSD (10GB per node, 3-way replication). B2 serves the full corpus with local hot cache.
 
 **LA mode**: 3 server nodes (~$75/mo). **HA mode**: 6 nodes (~$140/mo). Toggle via agent node provisioning/destruction.
 
-Full stack: NixOS / k3s / Cilium / Istio / Traefik+CrowdSec / k8gb+PowerDNS(MariaDB Galera)+ExternalDNS(RFC2136) / Bunny CDN(GeoIP) / SeaweedFS(local SSD,10GB,encrypted) / B2(rclone crypt) / Longhorn / MongoDB(`--enableEncryption`,active-passive) / CloudNativePG(streaming replica) / Temporal(MCR,active-passive) / ArgoCD / Prometheus+Grafana+Healthchecks.io
+Full stack: NixOS / k3s / Cilium / Istio / Traefik+CrowdSec / k8gb+PowerDNS(MariaDB Galera)+ExternalDNS(RFC2136) / Bunny CDN(GeoIP) / SeaweedFS(local SSD,10GB,encrypted) / B2(rclone crypt) / Longhorn / MongoDB(`--enableEncryption`,active-passive) / CloudNativePG(streaming replica) / Temporal(MCR,active-passive) / Headscale(VPN,Home Pi) / ArgoCD / Prometheus+Grafana+Healthchecks.io
 
 ---
 
@@ -27,25 +27,25 @@ Full stack: NixOS / k3s / Cilium / Istio / Traefik+CrowdSec / k8gb+PowerDNS(Mari
 
 ### 2.1 New Files: NixOS k3s Node Configurations (6 nodes)
 
-**`nixos/modules/hetzner-k3s-server.nix`** — Shared module. PowerDNS on host (systemd, boots before k3s). k3s with Cilium CNI. Split-IP firewall. MariaDB Galera node for PowerDNS backend.
+**`nixos/hetzner/modules/hetzner-k3s-server.nix`** — Shared module. PowerDNS on host (systemd, boots before k3s). k3s with Cilium CNI. Split-IP firewall. MariaDB Galera node for PowerDNS backend.
 
-**`nixos/modules/hetzner-k3s-agent.nix`** — Lighter module for agent nodes. No PowerDNS. No Galera. k3s agent joins the server's cluster.
+**`nixos/hetzner/modules/hetzner-k3s-agent.nix`** — Lighter module for agent nodes. No PowerDNS. No Galera. k3s agent joins the server's cluster.
 
-**`nixos/k3s-ashburn-server.nix`**, **`nixos/k3s-ashburn-agent.nix`** — Ashburn-specific SSH keys, IPs, hostnames.
+**`nixos/hetzner/hosts/ashburn-server.nix`**, **`nixos/hetzner/hosts/ashburn-agent.nix`**
+**`nixos/hetzner/hosts/hillsboro-server.nix`**, **`nixos/hetzner/hosts/hillsboro-agent.nix`**
+**`nixos/hetzner/hosts/nuremberg-server.nix`**, **`nixos/hetzner/hosts/nuremberg-agent.nix`**
 
-**`nixos/k3s-hillsboro-server.nix`**, **`nixos/k3s-hillsboro-agent.nix`**
-
-**`nixos/k3s-nuremberg-server.nix`**, **`nixos/k3s-nuremberg-agent.nix`**
+All configs live under `nixos/hetzner/` with its own `flake.nix` — fully decoupled from the parent flake.
 
 ### 2.2 Updated Files
 
-**`flake.nix`** — Add 6 NixOS configurations and the 2 new modules.
+**`nixos/hetzner/flake.nix`** — Independent sub-flake with 6 NixOS configurations, own inputs and lock file.
 
 ### 2.3 LA/HA Toggle Scripts
 
-**`scripts/toggle-ha.sh`** — Provisions 3 agent nodes via Hetzner API. Deploys NixOS. Agents join k3s clusters. ArgoCD deploys workloads.
+**`nixos/hetzner/scripts/toggle-ha.sh`** — Provisions 3 agent nodes via Hetzner API. Deploys NixOS. Agents join k3s clusters. ArgoCD deploys workloads.
 
-**`scripts/toggle-la.sh`** — Drains agent nodes gracefully. Destroys VMs via Hetzner API. Server nodes continue running.
+**`nixos/hetzner/scripts/toggle-la.sh`** — Drains agent nodes gracefully. Destroys VMs via Hetzner API. Server nodes continue running.
 
 ---
 
@@ -78,8 +78,8 @@ Deploy identically to all clusters via ArgoCD:
 ### Phase 0 — Provision (LA mode: 3 server nodes)
 1. Create 3 VMs: Ashburn CPX31, Hillsboro CPX31, Nuremberg CPX32
 2. Deploy NixOS via nixos-anywhere
-3. Verify: PowerDNS, MariaDB Galera, k3s, Cilium
-
+3. Set up Headscale on Home Pi first (not a Hetzner node — separate NixOS config)
+4. Verify: PowerDNS, MariaDB Galera, k3s, Cilium, Tailscale connected to Headscale
 ### Phase 1 — Bootstrap
 1. Configure PowerDNS zone + NS + TSIG key
 2. Deploy ArgoCD root App-of-Apps

@@ -86,6 +86,7 @@ in {
 
     direnv # nixos env manager: see also (direnv hook fish)
     # clang # compiler
+    # clang # compiler
     # rustup # rust compiler
     # bacon # rust build tool
     cargo-generate # rust project generator

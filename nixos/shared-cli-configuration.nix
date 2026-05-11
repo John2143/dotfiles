@@ -66,13 +66,17 @@
         omp-src = pkgs.fetchFromGitHub {
           owner = "John2143";
           repo = "oh-my-pi";
-          rev = "779f987e9c5e801b76fd4099e5e9e14a1edf1174";
-          hash = "sha256-7RHpj7GlwA6ZWELCpPxOp9HE6XSOj+9UQlO2WeL6rz0=";
+          rev = "0783a06277431390e2a80fb31b8948daaf4de90b";
+          hash = "sha256-ilFB2cH3/c20NA0yGmtUqiv454jMarqIn6qImBjOSjg=";
         };
         omp-unwrapped = (inputs.llm-agents.packages.${pkgs.stdenv.hostPlatform.system}.omp.overrideAttrs (old: {
-          version = "14.7.6-fix1";
+          version = "14.9.3";
           src = omp-src;
-          # cargoDeps, bunDeps, cargoHash all inherited from base (same Cargo.lock/bun.lock)
+          cargoDeps = pkgs.rustPlatform.fetchCargoVendor {
+            name = "omp-14.9.3-cargo-vendor";
+            src = omp-src;
+            hash = "sha256-lSWYXvk4w3QFt4FdlvAqdEJF8rV8CIfG35Mu3Iq7QFM=";
+          };
         }));
       in
       pkgs.writeShellScriptBin "omp" ''
@@ -81,7 +85,7 @@
             . /run/agenix/llm-runtime-keys
             set +a
           fi
-          ${inputs.llm-agents.packages.${pkgs.stdenv.hostPlatform.system}.omp}/bin/omp --system-prompt "$HOME/.omp/agent/system-prompt.md" "$@"
+          ${omp-unwrapped}/bin/omp --system-prompt "$HOME/.omp/agent/system-prompt.md" "$@"
           # exec ${pkgs.bubblewrap}/bin/bwrap \
           #   --ro-bind /nix/store /nix/store \
           #   --ro-bind /etc/resolv.conf /etc/resolv.conf \

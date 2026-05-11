@@ -1,0 +1,49 @@
+# PowerDNS Authoritative Server
+#
+# Provides authoritative DNS. Backend: MariaDB Galera (gmysql).
+# RFC2136 enabled for ExternalDNS. Listens on public IP for k8gb queries.
+{
+  ...
+}: {
+  age.secrets."hetzner/powerdns-tsig-key" = {
+    file = ../secrets/hetzner/powerdns-tsig-key.age;
+    owner = "pdns";
+    group = "pdns";
+  };
+
+  services.powerdns = {
+    enable = true;
+    extraConfig = ''
+      launch=gmysql
+      gmysql-host=127.0.0.1
+      gmysql-port=3306
+      gmysql-dbname=pdns
+      gmysql-user=pdns
+
+      local-address=0.0.0.0
+      local-port=53
+
+      dnsupdate=yes
+      allow-dnsupdate-from=127.0.0.0/8
+
+      default-ttl=60
+
+      api=yes
+      api-key=@PDNS_API_KEY@
+      webserver=yes
+      webserver-address=127.0.0.1
+      webserver-port=8081
+
+      allow-axfr-ips=127.0.0.1
+    '';
+  };
+
+  systemd.services.pdns = {
+    after = ["mysql.service"];
+    wants = ["mysql.service"];
+    before = ["k3s.service"];
+  };
+
+  networking.firewall.allowedTCPPorts = [53 8081];
+  networking.firewall.allowedUDPPorts = [53];
+}

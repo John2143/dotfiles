@@ -120,8 +120,10 @@
     bitwarden-desktop # password manager
     kind
     mongodb-compass
-    doctl
-
+    doctl # DigitalOcean CLI
+    hcloud # Hetzner CLI
+    rclone # S3/B2/RustFS sync
+    velero # K8s backup/migration
     e1s
     dbeaver-bin # db browser
 

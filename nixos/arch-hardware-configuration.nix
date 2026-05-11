@@ -21,7 +21,6 @@
     import fcntl
     import os
     import sys
-    import sys
     USBDEVFS_CONTROL = 0xc0185500
 
     # Option indexes from ps2avrGB firmware
@@ -62,7 +61,8 @@
 
 
     def find_device():
-        """Find busnum, devnum, devpath for ps2avrGB device."""
+        """Discover the ps2avrGB device. Returns dict with dev_path,
+        iface_id, unbind_path, bind_path, or None if not found."""
         for root, dirs, files in os.walk("/sys/devices"):
             if "idVendor" not in files:
                 continue
@@ -74,27 +74,75 @@
             with open(os.path.join(root, "idProduct")) as f:
                 if f.read().strip() != "422d":
                     continue
-            d = root
-            while d != "/sys/devices" and d != "/":
-                if os.path.exists(os.path.join(d, "busnum")):
-                    with open(os.path.join(d, "busnum")) as f:
-                        busnum = f.read().strip()
-                    with open(os.path.join(d, "devnum")) as f:
-                        devnum = f.read().strip()
-                    with open(os.path.join(d, "devpath")) as f:
-                        devpath = f.read().strip()
-                    return busnum, devnum, devpath
-                d = os.path.dirname(d)
-        return None, None, None
+
+            # Walk up to find the USB device node (holds busnum/devnum/devpath)
+            usb_dev = root
+            while usb_dev != "/sys/devices" and usb_dev != "/":
+                if os.path.exists(os.path.join(usb_dev, "busnum")):
+                    break
+                usb_dev = os.path.dirname(usb_dev)
+            else:
+                continue
+
+            with open(os.path.join(usb_dev, "busnum")) as f:
+                busnum = f.read().strip()
+            with open(os.path.join(usb_dev, "devnum")) as f:
+                devnum = f.read().strip()
+            with open(os.path.join(usb_dev, "devpath")) as f:
+                devpath = f.read().strip()
+
+            bus_padded = f"{int(busnum):03d}"
+            dev_padded = f"{int(devnum):03d}"
+            dev_path = f"/dev/bus/usb/{bus_padded}/{dev_padded}"
+
+            # Collect all interfaces with a driver bound
+            interfaces = []
+            for child in sorted(os.listdir(usb_dev)):
+                child_path = os.path.join(usb_dev, child)
+                if not os.path.isdir(child_path):
+                    continue
+                if not child.startswith(devpath + ":"):
+                    continue
+                driver_link = os.path.join(child_path, "driver")
+                if not os.path.islink(driver_link):
+                    continue
+                driver = os.path.basename(os.readlink(driver_link))
+                suffix = child[len(devpath):]   # e.g. ":1.1"
+                # Extract iface number from ":<config>.<iface>"
+                parts = suffix.lstrip(":").split(".")
+                if len(parts) >= 2:
+                    iface_num = int(parts[1])
+                else:
+                    iface_num = int(parts[0])
+                interfaces.append((suffix, driver, iface_num))
+
+            if not interfaces:
+                continue
+
+            # Use the last (highest-numbered) interface — the config interface
+            suffix, driver, iface_num = interfaces[-1]
+
+            iface_id = f"{busnum}-{devpath}{suffix}"
+            driver_base = "/sys/bus/usb/drivers"
+
+            return {
+                "dev_path": dev_path,
+                "iface_id": iface_id,
+                "iface_num": iface_num,
+                "unbind_path": f"{driver_base}/{driver}/unbind",
+                "bind_path": f"{driver_base}/{driver}/bind",
+            }
+
+        return None
 
 
-    def send_report(dev_path, data_bytes):
+    def send_report(dev_path, iface_num, data_bytes):
         """Send a SET_REPORT control transfer to the device."""
         ctrl = usbdevfs_ctrltransfer()
         ctrl.bRequestType = 0x21  # OUT, CLASS, INTERFACE
         ctrl.bRequest = 0x09       # SET_REPORT
         ctrl.wValue = 0x0301       # Feature report, Report ID 1
-        ctrl.wIndex = 0x0001       # Interface 1
+        ctrl.wIndex = iface_num    # Config interface number
         ctrl.wLength = len(data_bytes)
         ctrl.timeout = 1000
 
@@ -118,34 +166,34 @@
         return (g, r, b)
 
 
-    def cmd_off(dev_path):
+    def cmd_off(dev_path, iface_num):
         """Turn LEDs off."""
-        send_report(dev_path, bytes([0x01, OPT_MODE, MODE_OFF]))
+        send_report(dev_path, iface_num, bytes([0x01, OPT_MODE, MODE_OFF]))
         print("LEDs off")
 
 
-    def cmd_on(dev_path):
+    def cmd_on(dev_path, iface_num):
         """Turn LEDs on with color1 mode."""
-        send_report(dev_path, bytes([0x01, OPT_MODE, MODE_COLOR1]))
+        send_report(dev_path, iface_num, bytes([0x01, OPT_MODE, MODE_COLOR1]))
         print("LEDs on (color1)")
 
 
-    def cmd_color(dev_path, hexstr):
+    def cmd_color(dev_path, iface_num, hexstr):
         """Set color1 and switch to color1 mode."""
         g, r, b = parse_color(hexstr)
-        send_report(dev_path, bytes([0x01, OPT_COLOR1, g, r, b]))
-        send_report(dev_path, bytes([0x01, OPT_MODE, MODE_COLOR1]))
+        send_report(dev_path, iface_num, bytes([0x01, OPT_COLOR1, g, r, b]))
+        send_report(dev_path, iface_num, bytes([0x01, OPT_MODE, MODE_COLOR1]))
         print("Color set to #{}, LEDs on".format(hexstr))
 
 
-    def cmd_brightness(dev_path, val):
+    def cmd_brightness(dev_path, iface_num, val):
         """Set LED brightness (0-255)."""
         b = max(0, min(255, int(val)))
-        send_report(dev_path, bytes([0x01, OPT_BRIGHTNESS, b]))
+        send_report(dev_path, iface_num, bytes([0x01, OPT_BRIGHTNESS, b]))
         print("Brightness set to {}".format(b))
 
 
-    def cmd_rainbow(dev_path, fade_type=None):
+    def cmd_rainbow(dev_path, iface_num, fade_type=None):
         """Enable rainbow mode with optional fade type."""
         if fade_type is not None:
             ft = {
@@ -166,17 +214,17 @@
                     file=sys.stderr,
                 )
                 return
-            send_report(dev_path, bytes([0x01, OPT_FADE_TYPE, ft]))
-        send_report(dev_path, bytes([0x01, OPT_MODE, MODE_RAINBOW]))
+            send_report(dev_path, iface_num, bytes([0x01, OPT_FADE_TYPE, ft]))
+        send_report(dev_path, iface_num, bytes([0x01, OPT_MODE, MODE_RAINBOW]))
         label = " ({})".format(fade_type) if fade_type else ""
         print("Rainbow mode{}".format(label))
 
 
-    def cmd_mode(dev_path, mode):
-        """Set LED mode directly. 0=off, 1=rainbow, 2=color1, 3=color2, 4=color3."""
+    def cmd_mode(dev_path, iface_num, mode):
+        """Set LED mode directly."""
         m = max(0, min(4, int(mode)))
         names = ["off", "rainbow", "color1", "color2", "color3"]
-        send_report(dev_path, bytes([0x01, OPT_MODE, m]))
+        send_report(dev_path, iface_num, bytes([0x01, OPT_MODE, m]))
         print("Mode set to {} ({})".format(m, names[m]))
 
 
@@ -194,22 +242,22 @@
             usage()
             return 1
 
-        busnum, devnum, devpath = find_device()
-        if busnum is None:
+        dev = find_device()
+        if dev is None:
             print("ps2avrGB not found", file=sys.stderr)
             return 1
 
-        dev_path = (
-            f"/dev/bus/usb/{int(busnum):03d}/{int(devnum):03d}"
-        )
-        unbind_path = "/sys/bus/usb/drivers/usbhid/unbind"
-        bind_path = "/sys/bus/usb/drivers/usbhid/bind"
-        iface_id = f"{devpath}:1.1"
+        dev_path = dev["dev_path"]
+        iface_id = dev["iface_id"]
+        iface_num = dev["iface_num"]
+        unbind_path = dev["unbind_path"]
+        bind_path = dev["bind_path"]
 
-        # Unbind interface 1 from usbhid
+        # Unbind config interface from kernel driver
         try:
-            with open(unbind_path, "w") as f:
-                f.write(iface_id)
+            fd = os.open(unbind_path, os.O_WRONLY)
+            os.write(fd, iface_id.encode())
+            os.close(fd)
         except OSError as e:
             print(
                 "Failed to unbind {}: {}".format(iface_id, e),
@@ -221,35 +269,36 @@
         try:
             cmd = args[0]
             if cmd == "off":
-                cmd_off(dev_path)
+                cmd_off(dev_path, iface_num)
             elif cmd == "on":
-                cmd_on(dev_path)
+                cmd_on(dev_path, iface_num)
             elif cmd == "color" and len(args) >= 2:
-                cmd_color(dev_path, args[1])
+                cmd_color(dev_path, iface_num, args[1])
             elif cmd == "brightness" and len(args) >= 2:
-                cmd_brightness(dev_path, args[1])
+                cmd_brightness(dev_path, iface_num, args[1])
             elif cmd == "rainbow":
                 ft = args[1] if len(args) >= 2 else None
-                cmd_rainbow(dev_path, ft)
+                cmd_rainbow(dev_path, iface_num, ft)
             elif cmd == "mode" and len(args) >= 2:
-                cmd_mode(dev_path, args[1])
+                cmd_mode(dev_path, iface_num, args[1])
             else:
                 usage()
                 ok = False
         except (ValueError, OSError) as e:
             print("Error: {}".format(e), file=sys.stderr)
             ok = False
-
-        # Rebind interface 1
-        try:
-            with open(bind_path, "w") as f:
-                f.write(iface_id)
-        except OSError as e:
-            print(
-                "Failed to rebind {}: {}".format(iface_id, e),
-                file=sys.stderr,
-            )
-            return 1
+        finally:
+            # Rebind config interface - always runs, even on KeyboardInterrupt
+            try:
+                fd = os.open(bind_path, os.O_WRONLY)
+                os.write(fd, iface_id.encode())
+                os.close(fd)
+            except OSError as e:
+                print(
+                    "Failed to rebind {}: {}".format(iface_id, e),
+                    file=sys.stderr,
+                )
+                ok = False
 
         return 0 if ok else 1
 
@@ -437,4 +486,7 @@ in {
 
   hardware.bluetooth.enable = true; # enables support for Bluetooth
   hardware.bluetooth.powerOnBoot = true; # powers up the default Bluetooth controller on boot
+  environment.systemPackages = [
+    ps2avr_rgb
+  ];
 }

@@ -450,7 +450,7 @@ Complete bibliographies in individual research reports. Key primary sources:
 | | k3s agent (hot standby) | CPX31 (8GB / 4 vCPU / 160GB) | $24.99 |
 | **Nuremberg, DE** | k3s server | CPX32 (8GB / 4 vCPU / 160GB) | ~$15.20 |
 | | k3s agent (hot standby) | CPX32 (8GB / 4 vCPU / 160GB) | ~$15.20 |
-| **Home** | Raspberry Pi | PowerDNS #3, Uptime Kuma, RustFS | $0 + power |
+| **Home** | Raspberry Pi | Headscale (VPN), PowerDNS #3, Uptime Kuma, RustFS | $0 + power |
 
 All 6 nodes symmetrically sized. Any node can run the full workload for its region. SeaweedFS uses local SSD (10GB per node, 3-way replication, ~10GB usable hot cache). B2 serves the full corpus. Popular images cached locally.
 

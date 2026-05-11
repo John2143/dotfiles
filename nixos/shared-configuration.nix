@@ -199,6 +199,15 @@ in {
     serif = ["Noto Serif"];
     emoji = ["Noto Color Emoji"];
   };
+  fonts.fontconfig.antialias = true;
+  fonts.fontconfig.hinting = {
+    enable = true;
+    style = "slight";
+  };
+  fonts.fontconfig.subpixel = {
+    rgba = "rgb";
+    lcdfilter = "default";
+  };
 
   # audio
   services.pipewire = {
