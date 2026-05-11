@@ -11,11 +11,11 @@
 }: {
   services.headscale = {
     enable = true;
-    address = "127.0.0.1";
+    address = "0.0.0.0";
     port = 8080;
 
     settings = {
-      server_url = "https://home-pi.9s.pics";
+      server_url = "https://headscale.9s.pics";
 
       dns_config = {
         override_local_dns = true;

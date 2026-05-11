@@ -11,7 +11,7 @@
 }: {
   options.custom.headscaleServer = lib.mkOption {
     type = lib.types.str;
-    default = "https://home-pi.9s.pics";
+    default = "https://headscale.9s.pics";
     description = "Headscale server URL for tailscale up --login-server";
     example = "http://localhost:8080";
   };
