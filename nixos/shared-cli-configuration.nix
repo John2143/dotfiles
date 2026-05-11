@@ -66,8 +66,8 @@
         omp-src = pkgs.fetchFromGitHub {
           owner = "John2143";
           repo = "oh-my-pi";
-          rev = "0783a06277431390e2a80fb31b8948daaf4de90b";
-          hash = "sha256-ilFB2cH3/c20NA0yGmtUqiv454jMarqIn6qImBjOSjg=";
+          rev = "b04536a19b534d4e4ad90a6c37246d6bb27d7e0c";
+          hash = "sha256-/NBSN0Rh+lOmE8fCHfJSgZwU1H+2ulhoShyun7c/ZIk=";
         };
         omp-unwrapped = (inputs.llm-agents.packages.${pkgs.stdenv.hostPlatform.system}.omp.overrideAttrs (old: {
           version = "14.9.3";
@@ -76,6 +76,11 @@
             name = "omp-14.9.3-cargo-vendor";
             src = omp-src;
             hash = "sha256-lSWYXvk4w3QFt4FdlvAqdEJF8rV8CIfG35Mu3Iq7QFM=";
+          };
+          bunDeps = let
+            bun2nix' = (pkgs.extend inputs.llm-agents.inputs.bun2nix.overlays.default).bun2nix;
+          in bun2nix'.fetchBunDeps {
+            bunNix = ./omp-bun.nix;
           };
         }));
       in
