@@ -196,8 +196,9 @@ in
         baseDelayMs: 2000
         fallbackChains:
           default:
-            - "arch-ollama/gemma4"
+            - "deepseek/deepseek-v4-pro"
             - "anthropic/claude-sonnet-4-6"
+            - "office-ollama/qwen3.6:27b"
           smol:
             - "anthropic/claude-haiku-4-5"
     '';
@@ -295,6 +296,22 @@ in
       - nixos-rebuild switch, home-manager switch, nix-collect-garbage: confirm first.
       The tool-call approval hook (omp-safe) enforces these at the harness level — do not attempt to bypass it.
       </remember>
+
+      <agent-cron>
+      Schedule background work with `systemd-run --user` (no root, no NixOS rebuild, ephemeral — vanishes on reboot).
+
+      Recurring:  systemd-run --user --on-calendar="*:0/5" --unit="agent-foo" fish -c '…'
+      One-shot:   systemd-run --user --on-calendar="2026-05-11 03:00" --unit="agent-foo" ./script.sh
+      Relative:   systemd-run --user --on-active=30s --unit="agent-foo" fish -c '…'
+                  systemd-run --user --on-unit-inactive=5min --unit="agent-foo" ./retry.sh
+
+      List:       systemctl --user list-timers --all | grep agent-
+      Stop:       systemctl --user stop agent-foo.timer agent-foo.service
+
+      Prefix units `agent-`. Prefer `--on-unit-inactive=` to avoid overlap. Self-clean with `&& systemctl --user stop agent-foo.timer` on success. Remove timers when done.
+      Headless OMP: `omp launch -p "do X" --no-session` runs the agent non-interactively from a timer unit (approval hook blocks risky calls when no TTY).
+      Prefer `--model="office-ollama/qwen3.6:27b"` for cheap background queries; save paid models for complex work.
+      </agent-cron>
     '';
   };
 }

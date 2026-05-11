@@ -1,5 +1,5 @@
 ---
-description: Auto-discover an open GitHub issue, shepherd it through plan → implement → review → fix cycles, and deliver a reviewed PR ready for human merge
+description: Auto-discover an open GitHub issue, shepherd it through plan → implement → review → fix cycles, respond to human PR comments, and deliver a reviewed PR ready for human merge
 argument-hint: "[issue-number]"
 allowed-tools: Read, Write, Edit, Search, Find, Bash, Task, Ask
 tool-hints: |
@@ -23,7 +23,7 @@ This is a multi-session skill. The user invokes it repeatedly. Each invocation r
 
 | File | Purpose |
 |---|---|
-| `.gh-issue-state.json` | Current phase, issue number, branch, PR number, plan file, review findings |
+| `.gh-issue-state.json` | Current phase, issue number, branch, PR number, plan file, review findings, comment replies, cycle count |
 | `local://PLAN.md` | Implementation plan (written during plan phase, read during implement) |
 
 State file schema:
@@ -36,18 +36,29 @@ State file schema:
   "pr_number": 9,
   "plan_file": "local://PLAN.md",
   "incomplete_steps": ["Add zero-vector guard", "Pre-compute trig constants"],
-  "last_review_findings": {"critical": 0, "high": 1, "medium": 0, "low": 2}
+  "last_review_findings": {"critical": 0, "high": 1, "medium": 0, "low": 2},
+  "last_reviewed_commit": "a1b2c3d",
+  "review_cycles": 2,
+  "reply_to_comments": [
+    {"comment_id": "IC_kwABC123", "author": "reviewer1", "body_preview": "This should use a lookup table instead.", "resolved": false}
+  ],
+  "last_comment_check": "2025-01-15T10:30:00Z"
 }
 ```
 
 ### How to start each session
 
 1. Check if `.gh-issue-state.json` exists.
-   - **No state file**: Go to `discover` phase below.
-   - **State file exists**: Read it. Jump to the phase stored in `phase`. Execute that phase and only that phase.
-2. After completing the phase, update the `phase` field in the state file to the next phase (as specified at the end of each phase). Then stop.
-
-### How to work — execution phases
+   - **State file exists, phase is not `done`**: Read it. Jump to the phase stored in `phase`. Execute that phase and only that phase. This issue is still active — stay on it.
+   - **State file exists, phase is `done`**: The PR was finalized, but a human may have commented since. Check for new human comments on that specific PR (same procedure as review step 13). If new unresolved comments exist, add them to `reply_to_comments`, set `phase: "implement"`, and execute implement. If no new comments, delete `.gh-issue-state.json` and fall through to step 2.
+2. If no state file (or it was just deleted): **scan all open PRs for new human comments before reaching for new issues.** Existing PRs always take priority.
+   - List open PRs: `gh pr list --state open --json number,comments --jq '.[] | select(.comments | length > 0) | .number'`
+   - For each PR that has comments, fetch the full comment list and filter to human (non-self) comments. Since state files for completed PRs are deleted, treat any human comment on an open PR without an active state file as new.
+   - If any PR has unaddressed human comments:
+     - Present them: `"PR #<number> has <N> new comment(s) from <authors>. Latest: '<preview>'. Respond to this before new work?"`
+     - On confirmation, create a fresh `.gh-issue-state.json` for that PR seeded with `phase: "implement"`, `pr_number`, `reply_to_comments` from the new comments, and `review_cycles: 0`. Execute implement.
+   - If no PRs have new comments: proceed to `discover` phase to grab a new issue.
+3. After completing the phase, update the `phase` field in the state file to the next phase (as specified at the end of each phase). Then stop.
 
 #### Phase: discover
 
@@ -68,7 +79,7 @@ Find the next eligible issue, confirm with the user, label it, create state.
    - `gh issue edit <number> --add-label in-progress`
    - Create `.gh-issue-state.json`:
      ```json
-     {"issue_number": <number>, "issue_title": "<title>", "branch": null, "phase": "plan", "pr_number": null, "plan_file": "local://PLAN.md", "incomplete_steps": [], "last_review_findings": {}}
+     {"issue_number": <number>, "issue_title": "<title>", "branch": null, "phase": "plan", "pr_number": null, "plan_file": "local://PLAN.md", "incomplete_steps": [], "last_review_findings": {}, "last_reviewed_commit": null, "review_cycles": 0, "reply_to_comments": [], "last_comment_check": null}
      ```
    - Next phase: `plan`.
 
@@ -94,13 +105,14 @@ Explore the codebase, gather requirements, produce an implementation plan.
 
 #### Phase: implement
 
-Execute one step of the plan or fix one review finding.
+Execute one step of the plan, fix one review finding, or respond to one human PR comment.
 
 1. Read state file and plan file.
-2. Choose what to work on:
-   - If `last_review_findings` has `high` or `critical` entries: fix the highest-severity finding first.
+2. Choose what to work on (in priority order):
+   - If `last_review_findings` has `critical` or `high` entries: fix the highest-severity finding first.
+   - If `reply_to_comments` has unresolved entries: address the oldest unresolved comment.
    - Otherwise: pick the next item from `incomplete_steps`.
-   - If both lists are empty: set `phase: "review"` and stop.
+   - If all three lists are empty: set `phase: "review"` and stop.
 3. Re-read anchor lines before editing (hashes shift after prior edits).
 4. Make the change via `edit`. One function/module/concern per invocation.
 5. Verify: re-read modified lines, search for stale references to old patterns.
@@ -108,34 +120,49 @@ Execute one step of the plan or fix one review finding.
 7. If validation fails: read the error, fix, re-verify. Do not push failing code.
 8. Commit: `git add <files> && git commit -m "<description>\n\nRefs #<number>"`
 9. Push: `git push origin <branch>`
-10. If PR doesn't exist yet: `gh pr create --base main --head <branch> --title "<title>" --body "Fixes #<number>\n\n<summary>"`. Store PR number in state.
-11. Update state: remove completed step/finding from lists. If all steps done and no findings: set `phase: "review"`. If fixing a finding: set `phase: "review"`.
-12. Next phase: as determined above.
+10. If addressing a human comment: post a reply on the PR — `gh pr comment <number> --body "Addressed: <summary of what was changed>\n\n<optional: rationale if approach differs from suggestion>"`
+11. If PR doesn't exist yet: `gh pr create --base main --head <branch> --title "<title>" --body "Fixes #<number>\n\n<summary>"`. Store PR number in state.
+12. Update state:
+    - If fixing a review finding: decrement the severity count in `last_review_findings`. If all counts are zero, clear `last_review_findings` (set to `{}`).
+    - If addressing a comment: mark that comment `"resolved": true` in `reply_to_comments`.
+    - If completing a plan step: remove it from `incomplete_steps`.
+    - If all three lists (findings, comments, steps) are empty: set `phase: "review"`.
+    - Otherwise: set `phase: "implement"` to continue with remaining work.
+13. Next phase: as determined above.
 
 #### Phase: review
 
-Review the current diff and post structured findings as a PR comment.
+Review the current diff, post structured findings, and triage human PR comments.
 
-1. Read state file for branch and PR number.
-2. Get diff: `git diff main...<branch> --stat` then `git diff main...<branch>`.
-3. If more than 5 files changed: note "Review may be incomplete due to large diff."
-4. Check for `AGENTS.md` or `CLAUDE.md` — read for project conventions.
-5. For each changed file: read full file, cross-reference callers/callees via `search` or `lsp references`.
-6. Evaluate against: correctness, security, error handling, maintainability, performance.
-7. Produce findings. Each must have: severity (`CRITICAL`/`HIGH`/`MEDIUM`/`LOW`/`INFO`), file, line(s), problem description, concrete fix. Do not invent LOW/INFO findings to pad the list.
-   Example finding:
-   ```
-   1. **HIGH** — `scripts/game_manager.gd` (lines 616-622) — `clamp_launch_direction` returns non-normalized vector for `Vector2.ZERO` input. Fix: add `if dir == Vector2.ZERO: return Vector2(0.0, -1.0)` guard.
-   ```
-8. Also produce: Summary (score/10 + biggest gap) and Overall assessment paragraph.
-9. Post as PR comment: `gh pr comment <number> --body "## Review from automated agent\n\n### Summary\n...\n\n### Findings\n...\n\n### Overall assessment\n..."`
-10. Triaging:
-    - If `critical` findings exist: set `phase: "implement"`, store findings in `last_review_findings`.
-    - If `high` findings exist: set `phase: "implement"`, store findings.
-    - If only MEDIUM/LOW/INFO: ask user "Fix remaining MEDIUM findings or mark PR ready?" Update phase based on answer.
-    - If no findings: set `phase: "ready"`.
-11. Next phase: as determined above.
-    - Store current HEAD commit hash in state as `last_reviewed_commit`. On next review invocation, compare `HEAD` to `last_reviewed_commit` — if identical and no new commits exist, skip review and transition to `ready`.
+1. Read state file for branch, PR number, `last_reviewed_commit`, `review_cycles`.
+2. Guard: if `HEAD` equals `last_reviewed_commit` (no new commits since last review) and `reply_to_comments` is empty: skip review — set `phase: "ready"` and stop.
+3. Safety limit: if `review_cycles >= 5`: warn "5 review cycles reached — manual triage recommended." Set `phase: "ready"` and stop.
+4. Increment `review_cycles` in state.
+5. Get diff: `git diff main...<branch> --stat` then `git diff main...<branch>`.
+6. If more than 5 files changed: note "Review may be incomplete due to large diff."
+7. Check for `AGENTS.md` or `CLAUDE.md` — read for project conventions.
+8. For each changed file: read full file, cross-reference callers/callees via `search` or `lsp references`.
+9. Evaluate against: correctness, security, error handling, maintainability, performance.
+10. Produce findings. Each must have: severity (`CRITICAL`/`HIGH`/`MEDIUM`/`LOW`/`INFO`), file, line(s), problem description, concrete fix. Do not invent LOW/INFO findings to pad the list.
+    Example finding:
+    ```
+    1. **HIGH** — `scripts/game_manager.gd` (lines 616-622) — `clamp_launch_direction` returns non-normalized vector for `Vector2.ZERO` input. Fix: add `if dir == Vector2.ZERO: return Vector2(0.0, -1.0)` guard.
+    ```
+11. Also produce: Summary (score/10 + biggest gap) and Overall assessment paragraph.
+12. Post as PR comment: `gh pr comment <number> --body "## Review from automated agent (cycle <review_cycles>)\n\n### Summary\n...\n\n### Findings\n...\n\n### Overall assessment\n..."`
+13. Check for human PR comments (do this every review invocation, not just the first):
+    - `gh pr view <number> --json comments --jq '.comments[] | select(.author.login != "<your login>") | {id: .id, author: .author.login, body: .body, createdAt: .createdAt}'`
+    - Determine your own login: `gh auth status 2>&1 | head -1` or `gh api user --jq .login`.
+    - Filter to comments created after `last_comment_check` (or all human comments if `last_comment_check` is null).
+    - For each new unresolved human comment: append to `reply_to_comments` as `{"comment_id": "<id>", "author": "<login>", "body_preview": "<first 120 chars>", "resolved": false}`.
+    - Update `last_comment_check` to current ISO timestamp.
+14. Triaging (decide next phase):
+    - If `critical` or `high` findings exist: store findings in `last_review_findings`, set `phase: "implement"`.
+    - If `reply_to_comments` has unresolved entries: set `phase: "implement"`.
+    - If only MEDIUM/LOW/INFO findings: store in `last_review_findings`, set `phase: "implement"` to auto-fix them. Multiple review cycles are expected and normal.
+    - If no findings and no unresolved comments: set `phase: "ready"`.
+15. Store current HEAD commit hash in state as `last_reviewed_commit`.
+16. Next phase: as determined above.
 
 #### Phase: ready
 
@@ -148,7 +175,7 @@ Finalize the PR for human review.
      ```
      ## AI attribution
      **Agent role**: Full implementation from plan with self-review
-     **Phases**: Discover → Plan → Implement → Self-review → Fix → Re-review
+     **Phases**: Discover → Plan → Implement → Review → Fix → Re-review (×<review_cycles> cycles) → Comment response
      **Not verified**: <things that could not be tested in this environment>
      **Human attention needed**: <areas requiring human judgment>
      ---
@@ -164,13 +191,13 @@ Finalize the PR for human review.
 - Never force-push. Never use `--no-verify` or `--no-gpg-sign`.
 - Never modify files outside the repo root.
 - Never read, print, or commit secrets, `.env` files, or private keys.
-- Each invocation executes exactly one phase. Do not chain phases.
+- Each invocation executes exactly one phase. Do not chain phases. Multiple review→implement cycles are normal — repeat invocations until ready.
 - If stuck (ambiguous issue, unclear requirement, unavailable tooling): surface the problem and stop — do not guess.
-- If the issue touches more than 5 files or 3 subsystems, flag it for the user. Consider `plan-breakdown` for decomposition.
+- If the issue touches more than 5 files or 3 subsystems, flag it for the user. Consider `plan-breakdown` for decomposition. Comment-response changes that touch additional files are expected — the 5-file limit applies to initial implementation, not follow-up responses.
 - If `gh` CLI returns an auth or permission error: report "gh CLI error — check `gh auth status`." and stop.
 - If `.gh-issue-state.json` is malformed or missing required fields: report the parse error, show the expected schema (from Key files above), and stop.
 - If `git push` is rejected (non-fast-forward): report "Push rejected — branch may have diverged. Manual intervention needed." and stop.
 
 ### TLDR
 
-Read `.gh-issue-state.json` to find the current phase, execute one unit of work (discover → plan → implement → review → fix loop → ready), update state, and stop. Never merge. Surface blockers rather than guessing. Invoke repeatedly until phase is `done`.
+Read `.gh-issue-state.json` to find the current phase, execute one unit of work (discover → plan → implement → review → fix/comment loop → ready), update state, and stop. Never merge. Surface blockers rather than guessing. Multiple review cycles and comment responses are expected — invoke repeatedly until phase is `done`.

@@ -92,26 +92,31 @@ function parseVerdictText(text: string): { safe: boolean; reason: string } | nul
   }
 }
 
+
 async function classifyCommand(cmd, modelRegistry) {
   const spec = readSmolModelSpec();
-  if (!spec) return null;
+  if (!spec) { console.error("[approve] no smol model spec found"); return null; }
 
   const slash = spec.indexOf("/");
-  if (slash === -1) return null;
+  if (slash === -1) { console.error("[approve] invalid model spec:", spec); return null; }
 
   const provider = spec.slice(0, slash);
   const modelId = spec.slice(slash + 1);
+  console.error("[approve] looking up model:", provider, modelId);
   const model = modelRegistry.find(provider, modelId);
-  if (!model) return null;
+  if (!model) { console.error("[approve] model not found:", provider, modelId); return null; }
+  console.error("[approve] model found, baseUrl:", model.baseUrl, "id:", model.id);
 
   const apiKey = await modelRegistry.getApiKey(model);
-  if (!apiKey) return null;
+  if (!apiKey) { console.error("[approve] no API key for model:", model.provider, model.id); return null; }
+  console.error("[approve] apiKey obtained (len=" + apiKey.length + ")");
 
   try {
     const ac = new AbortController();
     const timer = setTimeout(() => ac.abort(), CLASSIFY_TIMEOUT_MS);
 
     const url = `${model.baseUrl}/chat/completions`;
+    console.error("[approve] fetching:", url);
     const response = await fetch(url, {
       method: "POST",
       headers: {
@@ -133,12 +138,19 @@ async function classifyCommand(cmd, modelRegistry) {
 
     clearTimeout(timer);
 
-    if (!response.ok) return null;
+    console.error("[approve] response status:", response.status);
+    if (!response.ok) {
+      const errText = await response.text().catch(() => "");
+      console.error("[approve] response error body:", errText.slice(0, 500));
+      return null;
+    }
 
     const data = await response.json();
     const contentText = data.choices?.[0]?.message?.content;
+    console.error("[approve] verdict text:", contentText?.slice(0, 200));
     return parseVerdictText(contentText);
-  } catch {
+  } catch (err) {
+    console.error("[approve] fetch exception:", err?.message || err);
     return null;
   }
 }

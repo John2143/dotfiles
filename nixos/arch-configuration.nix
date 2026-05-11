@@ -67,34 +67,34 @@ let
           fi
 
           ;;
-        fan-toggle)
+        ac-toggle)
           hass_post fan/toggle '{"entity_id":"fan.john_ac_combo_fans"}'
+          signal_waybar
+          hass_notify ac "AC" "Toggled"
+          ;;
+        fan-toggle)
+          hass_post fan/toggle '{"entity_id":"fan.plug_upstairs_desktop_computer_switch"}'
           signal_waybar
           hass_notify fan "Fan" "Toggled"
           ;;
-        plug-toggle)
-          hass_post fan/toggle '{"entity_id":"fan.plug_upstairs_desktop_computer_switch"}'
-          signal_waybar
-          hass_notify plug "Plug" "Upstairs desktop computer toggled"
-          ;;
-        light-toggle)
+        light-lamp)
           hass_post light/toggle '{"entity_id":"light.john_bedroom_lamp"}'
           signal_waybar
           hass_notify lamp "Lamp" "Toggled"
           ;;
 
-        superbight-toggle)
+        light-dresser)
           hass_post light/toggle '{"entity_id":"light.plug_bedroom_superbright"}'
           signal_waybar
-          hass_notify superbight "Superbight" "Toggled"
+          hass_notify dresser "Dresser Light" "Toggled"
           ;;
-        ac-switch-toggle)
+        light-ac)
           hass_post light/toggle '{"entity_id":"light.plug_bedroom_ac_and_fan_switch"}'
           signal_waybar
-          hass_notify ac-switch "AC Switch" "Toggled"
+          hass_notify ac-light "AC Light" "Toggled"
           ;;
         *)
-          echo "Usage: hass-macro {thermostat-down|thermostat-up|thermostat-toggle|fan-toggle|plug-toggle|light-toggle|superbight-toggle|ac-switch-toggle}" >&2
+          echo "Usage: hass-macro {thermostat-down|thermostat-up|thermostat-toggle|ac-toggle|fan-toggle|light-lamp|light-dresser|light-ac}" >&2
           exit 1
           ;;
       esac
@@ -227,17 +227,17 @@ in
         #   000=f20, 001=S-f20, 010=C-f20, 011=C-S-f20
         q   = "f20";       # 000  → monitors on
         w   = "S-f20";     # 001  → monitors off
-        e   = "C-f20";     # 010  → light: dresser (superbight-toggle)
-        r   = "C-S-f20";   # 011  → light: window AC (ac-switch-toggle)
+        e   = "C-f20";     # 010  → light: dresser (light-dresser)
+        r   = "C-S-f20";   # 011  → light: window AC (light-ac)
         #
         # Base F21 — home row (a s d f):
         a   = "f21";       # 000  → thermostat −1° (thermostat-down)
-        s   = "S-f21";     # 001  → AC toggle (thermostat-toggle)
+        s   = "S-f21";     # 001  → AC toggle (ac-toggle)
         d   = "C-f21";     # 010  → thermostat +1° (thermostat-up)
         f   = "C-S-f21";   # 011  → thermostat toggle (thermostat-toggle)
         #
         # Base F22 — bottom/edge (y g, esc t reserved):
-        y   = "f22";       # 000  → light: lamp (light-toggle)
+        y   = "f22";       # 000  → light: lamp (light-lamp)
         g   = "S-f22";     # 001  → fan toggle (fan-toggle)
         esc = "C-f22";     # 010  (reserved)
         t   = "C-S-f22";   # 011  (reserved)

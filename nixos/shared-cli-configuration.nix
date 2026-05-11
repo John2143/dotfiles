@@ -75,13 +75,13 @@
           # cargoDeps, bunDeps, cargoHash all inherited from base (same Cargo.lock/bun.lock)
         }));
       in
-        pkgs.writeShellScriptBin "omp" ''
+      pkgs.writeShellScriptBin "omp" ''
           if [ -f /run/agenix/llm-runtime-keys ]; then
             set -a
             . /run/agenix/llm-runtime-keys
             set +a
           fi
-          ${omp-unwrapped}/bin/omp --system-prompt "$HOME/.omp/agent/system-prompt.md" "$@"
+          ${inputs.llm-agents.packages.${pkgs.stdenv.hostPlatform.system}.omp}/bin/omp --system-prompt "$HOME/.omp/agent/system-prompt.md" "$@"
           # exec ${pkgs.bubblewrap}/bin/bwrap \
           #   --ro-bind /nix/store /nix/store \
           #   --ro-bind /etc/resolv.conf /etc/resolv.conf \
@@ -96,7 +96,8 @@
           #   --setenv PATH "$PATH" \
           #   --setenv TERM "''${TERM:-xterm}" \
           #   --unshare-all --share-net --die-with-parent \
-        '')
+        ''
+      )
       # claude wrapper: allowlist-style sandbox — explicitly bind only what
       # claude needs. Default-deny on $HOME, /run, and the rest of the host.
       #

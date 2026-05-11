@@ -161,6 +161,10 @@
           interval = 30;
           signal = 8;
           format = "{}";
+          on-click-right = "hass-macro ac-toggle";
+          on-scroll-up = "hass-macro thermostat-up";
+          on-scroll-down = "hass-macro thermostat-down";
+          on-click-middle = "hass-macro thermostat-toggle";
           tooltip = true;
         };
       }) // {
