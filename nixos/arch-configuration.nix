@@ -93,8 +93,14 @@ let
           signal_waybar
           hass_notify ac-light "AC Light" "Toggled"
           ;;
+
+        light-bedroom)
+          hass_post light/toggle '{"entity_id":"light.john_bedroom_light"}'
+          signal_waybar
+          hass_notify bedroom-light "Bedroom Light" "Toggled"
+          ;;
         *)
-          echo "Usage: hass-macro {thermostat-down|thermostat-up|thermostat-toggle|ac-toggle|fan-toggle|light-lamp|light-dresser|light-ac}" >&2
+          echo "Usage: hass-macro {thermostat-down|thermostat-up|thermostat-toggle|ac-toggle|fan-toggle|light-lamp|light-dresser|light-ac|light-bedroom}" >&2
           exit 1
           ;;
       esac
@@ -232,8 +238,8 @@ in
 
         # Requires `fkeys:basic_13-24` in hyprland kb_options (evdev defaults
         # F13-F23 to XF86 keysyms like XF86Launch9, XF86AudioMicMute, etc.).
-        # F18-F24 plain + Alt+F18-F24 = 14 signals across 11 mapped keys.
-        #
+        # Each target keycode can be combined with any subset of {Shift, Meta,
+        # Control, Alt, AltGr}, giving 2^6 = 64 possible binds per physical key.
         esc = "f18";     # (reserved)
         q   = "f19";    # monitors on
         w   = "f20";    # monitors off
@@ -241,10 +247,11 @@ in
         r   = "f22";    # light: window AC (light-ac)
         y   = "f23";    # light: lamp (light-lamp)
         a   = "f24";    # thermostat −1° (thermostat-down)
-        s   = "A-f18";  # AC toggle (ac-toggle)
-        d   = "A-f19";  # thermostat +1° (thermostat-up)
+        s   = "A-M-S-f18"; # AC toggle (ac-toggle) [TEST: 3-mod]
+        d   = "C-A-S-f19"; # thermostat +1° (thermostat-up) [TEST: 3-mod]
         f   = "A-f20";  # thermostat toggle (thermostat-toggle)
         g   = "A-f21";  # fan toggle (fan-toggle)
+        "5" = "XF86Launch8"; # light: bedroom overhead (light-bedroom)
     };
   };
   }; # close services.keyd

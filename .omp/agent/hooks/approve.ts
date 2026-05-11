@@ -55,6 +55,165 @@ The user runs commands in a NixOS environment with home-manager. Commands touchi
 
 const CLASSIFY_TIMEOUT_MS = 10000;
 
+// repoRoot captured at hook load time — OMP cwd is the repo directory.
+const repoRoot = process.cwd();
+
+// ---- State management (mode + whitelist) ----
+// State file is per-repo: ~/.omp/agent/approve-state/<repo-path-sanitized>.json
+function stateFilePath(): string {
+  const safe = repoRoot.replace(/^\/+/, "").replace(/[\/:]/g, "-") || "root";
+  return path.join(os.homedir(), ".omp", "agent", "approve-state", `${safe}.json`);
+}
+type Mode = "normal" | "edits" | "auto";
+
+interface WhitelistEntry {
+  pattern: string;
+  description: string;
+  created: number;
+}
+
+interface ApproveState {
+  mode: Mode;
+  whitelist: WhitelistEntry[];
+}
+
+function loadState(): ApproveState {
+  try {
+    const raw = fs.readFileSync(stateFilePath(), "utf-8");
+    const parsed = JSON.parse(raw);
+    return {
+      mode: parsed.mode || "normal",
+      whitelist: Array.isArray(parsed.whitelist) ? parsed.whitelist : [],
+    };
+  } catch {
+    return { mode: "normal", whitelist: [] };
+  }
+}
+
+function saveState(state: ApproveState): void {
+  try {
+    const sfp = stateFilePath();
+    fs.mkdirSync(path.dirname(sfp), { recursive: true });
+    fs.writeFileSync(sfp, JSON.stringify(state, null, 2), "utf-8");
+  } catch (err) {
+    console.error("[approve] failed to save state:", err?.message || err);
+  }
+}
+
+function getMode(): Mode {
+  const envMode = (typeof process !== "undefined" && process.env?.OMP_APPROVE_MODE) || "";
+  if (envMode === "normal" || envMode === "edits" || envMode === "auto") return envMode;
+  return loadState().mode;
+}
+
+function setMode(mode: Mode): void {
+  const state = loadState();
+  state.mode = mode;
+  saveState(state);
+}
+
+function checkWhitelist(cmd: string): boolean {
+  const state = loadState();
+  const trimmed = cmd.trim();
+  for (const entry of state.whitelist) {
+    try {
+      if (new RegExp(entry.pattern).test(trimmed)) return true;
+    } catch { /* bad regex in whitelist — skip */ }
+  }
+  return false;
+}
+
+function addToWhitelist(pattern: string, description: string): void {
+  const state = loadState();
+  // Deduplicate
+  if (!state.whitelist.some(e => e.pattern === pattern)) {
+    state.whitelist.push({ pattern, description, created: Date.now() });
+    saveState(state);
+  }
+}
+
+// ---- Pattern generation for whitelist suggestions ----
+function generatePattern(cmd: string): { pattern: string; description: string } {
+  const trimmed = cmd.trim();
+
+  // /nix/store/ path → generalize the path
+  const nixStore = trimmed.match(/^(\S+)\s+\/nix\/store\//);
+  if (nixStore) {
+    const base = nixStore[1];
+    return {
+      pattern: `^${escapeRegex(base)}\\s+/nix/store/`,
+      description: `${base} /nix/store/*`,
+    };
+  }
+
+  // kubectl get → generalize to kubectl get *
+  const kubeGet = trimmed.match(/^(kubectl\s+get)\b/);
+  if (kubeGet) {
+    const base = kubeGet[1];
+    return {
+      pattern: `^${escapeRegex(base)}\\b`,
+      description: `${base} *`,
+    };
+  }
+
+  // systemctl status/user info → generalize
+  const sysctl = trimmed.match(/^(systemctl\s+(status|list-units|show))\b/);
+  if (sysctl) {
+    const base = sysctl[1];
+    return {
+      pattern: `^${escapeRegex(base)}\\b`,
+      description: `${base} *`,
+    };
+  }
+
+  // ssh host cmd → exact (ssh is sensitive)
+  if (/^ssh\s/.test(trimmed)) {
+    return {
+      pattern: `^${escapeRegex(trimmed)}$`,
+      description: trimmed,
+    };
+  }
+
+  // git subcommand → allow that subcommand
+  const gitCmd = trimmed.match(/^(git\s+\S+)/);
+  if (gitCmd) {
+    const base = gitCmd[1];
+    return {
+      pattern: `^${escapeRegex(base)}\\b`,
+      description: `${base} *`,
+    };
+  }
+
+  // Simple command with no arguments → exact match
+  if (/^\S+$/.test(trimmed)) {
+    return {
+      pattern: `^${escapeRegex(trimmed)}$`,
+      description: trimmed,
+    };
+  }
+
+  // Build commands (nix build, cargo build, go build) — match first two words
+  const buildCmd = trimmed.match(/^(nix\s+(build|develop|shell|search)|cargo\s+build|go\s+build)\b/);
+  if (buildCmd) {
+    const base = buildCmd[1];
+    return {
+      pattern: `^${escapeRegex(base)}\\b`,
+      description: `${base} *`,
+    };
+  }
+
+
+  // Default: prefix match on first two words (or just first word)
+  const words = trimmed.split(/\s+/);
+  const base = words.length >= 2 ? words.slice(0, 2).join(" ") : words[0];
+  return {
+    pattern: `^${escapeRegex(base)}\\b`,
+    description: `${base} *`,
+  };
+
+function escapeRegex(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
 function readSmolModelSpec(): string | null {
   try {
     const cfg = path.join(os.homedir(), ".omp", "agent", "config.yml");
@@ -227,37 +386,109 @@ async function classifyCommand(cmd, modelRegistry) {
   return null; // all models failed
 }
 
+
 export default function (pi) {
   pi.on("session_start", async (_event, ctx) => {
-    ctx.ui.notify("LLM safety hook loaded", "info");
+    const mode = getMode();
+    ctx.ui.notify(`Approval hook loaded — mode: ${mode}`, "info");
   });
 
   pi.on("tool_call", async (event, ctx) => {
-    if (event.toolName !== "bash") return;
+    const mode = getMode();
 
+    // ---- Mode switching via omp-approve-mode command ----
+    if (event.toolName === "bash") {
+      const cmd = String(event.input.command ?? "").trim();
+      const modeSwitch = cmd.match(/^omp-approve-mode\s+(normal|edits|auto)$/);
+      if (modeSwitch) {
+        const newMode = modeSwitch[1] as Mode;
+        setMode(newMode);
+        ctx.ui.notify(`Mode changed to: ${newMode}`, "success");
+        return { block: true, reason: `Mode changed to ${newMode}. Run your command again.` };
+      }
+    }
+
+    // ---- Edit/write interception (edits mode) ----
+    if (mode === "edits" && (event.toolName === "edit" || event.toolName === "write")) {
+      const filePath = event.input?.path || event.input?.file || "";
+      // Resolve local:// URIs and relative paths against repoRoot
+      let resolved = filePath;
+      if (filePath.startsWith("local://")) {
+        resolved = path.join(repoRoot, filePath.slice("local://".length));
+      } else if (!path.isAbsolute(filePath)) {
+        resolved = path.resolve(repoRoot, filePath);
+      }
+      if (resolved.startsWith(repoRoot + path.sep) || resolved === repoRoot) {
+        return; // auto-allow edits within repo
+      }
+      // External — prompt
+      if (ctx.hasUI) {
+        const ok = await ctx.ui.confirm("Edit outside repo", `Allow edit to: ${filePath}?`);
+        if (!ok) return { block: true, reason: "Edit outside repo denied" };
+        return;
+      }
+      return { block: true, reason: "Edit outside repo blocked (no UI)" };
+    }
+
+    // ---- Bash commands ----
+    if (event.toolName !== "bash") return;
     const cmd = String(event.input.command ?? "");
 
-    let verdict = await classifyCommand(cmd, ctx.modelRegistry);
+    // 1. Whitelist check (all modes)
+    if (checkWhitelist(cmd)) return;
 
-    if (!verdict) {
-      // All LLM classifiers unreachable — fall back to local regex classifier
-      console.error("[approve] all LLM classifiers unreachable, using local regex classifier");
-      ctx.ui.notify("LLM safety classifiers unreachable — using local fallback", "warning");
-      verdict = localClassify(cmd);
+    // 2. Per-mode behavior
+    if (mode === "auto") {
+      // Auto mode: LLM classifier → safe passes, unsafe prompts
+      let verdict = await classifyCommand(cmd, ctx.modelRegistry);
+      if (!verdict) {
+        console.error("[approve] all LLM classifiers unreachable, using local regex classifier");
+        ctx.ui.notify("LLM safety classifiers unreachable — using local fallback", "warning");
+        verdict = localClassify(cmd);
+      }
+      if (verdict.safe) return;
+
+      if (!ctx.hasUI) {
+        return { block: true, reason: `Command blocked: ${verdict.reason}` };
+      }
+      const ok = await ctx.ui.confirm("Unsafe command", `${cmd.slice(0, 200)}\n\n${verdict.reason}\n\nAllow?`);
+      if (!ok) {
+        ctx.ui.notify("Command denied", "error");
+        return { block: true, reason: `Denied: ${verdict.reason}` };
+      }
+      ctx.ui.notify("Command approved by user", "success");
+      return;
     }
 
-    if (verdict.safe) return; // LLM says safe — let it through
+    // Normal / Edits mode: user confirms, then optional whitelist
+    const localVerdict = localClassify(cmd);
+    const safetyLabel = localVerdict.safe ? "Approve command?" : "⚠ Potentially unsafe — approve?";
 
-    // LLM says unsafe — prompt user
     if (!ctx.hasUI) {
-      return { block: true, reason: `Command blocked: ${verdict.reason}` };
+      if (localVerdict.safe) return;
+      return { block: true, reason: `Command blocked (no UI): ${localVerdict.reason}` };
     }
 
-    const ok = await ctx.ui.confirm("Unsafe command", `${cmd.slice(0, 200)}\n\n${verdict.reason}\n\nAllow?`);
+    const ok = await ctx.ui.confirm(
+      safetyLabel,
+      `${cmd.slice(0, 200)}\n\n${localVerdict.reason}\n\nAllow this once?`
+    );
     if (!ok) {
       ctx.ui.notify("Command denied", "error");
-      return { block: true, reason: `Denied: ${verdict.reason}` };
+      return { block: true, reason: `Denied: ${localVerdict.reason}` };
     }
+
+    // Offer to whitelist
+    const pattern = generatePattern(cmd);
+    const whitelistOk = await ctx.ui.confirm(
+      "Always allow?",
+      `Pattern: ${pattern.pattern}\nDescription: ${pattern.description}\n\nFuture matching commands will run without confirmation.`
+    );
+    if (whitelistOk) {
+      addToWhitelist(pattern.pattern, pattern.description);
+      ctx.ui.notify(`Whitelisted: ${pattern.description}`, "success");
+    }
+
     ctx.ui.notify("Command approved by user", "success");
   });
 }
