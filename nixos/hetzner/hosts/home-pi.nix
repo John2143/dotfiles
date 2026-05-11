@@ -14,6 +14,7 @@
   ...
 }: {
   imports = [
+    ./home-pi-hardware-configuration.nix
     ../modules/headscale.nix
     ../modules/hetzner-ssh.nix
     ../modules/hetzner-powerdns-bootstrap.nix
@@ -23,6 +24,25 @@
   ];
 
   networking.hostName = "home-pi";
+
+  # agenix identity
+  age.identityPaths = ["/home/john/.ssh/age"];
+
+  # Bootloader (Pi uses extlinux)
+  boot.loader = {
+    grub.enable = false;
+    generic-extlinux-compatible.enable = true;
+  };
+
+  system.stateVersion = "26.05";
+
+  # SSH and user
+  services.openssh.enable = true;
+  users.users.john = {
+    isNormalUser = true;
+    extraGroups = ["wheel"];
+    openssh.authorizedKeys.keys = sshKeys;
+ };
 
   # Connect to the local Headscale instance running on this host
   custom.headscaleServer = "http://localhost:8080";
