@@ -1,8 +1,8 @@
 # Headscale — Self-hosted Tailscale coordination server
 #
 # Runs on the Home Pi. All Hetzner nodes + home machines join this tailnet.
-# Tailscale on the same host connects via localhost:8080.
-# External nodes connect via the Home Pi's public IP (initial) or Tailscale IP (post-bootstrap).
+# Listens on 0.0.0.0:8080 so closet's Traefik can reverse-proxy to it.
+# Default ACL policy allows all tailnet traffic.
 {
   config,
   lib,
@@ -35,24 +35,11 @@
           "https://raw.githubusercontent.com/2143-Labs/2143-59s/main/base/headscale/derp-map.yaml"
         ];
       };
-
-      # ACLs — allow all nodes in the tailnet
-      acl_policy_path = "";
     };
-
-    # Default ACL: allow all traffic within the tailnet
-    aclPolicy = ''
-      {
-        "acls": [
-          {"action": "accept", "src": ["*"], "dst": ["*:*"]}
-        ]
-      }
-    '';
   };
 
-  # Allow external connections to headscale (for initial join and ongoing coordination)
-  # Post-bootstrap, restrict to Tailscale interface only
-  networking.firewall.allowedTCPPorts = [443 8080];
+  # Allow external connections to headscale
+  networking.firewall.allowedTCPPorts = [8080];
 
   # systemd: ensure headscale starts before tailscale on the same host
   systemd.services.tailscale = {
