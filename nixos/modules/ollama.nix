@@ -77,8 +77,9 @@ in {
 
     systemd.services.ollama-model-pull = lib.mkIf (cfg.modelNames != []) {
       description = "Pull declared ollama models";
-      after = ["ollama.service"];
+      after = ["network-online.target" "ollama.service"];
       requires = ["ollama.service"];
+      wants = ["network-online.target"];
       wantedBy = ["multi-user.target"];
       serviceConfig = {
         Type = "oneshot";

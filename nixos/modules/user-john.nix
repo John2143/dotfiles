@@ -9,6 +9,8 @@
   ];
 in {
   # Define a user account. Don't forget to set a password with ‘passwd’.
+  users.groups.plugdev = {};
+
   users.users.john = {
     isNormalUser = true;
     extraGroups = [
@@ -23,6 +25,7 @@ in {
       "audio" # to access audio devices
       "lp" # to access printers
       "scanner" # to access scanners
+      "plugdev" # debug probes (J-Link, ST-LINK, etc.)
     ];
     initialPassword = "john";
     shell = pkgs.fish;

@@ -313,6 +313,10 @@ in {
 
   # bluetooth
   services.blueman.enable = true;
+  # Fix blueman-applet user service: the NixOS module generated an override
+  # that adds a second ExecStart= line on top of the package's Type=dbus
+  # service, which systemd refuses to load.
+  systemd.user.services.blueman-applet.serviceConfig.ExecStart = lib.mkForce "${pkgs.blueman}/bin/blueman-applet";
 
   #systemd.timers."kdeconnect-refresh" = {
   #wantedBy = [ "timers.target" ];

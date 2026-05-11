@@ -291,6 +291,7 @@ in
       </stakes>
 
       <remember>
+      - Never run `find` (built-in Find tool, `fd`, `locate`, bash `find`, etc.) on /nix/store, ~/private, or ~ — those subtrees are enormous or encrypted and will hang. Always narrow to a specific subdirectory instead.
       - Do not write or edit files outside the repo root without confirmation.
       - Never read, print, or commit secrets, .env files, or private keys.
       - nixos-rebuild switch, home-manager switch, nix-collect-garbage: confirm first.
