@@ -91,6 +91,17 @@ Detailed reports at `ai_research/using-an-open-source-nonprofit-stack-like-desec
 - `phase_1_summary.md`
 - `final_report.md`
 
+
+### Phase 4: Geo-Distributed Encrypted Object Storage (3 sub-topics)
+
+**Key finding**: SeaweedFS selected over Garage for per-file AES-256-GCM encryption and richer S3 API. MinIO eliminated (archived Feb 2026). Requires 3× 100GB Hetzner Cloud Volumes (~€15/mo total) for 3-way replication of 250GB. Encryption: LUKS2 + SeaweedFS encryptVolumeData + rclone crypt per backup target. Backups: B2 ($1.44/mo) + home RustFS. Monitoring: Healthchecks.io.
+
+Detailed reports at `ai_research/geo-distributed-encrypted-object-storage/`:
+- `reports/garage-seaweedfs-minio-comparison_report.md`
+- `reports/encryption-distributed-object-storage_report.md`
+- `reports/multi-target-backup-b2-rustfs_report.md`
+- `phase_1_summary.md`
+- `final_report.md`
 ---
 
 ## 5. Technology Decisions
@@ -108,9 +119,10 @@ Detailed reports at `ai_research/using-an-open-source-nonprofit-stack-like-desec
 | DNS hosting | PowerDNS on host (NixOS systemd) | Zero external dependency; RFC2136 API; configurable TTL; boots before k3s |
 | DNS failover | k8gb (CNCF) | Open-source GSLB; mutual CoreDNS queries across clusters; geoip strategy |
 | DNS sync | ExternalDNS + RFC2136 provider | Updates PowerDNS via TSIG-authenticated DNS UPDATE |
-| Object storage | Backblaze B2 (direct S3 API) | $1.50/mo for 250GB; free egress via Cloudflare Bandwidth Alliance; S3-compatible; no encryption layer needed |
-| Database | Self-hosted MongoDB (encryption at rest) | Already runs on DOKS; `--enableEncryption` flag; local-path PV; encrypted hourly backups to B2; zero cost |
-| Storage | Longhorn (open-source) | Snapshots, S3 backup to B2, UI; ~200-300MB RAM overhead; $0; already familiar from home cluster |
+| Object storage | SeaweedFS (hot, geo-distributed) | 3× 100GB Hetzner Cloud Volumes (~€15/mo); per-file AES-256-GCM encryption; 3-way replication; local reads in all regions |
+| Object backups | Backblaze B2 (cold) + home RustFS (warm) | rclone crypt with separate keys per target; ~$1.44/mo; Healthchecks.io monitoring |
+| Database | Self-hosted MongoDB (encryption at rest) | Already runs on DOKS; `--enableEncryption` flag; Longhorn PV; encrypted hourly backups to B2; zero cost |
+| Storage (PVCs) | Longhorn (open-source) | Snapshots, S3 backup to B2, UI; ~200-300MB RAM overhead; $0; already familiar from home cluster |
 | DDoS mitigation | CrowdSec + Traefik middleware + iptables + Hetzner native | 5-layer defense; $0 software; ~€1.50/mo for extra IPs |
 | Certificates | cert-manager + Let's Encrypt | Already deployed; open-source; automatic renewal |
 
@@ -141,6 +153,7 @@ Detailed reports at `ai_research/using-an-open-source-nonprofit-stack-like-desec
 | deSEC DNS | Fallback | If PowerDNS proves too operationally heavy, deSEC with TTL exception |
 | Cloudflare free DNS | Fallback | If both PowerDNS and deSEC fail, CF free tier (60s TTL, in-tree ExternalDNS provider) |
 | Home node | Optional | Can replace one paid node (~$14/mo savings) |
+| Bunny CDN | Optional | Anycast CDN overlay (~$1-2/mo): 120+ PoPs, sub-second failover, edge caching, DDoS absorption. Flip DNS away to revert to k8gb-only. |
 
 ---
 
@@ -153,15 +166,18 @@ Detailed reports at `ai_research/using-an-open-source-nonprofit-stack-like-desec
 | Node 1 (US East) | Hetzner Ashburn CPX21 | 3 vCPU / 4GB / 80GB SSD | $13.99 |
 | Node 2 (US West) | Hetzner Hillsboro CPX21 | 3 vCPU / 4GB / 80GB SSD | $13.99 |
 | Node 3 (EU) | Hetzner Nuremberg CX22 | 2 vCPU / 4GB / 40GB SSD | ~$4.99 |
-| Object storage | Backblaze B2 | 250GB, S3 API | $1.50 |
-| Database | Self-hosted MongoDB | Encryption at rest, Longhorn PV, hourly backup to B2 | $0 |
-| Storage | Longhorn | Open-source, runs on existing nodes, snapshots + S3 backup | $0 |
-| DNS | PowerDNS (self-hosted) | On existing nodes, NixOS systemd | $0 |
+| Hot storage (SeaweedFS) | Hetzner Cloud Volumes | 3× 100GB for 3-way replication | ~€15.00 |
+| Cold backup (B2) | Backblaze B2 | 250GB encrypted, rclone crypt | ~$1.44 |
+| Warm backup | Home RustFS | S3-compatible, encrypted, rclone crypt | $0 |
+| Database | Self-hosted MongoDB | Encryption at rest, Longhorn PV | $0 |
+| DNS | PowerDNS (self-hosted) | On existing nodes | $0 |
 | DDoS extra IPs | Hetzner | 3× extra IPv4 (~€0.50/IP/mo) | ~$1.58 |
-| All software | k8gb, ExternalDNS, Traefik, Cilium, CrowdSec, cert-manager, Prometheus, Grafana, ArgoCD, Longhorn | Open-source | $0 |
-| **Total** | | | **~$36.05** |
+| All software | k8gb, ExternalDNS, Traefik, Cilium, CrowdSec, cert-manager, Prometheus, Grafana, ArgoCD, Longhorn, SeaweedFS | Open-source | $0 |
+| Optional: Bunny CDN | Bunny.net pull zone | Anycast CDN, 120+ PoPs | ~$1-2 |
+| **Total (without Bunny)** | | | **~$50.99** |
+| **Total (with Bunny)** | | | **~$52.99** |
 
-**Savings vs. DO $43/month**: ~$6.95/month (16%) with significantly higher reliability (3 nodes vs. 1).
+**Note**: Total exceeds the original $43 target due to SeaweedFS volume costs (~€15/mo) — a necessary addition for 3-way geo-distributed replication of 250GB. The original target was set before distributed encrypted object storage was in scope. The architecture provides dramatically higher reliability (3 nodes vs 1, anycast CDN option, dual encrypted backups) for ~$8-10/mo more than the current DO setup.
 
 ### Rejected architectures (for reference)
 
@@ -234,6 +250,18 @@ k8gb geoip: user's resolver IP → closest healthy cluster
       ▼
 Traefik (direct public IP) → CrowdSec bouncer → App pod
 ```
+```
+
+### 7.2.1 With Optional Bunny CDN (Anycast Overlay)
+
+```
+User → Bunny CDN (120+ anycast PoPs, sub-10ms globally)
+         Cache hit → serve from edge
+         Cache miss → pull from k8gb origin (closest healthy node)
+
+If Bunny CDN goes down: flip DNS A record to k8gb CoreDNS IPs.
+Reverts to k8gb-only failover. No lock-in — one DNS change.
+```
 
 ### 7.3 Failover Flow (Ashburn fails)
 
@@ -281,6 +309,57 @@ T+0-60s  User DNS caches expire (60s TTL).
 └─────────────────────────────────────────────┘
 ```
 
+### 7.5 End-to-End Architecture (with Bunny CDN)
+
+```
+                        ┌──────────────────────────────────────┐
+                        │           Users worldwide             │
+                        └──────────────────┬───────────────────┘
+                                           │
+                        ┌──────────────────▼───────────────────┐
+                        │   Bunny CDN ($1-2/mo, optional)      │
+                        │   120+ anycast PoPs, sub-10ms edge   │
+                        └──────────────────┬───────────────────┘
+                                           │
+             ┌─────────────────────────────┼─────────────────────────────┐
+             │                             │                             │
+   ┌─────────▼──────────┐       ┌─────────▼──────────┐       ┌─────────▼──────────┐
+   │   Ashburn, VA      │       │  Hillsboro, OR     │       │  Nuremberg, DE     │
+   │   Hetzner CPX21    │       │  Hetzner CPX21     │       │  Hetzner CX22      │
+   │                    │       │                    │       │                    │
+   │ PowerDNS (host)    │       │ k8gb + CoreDNS     │       │ PowerDNS (host)    │
+   │ k8gb + CoreDNS     │       │ Traefik + CrowdSec │       │ k8gb + CoreDNS     │
+   │ Traefik + CrowdSec │       │ MongoDB (stby)     │       │ Traefik + CrowdSec │
+   │ MongoDB+Longhorn   │       │ SeaweedFS Volume   │       │ MongoDB (stby)     │
+   │ SeaweedFS Volume   │       │ Your apps          │       │ SeaweedFS Volume   │
+   │ Your apps          │       │                    │       │ Your apps          │
+   │                    │       │                    │       │                    │
+   │ Protected IP :443  │       │ Protected IP :443  │       │ Protected IP :443  │
+   │ Raw IP (game/TS)   │       │ Raw IP             │       │ Raw IP             │
+   └────────┬───────────┘       └────────┬───────────┘       └────────┬──────────┘
+            │                            │                            │
+            └────────────────────────────┼────────────────────────────┘
+                                         │
+            ┌────────────────────────────┼────────────────────────────┐
+            │                            │                            │
+   ┌────────▼──────────┐      ┌─────────▼──────────┐      ┌─────────▼──────────┐
+   │ SeaweedFS Volume  │      │ SeaweedFS Volume   │      │ SeaweedFS Volume   │
+   │ 100GB, LUKS2      │      │ 100GB, LUKS2       │      │ 100GB, LUKS2      │
+   │ encryptVolumeData │      │ encryptVolumeData  │      │ encryptVolumeData │
+   │ per-file AES-GCM  │      │ per-file AES-GCM   │      │ per-file AES-GCM  │
+   └───────────────────┘      └────────────────────┘      └───────────────────┘
+            │                            │                            │
+            └────────────────────────────┼────────────────────────────┘
+                                         │
+                  ┌──────────────────────▼──────────────────────┐
+                  │          Backups (async, daily CronJob)      │
+                  │                                              │
+                  │  rclone crypt ──► Backblaze B2 ($1.44/mo)   │
+                  │  rclone crypt ──► Home RustFS (warm)         │
+                  │  Healthchecks.io monitoring                  │
+                  └─────────────────────────────────────────────┘
+```
+
 ---
 
 ## 8. Source References
@@ -297,3 +376,60 @@ Complete bibliographies in individual research reports. Key primary sources:
 - Backblaze B2: `https://www.backblaze.com/cloud-storage/pricing`
 - MongoDB Atlas: `https://www.mongodb.com/pricing`
 - Hetzner DDoS: `https://www.hetzner.com/pressroom/nokia-network-security/`
+
+---
+
+## 9. Final Architecture: 5-Nines Platform (~$92/mo)
+
+**Target**: 99.999% uptime (≤5.26 minutes downtime/year)
+
+### Node Layout (9 nodes total)
+
+| Location | Node | Role | Plan | Monthly |
+|----------|------|------|------|---------|
+| **Ashburn, VA** | k3s server | PowerDNS, k8gb, MongoDB (active), CloudNativePG (primary), Temporal Server, SeaweedFS volume | CPX21 4GB | $13.99 |
+| | k3s agent | Temporal Workers, HTTP apps, Istio sidecars, MongoDB backup | CPX11 2GB | ~$6.99 |
+| **Hillsboro, OR** | k3s server | k8gb, Traefik, CrowdSec, MongoDB (standby), CloudNativePG (replica), SeaweedFS volume | CPX21 4GB | $13.99 |
+| | k3s agent | Temporal Workers, HTTP apps, Istio sidecars | CPX11 2GB | ~$6.99 |
+| **Nuremberg, DE** | k3s server | PowerDNS, k8gb, MongoDB (standby), CloudNativePG (replica), SeaweedFS volume | CPX21 4GB | ~$9.90 |
+| | k3s agent | Temporal Workers, HTTP apps, Istio sidecars | CPX11 2GB | ~$4.95 |
+| **Home (Raspberry Pi)** | Standalone | PowerDNS #3 (multi-provider tiebreaker), k8gb split-brain witness, Uptime Kuma monitoring, RustFS backup target | Pi 4/5 | $0 + power |
+
+### New Components
+
+| Component | Why |
+|-----------|-----|
+| **CloudNativePG** | Per-region streaming replication, automated failover (<60s), WAL archiving to B2 |
+| **Temporal.io** | Durable execution engine; active on Ashburn, 18 workers across all 6 nodes |
+| **Istio** | Service mesh: mTLS, retries, circuit breaking, distributed tracing |
+| **2 nodes per region** | Single node failure → pods reschedule to sibling. DB has dedicated replica. |
+| **Home Pi (PowerDNS #3)** | 3rd authoritative DNS on non-Hetzner hardware — breaks single-provider dependency |
+| **Bunny CDN (default)** | Anycast edge, sub-second failover. If down, flip DNS to k8gb direct. |
+
+### Cost Breakdown
+
+| Component | Monthly |
+|-----------|---------|
+| 3× CPX21 servers | $37.88 |
+| 3× CPX11/CX22 agents | $18.93 |
+| SeaweedFS Volumes (3× 100GB) | ~$16.50 |
+| Backblaze B2 (cold backup) | $1.44 |
+| Bunny CDN (pull zone) | ~$2.00 |
+| DDoS extra IPs | $1.58 |
+| Home Pi (power) | ~$5.00 |
+| All software — open-source | $0 |
+| **Total** | **~$92/mo** |
+
+### 5-Nines Downtime Budget
+
+| Failure | Recovery | Events/yr | Budget used |
+|---------|----------|-----------|-------------|
+| Single node crash (pods reschedule) | 10-30s | 3× | 30-90s |
+| Region down (Bunny CDN anycast) | Sub-second | 0.5× | <1s |
+| CloudNativePG auto-promote | 30-60s | 0.5× | 15-30s |
+| PowerDNS failure (requires 2/3 down) | 60s TTL | 0.1× | 6s |
+| Bunny CDN outage → k8gb fallback | 60s flip | 0.5× | 30s |
+| **Total consumed** | | | **~2-3 min/yr** |
+| **99.999% budget** | | | **5.26 min/yr** ✅ |
+
+**Critical risk**: All 6 VPS nodes are on Hetzner. A Hetzner outage takes down everything except the Home Pi DNS and B2. True 5-nines requires 1 multi-provider node (~$15/mo) for compute redundancy during a provider outage.

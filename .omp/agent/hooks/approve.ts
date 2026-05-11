@@ -4,14 +4,16 @@
 // via raw fetch to the OpenAI-compatible /chat/completions endpoint. The model's
 // baseUrl and API key are resolved through ctx.modelRegistry.
 //
-// If the smol model is unreachable, blocks by default (fail-closed).
-//
+// Classification is tried in order:
+//   1. Primary smol model (from config.yml modelRoles.smol)
+//   2. Fallback chain (from config.yml retry.fallbackChains.smol)
+//   3. Local regex classifier (ultimate fallback — no network needed)
 // The LLM returns a JSON verdict { safe: boolean, reason: string }.
 // Safe commands pass through; unsafe ones trigger an interactive confirm dialog.
-//
-// json_schema is the safe default that works everywhere (OpenAI, DeepSeek,
-// vLLM, ollama ≥0.6). We also keep a text-parsing fallback for providers
-// that ignore responseFormat.
+// No response_format is sent — json_schema is rejected by DeepSeek v4,
+// json_object crashes vLLM Outlines, and ollama <0.6 ignores it.
+// The prompt instructs JSON-only output; parseVerdictText() handles
+// markdown-fenced fallback parsing for providers that ignore it.
 
 import * as fs from "node:fs";
 import * as path from "node:path";
@@ -43,26 +45,14 @@ UNSAFE (requires user confirmation):
 
 The user runs commands in a NixOS environment with home-manager. Commands touching /nix/store are sensitive. Commands inside /tmp or that just print/output are safe.`;
 
-// json_schema is the safe default that works everywhere (OpenAI, DeepSeek,
-// vLLM, ollama ≥0.6). vLLM with the Outlines backend rejects
-// { type: "json_object" } — sending the schemaless form crashes EngineCore.
-const VERDICT_SCHEMA = {
-  name: "verdict",
-  strict: true,
-  schema: {
-    type: "object",
-    additionalProperties: false,
-    required: ["safe", "reason"],
-    properties: {
-      safe: { type: "boolean" },
-      reason: { type: "string" },
-    },
-  },
-};
-
-const RESPONSE_FORMAT = { type: "json_schema", json_schema: VERDICT_SCHEMA };
-
+// We intentionally do NOT send response_format. json_schema is rejected
+// by DeepSeek v4 Flash (400: "response_format type is unavailable now"),
+// json_object crashes vLLM with the Outlines backend, and ollama <0.6
+// ignores it anyway. The prompt already instructs "Respond ONLY with a
+// JSON object" and parseVerdictText() strips markdown fences before
+// JSON.parse — this is the most portable approach.
 // Timeout for the classification call (ms).
+
 const CLASSIFY_TIMEOUT_MS = 10000;
 
 function readSmolModelSpec(): string | null {
@@ -73,6 +63,20 @@ function readSmolModelSpec(): string | null {
     return m ? m[1].trim() : null;
   } catch {
     return null;
+  }
+}
+function readFallbackChain(): string[] {
+  try {
+    const cfg = path.join(os.homedir(), ".omp", "agent", "config.yml");
+    const raw = fs.readFileSync(cfg, "utf-8");
+    // Find fallbackChains block, then smol section within it.
+    // Capture everything from "smol:" until the next indented key or end of string.
+    const fbMatch = raw.match(/fallbackChains:[\s\S]*?smol:([\s\S]*?)(?=\n  \w|\n\w|$)/);
+    if (!fbMatch) return [];
+    const items = fbMatch[1].matchAll(/- "([^"]+)"/g);
+    return [...items].map(m => m[1]);
+  } catch {
+    return [];
   }
 }
 
@@ -91,25 +95,67 @@ function parseVerdictText(text: string): { safe: boolean; reason: string } | nul
     return null;
   }
 }
+function localClassify(cmd: string): { safe: boolean; reason: string } {
+  const trimmed = cmd.trim();
+
+  // ---- UNSAFE patterns (checked first) ----
+  const unsafePatterns: Array<[RegExp, string]> = [
+    [/^git\s+(add|commit|push|pull|checkout|merge|rebase|reset|clean|tag\s+(?!(-l|--list))|stash\s+(push|drop|pop|apply|save)|branch\s+(-d|-D|--delete|--move|-m|--force))\b/, "git mutation"],
+    [/\bgit\s+push\s+.*(--force|-f|--delete)\b/, "git force push or branch delete"],
+    [/\bnixos-rebuild\s+(switch|boot|test)\b/, "nixos-rebuild system mutation"],
+    [/\bhome-manager\s+switch\b/, "home-manager switch"],
+    [/\bnix-collect-garbage\b/, "nix-collect-garbage"],
+    [/\brm\s+-r?f?\s+(?!\/tmp\b)\//, "recursive deletion outside /tmp"],
+    [/\brm\s+-r?f?\s+\/(etc|nix|boot|home|root|var|opt|usr)\b/, "deletion of system directory"],
+    [/\b(curl|wget)\b.*\|\s*(sh|bash|sudo\s+bash)\b/, "pipe network fetch to shell"],
+    [/\b(mkfs\.|dd\s+if=|fdisk|parted|mkswap)\b/, "disk/partition manipulation"],
+    [/\b(drop\s+(table|database)|alter\s+table|truncate(\s+table)?)\b/i, "database schema change"],
+    [/\b(nix\s+profile\s+install|apt(-get)?\s+install|pip\d?\s+install)\b/, "package installation"],
+    [/[>|]\s*\/+(etc|nix|boot)\//, "writing to system config path"],
+  ];
+
+  for (const [pat, reason] of unsafePatterns) {
+    if (pat.test(trimmed)) {
+      return { safe: false, reason: `local: UNSAFE — ${reason}` };
+    }
+  }
+
+  // ---- SAFE patterns ----
+  const safePatterns: Array<[RegExp, string]> = [
+    [/^git\s+(status\b|log\b|diff\b|show\b|stash\s+list\b|branch(?:\s|$)|remote\b|grep\b|blame\b|ls-files\b|ls-tree\b|rev-parse\b|rev-list\b|describe\b|tag(?:\s+(-l|--list)|$))/, "git read-only"],
+    [/^(cat|ls|find|grep|head|tail|less|stat|file|du|df)\b/, "file reading"],
+    [/^(read|wc|sort|uniq|cut|tr|awk|sed|jq)\b/, "text processing"],
+    [/^(echo|printf|print)\b/, "display"],
+    [/^(nix\s+(build|develop|shell|search)|cargo\s+build|go\s+build)\b/, "build without switch"],
+    [/^(curl|wget)\b/, "network fetch"],
+    [/^(which|type|command\s+-v|env|printenv|pwd|whoami|id|uname|hostname|date)\b/, "system info"],
+    [/^(apt-cache|pip\d?\s+(list|show|freeze))\b/, "package query"],
+    [/^\/tmp\//, "operation in /tmp"],
+  ];
+
+  for (const [pat, reason] of safePatterns) {
+    if (pat.test(trimmed)) {
+      return { safe: true, reason: `local: SAFE — ${reason}` };
+    }
+  }
+
+  // Default: unrecognized → block (conservative)
+  return { safe: false, reason: "local: unrecognized command — blocking by default" };
+}
 
 
-async function classifyCommand(cmd, modelRegistry) {
-  const spec = readSmolModelSpec();
-  if (!spec) { console.error("[approve] no smol model spec found"); return null; }
-
+async function tryModel(spec: string, cmd: string, modelRegistry: any): Promise<{ safe: boolean; reason: string } | null> {
   const slash = spec.indexOf("/");
   if (slash === -1) { console.error("[approve] invalid model spec:", spec); return null; }
 
   const provider = spec.slice(0, slash);
   const modelId = spec.slice(slash + 1);
-  console.error("[approve] looking up model:", provider, modelId);
+  console.error("[approve] trying model:", provider, modelId);
   const model = modelRegistry.find(provider, modelId);
   if (!model) { console.error("[approve] model not found:", provider, modelId); return null; }
-  console.error("[approve] model found, baseUrl:", model.baseUrl, "id:", model.id);
 
   const apiKey = await modelRegistry.getApiKey(model);
   if (!apiKey) { console.error("[approve] no API key for model:", model.provider, model.id); return null; }
-  console.error("[approve] apiKey obtained (len=" + apiKey.length + ")");
 
   try {
     const ac = new AbortController();
@@ -131,7 +177,9 @@ async function classifyCommand(cmd, modelRegistry) {
         ],
         temperature: 0.1,
         max_tokens: 256,
-        response_format: RESPONSE_FORMAT,
+        // response_format omitted — DeepSeek v4 rejects json_schema;
+        // the prompt already instructs "Respond ONLY with a JSON object"
+        // and parseVerdictText() handles text/fenced parsing.
       }),
       signal: ac.signal,
     });
@@ -148,11 +196,35 @@ async function classifyCommand(cmd, modelRegistry) {
     const data = await response.json();
     const contentText = data.choices?.[0]?.message?.content;
     console.error("[approve] verdict text:", contentText?.slice(0, 200));
-    return parseVerdictText(contentText);
+    const verdict = parseVerdictText(contentText);
+    if (verdict) {
+      console.error("[approve] model", spec, "verdict:", verdict.safe ? "SAFE" : "UNSAFE", "-", verdict.reason);
+    }
+    return verdict;
   } catch (err) {
-    console.error("[approve] fetch exception:", err?.message || err);
+    console.error("[approve] fetch exception for", spec, ":", err?.message || err);
     return null;
   }
+}
+
+async function classifyCommand(cmd, modelRegistry) {
+  const primary = readSmolModelSpec();
+  if (!primary) { console.error("[approve] no smol model spec found"); return null; }
+
+  // Try primary model
+  const verdict = await tryModel(primary, cmd, modelRegistry);
+  if (verdict) return verdict;
+
+  // Try fallback chain
+  const fallbacks = readFallbackChain();
+  for (const spec of fallbacks) {
+    if (spec === primary) continue;
+    console.error("[approve] falling back to:", spec);
+    const fbVerdict = await tryModel(spec, cmd, modelRegistry);
+    if (fbVerdict) return fbVerdict;
+  }
+
+  return null; // all models failed
 }
 
 export default function (pi) {
@@ -165,12 +237,13 @@ export default function (pi) {
 
     const cmd = String(event.input.command ?? "");
 
-    const verdict = await classifyCommand(cmd, ctx.modelRegistry);
+    let verdict = await classifyCommand(cmd, ctx.modelRegistry);
 
     if (!verdict) {
-      // Smol model unreachable — block by default (fail-closed)
-      ctx.ui.notify("Safety classifier unreachable — command blocked", "error");
-      return { block: true, reason: "Command blocked: unable to reach safety classifier (smol model unreachable)" };
+      // All LLM classifiers unreachable — fall back to local regex classifier
+      console.error("[approve] all LLM classifiers unreachable, using local regex classifier");
+      ctx.ui.notify("LLM safety classifiers unreachable — using local fallback", "warning");
+      verdict = localClassify(cmd);
     }
 
     if (verdict.safe) return; // LLM says safe — let it through

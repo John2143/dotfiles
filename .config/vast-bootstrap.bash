@@ -3,28 +3,36 @@
 # (vast-bootstrap fish function in nixos/home-cli.nix) sets these env vars
 # from /run/agenix/vast-credentials + ~/.config/vast/profile + defaults:
 #
+#   ENGINE             inference engine: "sglang" (default) or "vllm"
+#                        SGLang recommended for DeepSeek V4 — zero CJK token
+#                        injection vs vLLM's 50-75% rate (vllm#41985 unfixed).
+#                        vLLM kept for A/B comparison and non-DS models.
 #   MODEL              HF model id (required)
 #   SERVED             served-model-name exposed on the OpenAI API (default deepseek-v4-flash)
-#   VLLM_PORT          listen port inside the rental (default 8000)
-#   MAX_LEN            --max-model-len ("auto" → tuned per GPU count, see below)
-#   MEM_UTIL           --gpu-memory-utilization ("auto" → tuned per GPU count)
-#   MAX_NUM_SEQS       --max-num-seqs ("auto" → tuned per GPU count)
+#   SERVE_PORT         listen port inside the rental (default 8000)
+#                        Replaces VLLM_PORT (still accepted for backward compat).
+#   MAX_LEN            context length ("auto" → tuned per GPU count, see below)
+#                        vLLM: --max-model-len; SGLang: --context-length
+#   MEM_UTIL           GPU memory fraction ("auto" → tuned per GPU count)
+#                        vLLM: --gpu-memory-utilization; SGLang: --mem-fraction-static
+#   MAX_NUM_SEQS       max concurrent sequences ("auto" → tuned per GPU count)
+#                        vLLM: --max-num-seqs; SGLang: --max-running-requests
 #   HF_TOKEN           HuggingFace token (optional but strongly recommended:
 #                      faster downloads, higher rate limits, gated models)
-#   TOOL_PARSER        --tool-call-parser, e.g. qwen3_xml (optional)
-#   REASONING_PARSER   --reasoning-parser, e.g. qwen3 (optional)
-#   EXTRA_ARGS         space-separated extra flags (optional)
-#   FORCE_RESTART      if non-empty, kill any running vllm and re-launch
-#                      (otherwise the script is a no-op when vllm is up)
-#   TENSOR_PARALLEL    --tensor-parallel-size N (auto-detected = GPU count;
+#   TOOL_PARSER        --tool-call-parser (vLLM only; SGLang auto-handles DSv4)
+#   REASONING_PARSER   --reasoning-parser (vLLM only; SGLang auto-handles DSv4)
+#   EXTRA_ARGS         space-separated engine-specific extra flags (optional)
+#   FORCE_RESTART      if non-empty, kill any running server and re-launch
+#                      (otherwise the script is a no-op when the server is up)
+#   TENSOR_PARALLEL    tensor parallelism (auto-detected = GPU count;
 #                      set to 1 to disable on multi-GPU instances)
 #   LOGGING_PROXY      "1" (default) → run a Python reverse proxy in front
-#                      of vLLM that appends every OpenAI request + response
-#                      to /workspace/metrics/queries.jsonl. "0" → vLLM binds
-#                      VLLM_PORT directly (legacy). When enabled, vLLM binds
-#                      127.0.0.1:VLLM_INTERNAL_PORT and the proxy listens on
-#                      0.0.0.0:VLLM_PORT, so external clients are unchanged.
-#   VLLM_INTERNAL_PORT private port vLLM binds to under LOGGING_PROXY=1
+#                      of the engine that appends every OpenAI request+response
+#                      to /workspace/metrics/queries.jsonl. "0" → engine binds
+#                      SERVE_PORT directly (legacy). When enabled, engine binds
+#                      127.0.0.1:SERVE_INTERNAL_PORT and the proxy listens on
+#                      0.0.0.0:SERVE_PORT, so external clients are unchanged.
+#   SERVE_INTERNAL_PORT private port engine binds to under LOGGING_PROXY=1
 #                      (default 18000). Ignored otherwise.
 #
 # Auto-tuning targets DeepSeek-V4-Flash with 1-2 light users (rare concurrent
@@ -33,8 +41,8 @@
 #
 #   1 GPU  (B200, 192 GB):  MAX_LEN=524288  MEM_UTIL=0.93 MAX_NUM_SEQS=16
 #                           (weights eat ~80% VRAM; tighter MEM_UTIL avoids
-#                           OOM during CUDA graph capture; --max-num-batched-tokens
-#                           capped at 8192 to bound prefill activation spikes)
+#                           OOM during graph capture; max-prefill-tokens capped
+#                           at 8192 to bound prefill activation spikes)
 #   2 GPUs (2×B200, 384):   MAX_LEN=1000000 MEM_UTIL=0.95 MAX_NUM_SEQS=32
 #   4 GPUs (4×B200, 768):   MAX_LEN=1000000 MEM_UTIL=0.95 MAX_NUM_SEQS=64
 #   8 GPUs (8×B200, 1536):  MAX_LEN=1000000 MEM_UTIL=0.95 MAX_NUM_SEQS=128
@@ -47,23 +55,25 @@
 #   8 GPUs (8×B200, 1536):  MAX_LEN=524288 MEM_UTIL=0.94 MAX_NUM_SEQS=32
 #                           (~865 GB weights leaves ~580 GB for KV+activations)
 #
-# Topology choice: TP+EP (each request uses all GPUs) over the vLLM recipe's
-# DP+EP default. DP+EP optimizes throughput for many concurrent users; TP+EP
-# minimizes per-request latency, which matters more with 1-2 users.
+# Topology choice: TP+EP (each request uses all GPUs). SGLang on DSv4 produces
+# zero CJK bad tokens vs vLLM's 50-75% (vllm#41985); no sampling overrides
+# needed. When ENGINE=vllm, DeepSeek V4 gets temp=0.6/top_p=0.95/top_k=40 as
+# a workaround for the MLA Attention FP8 precision bug.
 #
-# Idempotent: if a vLLM server is already responding on $VLLM_PORT it exits 0
+# Idempotent: if a server is already responding on $SERVE_PORT it exits 0
 # unless FORCE_RESTART is set.
-# Logs go to /workspace/vllm.log; pid goes to /workspace/vllm.pid.
+# Logs go to /workspace/<engine>.log; pid goes to /workspace/<engine>.pid.
 #
 # Recommended rental image: nvidia/cuda:12.8.0-devel-ubuntu24.04 (clean CUDA,
-# no auto-launched services). Script installs python3 + venv + vllm if
+# no auto-launched services). Script installs python3 + venv + the engine if
 # missing. The venv lives at /workspace/venv and persists across reboots.
-
 set -euo pipefail
 
+: "${ENGINE:=sglang}"
 : "${MODEL:?missing MODEL}"
 : "${SERVED:=deepseek-v4-flash}"
-: "${VLLM_PORT:=8000}"
+# SERVE_PORT is the canonical name; VLLM_PORT still accepted for backward compat.
+: "${SERVE_PORT:=${VLLM_PORT:-8000}}"
 : "${MAX_LEN:=auto}"
 : "${MEM_UTIL:=auto}"
 : "${MAX_NUM_SEQS:=auto}"
@@ -74,19 +84,14 @@ set -euo pipefail
 : "${FORCE_RESTART:=}"
 : "${TENSOR_PARALLEL:=}"
 : "${MAX_NUM_BATCHED_TOKENS:=8192}"
-# Logging proxy: when 1, vLLM binds to 127.0.0.1:${VLLM_INTERNAL_PORT} and a
-# small Python reverse proxy listens on 0.0.0.0:${VLLM_PORT}. Every request
-# to OpenAI-compatible endpoints (chat/completions, completions, embeddings,
-# etc.) is appended as a JSONL record to /workspace/metrics/queries.jsonl,
-# which rides back with vast-fetch-metrics / vast-destroy. Set to 0 to keep
-# the original direct-bind behavior. VLLM_INTERNAL_PORT only matters when
-# LOGGING_PROXY=1.
+# Engine slug used for log/pid file naming and process matching.
+readonly ENGINE_SLUG="$ENGINE"
 : "${LOGGING_PROXY:=1}"
-: "${VLLM_INTERNAL_PORT:=18000}"
+: "${SERVE_INTERNAL_PORT:=${VLLM_INTERNAL_PORT:-18000}}"
 
 mkdir -p /workspace /workspace/tmp /workspace/pip-cache /workspace/.hf_home \
          /workspace/.vllm_cache /workspace/.triton_cache /workspace/.inductor_cache \
-         /workspace/metrics
+         /workspace/.sglang_cache /workspace/metrics
 cd /workspace
 
 # Append a structured lifecycle event to /workspace/metrics/events.jsonl.
@@ -98,19 +103,16 @@ emit_event() {
   local type="$1" msg="${2:-}"
   local ts
   ts=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-  # JSON string escape — backslash first (so subsequent escapes don't get
-  # double-escaped), then quote, then control chars. Skipping these would
-  # break a downstream JSONL parser the moment a stack trace or multi-line
-  # vllm arg gets passed in.
   msg="${msg//\\/\\\\}"
   msg="${msg//\"/\\\"}"
   msg="${msg//$'\n'/\\n}"
   msg="${msg//$'\r'/\\r}"
   msg="${msg//$'\t'/\\t}"
-  printf '{"ts":"%s","type":"%s","message":"%s"}\n' "$ts" "$type" "$msg" \
+  printf '{"ts":"%s","type":"%s","message":"%s","engine":"%s"}\n' \
+    "$ts" "$type" "$msg" "$ENGINE_SLUG" \
     >> /workspace/metrics/events.jsonl
 }
-emit_event bootstrap_start "model=${MODEL} served=${SERVED} port=${VLLM_PORT}"
+emit_event bootstrap_start "model=${MODEL} served=${SERVED} port=${SERVE_PORT}"
 
 # Vast.ai's vLLM-flavored templates put a 32 GB overlay on / while the real
 # storage lives at /workspace (terabytes). HF Hub's default temp paths spill
@@ -146,7 +148,7 @@ if [ "$(df --output=pcent / | tail -1 | tr -dc 0-9)" -gt 50 ]; then
   rm -rf /tmp/* /tmp/.[!.]* 2>/dev/null || true
 fi
 
-# Vast.ai's "vLLM …" templates auto-launch their own vllm via supervisord,
+# Vast.ai's "vLLM …" / "SGLang …" templates auto-launch via supervisord,
 # which holds the entire GPU before our serve command runs. Stop it cleanly
 # if present (no-op on bare cuda/pytorch images).
 if command -v supervisorctl >/dev/null 2>&1; then
@@ -155,13 +157,25 @@ if command -v supervisorctl >/dev/null 2>&1; then
     supervisorctl stop vllm || true
     sleep 3
   fi
+  if supervisorctl status sglang 2>/dev/null | grep -q RUNNING; then
+    echo "Stopping supervisord-managed sglang to free the GPU ..."
+    supervisorctl stop sglang || true
+    sleep 3
+  fi
 fi
-# Belt-and-suspenders: kill any orphan vllm/EngineCore processes.
-# `pkill -f 'vllm serve'` handles the main process but forked EngineCore
-# children can survive a crash. `pkill -f 'vllm'` is broader and catches
-# them; the metrics monitor has no "vllm" substring, so it is unaffected.
+# Belt-and-suspenders: kill any orphan engine processes.
+# For vLLM: 'vllm serve' + forked EngineCore children.
+# For SGLang: 'sglang.launch_server' + sglang worker processes.
+# The metrics monitor has neither substring, so it is unaffected.
 # The proxy is killed separately.
-pkill -f 'vllm' 2>/dev/null || true
+if [ "$ENGINE_SLUG" = "vllm" ]; then
+  pkill -f 'vllm' 2>/dev/null || true
+elif [ "$ENGINE_SLUG" = "sglang" ]; then
+  pkill -f 'sglang' 2>/dev/null || true
+fi
+# Always kill the other engine too (stale from a previous ENGINE= switch).
+pkill -f 'vllm serve' 2>/dev/null || true
+pkill -f 'sglang.launch_server' 2>/dev/null || true
 
 # True iff EXTRA_ARGS already contains the named flag (whole-word, so
 # --tool-call-parser doesn't match --tool-call-parser-foo). Used to suppress
@@ -171,61 +185,35 @@ has_extra_flag() {
   printf '%s\n' "$EXTRA_ARGS" | grep -qE -- "(^|[[:space:]])$1([[:space:]]|=|\$)"
 }
 
-# DeepSeek V4 currently asserts kv_cache_dtype starts with "fp8". Set it
-# automatically unless the caller passed --kv-cache-dtype / a parser flag
-# themselves (in EXTRA_ARGS or via the env-var equivalents).
-case "$MODEL" in
-  *DeepSeek-V4*|*deepseek-v4*)
-    if ! has_extra_flag --kv-cache-dtype; then
-      echo "Auto-setting --kv-cache-dtype fp8 for DeepSeek V4."
-      EXTRA_ARGS="--kv-cache-dtype fp8 ${EXTRA_ARGS}"
-    fi
-    # Sampling override — works around two distinct V4 failure modes
-    # observed 2026-05-08 under DeepSeek's recommended temp=1.0/top_p=1.0:
-    #
-    #   (1) CJK token injection mid-prose at fragile ASCII↔CJK boundaries.
-    #       Maps to vllm#41985: vLLM's MLA attention FP8 compute path
-    #       (deepseek_v4_attention.py) has insufficient precision vs
-    #       SGLang on the same model+hardware. KV-cache dtype was ruled
-    #       out by the reporter (E4M3 vs E5M2 identical bad-token rate).
-    #
-    #   (2) Repetition collapse during multi-step research turns: same
-    #       BPE token emitted back-to-back ("HyprlandHyprlandHyprland"),
-    #       short phrases looped hundreds of times ("Let's edit the"
-    #       repeated 30+ times), token-level mutations
-    #       (Hyprland → Hybridland). Classic no-escape regime where
-    #       top_p=1.0 leaves the deep tail open and the model latches
-    #       on a self-reinforcing prefix.
-    #
-    # temperature=0.6 alone (initial fix attempt) caught (1) but not (2)
-    # — repetition collapse needs tail truncation, not just temperature.
-    # top_p=0.95 cuts the deep tail; top_k=40 caps the candidate set as
-    # belt-and-suspenders against pathological prefixes. This is a
-    # deeper deviation from DeepSeek's vendor recommendation; intentional,
-    # treating the rec as broken under vLLM's V4 attention FP8 path.
-    # Drop this entire block and re-test 1.0/1.0 once vllm#41985 closes.
-    #
-    # Related (separate failure modes, tracked here for context):
-    #   vllm#41985 — primary, CJK token injection
-    #   vllm#41331 — garbled output w/ CUDA graph + concurrent identical reqs
-    #   vllm#40801 — DSML fragment leak in streaming tool-call parsing
-    #   vllm#41240 — V4 DSML parser wrapper/string handling (CLOSED, PR #41241)
-    #   vllm#40854 — V4 unresponsive when used via claude code path
-    #   vllm#41015 — FP4 rounding fix (greedy mode, MERGED upstream)
-    if ! has_extra_flag --override-generation-config; then
-      echo "Auto-overriding sampling: temp=0.6 top_p=0.95 top_k=40 (vllm#41985 + repetition collapse)."
-      EXTRA_ARGS="--override-generation-config {\"temperature\":0.6,\"top_p\":0.95,\"top_k\":40} ${EXTRA_ARGS}"
-    fi
-    if [ -z "$TOOL_PARSER" ] && ! has_extra_flag --tool-call-parser; then
-      echo "Auto-setting --tool-call-parser deepseek_v4 for DeepSeek V4."
-      TOOL_PARSER=deepseek_v4
-    fi
-    if [ -z "$REASONING_PARSER" ] && ! has_extra_flag --reasoning-parser; then
-      echo "Auto-setting --reasoning-parser deepseek_v4 for DeepSeek V4."
-      REASONING_PARSER=deepseek_v4
-    fi
-    ;;
-esac
+# vLLM-specific DeepSeek V4 workarounds. SGLang needs none of these —
+# its MLA attention implementation has correct FP8 precision (zero CJK
+# bad tokens vs vLLM's 50-75% at temp=1.0/top_p=1.0, per vllm#41985).
+if [ "$ENGINE_SLUG" = "vllm" ]; then
+  case "$MODEL" in
+    *DeepSeek-V4*|*deepseek-v4*)
+      if ! has_extra_flag --kv-cache-dtype; then
+        echo "Auto-setting --kv-cache-dtype fp8 for DeepSeek V4 (vLLM)."
+        EXTRA_ARGS="--kv-cache-dtype fp8 ${EXTRA_ARGS}"
+      fi
+      # Sampling override for vllm#41985 (CJK token injection) +
+      # repetition collapse. Drop when vllm#41985 closes. See header.
+      if ! has_extra_flag --override-generation-config; then
+        echo "Auto-overriding sampling: temp=0.6 top_p=0.95 top_k=40 (vllm#41985 + repetition collapse)."
+        EXTRA_ARGS="--override-generation-config {\"temperature\":0.6,\"top_p\":0.95,\"top_k\":40} ${EXTRA_ARGS}"
+      fi
+      if [ -z "$TOOL_PARSER" ] && ! has_extra_flag --tool-call-parser; then
+        echo "Auto-setting --tool-call-parser deepseek_v4 for DeepSeek V4 (vLLM)."
+        TOOL_PARSER=deepseek_v4
+      fi
+      if [ -z "$REASONING_PARSER" ] && ! has_extra_flag --reasoning-parser; then
+        echo "Auto-setting --reasoning-parser deepseek_v4 for DeepSeek V4 (vLLM)."
+        REASONING_PARSER=deepseek_v4
+      fi
+      ;;
+  esac
+else
+  echo "ENGINE=sglang: no DeepSeek V4 workarounds needed (MLA attention precision is correct)."
+fi
 
 # Background sampler: nvidia-smi GPU stats + vLLM /metrics scrape, every 5s,
 # appended to /workspace/metrics/. vast-destroy scp's this directory down
@@ -382,7 +370,7 @@ while true; do
 done
 MONEOF
   chmod +x /workspace/metrics-monitor.sh
-  nohup bash /workspace/metrics-monitor.sh 5 "${VLLM_PORT}" \
+  nohup bash /workspace/metrics-monitor.sh 5 "${SERVE_PORT}" \
     >>/workspace/metrics/monitor.log 2>&1 &
   echo "$!" > "$pidfile"
   disown 2>/dev/null || true
@@ -391,8 +379,8 @@ MONEOF
 }
 
 # Logging proxy: tiny Python reverse proxy that records every OpenAI-style
-# request + response to /workspace/metrics/queries.jsonl. vLLM binds to
-# 127.0.0.1:${VLLM_INTERNAL_PORT}; the proxy listens on 0.0.0.0:${VLLM_PORT}
+# request + response to /workspace/metrics/queries.jsonl. Engine binds to
+# 127.0.0.1:${SERVE_INTERNAL_PORT}; the proxy listens on 0.0.0.0:${SERVE_PORT}
 # and forwards transparently. High-frequency monitoring endpoints (/metrics,
 # /health, /v1/models) pass through without logging so the JSONL stays
 # signal-only. Idempotent via /workspace/proxy.pid.
@@ -409,8 +397,7 @@ start_logging_proxy_if_needed() {
     fi
   fi
 
-  # httpx isn't always pulled in by vllm directly; install on demand into
-  # the same venv. fastapi + uvicorn ship with vllm.
+  # httpx isn't always pulled in by the engine directly; install on demand.
   if ! /workspace/venv/bin/python -c 'import httpx, fastapi, uvicorn' >/dev/null 2>&1; then
     echo "Installing logging-proxy deps (httpx) into /workspace/venv ..."
     /workspace/venv/bin/pip install --quiet httpx fastapi uvicorn || {
@@ -419,7 +406,7 @@ start_logging_proxy_if_needed() {
     }
   fi
 
-  cat > /workspace/vllm-logging-proxy.py <<'PROXYEOF'
+  cat > /workspace/logging-proxy.py <<'PROXYEOF'
 #!/usr/bin/env python3
 """Reverse proxy that logs every OpenAI-style request/response to JSONL.
 
@@ -617,28 +604,29 @@ if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=PROXY_PORT,
                 log_level="warning", access_log=False)
 PROXYEOF
-  chmod +x /workspace/vllm-logging-proxy.py
+  chmod +x /workspace/logging-proxy.py
 
-  PROXY_PORT="${VLLM_PORT}" UPSTREAM_PORT="${VLLM_INTERNAL_PORT}" \
+  PROXY_PORT="${SERVE_PORT}" UPSTREAM_PORT="${SERVE_INTERNAL_PORT}" \
   LOG_FILE=/workspace/metrics/queries.jsonl \
-  nohup /workspace/venv/bin/python /workspace/vllm-logging-proxy.py \
+  nohup /workspace/venv/bin/python /workspace/logging-proxy.py \
     >>/workspace/metrics/proxy.log 2>&1 &
   echo "$!" > "$pidfile"
   disown 2>/dev/null || true
-  echo "Started logging proxy (pid $(cat "$pidfile"), :${VLLM_PORT} → :${VLLM_INTERNAL_PORT}, log → /workspace/metrics/queries.jsonl)."
-  emit_event proxy_start "pid=$(cat "$pidfile") port=${VLLM_PORT} upstream=${VLLM_INTERNAL_PORT}"
+  echo "Started logging proxy (pid $(cat "$pidfile"), :${SERVE_PORT} → :${SERVE_INTERNAL_PORT}, log → /workspace/metrics/queries.jsonl)."
+  emit_event proxy_start "pid=$(cat "$pidfile") port=${SERVE_PORT} upstream=${SERVE_INTERNAL_PORT}"
 }
 
-# Probe vLLM directly. With LOGGING_PROXY=1, vllm binds to a private internal
-# port; probing $VLLM_PORT would also hit the proxy, but probing the internal
-# port lets us tell vllm-up-but-proxy-down apart from both-down.
-PROBE_PORT="${VLLM_PORT}"
-[ "$LOGGING_PROXY" = "1" ] && PROBE_PORT="${VLLM_INTERNAL_PORT}"
+# Probe the engine directly. With LOGGING_PROXY=1, the engine binds to a
+# private internal port; probing $SERVE_PORT would also hit the proxy, but
+# probing the internal port lets us tell engine-up-but-proxy-down apart
+# from both-down.
+PROBE_PORT="${SERVE_PORT}"
+[ "$LOGGING_PROXY" = "1" ] && PROBE_PORT="${SERVE_INTERNAL_PORT}"
 
 if curl -fsS "http://localhost:${PROBE_PORT}/v1/models" >/dev/null 2>&1; then
   if [ -z "${FORCE_RESTART}" ]; then
     emit_event early_exit_already_running ""
-    echo "vLLM already responding on :${PROBE_PORT} — bootstrap is a no-op."
+    echo "${ENGINE_SLUG} already responding on :${PROBE_PORT} — bootstrap is a no-op."
     echo "(Pass --restart to vast-bootstrap to force a re-launch with new flags.)"
     curl -s "http://localhost:${PROBE_PORT}/v1/models" | head -c 400
     echo
@@ -647,9 +635,10 @@ if curl -fsS "http://localhost:${PROBE_PORT}/v1/models" >/dev/null 2>&1; then
     exit 0
   fi
   emit_event force_restart ""
-  echo "FORCE_RESTART set — stopping running vLLM to re-launch with new flags ..."
-  pkill -f 'vllm' 2>/dev/null || true
+  echo "FORCE_RESTART set — stopping running ${ENGINE_SLUG} to re-launch with new flags ..."
+  pkill -f "${ENGINE_SLUG}" 2>/dev/null || true
   pkill -f 'vllm-logging-proxy.py' 2>/dev/null || true
+  pkill -f 'logging-proxy.py' 2>/dev/null || true
   rm -f /workspace/proxy.pid
   for _ in $(seq 1 30); do
     curl -fsS "http://localhost:${PROBE_PORT}/v1/models" >/dev/null 2>&1 || break
@@ -697,16 +686,13 @@ fi
 
 # Reuse a previously-created venv if it exists (subsequent bootstraps after
 # the first are near-instant — model weights are also cached on /workspace).
-if [ -x /workspace/venv/bin/vllm ]; then
+if [ -x /workspace/venv/bin/python3 ]; then
   export PATH="/workspace/venv/bin:$PATH"
 fi
 
-if ! command -v vllm >/dev/null 2>&1; then
+if [ "$ENGINE_SLUG" = "vllm" ] && ! command -v vllm >/dev/null 2>&1; then
   echo "vllm CLI not found; bootstrapping venv + vllm ..."
 
-  # If a previous attempt left an incomplete venv (e.g. python but no pip,
-  # which happens when `python3 -m venv` runs without ensurepip available),
-  # nuke it so we can recreate cleanly.
   if [ -d /workspace/venv ] && { [ ! -x /workspace/venv/bin/python3 ] || [ ! -x /workspace/venv/bin/pip ]; }; then
     echo "Removing incomplete /workspace/venv from a previous failed attempt ..."
     rm -rf /workspace/venv
@@ -720,16 +706,32 @@ if ! command -v vllm >/dev/null 2>&1; then
   echo "pip install vllm into /workspace/venv (~5 min) ..."
   emit_event pip_install_start ""
   /workspace/venv/bin/pip install --quiet --upgrade pip
-  # To pin a specific vLLM version for reproducibility, replace with:
-  #   /workspace/venv/bin/pip install --quiet "vllm==X.Y.Z"
   /workspace/venv/bin/pip install --quiet vllm
   emit_event pip_install_done ""
+  export PATH="/workspace/venv/bin:$PATH"
+elif [ "$ENGINE_SLUG" = "sglang" ] && ! command -v sglang >/dev/null 2>&1; then
+  echo "sglang CLI not found; bootstrapping venv + sglang ..."
 
+  if [ -d /workspace/venv ] && { [ ! -x /workspace/venv/bin/python3 ] || [ ! -x /workspace/venv/bin/pip ]; }; then
+    echo "Removing incomplete /workspace/venv from a previous failed attempt ..."
+    rm -rf /workspace/venv
+  fi
+
+  if [ ! -d /workspace/venv ]; then
+    echo "Creating venv at /workspace/venv ..."
+    python3 -m venv /workspace/venv
+  fi
+
+  echo "pip install sglang[all] into /workspace/venv (~5 min) ..."
+  emit_event pip_install_start ""
+  /workspace/venv/bin/pip install --quiet --upgrade pip
+  /workspace/venv/bin/pip install --quiet "sglang[all]"
+  emit_event pip_install_done ""
   export PATH="/workspace/venv/bin:$PATH"
 fi
 
 if ! command -v nvidia-smi >/dev/null 2>&1; then
-  echo "Warning: nvidia-smi not found inside the rental. vLLM will likely fail to start." >&2
+  echo "Warning: nvidia-smi not found inside the rental. ${ENGINE_SLUG} will likely fail to start." >&2
 fi
 
 # Detect GPU count so we can pick topology-aware defaults.
@@ -777,33 +779,45 @@ esac
 echo "Topology: ${GPU_COUNT} GPU(s) → MAX_LEN=${MAX_LEN} MEM_UTIL=${MEM_UTIL} MAX_NUM_SEQS=${MAX_NUM_SEQS}"
 
 # TP=GPU_COUNT on multi-GPU; favors single-request latency over throughput.
-if [ -z "${TENSOR_PARALLEL}" ] && ! has_extra_flag --tensor-parallel-size; then
-  if [ "${GPU_COUNT}" -gt 1 ]; then
-    echo "Auto-setting --tensor-parallel-size ${GPU_COUNT}."
-    TENSOR_PARALLEL="${GPU_COUNT}"
+# vLLM: --tensor-parallel-size; SGLang: --tp-size
+if [ -z "${TENSOR_PARALLEL}" ]; then
+  tp_flag=""
+  if [ "$ENGINE_SLUG" = "vllm" ]; then
+    tp_flag="--tensor-parallel-size"
+  else
+    tp_flag="--tp-size"
+  fi
+  if ! has_extra_flag "$tp_flag"; then
+    if [ "${GPU_COUNT}" -gt 1 ]; then
+      echo "Auto-setting ${tp_flag} ${GPU_COUNT}."
+      TENSOR_PARALLEL="${GPU_COUNT}"
+    fi
   fi
 fi
 
 # Single-GPU prefill activation can spike past the ~30 GB free after V4-Flash
-# weights; cap chunked-prefill batch size unless the caller already set it.
-if [ "${GPU_COUNT}" = "1" ] && ! has_extra_flag --max-num-batched-tokens; then
-  EXTRA_ARGS="--max-num-batched-tokens ${MAX_NUM_BATCHED_TOKENS} ${EXTRA_ARGS}"
+# weights. vLLM: --max-num-batched-tokens; SGLang: --max-prefill-tokens
+if [ "${GPU_COUNT}" = "1" ]; then
+  if [ "$ENGINE_SLUG" = "vllm" ] && ! has_extra_flag --max-num-batched-tokens; then
+    EXTRA_ARGS="--max-num-batched-tokens ${MAX_NUM_BATCHED_TOKENS} ${EXTRA_ARGS}"
+  elif [ "$ENGINE_SLUG" = "sglang" ] && ! has_extra_flag --max-prefill-tokens; then
+    EXTRA_ARGS="--max-prefill-tokens ${MAX_NUM_BATCHED_TOKENS} ${EXTRA_ARGS}"
+  fi
 fi
 
-# DeepSeek V4 is MoE; auto-enable expert parallelism only at 4+ GPUs where
-# the weight footprint pressure makes EP+TP clearly worthwhile. At 2 GPUs
-# V4-Flash fits comfortably with TP alone (74 GB/GPU on B200's 192 GB) and
-# the all-to-all dispatch overhead from EP can dominate latency for 1-2
-# user workloads — the kind of thing this rental serves. Override:
-#   - force on at 2 GPUs:   EXTRA_ARGS="--enable-expert-parallel"
-#   - force off at any N:   DISABLE_EXPERT_PARALLEL=1
+# DeepSeek V4 is MoE. vLLM: --enable-expert-parallel; SGLang: --enable-ep-moe
+if [ "$ENGINE_SLUG" = "vllm" ]; then
+  ep_flag="--enable-expert-parallel"
+else
+  ep_flag="--enable-ep-moe"
+fi
 case "$MODEL" in
   *DeepSeek-V4*|*deepseek-v4*)
     if [ -z "${DISABLE_EXPERT_PARALLEL:-}" ] \
        && [ "${GPU_COUNT}" -ge 4 ] \
-       && ! has_extra_flag --enable-expert-parallel; then
-      echo "Auto-enabling --enable-expert-parallel for ${GPU_COUNT}-GPU MoE."
-      EXTRA_ARGS="--enable-expert-parallel ${EXTRA_ARGS}"
+       && ! has_extra_flag "$ep_flag"; then
+      echo "Auto-enabling ${ep_flag} for ${GPU_COUNT}-GPU MoE."
+      EXTRA_ARGS="${ep_flag} ${EXTRA_ARGS}"
     fi
     ;;
 esac
@@ -812,45 +826,54 @@ if [ -n "${HF_TOKEN}" ]; then
   export HF_TOKEN HUGGING_FACE_HUB_TOKEN="${HF_TOKEN}"
 fi
 
-# Build ARGS such that anything the caller put in EXTRA_ARGS wins. Each base
-# flag is suppressed if EXTRA_ARGS already names it, avoiding duplicate-flag
-# crashes / undefined-precedence behavior in vllm's CLI parser.
-#
-# When LOGGING_PROXY=1, vllm binds privately to 127.0.0.1:${VLLM_INTERNAL_PORT}
-# and the Python proxy on ${VLLM_PORT} is the only externally-reachable
-# listener. Otherwise vllm exposes ${VLLM_PORT} directly (legacy behavior).
+# Build engine CLI args. Caller's EXTRA_ARGS wins (per-flag suppression).
+# When LOGGING_PROXY=1, engine binds to 127.0.0.1:${SERVE_INTERNAL_PORT}
+# and the Python proxy on ${SERVE_PORT} is externally reachable.
 if [ "$LOGGING_PROXY" = "1" ]; then
-  VLLM_BIND_HOST=127.0.0.1
-  VLLM_BIND_PORT="${VLLM_INTERNAL_PORT}"
+  BIND_HOST=127.0.0.1
+  BIND_PORT="${SERVE_INTERNAL_PORT}"
 else
-  VLLM_BIND_HOST=0.0.0.0
-  VLLM_BIND_PORT="${VLLM_PORT}"
+  BIND_HOST=0.0.0.0
+  BIND_PORT="${SERVE_PORT}"
 fi
-ARGS=(serve "${MODEL}")
-has_extra_flag --host                       || ARGS+=(--host "${VLLM_BIND_HOST}")
-has_extra_flag --port                       || ARGS+=(--port "${VLLM_BIND_PORT}")
-has_extra_flag --trust-remote-code          || ARGS+=(--trust-remote-code)
-has_extra_flag --max-model-len              || ARGS+=(--max-model-len "${MAX_LEN}")
-has_extra_flag --gpu-memory-utilization     || ARGS+=(--gpu-memory-utilization "${MEM_UTIL}")
-has_extra_flag --max-num-seqs               || ARGS+=(--max-num-seqs "${MAX_NUM_SEQS}")
-has_extra_flag --served-model-name          || ARGS+=(--served-model-name "${SERVED}")
 
-if [ -n "${TOOL_PARSER}" ] && ! has_extra_flag --tool-call-parser; then
-  ARGS+=(--enable-auto-tool-choice --tool-call-parser "${TOOL_PARSER}")
+if [ "$ENGINE_SLUG" = "vllm" ]; then
+  ARGS=(serve "${MODEL}")
+  has_extra_flag --host                       || ARGS+=(--host "${BIND_HOST}")
+  has_extra_flag --port                       || ARGS+=(--port "${BIND_PORT}")
+  has_extra_flag --trust-remote-code          || ARGS+=(--trust-remote-code)
+  has_extra_flag --max-model-len              || ARGS+=(--max-model-len "${MAX_LEN}")
+  has_extra_flag --gpu-memory-utilization     || ARGS+=(--gpu-memory-utilization "${MEM_UTIL}")
+  has_extra_flag --max-num-seqs               || ARGS+=(--max-num-seqs "${MAX_NUM_SEQS}")
+  has_extra_flag --served-model-name          || ARGS+=(--served-model-name "${SERVED}")
+
+  if [ -n "${TOOL_PARSER}" ] && ! has_extra_flag --tool-call-parser; then
+    ARGS+=(--enable-auto-tool-choice --tool-call-parser "${TOOL_PARSER}")
+  fi
+  if [ -n "${REASONING_PARSER}" ] && ! has_extra_flag --reasoning-parser; then
+    ARGS+=(--reasoning-parser "${REASONING_PARSER}")
+    has_extra_flag --default-chat-template-kwargs \
+      || ARGS+=(--default-chat-template-kwargs '{"thinking": true}')
+  fi
+  if [ -n "${TENSOR_PARALLEL}" ] && ! has_extra_flag --tensor-parallel-size; then
+    ARGS+=(--tensor-parallel-size "${TENSOR_PARALLEL}")
+  fi
+else
+  # SGLang CLI
+  ARGS=(sglang.launch_server --model "${MODEL}")
+  has_extra_flag --host                       || ARGS+=(--host "${BIND_HOST}")
+  has_extra_flag --port                       || ARGS+=(--port "${BIND_PORT}")
+  has_extra_flag --trust-remote-code          || ARGS+=(--trust-remote-code)
+  has_extra_flag --context-length             || ARGS+=(--context-length "${MAX_LEN}")
+  has_extra_flag --mem-fraction-static        || ARGS+=(--mem-fraction-static "${MEM_UTIL}")
+  has_extra_flag --max-running-requests       || ARGS+=(--max-running-requests "${MAX_NUM_SEQS}")
+  has_extra_flag --served-model-name          || ARGS+=(--served-model-name "${SERVED}")
+
+  if [ -n "${TENSOR_PARALLEL}" ] && ! has_extra_flag --tp-size; then
+    ARGS+=(--tp-size "${TENSOR_PARALLEL}")
+  fi
 fi
-if [ -n "${REASONING_PARSER}" ] && ! has_extra_flag --reasoning-parser; then
-  ARGS+=(--reasoning-parser "${REASONING_PARSER}")
-  # DeepSeek V4's chat template disables thinking by default, unlike Qwen3
-  # which enables it. Without this, the model never emits reasoning tokens,
-  # so the reasoning parser has nothing to split and reasoning_content is
-  # always null. Enable thinking server-wide; clients can still disable
-  # per-request via chat_template_kwargs: {"thinking": false}.
-  has_extra_flag --default-chat-template-kwargs \
-    || ARGS+=(--default-chat-template-kwargs '{"thinking": true}')
-fi
-if [ -n "${TENSOR_PARALLEL}" ] && ! has_extra_flag --tensor-parallel-size; then
-  ARGS+=(--tensor-parallel-size "${TENSOR_PARALLEL}")
-fi
+
 if [ -n "${EXTRA_ARGS}" ]; then
   # Word-splitting is intentional so EXTRA_ARGS can carry multiple flags.
   # shellcheck disable=SC2206
@@ -858,67 +881,58 @@ if [ -n "${EXTRA_ARGS}" ]; then
   ARGS+=("${EXTRA[@]}")
 fi
 
-# Final sanity scan: warn on any flag that ended up in ARGS twice. Catches
-# both EXTRA_ARGS containing a duplicate of itself and any future regression
-# in the suppress-if-set logic above.
+# Final sanity scan: warn on any flag that ended up in ARGS twice.
 DUP_FLAGS=$(printf '%s\n' "${ARGS[@]}" | grep -E '^--' | sort | uniq -d)
 if [ -n "$DUP_FLAGS" ]; then
-  echo "Warning: duplicate vllm flag(s) in ARGS — vllm CLI may reject:" >&2
+  echo "Warning: duplicate ${ENGINE_SLUG} flag(s) in ARGS — CLI may reject:" >&2
   printf '  %s\n' $DUP_FLAGS >&2
 fi
 
-pkill -f 'vllm serve' 2>/dev/null || true
+# Kill any previous instance of this engine + proxy, then launch.
+pkill -f "${ENGINE_SLUG}" 2>/dev/null || true
 pkill -f 'vllm-logging-proxy.py' 2>/dev/null || true
+pkill -f 'logging-proxy.py' 2>/dev/null || true
 rm -f /workspace/proxy.pid
 sleep 3
 
-echo "Launching: vllm ${ARGS[*]}"
-echo "=== vllm launch args: ${ARGS[*]}" >> /workspace/vllm.log
-emit_event vllm_launch "args=${ARGS[*]}"
-# Wrap stdout+stderr with `ts` (moreutils) so every line gets an absolute
-# ISO-8601 timestamp. Without this, vllm.log lines look like
-# "INFO 05-06 16:08:54 ..." (no year/zone), which the render script can't
-# align to the metrics timeline. The bash subshell pid is what we track —
-# kill -0 still detects the whole pipeline ending, and pkill -f 'vllm serve'
-# still matches the inner process.
-nohup bash -c 'vllm "$@" 2>&1 | ts "%Y-%m-%dT%H:%M:%SZ "' \
-  _ "${ARGS[@]}" >>/workspace/vllm.log &
-VLLM_PID=$!
-echo "${VLLM_PID}" >/workspace/vllm.pid
+readonly LOGFILE="/workspace/${ENGINE_SLUG}.log"
+readonly PIDFILE="/workspace/${ENGINE_SLUG}.pid"
+
+echo "Launching: ${ARGS[*]}"
+echo "=== ${ENGINE_SLUG} launch args: ${ARGS[*]}" >> "$LOGFILE"
+emit_event vllm_launch "args=${ARGS[*]} engine=${ENGINE_SLUG}"
+nohup bash -c '"$@" 2>&1 | ts "%Y-%m-%dT%H:%M:%SZ "' \
+  _ "${ARGS[@]}" >>"$LOGFILE" &
+ENGINE_PID=$!
+echo "${ENGINE_PID}" > "$PIDFILE"
 
 # Start the monitor before the readiness wait so GPU/VRAM/power samples cover
-# the interesting window — weights load, torch.compile, warmup. Idempotent via
-# pidfile, so no-op on --restart.
+# the interesting window — weights load, compile, warmup. Idempotent via pidfile.
 start_monitor_if_needed
-# Start the logging proxy alongside vllm so external clients hitting :${VLLM_PORT}
-# get a clean 502 (not connection-refused) during warmup, and so the very first
-# successful request lands in queries.jsonl. No-op when LOGGING_PROXY=0.
+# Start the logging proxy alongside the engine so external clients hitting
+# :${SERVE_PORT} get a clean 502 (not connection-refused) during warmup.
 start_logging_proxy_if_needed
 
-echo "Waiting for /v1/models on :${VLLM_BIND_PORT} (cold-cold start ~30 min; up to 40 min ceiling) ..."
-# 480 × 5s = 40 min ceiling. Cold-cold first launch on a fresh rental is
-# ~27-30 min in practice (8 min HF download + 9 min weights load + 2 min
-# torch.compile + 5 min profiling/warmup + 3 min DeepGEMM warmup + 4 min
-# flashinfer autotune + 10 s graph capture). 20 min was the old cap and
-# false-failed regularly on cold images.
+echo "Waiting for /v1/models on :${BIND_PORT} (cold-cold start ~30 min; up to 40 min ceiling) ..."
+# 480 × 5s = 40 min ceiling.
 for _ in $(seq 1 480); do
-  if curl -fsS "http://localhost:${VLLM_BIND_PORT}/v1/models" >/dev/null 2>&1; then
-    echo "vLLM is ready."
-    emit_event vllm_ready ""
-    curl -s "http://localhost:${VLLM_BIND_PORT}/v1/models" | head -c 400
+  if curl -fsS "http://localhost:${BIND_PORT}/v1/models" >/dev/null 2>&1; then
+    echo "${ENGINE_SLUG} is ready."
+    emit_event vllm_ready "engine=${ENGINE_SLUG}"
+    curl -s "http://localhost:${BIND_PORT}/v1/models" | head -c 400
     echo
     exit 0
   fi
-  if ! kill -0 "${VLLM_PID}" 2>/dev/null; then
-    echo "vllm process exited unexpectedly. Last 50 log lines:" >&2
-    tail -n 50 /workspace/vllm.log >&2 || true
-    emit_event vllm_failed "process exited during startup"
+  if ! kill -0 "${ENGINE_PID}" 2>/dev/null; then
+    echo "${ENGINE_SLUG} process exited unexpectedly. Last 50 log lines:" >&2
+    tail -n 50 "$LOGFILE" >&2 || true
+    emit_event vllm_failed "engine=${ENGINE_SLUG} process exited during startup"
     exit 1
   fi
   sleep 5
 done
 
-echo "Timed out waiting for vLLM readiness. Tail of /workspace/vllm.log:" >&2
-tail -n 50 /workspace/vllm.log >&2 || true
-emit_event vllm_failed "timeout waiting for /v1/models"
+echo "Timed out waiting for ${ENGINE_SLUG} readiness. Tail of ${LOGFILE}:" >&2
+tail -n 50 "$LOGFILE" >&2 || true
+emit_event vllm_failed "engine=${ENGINE_SLUG} timeout waiting for /v1/models"
 exit 1

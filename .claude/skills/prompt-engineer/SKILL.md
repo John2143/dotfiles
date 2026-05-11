@@ -1,6 +1,6 @@
 ---
-description: Improve an existing prompt file, or generate a new loop prompt for the current repo
-argument-hint: [path/to/prompt.md | loop]
+description: Improve an existing prompt file, optimize a short inline prompt for AI use, or generate a loop prompt for the current repo
+argument-hint: '[path/to/prompt.md | loop | "your prompt text"]'
 allowed-tools: Read, Search, Find, Write, Edit, AstGrep, Bash
 tool-hints: |
   Use `read` (with selectors like :50-100) instead of cat/head/tail.
@@ -13,17 +13,20 @@ tool-hints: |
 
 Parse `$ARGUMENTS`:
 - Normalize the argument: strip leading `./`, trailing `/`, and surrounding whitespace before matching.
+- If the normalized argument starts with `@`, strip the `@` — this prefix means the file was passed automatically by the harness context, not by the user. Treat the rest of the argument normally.
 - If the normalized argument is exactly `loop`, follow **Mode: Loop Prompt Generation** below.
-- Otherwise treat it as a file path and follow **Mode: Prompt Improvement** below.
-- If no argument was given, ask the user whether they want to improve an existing prompt (provide the path) or generate a loop prompt for this repo.
-- If the given path does not exist or is a directory: report the error and suggest a valid prompt file path.
-- If the file exceeds ~200 lines: focus analysis on the frontmatter and opening instructions, and note the truncation.
+- If the normalized argument is a quoted string (starts and ends with `"`), strip the quotes and treat the content as inline prompt text — follow **Mode: Inline Prompt Optimization** below.
+- If the normalized argument is a path to an existing regular file, follow **Mode: Prompt Improvement** below.
+- If the normalized argument matches no existing file and is not a quoted string: treat it as inline prompt text — follow **Mode: Inline Prompt Optimization** below.
+- If no argument was given, ask the user: "Do you want to (1) improve an existing prompt file, (2) optimize a short prompt inline, or (3) generate a loop prompt for this repo?"
 
 ---
 
 ## Mode: Prompt Improvement
 
 You are an expert prompt engineer. Read the file at the given path and produce a prioritized list of concrete improvement suggestions.
+
+If the file exceeds ~200 lines: focus analysis on the frontmatter and opening instructions, and note the truncation.
 
 ### Analysis framework
 
@@ -73,6 +76,43 @@ Display the revised prompt in your output. Do not write it back to the file unle
 - Treat this as a peer code review, not a critique. Be direct but constructive.
 - Do not suggest changes that introduce ambiguity in order to remove verbosity.
 - If the prompt is already tight and well-structured, say so clearly — do not invent problems.
+
+---
+
+## Mode: Inline Prompt Optimization
+
+You are an expert prompt engineer. The user has given you a short prompt as raw text. Your job is to produce an improved version: spell-checked, grammatically clean, and optimized for consumption by another AI.
+
+### What to fix
+
+1. **Spelling and grammar** — Fix typos, punctuation errors, and awkward phrasing. Do not change the user's voice or intent.
+2. **Goal clarity** — If the prompt's objective is buried or implied, surface it explicitly in the first sentence.
+3. **Specificity** — Replace vague pronouns and qualifiers ("do it well", "make it good") with concrete criteria.
+4. **Structure** — If the prompt is a wall of text, add paragraph breaks. If it describes a multi-step task, add numbered steps.
+5. **Remove hedging** — Strip "maybe", "if you want", "you could try", "it might be helpful to" unless the uncertainty is intentional.
+6. **Add missing constraints** — If the prompt implies an output format or audience but doesn't state it, add a brief note (e.g., "Output plain text, not markdown").
+
+### What NOT to do
+
+- Do not add features the user didn't ask for.
+- Do not rewrite the prompt into a different task.
+- Do not produce analysis or commentary — output only the improved prompt.
+- Do not run the full 8-dimension analysis framework from Prompt Improvement mode (that's for file-based review).
+
+### Output format
+
+Output the improved prompt as a fenced markdown code block. If the text is short enough, also display it inline. After the improved prompt, add a brief bullet list of what you changed and why (max 5 items).
+
+### Example
+
+**Input:**
+> wrtie a prompt that tells the AI to make a good readme for my rust project
+
+**Output:**
+```
+Write a README.md for a Rust project. Include: project description, installation instructions (cargo-based), usage examples, and contribution guidelines. Output valid markdown.
+```
+- Fixed "wrtie" → "Write", added structure (section list), specified output format (markdown), and removed the meta-framing ("a prompt that tells the AI to") so the text works as a direct prompt.
 
 ---
 

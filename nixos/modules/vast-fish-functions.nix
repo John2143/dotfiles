@@ -98,7 +98,7 @@
     #             vast-status
     #   Use       omp → vast-vllm/<model>
     #             curl http://localhost:8001/v1/models
-    #             vast-logs [N]                       # tail remote vllm.log
+    #             vast-logs [N]                       # tail remote engine log
     #   Teardown  vast-tunnel-down
     #             vast-destroy INSTANCE_ID
     #
@@ -156,6 +156,8 @@
       set -q VAST_REASONING_PARSER; or set -gx VAST_REASONING_PARSER ""
       set -q VAST_EXTRA_ARGS; or set -gx VAST_EXTRA_ARGS ""
       set -q VAST_TENSOR_PARALLEL; or set -gx VAST_TENSOR_PARALLEL ""
+      set -q VAST_ENGINE; or set -gx VAST_ENGINE "sglang"
+      set -q VAST_LOGGING_PROXY; or set -gx VAST_LOGGING_PROXY "1"
 
       # Fish quirk: `set -q VAR; or set -gx VAR ""` returns 1 even when the
       # set succeeds (the empty-list `set` doesn't override the prior `set -q`
@@ -352,19 +354,19 @@
         return 1
       end
 
-      echo "Bootstrapping vLLM on $VAST_SSH_USER@$VAST_HOST:$VAST_SSH_PORT (model: $VAST_MODEL)"
+      echo "Bootstrapping $VAST_ENGINE on $VAST_SSH_USER@$VAST_HOST:$VAST_SSH_PORT (model: $VAST_MODEL)"
       ssh -i $VAST_SSH_KEY \
           -p $VAST_SSH_PORT \
           -o StrictHostKeyChecking=no \
           -o UserKnownHostsFile=/dev/null \
           -o LogLevel=ERROR \
           $VAST_SSH_USER@$VAST_HOST \
-          "MODEL='$VAST_MODEL' SERVED='$VAST_SERVED_MODEL_NAME' VLLM_PORT='$VAST_VLLM_PORT' MAX_LEN='$VAST_MAX_MODEL_LEN' MEM_UTIL='$VAST_GPU_MEM_UTIL' MAX_NUM_SEQS='$VAST_MAX_NUM_SEQS' HF_TOKEN='$VAST_HF_TOKEN' TOOL_PARSER='$VAST_TOOL_CALL_PARSER' REASONING_PARSER='$VAST_REASONING_PARSER' EXTRA_ARGS='$VAST_EXTRA_ARGS' TENSOR_PARALLEL='$VAST_TENSOR_PARALLEL' LOGGING_PROXY='$VAST_LOGGING_PROXY' FORCE_RESTART='$force_restart' bash -s" < /home/john/dotfiles/.config/vast-bootstrap.bash
+          "ENGINE='$VAST_ENGINE' MODEL='$VAST_MODEL' SERVED='$VAST_SERVED_MODEL_NAME' VLLM_PORT='$VAST_VLLM_PORT' MAX_LEN='$VAST_MAX_MODEL_LEN' MEM_UTIL='$VAST_GPU_MEM_UTIL' MAX_NUM_SEQS='$VAST_MAX_NUM_SEQS' HF_TOKEN='$VAST_HF_TOKEN' TOOL_PARSER='$VAST_TOOL_CALL_PARSER' REASONING_PARSER='$VAST_REASONING_PARSER' EXTRA_ARGS='$VAST_EXTRA_ARGS' TENSOR_PARALLEL='$VAST_TENSOR_PARALLEL' LOGGING_PROXY='$VAST_LOGGING_PROXY' FORCE_RESTART='$force_restart' bash -s" < /home/john/dotfiles/.config/vast-bootstrap.bash
       set -l rc $status
       env-cleanup $_pre_vars
       return $rc
     '';
-    vast-bootstrap.description = "Bootstrap vLLM on a rented Vast.ai instance (vast-bootstrap [INSTANCE_ID] [--restart] [--no-fzf]; with ≥2 running instances opens an fzf picker unless --no-fzf or fzf is missing).";
+    vast-bootstrap.description = "Bootstrap SGLang (default) or vLLM on a rented Vast.ai instance (vast-bootstrap [INSTANCE_ID] [--restart] [--no-fzf]; with ≥2 running instances opens an fzf picker unless --no-fzf or fzf is missing). Set ENGINE=sglang|vllm via VAST_ENGINE in ~/.config/vast/profile.";
 
     vast-tunnel.body = ''
       set -l _pre_vars (set --names -x)
@@ -556,7 +558,7 @@
           -o UserKnownHostsFile=/dev/null \
           -o LogLevel=ERROR \
           $VAST_SSH_USER@$VAST_HOST \
-          "tail -n $n -f /workspace/vllm.log"
+          "tail -n $n -f /workspace/$VAST_ENGINE.log"
       set -l rc $status
       env-cleanup $_pre_vars
       return $rc
@@ -623,7 +625,7 @@
     '';
     vast-metrics.description = "Show live GPU+vLLM metrics state on the rental (vast-metrics [INSTANCE_ID] [--no-fzf]; monitor status, sample count, avg/peak util, latest samples).";
     vast-fetch-metrics.body = ''
-      # Snapshot /workspace/metrics + vllm.log from a running rental into
+      # Snapshot /workspace/metrics + engine log from a running rental into
       # ~/vast-metrics/$id-$ts/, then render PNGs + summary.txt via
       # vast-render-metrics. Non-destructive — instance keeps running.
       # vast-destroy delegates to this for its teardown snapshot.
@@ -666,7 +668,7 @@
           -o StrictHostKeyChecking=no \
           -o UserKnownHostsFile=/dev/null \
           -o LogLevel=ERROR \
-          $VAST_SSH_USER@$VAST_HOST:/workspace/vllm.log $dest/
+          $VAST_SSH_USER@$VAST_HOST:/workspace/$VAST_ENGINE.log $dest/
       set -l rc_log $status
 
       # Capture rental cost metadata so vast-render-metrics can compute $/Mtok.
@@ -694,7 +696,7 @@
       env-cleanup $_pre_vars
       return 0
     '';
-    vast-fetch-metrics.description = "Snapshot /workspace/metrics + vllm.log from a running rental into ~/vast-metrics/<id>-<ts>/ and render PNGs (vast-fetch-metrics [--no-fzf] [INSTANCE_ID]; non-destructive — instance keeps running).";
+    vast-fetch-metrics.description = "Snapshot /workspace/metrics + engine log from a running rental into ~/vast-metrics/<id>-<ts>/ and render PNGs (vast-fetch-metrics [--no-fzf] [INSTANCE_ID]; non-destructive — instance keeps running).";
 
     # Helpers for finding and renting Vast.ai instances. Wrap the `vastai`
     # CLI (provided by the wrapper in shared-cli-configuration.nix). Run
@@ -726,21 +728,47 @@
     vast-search-big.description = "Search Vast.ai offers with ≥1100 GB total host VRAM (sized for DeepSeek-V4-Pro). Pass extra args to override query.";
 
     vast-search-any.body = ''
-      # Catch-all "modern big-VRAM card" search — doesn't pin a model name,
-      # just filters by capability. Matches B200 (192 GB, 8 TB/s) and any
-      # future Hopper-successor with HBM3e+. Excludes A100/H100/H200 by the
-      # 175 GB per-GPU floor, and excludes Ampere by compute_cap ≥ 900.
+      # Broad GPU search — filters by total VRAM, reliability, disk, and
+      # minimum rental duration. No GPU model or compute-cap pin so it
+      # catches everything from RTX A5000s to H200s.
       #
-      #   gpu_ram > 175       — per-GPU VRAM in GB; B200=192, MI300=192
-      #   gpu_mem_bw > 4000   — memory bandwidth in GB/s; B200~8000, H200~4800
-      #   compute_cap >= 900  — Hopper or newer (H100/H200=900, B200=1000)
-      set -l query 'reliability > 0.85 gpu_ram > 175 gpu_mem_bw > 4000 compute_cap >= 900 disk_space > 170 rentable=true'
+      #   reliability > 0.65    — host uptime track record
+      #   duration > 4          — rental must allow ≥4 hours
+      #   gpu_total_ram > 180   — total VRAM across all GPUs in GB
+      #   disk_space > 160      — storage in GB
+      set -l query 'reliability > 0.65 duration > 4 gpu_total_ram > 180 disk_space > 160 rentable=true'
       if test (count $argv) -gt 0
         set query $argv
       end
       vastai search offers $query -o 'dph_total'
     '';
-    vast-search-any.description = "Search Vast.ai offers for any modern big-VRAM GPU (≥175 GB/GPU, ≥4 TB/s memory bw, Hopper+). Pass extra args to override query.";
+    vast-search-any.description = "Search Vast.ai offers with broad GPU filters (≥65% reliability, ≥4hr duration, ≥180GB total VRAM, ≥160GB disk). Pass extra args to override query.";
+
+    vast-hunt-deals.body = ''
+      set -l max_price 2.0
+      set -l quiet 0
+      for arg in $argv
+        switch $arg
+          case '--max' '--max-price'
+            # handled below by index
+          case '--quiet' '-q'
+            set quiet 1
+          case '*'
+            if test (string match -r '^[0-9.]+$' -- $arg)
+              set max_price $arg
+            end
+        end
+      end
+
+      # DeepSeek V4-Flash: ~150 GB weights; add 20 GB headroom for KV/overhead.
+      # Catches 8×24GB (192), 4×48GB (192), 4×A100-40 (160), 2×H200 (282), etc.
+      set -l query "gpu_total_ram > 160 disk_space > 160 duration > 4 dph_total < $max_price rentable=true"
+      if test $quiet -eq 0
+        echo "Hunting DeepSeek-capable nodes ≤ \$$max_price/hr..."
+      end
+      vastai search offers $query -o 'dph_total'
+    '';
+    vast-hunt-deals.description = "Hunt for cheap DeepSeek-capable nodes on Vast.ai (vast-hunt-deals [MAX_PRICE] [--quiet]). Default max \$2/hr. Filters: ≥160GB total VRAM, ≥160GB disk, ≥4hr duration.";
 
     vast-create.body = ''
       set -l offer_id $argv[1]

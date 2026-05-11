@@ -1,7 +1,7 @@
 ---
 description: Guide the user through creating a new skill: scope definition, plan generation, and task decomposition
 argument-hint: [idea] [--name name] [--refine]
-allowed-tools: Read, Search, Find, Write, Edit, AstGrep, Bash
+allowed-tools: Read, Search, Find, Write, Edit, AstGrep, Bash, Ask
 tool-hints: |
   Use `read` (with selectors like :50-100) instead of cat/head/tail.
   Use `search` instead of grep/rg.
@@ -25,16 +25,81 @@ Your job is to produce a complete skill document (SKILL.md) under `.claude/skill
 
 ### Phase 1 — Clarify the idea
 
-Ask clarifying questions to narrow scope. The user may have given only a one-line idea. Probe the following dimensions (skip any the user already answered):
+Use the `ask` tool to present all clarifying questions at once. Skip any dimension the user already answered in their `$IDEA`.
 
-1. **Input / invocation** — How will this skill be invoked? What arguments does it take? (e.g., `[path] [--focus correctness]`, `[symptom]`, `[scope]`)
-2. **Output / deliverable** — What does the skill produce? A file? A report in chat? A side-effect like a commit? State files that persist between user invocations?
-3. **Invocation pattern** — Is this a one-shot skill (run once, produce a result, done), a multi-session skill (user invokes it several times; each invocation does one unit of work, state persists in files), or a loop prompt (designed for the `/loop` harness, which calls the same prompt repeatedly with no arguments; must decide whether to sleep or work on each call)?
-4. **Allowed tools** — What tools does this skill need? (Review existing skills for common patterns: Read, Search, Find, Write, Edit, LSP, Bash, Debug, AstGrep)
-5. **Constraints** — What should the agent not do? Delete files? Modify production configs? Run destructive commands?
-6. **Target repo/context** — What codebase or environment does this skill operate in? Is it generic or repo-specific?
-
-Ask all questions at once in a numbered list, then wait for the user's response before proceeding.
+```json
+{
+  "questions": [
+    {
+      "id": "input",
+      "question": "How will this skill be invoked? What arguments does it take?",
+      "options": [
+        { "label": "No arguments — just run it" },
+        { "label": "A file or directory path" },
+        { "label": "A search query or topic string" },
+        { "label": "A commit range (e.g. HEAD~10)" },
+        { "label": "Custom flags (e.g. --focus, --dry-run)" }
+      ]
+    },
+    {
+      "id": "output",
+      "question": "What does the skill produce as its deliverable?",
+      "options": [
+        { "label": "Chat report only (read-only analysis)" },
+        { "label": "A written file (report, config, code)" },
+        { "label": "State files for multi-session tracking" },
+        { "label": "A git commit" }
+      ]
+    },
+    {
+      "id": "pattern",
+      "question": "What invocation pattern fits this skill?",
+      "options": [
+        { "label": "One-shot — run once, produce a result, done" },
+        { "label": "Multi-session — user invokes repeatedly, state persists in files" },
+        { "label": "Loop prompt — unattended, called by /loop harness with no arguments" }
+      ]
+    },
+    {
+      "id": "tools",
+      "question": "Which tools does this skill need? (Select all that apply)",
+      "multi": true,
+      "options": [
+        { "label": "Read / Search / Find (filesystem inspection)" },
+        { "label": "Write / Edit (file modification)" },
+        { "label": "LSP (code intelligence, refactoring)" },
+        { "label": "Bash (shell commands, builds, tests)" },
+        { "label": "AstGrep (structural search and rewrite)" },
+        { "label": "Task (parallel subagents)" },
+        { "label": "Browser (web interaction)" },
+        { "label": "Debug (debugger integration)" }
+      ]
+    },
+    {
+      "id": "constraints",
+      "question": "What should the agent NOT do?",
+      "options": [
+        { "label": "Read-only — never modify files" },
+        { "label": "No destructive commands (rm, force-push, etc.)" },
+        { "label": "Repo-scoped only — no writes outside the repo" },
+        { "label": "No network access" },
+        { "label": "No specific restrictions beyond defaults" }
+      ]
+    },
+    {
+      "id": "context",
+      "question": "What codebase or environment does this skill target?",
+      "options": [
+        { "label": "Generic — works in any repo" },
+        { "label": "NixOS / home-manager configurations" },
+        { "label": "This specific repo only" },
+        { "label": "Kubernetes / k3s clusters" },
+        { "label": "Rust / Cargo projects" }
+      ]
+    }
+  ]
+}
+```
 
 After the user responds, produce a short **Scope Summary** (3-5 sentences) confirming your understanding. Present it in chat.
 

@@ -11,7 +11,7 @@
 - **Hillsboro, OR** (US West) — CPX21, 3 vCPU / 4GB / 80GB
 - **Nuremberg, DE** (EU) — CX22, 2 vCPU / 4GB / 40GB
 
-DNS via PowerDNS on host (NixOS systemd), k8gb geoip failover, Traefik ingress with CrowdSec, Backblaze B2 object storage, self-hosted MongoDB (encryption at rest, Longhorn PV). Full details in [`hosting-research.md`](hosting-research.md).
+DNS via PowerDNS on host (NixOS systemd), k8gb geoip failover, Bunny CDN (optional anycast overlay), Traefik ingress with CrowdSec, SeaweedFS hot storage (3× 100GB volumes, per-file encrypted), Backblaze B2 cold storage, home RustFS warm backup, self-hosted MongoDB (encryption at rest, Longhorn PV). Full details in [`hosting-research.md`](hosting-research.md).
 
 ---
 
@@ -387,132 +387,138 @@ hostNetwork: true
 
 ---
 
-## 4. Changes to Existing Repository: `2143-k8s`
+## 4. Application Configuration (new, in `2143-k8s-infra` or new app repo)
+### 4.1 Ingress (Traefik replaces nginx-ingress)
 
-### 4.1 Ingress Migration (nginx → Traefik)
-
-- Remove `apps-gateway-nginx` Deployment and Service
-- Convert nginx Ingress annotations to Traefik-compatible equivalents
-- Traefik v3.5+ nginx provider handles existing Ingress resources automatically
-- Run `ingress-nginx-migration` tool for compatibility report
+- Deploy Traefik via Helm on all 3 clusters (per-cluster values in 2143-k8s-infra)
+- Traefik v3.5+ nginx provider handles existing Ingress resources
+- No migration needed — greenfield, deploy fresh
 
 ### 4.2 App Deployments
 
-Existing deployments deploy identically to all 3 clusters via ArgoCD — no changes needed:
-- `john2143-com`: stateless, S3-backed, S3 endpoint already configurable via env
-- `mongo`: self-host with encryption at rest, active-passive across clusters
+Deploy identically to all 3 clusters via ArgoCD:
+- `john2143-com`: stateless, S3-backed (→ SeaweedFS S3 gateway)
+- `mongo`: self-hosted with `--enableEncryption`, active on Ashburn, standby on others
 - `openfront-pro`, `openfront-pro-simulation-api`: stateless
 - `poe-sale-redirector`, `poe2-sale-redirector`: stateless, deploy to raw IP
 - `derp-server`: UDP, deploy to raw IP via hostPort
 - `prometheus`, `grafana`: monitoring
 
-### 4.3 S3 Endpoint Change
+### 4.3 S3 Configuration
 
-Update `s3-creds` Secret to point at Backblaze B2 instead of DO Spaces:
 ```yaml
-S3_ENDPOINT_URL: https://s3.us-west-004.backblazeb2.com
-S3_ACCESS_KEY: <b2-application-key-id>
-S3_SECRET_KEY: <b2-application-key>
+# Point imagehost at SeaweedFS (hot, local, encrypted)
+S3_ENDPOINT_URL: http://seaweedfs-s3.<cluster>.svc.cluster.local:8333
+S3_ACCESS_KEY: <seaweedfs-access-key>
+S3_SECRET_KEY: <seaweedfs-secret-key>
+BUCKET: imagehost-files
 ```
 
-The `MINIO_*` env vars can be removed if no longer using MinIO, or kept if running a local MinIO cache.
+Remove old `MINIO_*` env vars — SeaweedFS uses standard S3.
 
-### 4.4 MongoDB Migration
+### 4.4 MongoDB
 
-Self-hosted with encryption at rest (active-passive across clusters):
-- Deploy mongo on Ashburn as active with `--enableEncryption` + encryption key in Kubernetes Secret
-- Nuremberg and Hillsboro run standby mongo (scaled to 0), PVCs pre-provisioned via Longhorn
-- Hourly CronJob: `mongodump` → B2 bucket for backup
-- Failover: restore latest dump to standby, scale up, update DB connection string
-- Longhorn provides volume snapshots as secondary recovery point
+Greenfield — deploy fresh with `--enableEncryption` + encryption key in Secret:
+- Active on Ashburn (Longhorn PV)
+- Standby on Hillsboro and Nuremberg (scaled to 0, PVCs pre-provisioned)
+- Hourly CronJob: `mongodump` → B2 (encrypted)
+
 ### 4.5 Monitoring
 
-- Prometheus: Add k8gb metrics scrape config, CrowdSec metrics, PowerDNS metrics
-- Grafana: Import k8gb dashboard, CrowdSec dashboard
-- Alert rules: node bandwidth >80%, CrowdSec ban spikes, k8gb endpoint count drops
+- Prometheus: k8gb metrics, CrowdSec metrics, PowerDNS metrics, SeaweedFS metrics
+- Grafana: k8gb dashboard, CrowdSec dashboard, SeaweedFS dashboard
+- Alert rules: node bandwidth >80%, CrowdSec ban spikes, k8gb endpoint count drops, backup failure
+
+## 5. Greenfield Deployment Phases
+
+**This is a greenfield deployment on a new domain.** No migration from DOKS. Build fresh, test fully, copy data later.
+
+### Phase 0 — Provision Hetzner Nodes
+
+1. Create 3 VMs in Hetzner Cloud (Ashburn CPX21, Hillsboro CPX21, Nuremberg CX22)
+2. Create 3× 100GB Cloud Volumes (attach to each node for SeaweedFS)
+3. Request additional IPv4 per node (for split-IP architecture)
+4. Deploy NixOS via nixos-anywhere
+5. Verify: PowerDNS starts, k3s running, Cilium healthy
+
+### Phase 1 — Bootstrap Cluster Services
+
+1. Configure PowerDNS: add new domain zone, set NS records with registrar, configure TSIG key
+2. Install ArgoCD on each cluster
+3. Deploy root App-of-Apps: cert-manager → Traefik → ExternalDNS → k8gb → CrowdSec → Longhorn
+4. Verify: all 3 clusters synced, TLS certs issued, k8gb CoreDNS responding
+
+### Phase 2 — Deploy SeaweedFS
+
+1. Deploy SeaweedFS via Helm on all 3 clusters
+2. Configure 3-way replication across zones (ashburn, hillsboro, nuremberg)
+3. Enable `-encryptVolumeData` on filer
+4. Create LUKS2-encrypted partitions on the 100GB Cloud Volumes
+5. Create S3 buckets, access keys
+6. Verify: upload test file, read from all 3 regions, confirm encryption at rest
+
+### Phase 3 — Deploy Applications
+
+1. Deploy MongoDB (active on Ashburn, standby on others) with `--enableEncryption`
+2. Deploy john2143-com, openfront-pro, poe-sale-redirector, derp-server
+3. Configure S3 endpoint → SeaweedFS S3 gateway
+4. Deploy MongoDB backup CronJob → B2
+5. Configure k8gb Gslb CRDs with geoip strategy
+6. Smoke test: access via direct node IPs, upload images, verify DNS
+
+### Phase 4 — Backup Layer
+
+1. Create Backblaze B2 bucket (new key, separate from DO Spaces)
+2. Generate rclone crypt keys (separate keys for B2 and RustFS)
+3. Deploy backup CronJob: rclone crypt → B2 + rclone crypt → RustFS
+4. Configure Healthchecks.io monitoring
+5. Enable B2 Object Lock (governance mode, 30-day retention)
+6. Test restore: rclone sync from B2 to a test bucket
+
+### Phase 5 — DNS Go-Live
+
+1. Verify everything works via direct IPs
+2. Point new domain DNS at k8gb CoreDNS IPs
+3. Monitor: error rates, DNS resolution, certificate renewal, backup health
+4. Optional: enable Bunny CDN pull zone, point DNS at Bunny
+
+### Phase 6 — Data Migration (from old domain)
+
+1. rclone sync from DO Spaces → new B2 bucket (or direct to SeaweedFS)
+2. mongodump from old DOKS mongo → mongorestore to new cluster
+3. Update old domain DNS to redirect to new domain
+4. Decommission DOKS when traffic has fully moved
 
 ---
 
-## 5. Migration Phases (Summary)
+## 6. Rollback
 
-### Phase 0 — Preparation (DOKS side, no downtime)
-
-1. Lower DNS TTL on all DOKS A records to 300s (do 48h before cutover)
-2. Install Velero on DOKS, create full backup to S3-compatible bucket
-3. Export MongoDB: `mongodump --archive --gzip`
-4. Run Traefik ingress-nginx-migration compatibility check
-5. Prepare `2143-k8s-infra` repo with all configs
-6. Create Backblaze B2 bucket, generate MongoDB encryption key
-
-### Phase 1 — Provision Hetzner Nodes
-
-1. Create 3 VMs in Hetzner Cloud (Ashburn, Hillsboro, Nuremberg)
-2. Deploy NixOS via nixos-anywhere + Disko: `nix run github:nix-community/nixos-anywhere -- --flake .#k3s-ashburn --target-host root@<IP>`
-3. Verify PowerDNS starts, k3s is running on each node
-4. Cilium install: `cilium install --set ipam.operator.clusterPoolIPv4PodCIDRList=10.42.0.0/16`
-5. Configure PowerDNS: add zone, set NS records, configure TSIG key for ExternalDNS
-
-### Phase 2 — Bootstrap Cluster Services
-
-1. Install ArgoCD on each cluster
-2. Configure root App-of-Apps pointing at `2143-k8s-infra` (with per-cluster values)
-3. Sync waves deploy: cert-manager → Traefik → ExternalDNS → k8gb → CrowdSec → apps
-4. Verify: all 3 clusters show synced, Traefik pods running, Cilium healthy
-
-### Phase 3 — Storage and Stateful Migration
-
-1. Restore PVCs from Velero backup to Hetzner
-2. Deploy self-hosted MongoDB with `--enableEncryption` on Ashburn (active), standby on others
-3. Update app connection strings (S3 endpoint → B2, DB → self-hosted mongo)
-4. Deploy identical workloads to all 3 clusters
-5. Smoke test: access each cluster via direct node IP
-
-### Phase 4 — DNS Cutover
-
-1. Register PowerDNS NS records with domain registrar
-2. Verify k8gb CoreDNS serves correct geoip responses
-3. Test failover: scale down primary cluster pods, verify DNS shifts
-4. Update DNS to point at k8gb CoreDNS IPs (replacing DOKS LB)
-5. Monitor for 24h: error rates, DNS resolution, certificate renewal
-
-### Phase 5 — Decommission DOKS
-
-1. 72-hour observation period with DOKS still running
-2. Final Velero backup for archive
-3. Raise DNS TTLs back to operational values (3600s)
-4. Delete DOKS cluster, LB, volumes from DigitalOcean
-5. Cancel DO subscription
-
-### Rollback Plan
-
-- Phases 0-3: terminate Hetzner VMs, no production impact
-- Phase 4: revert DNS record to DOKS LB IP (300s TTL = 5-min window)
-- Phase 5: restore from archival Velero backup to new DOKS cluster
+Greenfield = no rollback needed until Phase 5. Before go-live, tear down and rebuild freely. After go-live, old domain still works on DOKS — revert DNS if needed.
 
 ---
 
-## 6. Open Decisions (to resolve before implementation)
+## 7. Open Decisions
 
-| Decision | Options | Recommended |
-|----------|---------|-------------|
-| deSEC TTL exception | Request 60s exception vs. PowerDNS vs. CF free DNS | **PowerDNS** — maximum independence |
-| MongoDB | Atlas M0 free vs. self-hosted active-passive | **Self-hosted** — encryption at rest, Longhorn PV, hourly backup to B2 |
-| Third US node | BuyVM $15 vs. Linode $20 vs. home node | **N/A** — using EU node (Nuremberg CX22) instead of third US node |
-| Cloudflare Tunnel overlay | Add as optional DDoS shield vs. skip entirely | **Skip initially** — add only if DDoS exceeds CrowdSec |
-| Monitoring | Central Grafana vs. per-cluster vs. both | **Per-cluster Prometheus + central Grafana** (or Grafana Cloud free tier) |
-| cert-manager DNS challenge | Let's Encrypt HTTP-01 vs. DNS-01 | **HTTP-01** via Traefik (simpler); DNS-01 if wildcard certs needed |
-| ArgoCD repo strategy | Single root app vs. per-cluster apps | **Single root App-of-Apps** with per-cluster values files |
+| Decision | Options | Resolved |
+|----------|---------|----------|
+| DNS provider | PowerDNS vs. deSEC vs. CF free | **PowerDNS** |
+| MongoDB | Atlas vs. self-hosted | **Self-hosted, encryption at rest** |
+| Object storage | B2 only vs. SeaweedFS + B2 | **SeaweedFS hot + B2 cold** |
+| CDN | None vs. Bunny CDN | **Bunny CDN optional overlay** |
+| Third node | US provider vs. EU | **Nuremberg CX22 (EU)** |
+| New domain | TBD | **Pick a new domain for greenfield** |
 
 ---
 
-## 7. Timeline Estimate
+## 8. Timeline
 
-| Phase | Effort | Calendar (assuming part-time) |
-|-------|--------|------------------------------|
-| Phase 0 — Preparation | 1-2 days | Week 1 |
-| Phase 1 — Provision | 0.5 day | Week 1 |
-| Phase 2 — Bootstrap | 1-2 days | Week 1-2 |
-| Phase 3 — Storage migration | 0.5-1 day | Week 2 |
-| Phase 4 — DNS cutover | 0.5 day + 24h monitoring | Week 2-3 |
-| Phase 5 — Decommission | 0.5 day | Week 3 |
-| **Total** | **4-7 days** | **~3 weeks** |
+| Phase | Effort | Notes |
+|-------|--------|-------|
+| Phase 0 — Provision | 0.5 day | nixos-anywhere is fast |
+| Phase 1 — Bootstrap | 1-2 days | ArgoCD sync waves automate most |
+| Phase 2 — SeaweedFS | 1 day | LUKS + layout config is the hard part |
+| Phase 3 — Apps | 1 day | Mostly ArgoCD sync |
+| Phase 4 — Backups | 0.5 day | rclone config + CronJob |
+| Phase 5 — Go-live | 0.5 day | DNS + monitoring |
+| Phase 6 — Data migration | 1-2 days | rclone + mongodump |
+| **Total** | **5-7 days** | Stretch across 2-3 weeks |

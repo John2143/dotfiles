@@ -148,8 +148,8 @@ Review the current diff, post structured findings, and triage human PR comments.
     ```
     1. **HIGH** — `scripts/game_manager.gd` (lines 616-622) — `clamp_launch_direction` returns non-normalized vector for `Vector2.ZERO` input. Fix: add `if dir == Vector2.ZERO: return Vector2(0.0, -1.0)` guard.
     ```
-11. Also produce: Summary (score/10 + biggest gap) and Overall assessment paragraph.
-12. Post as PR comment: `gh pr comment <number> --body "## Review from automated agent (cycle <review_cycles>)\n\n### Summary\n...\n\n### Findings\n...\n\n### Overall assessment\n..."`
+11. Also produce: one-line verdict (score/10, biggest gap).
+12. Post as PR comment: `gh pr comment <number> --body "## Review (cycle <review_cycles>)\n\nScore: X/10. Gap: <gap>.\n\n<findings, one line each>\n\nVerdict: <one-line readiness>"`
 13. Check for human PR comments (do this every review invocation, not just the first):
     - `gh pr view <number> --json comments --jq '.comments[] | select(.author.login != "<your login>") | {id: .id, author: .author.login, body: .body, createdAt: .createdAt}'`
     - Determine your own login: `gh auth status 2>&1 | head -1` or `gh api user --jq .login`.

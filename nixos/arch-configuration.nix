@@ -220,30 +220,34 @@ in
     keyboards.macropad = {
       ids = ["20a0:422d"];
       settings.main = {
-        # Binary modifier encoding: 3 base F-keys (F20, F21, F22) × 8 combos = 24 signals.
-        # Modifier bits: shift=bit0, ctrl=bit1. ALT combos (bit2) reserved for future.
+        #  ┌───┬───┬───┬───┬───┬───┐
+        #  │esc│ 1 │ 2 │ 3 │ 4 │ 5 │
+        #  ├───┼───┼───┼───┼───┼───┤
+        #  │tab│ q │ w │ e │ r │ y │
+        #  ├───┼───┼───┼───┼───┼───┤
+        #  │ v │ a │ s │ d │ f │ g │
+        #  ├───┼───┼───┼───┼───┼───┤
+        #  │ z │ x │ c │ b │ent│   │
+        #  └───┴───┴───┴───┴───┴───┘
+
+        # Requires `fkeys:basic_13-24` in hyprland kb_options (evdev defaults
+        # F13-F23 to XF86 keysyms like XF86Launch9, XF86AudioMicMute, etc.).
+        # F18-F24 plain + Alt+F18-F24 = 14 signals across 11 mapped keys.
         #
-        # Base F20 — top row (q w e r):
-        #   000=f20, 001=S-f20, 010=C-f20, 011=C-S-f20
-        q   = "f20";       # 000  → monitors on
-        w   = "S-f20";     # 001  → monitors off
-        e   = "C-f20";     # 010  → light: dresser (light-dresser)
-        r   = "C-S-f20";   # 011  → light: window AC (light-ac)
-        #
-        # Base F21 — home row (a s d f):
-        a   = "f21";       # 000  → thermostat −1° (thermostat-down)
-        s   = "S-f21";     # 001  → AC toggle (ac-toggle)
-        d   = "C-f21";     # 010  → thermostat +1° (thermostat-up)
-        f   = "C-S-f21";   # 011  → thermostat toggle (thermostat-toggle)
-        #
-        # Base F22 — bottom/edge (y g, esc t reserved):
-        y   = "f22";       # 000  → light: lamp (light-lamp)
-        g   = "S-f22";     # 001  → fan toggle (fan-toggle)
-        esc = "C-f22";     # 010  (reserved)
-        t   = "C-S-f22";   # 011  (reserved)
-      };
+        esc = "f18";     # (reserved)
+        q   = "f19";    # monitors on
+        w   = "f20";    # monitors off
+        e   = "f21";    # light: dresser (light-dresser)
+        r   = "f22";    # light: window AC (light-ac)
+        y   = "f23";    # light: lamp (light-lamp)
+        a   = "f24";    # thermostat −1° (thermostat-down)
+        s   = "A-f18";  # AC toggle (ac-toggle)
+        d   = "A-f19";  # thermostat +1° (thermostat-up)
+        f   = "A-f20";  # thermostat toggle (thermostat-toggle)
+        g   = "A-f21";  # fan toggle (fan-toggle)
     };
   };
+  }; # close services.keyd
 
   environment.systemPackages = [
     hass-macro

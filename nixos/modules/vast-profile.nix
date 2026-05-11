@@ -7,6 +7,12 @@
       # let you run different workloads in parallel (one rental per label).
       VAST_LABEL=vllm-deepseek-v4
 
+      # ---------- Engine ----------
+      # "sglang" (default, recommended for DeepSeek V4) or "vllm".
+      # SGLang produces zero CJK bad tokens vs vLLM's 50-75% rate (vllm#41985).
+      # vLLM kept for A/B comparison and non-DS models.
+      # VAST_ENGINE=sglang
+
       # ---------- Model + serving config ----------
       VAST_MODEL=deepseek-ai/DeepSeek-V4-Flash
       VAST_SERVED_MODEL_NAME=deepseek-v4-flash
@@ -43,29 +49,24 @@
       # NOTE: VAST_HF_TOKEN is a *secret*; put it in the encrypted
       # vast-credentials.age file, not here. (envsource sources both,
       # credentials wins.)
-      # Tool/reasoning parsers for models that need them. DeepSeek V4
-      # auto-gets deepseek_v4 parsers from vast-bootstrap.bash; only set
-      # these for other models (e.g. Qwen3).
-      # Also auto-adds --default-chat-template-kwargs '{"thinking": true}'
-      # for DeepSeek V4 so that thinking is enabled by default (the V4
-      # template disables it otherwise). To force non-think, pass
-      # chat_template_kwargs: {"thinking": false} per request.
+      # Tool/reasoning parsers for vLLM-only models that need them. SGLang
+      # auto-handles DeepSeek V4; only set these for non-DS models on vLLM
+      # (e.g. Qwen3).
       # VAST_TOOL_CALL_PARSER=qwen3_xml
       # VAST_REASONING_PARSER=qwen3
-      # Extra `vllm serve` flags. DeepSeek V4 auto-gets --kv-cache-dtype
-      # fp8 from vast-bootstrap.bash; only set this for other tweaks.
+      # Extra engine flags (passed through to vllm serve or sglang.launch_server).
       # VAST_EXTRA_ARGS=--quantization fp4
       # Tensor parallelism: auto-detected from GPU count (2x GPU → 2).
       # Override here to force a specific value or disable (set to 1).
       # VAST_TENSOR_PARALLEL=1
 
       # Logging proxy: when 1 (default), a tiny Python reverse proxy sits
-      # in front of vLLM and appends every OpenAI-style request + response
-      # to /workspace/metrics/queries.jsonl. vLLM binds privately to
+      # in front of the engine and appends every OpenAI-style request+response
+      # to /workspace/metrics/queries.jsonl. The engine binds privately to
       # 127.0.0.1:18000; the proxy listens on $VAST_VLLM_PORT and forwards
       # transparently — clients are unchanged. queries.jsonl rides back
       # automatically with vast-fetch-metrics / vast-destroy. Set to 0 to
-      # disable and bind vLLM directly on $VAST_VLLM_PORT (legacy mode).
+      # disable and bind the engine directly on $VAST_VLLM_PORT (legacy mode).
       # VAST_LOGGING_PROXY=0
 
       # ---------- Manual host override (skip API discovery) ----------

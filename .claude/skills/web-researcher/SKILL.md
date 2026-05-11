@@ -44,10 +44,12 @@ All files live under `ai_research/{topic-slug}/` relative to the repo root. None
 
 ## How to start each session
 
-You run one atomic category of work per session, then stop. On every invocation:
+**This is a multi-invocation skill.** You run exactly one category of work per session, then you terminate. The user invokes you again for the next step. This is by design — it keeps your context window clean and your decisions auditable.
+
+### Hard session-boundary rule
 
 1. Read `ai_research/{topic-slug}/research_state.md`. If it does not exist, this is a fresh research project — follow **SETUP**.
-2. Read the `phase_status` field from `research_state.md`. Determine which category to execute:
+2. Read the `phase_status` field. Determine which single category to execute:
 
    | `phase_status` | Category to run |
    |---|---|
@@ -58,8 +60,26 @@ You run one atomic category of work per session, then stop. On every invocation:
    | `finalizing` | FINALIZE |
    | `done` | Report: research is complete. Point the user to `ai_research/{topic-slug}/final_report.md`. |
 
-3. Execute exactly one category (below). Update state files. **Stop.** Do not chain categories in a single session.
+3. Execute that one category. When its final step says **STOP**, stop immediately.
 
+### What "STOP" means
+
+After completing a category, your only remaining actions are:
+- Confirm the state file was written.
+- Report which category you completed and what the next `phase_status` is.
+
+You **must not** read the next category's instructions. You **must not** evaluate whether the next step could also be done. You **must not** read past the STOP line in the SKILL.md file.
+
+### Anti-pattern: "the user is waiting"
+
+The following pattern is a bug and must never happen:
+> "The user is in a conversation with me right now. They probably expect me to complete the research in this session. Let me proceed to DISPATCH."
+
+That reasoning is always wrong. The skill is designed for multiple invocations. The user knows each invocation does one step. Chaining categories defeats context-window isolation and produces sloppy synthesis. Delivering one clean atomic step per invocation is how you serve the user best.
+
+### Anti-pattern: "I'll just check the next section"
+
+Do not scroll past the STOP line to see what the next category requires. If you do, you have already violated the boundary. The state file is the only link between sessions — not your memory of the next step.
 ## How to work
 
 ### Category: SETUP
@@ -112,14 +132,14 @@ You run one atomic category of work per session, then stop. On every invocation:
 - **Done**:
 ```
 
-8. Stop. The next session will read `phase_status: dispatching` and run DISPATCH.
+8. **STOP.** You have completed SETUP. The state file now reads `phase_status: dispatching`. Do not read the DISPATCH section. Do not dispatch sub-agents. The user will invoke the skill again for DISPATCH.
 
 ### Category: DISPATCH
 
 **Purpose**: Send sub-agents to research pending sub-topics in parallel. Do not collect results in this session.
 
 1. Read `research_plan.md` and `research_state.md`. Identify pending sub-topics from the `Pending:` list in `research_state.md`.
-2. If no sub-topics are pending and `Done:` is not empty: update `phase_status` to `synthesizing` in `research_state.md`. Stop. The next session will run SYNTHESIZE.
+2. If no sub-topics are pending and `Done:` is not empty: update `phase_status` to `synthesizing` in `research_state.md`. **STOP.** Do not proceed to synthesis in this session.
 3. Select up to 5 pending sub-topics to dispatch this session (or up to 10 if the user explicitly authorized more in `$CONTEXT`). If more than 5 remain pending, dispatch 5 now; the rest will be dispatched in future sessions.
 4. Rewrite `research_state.md` atomically: move each selected sub-topic's slug from the `Pending:` list to the `In progress:` list, and set `phase_status` to `synthesizing` (sub-agents will run independently; the next session collects results). The file is small — rewrite the whole thing in one `write` call rather than editing individual lines.
 5. Dispatch all selected sub-agents simultaneously using `Task(task)`. Each sub-agent receives a self-contained research brief. Construct the brief as follows (substitute `{placeholders}` with values from `research_plan.md`):
@@ -179,7 +199,7 @@ All sources in APA format. Each entry must include the full URL.
 - Your report must be self-contained so a reviewer can audit it without your context window.
 ```
 
-6. Stop. Do not wait for sub-agent results — they run asynchronously. The next session will collect results in SYNTHESIZE.
+6. **STOP.** You have completed DISPATCH. Sub-agents are running asynchronously. Do not wait for results. Do not read the SYNTHESIZE section. The user will invoke the skill again for SYNTHESIZE.
 
 ### Category: SYNTHESIZE
 
@@ -190,8 +210,8 @@ All sources in APA format. Each entry must include the full URL.
    - If the file exists and contains a complete report (all 5 required sections present): move the sub-topic's slug from `In progress:` to `Done:` in `research_state.md`. Rewrite the entire state file atomically.
    - If the file does not exist or is incomplete (missing sections): leave the slug under `In progress:`.
 3. If any slugs remain under `Pending:` or `In progress:` in `research_state.md`:
-   - If sub-agents for `In progress:` items appear to have failed (no output file after a reasonable attempt): move those slugs back to `Pending:`, set `phase_status` to `dispatching`, and stop. The next session will re-dispatch them.
-   - Otherwise, set `phase_status` to `dispatching` and stop. The next session will dispatch remaining pending items.
+   - If sub-agents for `In progress:` items appear to have failed (no output file after a reasonable attempt): move those slugs back to `Pending:`, set `phase_status` to `dispatching`, and **STOP.** Do not proceed to synthesis in this session.
+   - Otherwise, set `phase_status` to `dispatching` and **STOP.** Do not proceed to synthesis in this session.
 4. If both `Pending:` and `In progress:` are empty in `research_state.md` (all sub-topics are in `Done:`):
    - Read every completed report in full.
    - Write `phase_{N}_summary.md` (where N is the current phase number) with this structure:
@@ -225,15 +245,15 @@ All sources in APA format. Each entry must include the full URL.
 5. **Decision criteria** — determine which of three outcomes applies and record it in both the phase summary and `research_state.md`:
 
    **SUFFICIENT**: The primary research question can now be answered fully and confidently based on the evidence collected across all phases. No major gaps remain. No contradictory findings remain unresolved.
-   → Set `phase_status` to `finalizing` in `research_state.md`. Stop. Next session: FINALIZE.
+   → Set `phase_status` to `finalizing` in `research_state.md`. **STOP.** Do not proceed to FINALIZE in this session. Next session: FINALIZE.
 
    **MORE_NEEDED**: The research so far is useful but does not fully answer the primary question. New sub-questions emerged during this phase that need investigation.
-   → Append the new sub-questions to `research_plan.md` as sub-topics for the next phase (do not edit existing sub-topics — only append). Add the new sub-topic slugs to the `Pending:` list in `research_state.md`, update `Total sub-topics`, increment the phase number, and set `phase_status` to `dispatching`. Rewrite `research_state.md` atomically. Stop. Next session: DISPATCH new sub-topics.
+   → Append the new sub-questions to `research_plan.md` as sub-topics for the next phase (do not edit existing sub-topics — only append). Add the new sub-topic slugs to the `Pending:` list in `research_state.md`, update `Total sub-topics`, increment the phase number, and set `phase_status` to `dispatching`. Rewrite `research_state.md` atomically. **STOP.** Do not dispatch new sub-topics in this session. Next session: DISPATCH new sub-topics.
 
    **STUCK**: The primary question cannot be answered without user input. This may be because the question is fundamentally unanswerable with available sources, contradictory evidence cannot be resolved, or the scope needs narrowing.
-   → Set `phase_status` to `stuck` in `research_state.md`. Stop and present the user with: a summary of what was found, what the blocker is, and 2–3 concrete options for how to proceed (e.g., narrow scope, accept a qualified answer, pursue a specific missing source). Do not proceed until the user responds.
+   → Set `phase_status` to `stuck` in `research_state.md`. **STOP.** Present the user with: a summary of what was found, what the blocker is, and 2–3 concrete options for how to proceed (e.g., narrow scope, accept a qualified answer, pursue a specific missing source). Do not proceed until the user responds in a future session.
 
-6. Stop.
+6. **STOP.** You have completed SYNTHESIZE. The state file reflects the decision (finalizing, dispatching, or stuck). Do not proceed to the next step regardless of the decision. The user will invoke the skill again.
 
 ### Category: FINALIZE
 
@@ -286,6 +306,8 @@ Consolidated bibliography from all phase summaries.
 4. Mark `phase_status` as `done` in `research_state.md`.
 5. Report to the user: state that research is complete, provide the answer if short, and point to `ai_research/{topic-slug}/final_report.md` for the full report.
 
+6. **STOP.** You have completed FINALIZE. Research is done. `phase_status` is `done`.
+
 ## Constraints
 
 - You may create files inside `ai_research/{topic-slug}/`.
@@ -299,8 +321,8 @@ Consolidated bibliography from all phase summaries.
 - You may not assign equal weight to all sources regardless of credibility — evaluate and state source quality in every report.
 - You may not run more than 10 sub-agents per phase without explicit user approval in `$CONTEXT`.
 - You may not ask the user questions during active research phases — only at SETUP (if the question is unclear) or when genuinely stuck at SYNTHESIZE.
-- You may not chain multiple categories in one session — execute exactly one category, update state, and stop.
+- **You may not chain multiple categories in one session.** Execute exactly one category, update state, and stop. After writing a STOP line, your session is over — do not scroll further in this SKILL.md. Do not read the next category's instructions. Do not evaluate whether "it would be faster" to do the next step now. The state file is the only handoff mechanism between sessions.
 
 ## TLDR
 
-Your job is to run one atomic step of a structured research process per session and then stop. Set up by creating `ai_research/{topic-slug}/` and decomposing the primary question into sub-topics with optional perspective assignments. Dispatch task sub-agents in parallel to research each sub-topic and produce cited markdown reports. Synthesize their findings into phase summaries, then decide whether the primary question is answered (finalize), needs more phases (loop back), or is stuck (ask the user). Every constraint starts with May or May not. The state machine is: SETUP → DISPATCH ⇄ SYNTHESIZE → FINALIZE → DONE. Read `research_state.md` first on every invocation to know which category to run.
+Your job is to run exactly one atomic step of a structured research process per session and then stop. After you hit a STOP line, your session is over — confirm the state file was written and report which category you completed. Do not scroll further in this SKILL.md. The state machine is: SETUP → DISPATCH ⇄ SYNTHESIZE → FINALIZE → DONE. Read `research_state.md` first on every invocation to know which category to run — never continue from your own memory of the previous step.

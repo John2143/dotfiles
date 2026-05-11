@@ -39,16 +39,36 @@ For each changed file:
 
 Evaluate in order. Flag CRITICAL issues immediately but continue evaluating remaining dimensions:
 
-**1. Correctness** — Logic errors, off-by-one, null/undefined dereferences, type mismatches, race conditions, incorrect assumptions about input shape or range, missing or incorrect edge-case handling.
+**1. Correctness**
+- Logic errors, off-by-one, null/undefined dereferences, type mismatches
+- Race conditions (shared mutable state without synchronization)
+- Incorrect assumptions about input shape or range
+- Missing or incorrect edge-case handling
 
-**2. Security** — Injection vulnerabilities (command, SQL, path traversal, XSS), authentication or authorization bypass, credential leaks (hardcoded secrets, secrets in logs), missing input validation.
+**2. Security**
+- Injection vulnerabilities (command, SQL, path traversal, XSS)
+- Authentication or authorization bypass
+- Credential leaks (hardcoded secrets, secrets in logs, secrets in URLs)
+- Missing or insufficient input validation / sanitization
 
-**3. Error handling** — Silent failures (errors caught but ignored), swallowed panics/exceptions, unhandled error variants, functions returning success-like values on failure.
+**3. Error handling**
+- Silent failures (errors caught but ignored, or `/* fallthrough */` with no action)
+- Swallowed panics or exceptions
+- Unhandled error variants in match/switch
+- Functions that return success-like values when they have actually failed
 
-**4. Maintainability** — Coupling and cohesion, naming clarity, duplication, dead code, misleading comments, unused parameters/imports.
+**4. Maintainability**
+- Coupling and cohesion — is this module doing too much?
+- Naming — do names communicate intent or just mechanics?
+- Duplication — repeated patterns that should be extracted
+- Dead code — unreachable branches, unused parameters or imports
+- Comments — misleading, absent where needed, or present to excuse bad naming
 
-**5. Performance** — Hot-path allocations in loops, N+1 queries or redundant I/O, unnecessary work that could be cached/batched/hoisted, inefficient data structures.
-
+**5. Performance**
+- Hot-path allocations in loops
+- N+1 queries or redundant I/O
+- Unnecessary work that could be cached, batched, or hoisted
+- Inefficient data structures
 ### Step 4 — Produce findings
 
 Each finding must include:
@@ -65,24 +85,18 @@ Example:
 
 If no issues in a dimension, state "No issues found." Do not invent LOW/INFO findings to pad the list.
 
-Also produce:
-- **Summary**: Score out of 10, single biggest gap.
-- **Overall assessment**: Readiness for production, most impactful improvement, patterns (good or bad) across the reviewed surface.
+Also produce: one-line verdict (score/10, biggest gap).
 
 ### Step 5 — Post as PR comment
 
 ```
-gh pr comment <number> --body "## Review from automated agent
+gh pr comment <number> --body "## Review
 
-### Summary
-Score: X/10 — <biggest gap>
+Score: X/10. Gap: <gap>.
 
-### Findings
-1. **SEVERITY** — \`file\` (line N) — problem. Fix: <concrete fix>.
+<findings, one line each>
 
-### Overall assessment
-<paragraph>"
-```
+Verdict: <one-line readiness>"
 
 ### Step 6 — Update state
 
