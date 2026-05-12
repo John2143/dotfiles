@@ -786,6 +786,9 @@ nnoremap <leader>qy <Plug>VimspectorToggleConditionalBreakpoint
 
 inoremap <silent><script><expr> <C-J> copilot#Accept("\<CR>")
 
+" pressing ctrl shift j will join without space
+vnoremap <C-J> gJ
+
 nmap <Leader>qr <Plug>VimspectorRestart
 nmap <Leader>qh <Plug>VimspectorStepOut
 nmap <Leader>ql <Plug>VimspectorStepInto

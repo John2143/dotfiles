@@ -155,6 +155,7 @@ set fish_greeting
 fish_add_path "$HOME/bin"
 fish_add_path "$HOME/.cargo/bin"
 fish_add_path "$HOME/go/bin/"
+fish_add_path "$HOME/.local/bin/"
 
 set -x HOMEBREW_NO_AUTO_UPDATE 1
 set BAT_THEME "Solarized (dark)"
