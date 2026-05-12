@@ -1,8 +1,12 @@
 # Headscale — Self-hosted Tailscale coordination server
 #
 # Runs on the Home Pi. All Hetzner nodes + home machines join this tailnet.
-# Listens on 0.0.0.0:8080 so closet's Traefik can reverse-proxy to it.
+# Tailscale on the same host connects via localhost:8080.
+# External nodes connect via headscale.9s.pics (routed through closet's Traefik).
 {
+  config,
+  lib,
+  pkgs,
   ...
 }: {
   services.headscale = {
@@ -13,29 +17,37 @@
     settings = {
       server_url = "https://headscale.9s.pics";
 
-      derp = {
-        server = {
-          enabled = false;
-        };
-        paths = [];
-        auto_update_enable = true;
-        urls = [
-          "https://raw.githubusercontent.com/2143-Labs/2143-59s/main/base/headscale/derp-map.yaml"
-        ];
+      dns = {
+        magic_dns = true;
+        base_domain = "9s.pics";
+        override_local_dns = true;
+        nameservers.global = ["1.1.1.1" "9.9.9.9"];
       };
-    };
 
-    # DNS config (new API — moved from settings.dns_config to top-level dns)
-    dns = {
-      magic_dns = true;
-      base_domain = "9s.pics";
-      nameservers.global = ["1.1.1.1" "9.9.9.9"];
-      override_local_dns = true;
+      # DERP relay servers — one per region on raw IPs
+      derp = {
+        urls = [];
+        paths = [];
+        auto_update_enabled = false;
+        server.enabled = false; # DERP runs as a separate app on each k3s node
+      };
     };
   };
 
-  # Allow external connections to headscale
-  networking.firewall.allowedTCPPorts = [8080];
+  # Default ACL: allow all traffic within the tailnet
+  # Write to a file since the option expects a path
+  environment.etc."headscale/acl.json" = {
+    text = ''
+      {
+        "acls": [
+          {"action": "accept", "src": ["*"], "dst": ["*:*"]}
+        ]
+      }
+    '';
+    mode = "0440";
+    user = "headscale";
+    group = "headscale";
+  };
 
   # systemd: ensure headscale starts before tailscale on the same host
   systemd.services.tailscale = {
