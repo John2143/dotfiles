@@ -1,28 +1,19 @@
-// UI stats extension — timestamps in chat, timing in widget, footer test.
+// UI stats extension — timestamps in chat, timing in widget, tokens/sec in footer.
 //
 // Chat: injects timestamp banners via `before_agent_start`.
 // Widget: shows turn timing + token speed below the editor via `setWidget`.
-// Status: minimal ready/turn indicator.
-// Footer: test — replaces footer with a custom Component to confirm API works.
+// Footer: registers a segment showing live tokens/sec via OMP's built-in computation.
 
 export default function (pi: any) {
-  // ============================================================
-  // Per-turn state
-  // ============================================================
-
   let turnStartMs = 0;
   let currentTurn = 0;
   let agentStartMs = 0;
   let totalAgentTurns = 0;
-  let widgetText = "ready";
+  let widgetText = "";
 
   // ============================================================
   // Helpers
   // ============================================================
-
-  function now(): string {
-    return new Date().toLocaleTimeString("en-US", { hour12: false, hour: "2-digit", minute: "2-digit", second: "2-digit" });
-  }
 
   function isoNow(): string {
     return new Date().toISOString().replace("T", " ").slice(0, 19);
@@ -39,7 +30,8 @@ export default function (pi: any) {
   function formatTokens(n: number): string {
     if (n >= 1000000) return (n / 1000000).toFixed(1) + "M";
     if (n >= 1000) return (n / 1000).toFixed(1) + "k";
-    return String(n);
+    // Round small floats to avoid 29.77605404729138/s
+    return n < 10 ? n.toFixed(1) : String(Math.round(n));
   }
 
   function extractUsage(obj: any): { input: number; output: number } | null {
@@ -57,61 +49,33 @@ export default function (pi: any) {
   }
 
   function updateWidget(ctx: any): void {
+    if (!widgetText) {
+      ctx.ui.setWidget("ui-stats", undefined);
+      return;
+    }
     const dim = "\x1b[2m";
     const reset = "\x1b[0m";
     ctx.ui.setWidget("ui-stats", [`${dim}${widgetText}${reset}`], { placement: "belowEditor" });
   }
 
   // ============================================================
-  // Footer component (proper TUI Component interface)
-  // ============================================================
-
-  function makeFooterComponent(text: string) {
-    return {
-      render(_width: number): string[] {
-        const dim = "\x1b[2m";
-        const bold = "\x1b[1m";
-        const reset = "\x1b[0m";
-        return [`${dim}⎯⎯⎯⎯⎯ ${bold}FOOTER TEST: ${text}${reset}${dim} ⎯⎯⎯⎯⎯${reset}`];
-      },
-      invalidate(): void { /* no cache */ },
-    };
-  }
-
-  // ============================================================
   // Hook handlers
   // ============================================================
 
-  // Chat timestamp banner
-  pi.on("before_agent_start", async (event: any, _ctx: any) => {
-    const ts = isoNow();
-    const bold = "\x1b[1m";
-    const dim = "\x1b[2m";
-    const reset = "\x1b[0m";
-    return {
-      message: {
-        customType: "timestamp",
-        content: `${dim}╭─ ${bold}${ts}${reset}${dim} ──────────────${reset}`,
-        display: `${dim}${ts}${reset}`,
-      },
-    };
-  });
-
   pi.on("session_start", async (_event: any, ctx: any) => {
     // Footer segment — live tokens/sec from OMP's built-in computation
-    ctx.ui.registerStatusLineSegment("ext-tps", {
-      render(_ctx: any) {
-        const tps = _ctx?.usageStats?.tokensPerSecond;
-        if (!tps || tps <= 0) return { content: "", visible: false };
-        const dim = "\x1b[2m";
-        const reset = "\x1b[0m";
-        return { content: `${dim}⏱ ${formatTokens(tps)}/s${reset}`, visible: true };
-      }
-    });
-
-    // Widget: turn timing below editor
-    widgetText = "ready";
-    updateWidget(ctx);
+    if (typeof ctx.ui.registerStatusLineSegment === "function") {
+      ctx.ui.registerStatusLineSegment("ext-tps", {
+        render(_ctx: any) {
+          const tps = _ctx?.usageStats?.tokensPerSecond;
+          if (!tps || tps <= 0) return { content: "", visible: false };
+          const dim = "\x1b[2m";
+          const reset = "\x1b[0m";
+          return { content: `${dim}⏱ ${formatTokens(tps)}/s${reset}`, visible: true };
+        }
+      });
+    }
+    // No widget until a turn starts
   });
 
   pi.on("turn_start", async (event: any, ctx: any) => {
@@ -120,6 +84,7 @@ export default function (pi: any) {
     widgetText = `turn ${currentTurn + 1} · thinking…`;
     updateWidget(ctx);
   });
+
   pi.on("turn_end", async (event: any, ctx: any) => {
     const elapsed = Date.now() - turnStartMs;
     const usage = extractUsage(event.message) ?? extractUsage(event);
@@ -164,7 +129,6 @@ export default function (pi: any) {
   });
 
   pi.on("session_shutdown", async (_event: any, ctx: any) => {
-    ctx.ui.setStatus("ui-time", undefined);
     ctx.ui.setWidget("ui-stats", undefined);
   });
 }
