@@ -2,14 +2,20 @@
 
 ## System Info
 
+- Hostname: DCIL-L562P1Q5NQ-M
 - Architecture: arm64 (Apple Silicon)
+- CPU: Apple M1 Pro (10 cores)
+- RAM: 32 GB
+- Disk: 926 GB total, ~90 GB free (11% used)
 - OS: macOS 15.7.5 (Build 24G624)
 - Nix: 2.22.1 (standalone, no nix-darwin)
-- Default shell: /bin/zsh
-- Fish: 4.1.2 (installed via brew)
+- Nix store size: 26 GB
+- Default shell (UserShell): /opt/homebrew/bin/fish
+- Fish: 4.1.2 (installed via brew, registered as login shell)
 - Node: v25.2.1 (via fnm)
 - Go: 1.25.2
 - Python: 3.14.2
+- Rust/Cargo: installed (~/.cargo/bin in PATH)
 
 ## Homebrew Taps
 
@@ -180,11 +186,52 @@ These may not have direct nixpkgs equivalents and need special handling:
 - `vfkit` — macOS virtualization framework CLI (from tap cfergeau/crc)
 - `docx2pdf` — Word to PDF converter (from tap aljohri/-)
 
+## PATH order
+
+```
+/usr/local/sbin
+~/.local/bin
+~/.nix-profile/bin
+/nix/var/nix/profiles/default/bin
+~/go/bin
+~/bin
+~/.docker/bin
+~/.cargo/bin
+/opt/homebrew/sbin
+/opt/homebrew/bin
+(fnm managed node bin)
+/usr/local/bin
+/usr/bin
+/bin
+/usr/sbin
+/sbin
+```
+
+## Config files
+
+- `~/.config/fish/config.fish` — fish shell config
+- `~/.config/starship.toml` — already managed via NixOS home-manager
+- `~/.config/nvim/init.vim` — already managed via NixOS home-manager
+
+## Shell registration
+
+- `/etc/shells` does NOT include fish — UserShell is set to `/opt/homebrew/bin/fish` directly
+- nix-darwin will need to add nix's fish to `/etc/shells` and update UserShell
+
+## Nix state
+
+- No launchd services for nix currently
+- No per-user nix profiles (`/nix/var/nix/profiles/per-user/jschmidt/` is empty)
+- No `~/.config/nix/nix.conf` — experimental features not enabled
+- `/etc/nix/nix.conf` only has `build-users-group = nixbld`
+
 ## Migration notes
 
-- Default shell is zsh but fish 4.1.2 is the working shell (set via brew)
-- fnm manages Node versions — nix can replace this or coexist
+- UserShell is `/opt/homebrew/bin/fish` — nix-darwin needs to register nix fish in /etc/shells and swap the path
+- fnm manages Node versions — replace with nix-managed nodejs
 - Many formulae are transitive deps of ffmpeg/mpv/gstreamer — in nix these come automatically
-- Go tools should be managed via `go install` or nix overlays, not system packages
-- Kubernetes tools (helm, kubectl, k9s, kind, minikube, istioctl, argocd, eksctl) are a cluster — all available in nixpkgs
-- The cross-compilation toolchain (x86_64-linux-gnu) is used for embedded/Rust cross-builds
+- Go tools should be managed via nix (gotools overlay or buildGoModule)
+- Kubernetes tools (helm, kubectl, k9s, kind, minikube, istioctl, argocd, eksctl) — all available in nixpkgs
+- The cross-compilation toolchain (x86_64-linux-gnu) — needs nixpkgs cross-compilation support
+- Rust/cargo — move to nix-managed rust toolchain (fenix or rust-overlay)
+- Goal: fully remove Homebrew after migration. Everything managed by nix-darwin. No hybrid state.
