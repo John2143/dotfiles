@@ -14,7 +14,12 @@ tool-hints: |
 
 Parse `$ARGUMENTS`:
 - First positional argument is the `$IDEA` — a description of what the skill should do (e.g., "I want a skill which helps me check logs, diagnose, plan, and fix issues automatically in a loop"). If omitted, ask the user for the idea before proceeding.
-- If `--name $SKILL_NAME` is provided, use it as the skill directory name and kebab-case identifier. If omitted, derive it from `$IDEA` by: lowercasing, replacing spaces and non-alphanumeric chars with hyphens, collapsing consecutive hyphens, then stripping leading/trailing hyphens. Truncate to 48 characters.
+- If `--name $SKILL_NAME` is provided, use it as the skill directory name and kebab-case identifier. If omitted, derive it from `$IDEA` by running this exact bash snippet with the idea in `$IDEA`:
+  ```bash
+  SKILL_NAME=$(printf '%s' "$IDEA" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9]/-/g; s/-\+/-/g; s/^-//; s/-$//' | cut -c1-48)
+  if [ -z "$SKILL_NAME" ]; then echo "EMPTY_SLUG"; else echo "$SKILL_NAME"; fi
+  ```
+  If the output is `EMPTY_SLUG`, ask the user to provide `--name`.
 - If the user passes `--refine`, automatically run prompt-engineer on the resulting file after writing it (skip the Phase 5 offer).
 
 ---

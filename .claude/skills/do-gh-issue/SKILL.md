@@ -56,7 +56,7 @@ All state fields: `schema_version`, `issue_number`, `issue_title`, `branch`, `ph
 0. Validate state file if it exists: after reading, check that `schema_version`, `issue_number`, `phase` are present and non-null. If any required field is missing, report the parse error with the expected schema and stop.
 1. Check if `.gh-issue-state.json` exists.
    - **State file exists, phase is not `done`**: Read it. Jump to the phase stored in `phase`. Execute that phase and only that phase. This issue is still active — stay on it.
-   - **State file exists, phase is `stuck`**: Read `stuck_reason` and report: "This issue is stuck: <stuck_reason>. Options: (1) resolve the blocker and set phase back manually, (2) abandon the issue (`rm .gh-issue-state.json && gh issue edit <number> --remove-label in-progress`)." If in loop mode, call `exit_loop_mode("Stuck: <stuck_reason>")`. If not in loop mode, stop.
+   - **State file exists, phase is `stuck`**: Read `stuck_reason` and report: "This issue is stuck: <stuck_reason>. Options: (1) resolve the blocker and set phase back manually, (2) abandon the issue (`rm .gh-issue-state.json && gh issue edit <number> --remove-label in-progress`)." Then call `exit_loop_mode("Stuck: <stuck_reason>")`. If the tool is unavailable, report text and stop.
    - **State file exists, phase is not `done` or `stuck`**: Read it. Jump to the phase stored in `phase`. Execute that phase and only that phase. This issue is still active — stay on it.
    - **State file exists, phase is `done`**: The PR was finalized, but a human may have commented since. Check for new human comments on that specific PR (same procedure as review step 13). If new unresolved comments exist, add them to `reply_to_comments`, set `phase: "implement"`, and execute implement. If no new comments, delete `.gh-issue-state.json` and fall through to step 2.
 2. If no state file (or it was just deleted): **scan all open PRs for new human comments before reaching for new issues.** Existing PRs always take priority.
@@ -67,7 +67,7 @@ All state fields: `schema_version`, `issue_number`, `issue_title`, `branch`, `ph
      - On confirmation, create a fresh `.gh-issue-state.json` for that PR seeded with `phase: "implement"`, `pr_number`, `reply_to_comments` from the new comments, and `review_cycles: 0`. Execute implement.
    - If no PRs have new comments: proceed to `discover` phase to grab a new issue.
 3. After completing the phase, update the `phase` field in the state file to the next phase (as specified at the end of each phase). Then stop.
-   If the harness is running in loop mode, use `exit_loop_mode(reason)` when the work is complete rather than just stopping — otherwise the harness will re-invoke indefinitely.
+   Always call `exit_loop_mode(reason)` when all work is exhausted (no state file, no eligible issues, no PRs with comments). If the tool is unavailable, report and stop.
 
 #### Phase: discover
 
@@ -75,7 +75,7 @@ Find the next eligible issue, confirm with the user, label it, create state.
 
 1. Run `gh issue list --state open --limit 20 --json number,title,labels,body`.
 2. Filter to issues that do NOT have a label named `in-progress`. Skip issues labeled `question` or `discussion` unless the user explicitly asks for them.
-3. If no eligible issues: report "No open issues without in-progress label." If in loop mode, call `exit_loop_mode("No eligible open issues — all issues are in-progress, done, or skipped.")`. If not in loop mode, stop. Do not invent work.
+3. If no eligible issues: report "No open issues without in-progress label." Then call `exit_loop_mode("No eligible open issues — all issues are in-progress, done, or skipped.")`. If the tool is unavailable, report and stop. Do not invent work.
 4. Present the first eligible issue:
    ```
    **Issue #<number>** — "<title>"
@@ -83,7 +83,7 @@ Find the next eligible issue, confirm with the user, label it, create state.
    URL: <url>
    Body: <first 200 chars or "(empty)">
    ```
-5. If in loop mode (unattended): auto-accept the first eligible issue — no `ask` call. If not in loop mode: `ask` for confirmation. If user says no, move to the next eligible issue. If none remain, stop (or `exit_loop_mode` if in loop mode, since there are no more issues to try).
+5. If in loop mode (unattended): auto-accept the first eligible issue — no `ask` call. If not in loop mode: `ask` for confirmation. If user says no, move to the next eligible issue. If none remain, call `exit_loop_mode("No remaining eligible issues — user declined all.")`. If the tool is unavailable, stop.
 6. On confirmation:
    - `gh issue edit <number> --add-label in-progress`
    - Create `.gh-issue-state.json`:
@@ -193,7 +193,7 @@ Finalize the PR for human review.
    - Update: `gh pr edit <number> --body "<new body>"`
 2. Final verification: `gh pr view <number>`
 3. Report: "PR #<number> is ready for human review: <url>. The `in-progress` label remains — remove it after merge."
-4. If the harness is running in loop mode: call `exit_loop_mode("PR #<number> is ready for human review: <url>")`. Otherwise: set `phase: "done"` in state file. Stop.
+4. Set `phase: "done"` in state file. **Do not call `exit_loop_mode` here.** The next invocation will check for remaining work (new issues, new PR comments) via the `done` handler and only exit when truly exhausted. Stop.
 
 ### Constraints
 
@@ -205,7 +205,7 @@ Finalize the PR for human review.
 - If stuck (ambiguous issue, unclear requirement, unavailable tooling): set `phase: "stuck"`, set `stuck_reason` to a one-line description of the blocker, and stop. On next invocation, the stuck handler will present resolution options.
 - If the issue touches more than 5 files or 3 subsystems, flag it for the user. Consider `plan-breakdown` for decomposition. Comment-response changes that touch additional files are expected — the 5-file limit applies to initial implementation, not follow-up responses.
 - If `gh` CLI returns an auth or permission error: set `phase: "stuck"`, set `stuck_reason: "gh CLI auth/permission error — check gh auth status"`, and stop.
-- If invoked in loop mode and `phase` becomes `done`, call `exit_loop_mode('<summary>')` to prevent infinite re-invocations.
+- When all work is exhausted (no state file, no eligible open issues, no PRs with unaddressed human comments), always call `exit_loop_mode('<summary>')`. Do not evaluate whether you are in loop mode — just call it. If the tool fails, your text report is sufficient. Under no circumstances should the skill loop when nothing is left to do.
 - If `.gh-issue-state.json` is malformed or missing required fields: report the parse error, show the expected schema (from Key files above), and stop. Do not set stuck — this is a user-fixable file issue.
 - If `git push` is rejected (non-fast-forward): set `phase: "stuck"`, set `stuck_reason: "Push rejected — branch may have diverged"`, and stop.
 

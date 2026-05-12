@@ -84,13 +84,47 @@
     '';
     bigjuush.description = "Upload files to RustFS and get public share links";
     omp-safe.body = ''
-      # Run omp with the tool-call approval hook loaded. Default `omp` runs
-      # auto; `omp-safe` prompts before risky bash, force-pushes, etc.
-      # See `~/.omp/agent/hooks/approve.ts` for the rule list.
+      # Run omp with all hooks from ~/.omp/agent/hooks/ loaded. Default `omp`
+      # runs auto; `omp-safe` prompts before risky bash, force-pushes, etc.
+      # See `~/.omp/agent/hooks/approve.ts` for the approval rule list.
       # Verify with: `try-check-prompt`
-      omp --hook=$HOME/.omp/agent/hooks/approve.ts $argv
+      set -l hook_args
+      for hook in $HOME/.omp/agent/hooks/*.ts
+        set -a hook_args --hook=$hook
+      end
+      omp $hook_args $argv
     '';
-    omp-safe.description = "Run omp with the approval hook for risky tool calls";
+    omp-safe.description = "Run omp with all hooks from ~/.omp/agent/hooks/";
+
+    omp-approve-mode.body = ''
+      # Switch the approval mode for the current repo. Writes to .claude/settings.local.json.
+      # Mode is stored as permissions.defaultMode following Claude Code settings schema.
+      # Usage: omp-approve-mode normal|edits|auto
+      # Normal:  prompt for each unlisted bash command
+      # Edits:   auto-allow in-repo edits, prompt for bash
+      # Auto:    LLM classifier verifies before running
+      set -l mode $argv[1]
+      if test "$mode" != "normal" -a "$mode" != "edits" -a "$mode" != "auto"
+        echo "Usage: omp-approve-mode normal|edits|auto" >&2
+        return 1
+      end
+      set -l dmode default
+      if test "$mode" = "edits"
+        set dmode acceptEdits
+      else if test "$mode" = "auto"
+        set dmode auto
+      end
+      set -l file .claude/settings.local.json
+      if test -f $file
+        set -l tmp (mktemp)
+        jq --arg m "$dmode" '.permissions.defaultMode = $m' $file > $tmp && mv $tmp $file
+      else
+        mkdir -p .claude
+        echo '{"permissions":{"allow":[],"deny":[],"defaultMode":"'$dmode'"}}' | jq . > $file
+      end
+      echo "Approval mode: $mode (stored in $file)" >&2
+    '';
+    omp-approve-mode.description = "Switch OMP approval mode (normal|edits|auto) for current repo";
     try-check-prompt.body = ''
       # Run omp with the approval hook and a safe prompt that exercises the
       # approve/deny confirm dialog. The prompt instructs the model to run a command

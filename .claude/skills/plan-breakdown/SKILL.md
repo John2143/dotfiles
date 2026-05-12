@@ -14,7 +14,11 @@ Parse `$ARGUMENTS`:
 - `--output <path>` — where to write the decomposed plan. Default: `local://DELEGATEDPLAN.md`.
 - `--scope <area>` — optional context narrowing (e.g. "backend only", "NixOS configs", "auth subsystem").
 - If neither a file path nor `--text` is provided: ask the user to paste or point to the plan.
-- Derive a plan-id from the plan title: lowercase, replace spaces/non-alphanumeric with hyphens, collapse consecutive hyphens, strip leading/trailing hyphens, truncate to 48 characters. Use this plan-id in the output file header and for cross-reference.
+- Derive a plan-id from the plan title: run this exact bash snippet with the plan title in `$TITLE`. Captures output — if `EMPTY_SLUG`, use `plan-` followed by the ISO timestamp.
+  ```bash
+  PLAN_ID=$(printf '%s' "$TITLE" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9]/-/g; s/-\+/-/g; s/^-//; s/-$//' | cut -c1-48)
+  if [ -z "$PLAN_ID" ]; then echo "EMPTY_SLUG"; else echo "$PLAN_ID"; fi
+  ```
 
 ---
 

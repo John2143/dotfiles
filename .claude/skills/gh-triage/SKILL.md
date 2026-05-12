@@ -12,7 +12,7 @@ Parse `$ARGUMENTS`:
 - `--pr number` — PR number to fetch review comments from.
 - `--input findings.json` — path to a JSON file of findings (alternative to PR fetch).
 - If neither provided, read `.gh-issue-state.json` for the PR number.
-- If no source of findings can be determined, ask the user.
+- If no source of findings can be determined: if invoked from a workflow with a state file, report "No findings source available — check state file." If standalone, ask the user.
 
 ---
 
