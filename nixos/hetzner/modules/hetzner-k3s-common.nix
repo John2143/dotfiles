@@ -175,12 +175,9 @@
     '';
   };
 
+
   # Additional age secrets needed by k8s-secrets-bootstrap
-  age.secrets."hetzner/powerdns-tsig-key" = {
-    file = ../secrets/hetzner/powerdns-tsig-key.age;
-    owner = "root";
-    group = "root";
-  };
+  # (powerdns-tsig-key is declared in hetzner-powerdns.nix)
   age.secrets."hetzner/mongodb-encryption-key" = {
     file = ../secrets/hetzner/mongodb-encryption-key.age;
     owner = "root";
