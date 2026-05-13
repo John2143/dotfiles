@@ -282,10 +282,6 @@ in
       ExecStart = "${inputs.screen-control.defaultPackage.x86_64-linux}/bin/screen-control";
       Restart = "always";
       RestartSec = 5;
-      User = "john";
-      Environment = [
-        "XDG_RUNTIME_DIR=/run/user/1000"
-      ];
     };
     path = [pkgs.hyprland];
   };

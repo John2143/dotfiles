@@ -14,7 +14,7 @@ struct KeypadRequest {
 }
 
 fn run_ps2avr_rgb(args: &[&str]) -> ScreenResponse {
-    match Command::new("ps2avr-rgb")
+    match Command::new("/run/current-system/sw/bin/ps2avr-rgb")
         .args(args)
         .output()
     {
