@@ -49,6 +49,8 @@
   programs.fish.enable = true;
   environment.shells = [pkgs.fish];
 
+  security.pam.services.sudo_local.touchIdAuth = true;
+
   programs.gnupg.agent = {
     enable = true;
     enableSSHSupport = true;
@@ -118,8 +120,6 @@
     extraSpecialArgs = {inherit inputs;};
     users.jschmidt = import ./home-cli.nix;
   };
-
-  networking.hostName = compName;
 
   ids.gids.nixbld = 30000;
 
