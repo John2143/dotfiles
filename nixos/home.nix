@@ -164,11 +164,22 @@
     #wineWowPackages.waylandFull
   ];
 in {
-  # Include everything from home-cli.nix too
   imports = [
     ./home-cli.nix
     ./modules/waybar.nix
   ];
+
+  home.pointerCursor = {
+    name = "Adwaita";
+    package = pkgs.adwaita-icon-theme;
+    size = 24;
+    gtk.enable = true;
+  };
+
+  services.udiskie = {
+    enable = true;
+    settings.program_options = {};
+  };
 
   # Check hostname to determine what to install
   home.packages =

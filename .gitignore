@@ -12,3 +12,6 @@ vimfiles/*
 
 # Claude Code local settings (personal permissions, not shared)
 .claude/settings.local.json
+
+# nix build output
+result

@@ -30,16 +30,14 @@ in {
     inherit (config.nixpkgs) config;
   };
 
-  home.username = lib.mkDefault (
+  home.username =
     if pkgs.stdenv.isDarwin
     then "jschmidt"
-    else "john"
-  );
-  home.homeDirectory = lib.mkDefault (
+    else "john";
+  home.homeDirectory =
     if pkgs.stdenv.isDarwin
     then "/Users/jschmidt"
-    else "/home/john"
-  );
+    else "/home/john";
 
   nixpkgs.config = lib.mkIf (!pkgs.stdenv.isDarwin) {
     allowUnfree = true;
@@ -151,24 +149,11 @@ in {
   #
   #  /etc/profiles/per-user/john/etc/profile.d/hm-session-vars.sh
   #
-  home.pointerCursor = lib.mkIf pkgs.stdenv.isLinux {
-    name = "Adwaita";
-    package = pkgs.adwaita-icon-theme;
-    size = 24;
-    gtk.enable = true;
-  };
 
   home.sessionVariables = {
     EDITOR = "nvim";
   };
 
-  services.udiskie = lib.mkIf pkgs.stdenv.isLinux {
-    enable = true;
-    settings = {
-      program_options = {
-      };
-    };
-  };
 
   programs.fish = {
     enable = true;

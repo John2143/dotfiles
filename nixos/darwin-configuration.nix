@@ -114,11 +114,14 @@
   home-manager = {
     useGlobalPkgs = true;
     useUserPackages = true;
+    backupFileExtension = "hm-backup";
     extraSpecialArgs = {inherit inputs;};
     users.jschmidt = import ./home-cli.nix;
   };
 
   networking.hostName = compName;
+
+  ids.gids.nixbld = 30000;
 
   system.primaryUser = "jschmidt";
   system.stateVersion = 6;
