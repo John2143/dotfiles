@@ -22,11 +22,6 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
-    screen-control = {
-      url = "path:./screen-control";
-      inputs.nixpkgs.follows = "nixpkgs";
-    };
-
     llm-agents = {
       url = "github:numtide/llm-agents.nix";
     };
@@ -37,6 +32,11 @@
     };
     hyprcap = {
       url = "github:alonso-herreros/hyprcap";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+
+    nix-darwin = {
+      url = "github:LnL7/nix-darwin";
       inputs.nixpkgs.follows = "nixpkgs";
     };
   };
@@ -67,6 +67,7 @@
     ];
   in rec {
     formatter.x86_64-linux = nixpkgs.legacyPackages.${system}.alejandra;
+    formatter.aarch64-darwin = nixpkgs.legacyPackages.aarch64-darwin.alejandra;
 
     nixosConfigurations.office = nixpkgs.lib.nixosSystem {
       inherit system;
@@ -297,5 +298,19 @@
     };
 
     packages.x86_64-linux.installer = nixosConfigurations.installer.config.system.build.isoImage;
+
+    darwinConfigurations.mac = inputs.nix-darwin.lib.darwinSystem {
+      system = "aarch64-darwin";
+      specialArgs = {
+        inherit inputs;
+        compName = "mac";
+        sshKeys = my-keys;
+      };
+      modules = [
+        inputs.home-manager.darwinModules.default
+        agenix.darwinModules.default
+        ./nixos/darwin-configuration.nix
+      ];
+    };
   };
 }

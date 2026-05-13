@@ -30,12 +30,18 @@ in {
     inherit (config.nixpkgs) config;
   };
 
-  # Home Manager needs a bit of information about you and the paths it should
-  # manage.
-  home.username = "john";
-  home.homeDirectory = "/home/john";
+  home.username = lib.mkDefault (
+    if pkgs.stdenv.isDarwin
+    then "jschmidt"
+    else "john"
+  );
+  home.homeDirectory = lib.mkDefault (
+    if pkgs.stdenv.isDarwin
+    then "/Users/jschmidt"
+    else "/home/john"
+  );
 
-  nixpkgs.config = {
+  nixpkgs.config = lib.mkIf (!pkgs.stdenv.isDarwin) {
     allowUnfree = true;
   };
 
@@ -50,76 +56,73 @@ in {
 
   # The home.packages option allows you to install Nix packages into your
   # environment.
-  home.packages = with pkgs; [
-    # neovim
+  home.packages = with pkgs;
+    [
+      # cli
+      bat # cat replacement
+      eza # ls replacement
+      ripgrep # grep replacement
+      btop # btop++ > bpytop > htop > top
+      choose # awk replacement
+      dust # df/du replacement
+      ncdu # du / disk usage
+      fzf
+      fd # find replacement
+      delta # pager
+      killall # like pkill
+      gh # github
+      jq
+      unzip
+      unrar
+      dive
 
-    # cli
-    gocryptfs
-    bat # cat replacement
-    eza # ls replacement
-    ripgrep # grep replacement
-    btop # btop++ > bpytop > htop > top
-    choose # awk replacement
-    dust # df/du replacement
-    ncdu # du / disk usage
-    fzf
-    fd # find replacement
-    #update-nix-fetchgit # update fetchgit urls
-    delta # pager
-    gptfdisk # disk partitioning tool
-    killall # like pkill
-    gh # github
-    timg # image viewer
-    jq
-    unzip
-    unrar
-    systemctl-tui
-    dive
-    bind # network utilities
+      # k8s
+      kubecolor # kubectl color
+      k9s
+      argocd
 
-    # k8s
-    # kubectl # from k3s
-    kubecolor # kubectl color
-    k9s
-    k3s
-    argocd
+      direnv
+      cargo-generate # rust project generator
 
-    direnv # nixos env manager: see also (direnv hook fish)
-    # clang # compiler
-    # clang # compiler
-    # rustup # rust compiler
-    # bacon # rust build tool
-    cargo-generate # rust project generator
+      file # file info
 
-    # screenshots
-    file # file info
+      nodejs
 
-    # embedded programming
-    # gcc-arm-embedded # arm compiler
-    # openocd # open debugger
-    # probe-rs # rust <-> stm32
-    # stlink # stm32 programmer
-    # stm32cubemx # stm32 ide
-    # kicad # PCB Hardware Layout
-
-    # Other / unsorted
-    # kubernetes-helm
-    nodejs
-    #nodePackages."@tailwindcss/language-server" # tailwindcss language server for neovim
-    #nodePackages.yaml-language-server # yaml language server for neovim
-
-    fastfetch
-    distrobox
-    # sage
-    nh
-    nixd
-    trash-cli # bound to "rmm"
-    s3cmd
-    minio-client # provides `mc` for RustFS/S3 operations
-    websocat
-    zip
-    lxqt.lxqt-policykit
-  ];
+      fastfetch
+      nh
+      nixd
+      trash-cli # bound to "rmm"
+      s3cmd
+      minio-client # provides `mc` for RustFS/S3 operations
+      websocat
+      zip
+    ]
+    ++ lib.optionals pkgs.stdenv.isLinux [
+      gocryptfs
+      gptfdisk # disk partitioning tool
+      timg # image viewer
+      systemctl-tui
+      bind # network utilities
+      k3s
+      distrobox
+      lxqt.lxqt-policykit
+    ]
+    ++ lib.optionals pkgs.stdenv.isDarwin [
+      ffmpeg
+      mpv
+      cmake
+      watch
+      tree
+      zoxide
+      awscli2
+      kubernetes-helm
+      kubectl
+      go
+      gopls
+      protobuf
+      yq-go
+      htop
+    ];
 
   # Home Manager is pretty good at managing dotfiles. The primary way to manage
   # plain files is through 'home.file'.
@@ -148,7 +151,7 @@ in {
   #
   #  /etc/profiles/per-user/john/etc/profile.d/hm-session-vars.sh
   #
-  home.pointerCursor = {
+  home.pointerCursor = lib.mkIf pkgs.stdenv.isLinux {
     name = "Adwaita";
     package = pkgs.adwaita-icon-theme;
     size = 24;
@@ -159,7 +162,7 @@ in {
     EDITOR = "nvim";
   };
 
-  services.udiskie = {
+  services.udiskie = lib.mkIf pkgs.stdenv.isLinux {
     enable = true;
     settings = {
       program_options = {
@@ -378,7 +381,10 @@ in {
       user = {
         email = "john@john2143.com";
         name = "John Schmidt";
-        signingkey = "/home/john/.ssh/id_github_sign.pub";
+        signingkey =
+          if pkgs.stdenv.isDarwin
+          then "/Users/jschmidt/.ssh/id_github_sign.pub"
+          else "/home/john/.ssh/id_github_sign.pub";
       };
       gpg = {
         format = "ssh";
