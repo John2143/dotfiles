@@ -69,12 +69,6 @@
     scriptArgs = "%S";
   };
 
-  # Access to the TSIG key secret
-  age.secrets."hetzner/powerdns-tsig-key" = {
-    file = ../secrets/hetzner/powerdns-tsig-key.age;
-    owner = "root";
-    group = "root";
-  };
 
   # State directory
   systemd.tmpfiles.rules = [

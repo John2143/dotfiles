@@ -96,33 +96,38 @@
             dev_path = f"/dev/bus/usb/{bus_padded}/{dev_padded}"
 
             # Collect all interfaces with a driver bound
+            dev_basename = os.path.basename(usb_dev)
             interfaces = []
             for child in sorted(os.listdir(usb_dev)):
                 child_path = os.path.join(usb_dev, child)
                 if not os.path.isdir(child_path):
                     continue
-                if not child.startswith(devpath + ":"):
+                matches_basename = child.startswith(dev_basename + ":")
+                if not (matches_basename or child.startswith(devpath + ":")):
                     continue
                 driver_link = os.path.join(child_path, "driver")
                 if not os.path.islink(driver_link):
                     continue
                 driver = os.path.basename(os.readlink(driver_link))
-                suffix = child[len(devpath):]   # e.g. ":1.1"
+                if matches_basename:
+                    suffix = child[len(dev_basename):]
+                else:
+                    suffix = child[len(devpath):]
                 # Extract iface number from ":<config>.<iface>"
                 parts = suffix.lstrip(":").split(".")
                 if len(parts) >= 2:
                     iface_num = int(parts[1])
                 else:
                     iface_num = int(parts[0])
-                interfaces.append((suffix, driver, iface_num))
+                interfaces.append((suffix, driver, iface_num, child))
 
             if not interfaces:
                 continue
 
             # Use the last (highest-numbered) interface — the config interface
-            suffix, driver, iface_num = interfaces[-1]
+            suffix, driver, iface_num, child = interfaces[-1]
 
-            iface_id = f"{busnum}-{devpath}{suffix}"
+            iface_id = child
             driver_base = "/sys/bus/usb/drivers"
 
             return {

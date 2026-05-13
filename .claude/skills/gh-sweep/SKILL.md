@@ -31,7 +31,7 @@ Parse `$ARGUMENTS`:
    - [ ] Examples: typo fixes, version string bumps, dead code removal, config value tweaks, broken URL fixes, obvious copy-paste errors
 
 4. If no issues pass: "No trivial issues found. Use `do-gh-issue` for issues requiring planning." Stop.
-5. Present the first trivial issue and confirm. "This looks trivial (<description>). Fix and open a PR?"
+5. Present the first trivial issue. If in loop mode (unattended): auto-accept — no `ask` call. If not in loop mode: ask for confirmation — "This looks trivial (<description>). Fix and open a PR?" If user declines, move to the next candidate. If none remain, stop.
 
 ### Step 2 — Label and branch
 

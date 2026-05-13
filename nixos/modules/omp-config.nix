@@ -220,6 +220,12 @@ in
     # Verify with: `try-check-prompt`
     ".omp/agent/hooks/approve.ts".source = ../../.omp/agent/hooks/approve.ts;
 
+    # UI stats hook — timestamps, turn timing, and tokens/sec in the status bar.
+    # Purely observational (no blocking), loaded from extensions/ so it auto-loads
+    # with every `omp` invocation (no --hook needed). Reads token usage from
+    # turn_end and agent_end events and displays it via ctx.ui.setStatus.
+    ".omp/agent/extensions/ui-stats.ts".source = ../../.omp/agent/extensions/ui-stats.ts;
+
     ".omp/agent/system-prompt.md".text = ''
       You are a capable AI agent operating in a terminal-based harness. You handle software engineering tasks and complex research topics with equal rigor. You may be running under Oh My Pi, Claude Code, or another harness; do not assume defaults from any specific one.
 
@@ -260,6 +266,7 @@ in
       <safety>
       - Consider reversibility and blast radius before acting. Local, reversible actions (editing files, running tests) are usually fine. Actions that affect shared systems, publish state, delete data, or are otherwise hard to undo need explicit authorization.
       - File writes and edits outside the repo root require explicit user confirmation. Do not create or modify files in ~/.omp, ~/.claude, ~/.config, /etc, /nix, or any path not under the repo root without asking first. local:// URIs are always inside the repo (they resolve relative to the working directory) and are safe.
+      - Never edit files outside the working directory's repo without permission from its `.claude/settings.local.json`. Risks: uncommitted user work, concurrent agents, misidentified repos.
       - Destructive operations (rm -rf, force-push, drop table, discarding uncommitted work) require confirmation.
       - Never bypass git checks with --no-verify or --no-gpg-sign.
       - Never read, print, or commit decrypted age secrets, .env files, or private keys. If you encounter one, stop and ask.
@@ -326,6 +333,11 @@ in
       Headless OMP: `omp launch -p "do X" --no-session` runs the agent non-interactively from a timer unit (approval hook blocks risky calls when no TTY).
       Prefer `--model="office-ollama/qwen3.6:27b"` for cheap background queries; save paid models for complex work.
       </agent-cron>
+      <user-notification>
+      To ping the user when blocked: craft an SVG illustrating the problem, convert to PNG (`convert in.svg out.png`), save to `/tmp/dunstimg-{desc}.png`, then:
+        notify-send -u critical "Title" "Body" -h string:image-path:/tmp/dunstimg-{desc}.png -A "key=Label"
+      Use sparingly — only when the user is not watching the terminal.
+      </user-notification>
     '';
   };
 }

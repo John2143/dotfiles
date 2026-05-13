@@ -38,6 +38,7 @@
     wl-clipboard-x11 # clipboard compatibility for some apps
     dunst # desktop alert notificaitons
     libnotify # notifications cli
+    fuzzel # dmenu replacement for dunst actions
     gammastep # redshift / f.lux / night light
     #spotifyd # play to spotify device if needed
 

@@ -55,6 +55,12 @@ The user runs commands in a NixOS environment with home-manager. Commands touchi
   const CLASSIFY_TIMEOUT_MS = 10000;
   const VALID_MODES = ["normal", "edits", "auto"];
 
+  // Auto-mode fallback thresholds (Claude Code: 3 consecutive / 20 total)
+  let autoBlockConsecutive = 0;
+  let autoBlockTotal = 0;
+  const AUTO_BLOCK_CONSECUTIVE_MAX = 3;
+  const AUTO_BLOCK_TOTAL_MAX = 20;
+
   const MODE_TO_DEFAULT_MODE: Record<string, string> = {
     normal: "default",
     edits: "acceptEdits",
@@ -290,21 +296,18 @@ The user runs commands in a NixOS environment with home-manager. Commands touchi
    * Process wrappers (timeout, time, nice, nohup, stdbuf, bare xargs)
    * are stripped before matching.
    */
-  function bashRuleMatches(rule: string, cmd: string): boolean {
+  function bashRuleMatches(rule: string, cmd: string, matchAnySub = false): boolean {
     if (!rule.startsWith("Bash(") || !rule.endsWith(")")) return false;
-    const glob = rule.slice(5, -1); // Extract content between Bash( and )
+    const glob = rule.slice(5, -1);
 
-    // Special case: "Bash" or "Bash(*)" matches everything
     if (glob === "*" || glob === "") return true;
 
     const subcommands = splitCompoundCommands(cmd);
     if (subcommands.length === 0) return false;
 
     const regex = globToRegex(glob);
-    return subcommands.every(sub => {
-      const stripped = stripWrappers(sub);
-      return regex.test(stripped);
-    });
+    const test = (sub: string) => regex.test(stripWrappers(sub));
+    return matchAnySub ? subcommands.some(test) : subcommands.every(test);
   }
 
   // ============================================================
@@ -453,7 +456,7 @@ The user runs commands in a NixOS environment with home-manager. Commands touchi
 
   // ---- Whitelist (permissions.allow) ----
 
-  function checkWhitelist(cmd: string): boolean {
+  function checkWhitelist(cmd: string, mode?: string): boolean {
     const settings = loadSettings();
     const perms = settings.permissions as Record<string, unknown> | undefined;
     const allow: string[] = Array.isArray(perms?.allow) ? perms.allow as string[] : [];
@@ -462,12 +465,31 @@ The user runs commands in a NixOS environment with home-manager. Commands touchi
 
     // Deny takes precedence (Claude Code semantics: deny → ask → allow)
     for (const rule of deny) {
-      if (bashRuleMatches(rule, trimmed)) return false;
+      if (bashRuleMatches(rule, trimmed, true)) return false;
     }
 
-    for (const rule of allow) {
+    // In auto mode, drop broad allow rules that grant arbitrary code execution
+    // (Claude Code: Bash(*), Bash(python*), Bash(node*), etc.)
+    const filteredAllow = mode === "auto"
+      ? allow.filter(r => !isBroadRule(r))
+      : allow;
+
+    for (const rule of filteredAllow) {
       if (bashRuleMatches(rule, trimmed)) return true;
     }
+    return false;
+  }
+
+  /** Detect broad Bash allow rules that Claude Code drops in auto mode. */
+  function isBroadRule(rule: string): boolean {
+    if (!rule.startsWith("Bash(")) return false;
+    const glob = rule.slice(5, -1);
+    // Bare wildcard
+    if (glob === "*" || glob === "") return true;
+    // Script interpreters as first word (python*, node*, ruby*, bash*, sh*, perl*)
+    if (/^(python|python3?|node|ruby|bash|sh|perl|php|deno)\b/.test(glob)) return true;
+    // Package manager run commands (npm run, yarn run, pip run, cargo run, etc.)
+    if (/^(npm|yarn|pnpm|pip\d?|cargo|go|npx|bun)\s+run\b/.test(glob)) return true;
     return false;
   }
 
@@ -488,6 +510,11 @@ The user runs commands in a NixOS environment with home-manager. Commands touchi
 
   function generatePermissionRule(cmd: string): { rule: string; description: string } {
     const trimmed = cmd.trim();
+    const words = trimmed.split(/\s+/);
+    // Single-word command → exact match (Bash(lsof) not Bash(lsof *))
+    if (words.length <= 1) {
+      return { rule: "Bash(" + trimmed + ")", description: trimmed };
+    }
     const base = extractCommandBase(trimmed);
     const rule = "Bash(" + base + " *)";
     return { rule, description: base + " *" };
@@ -703,7 +730,7 @@ The user runs commands in a NixOS environment with home-manager. Commands touchi
   });
 
   pi.on("tool_call", async (event: any, ctx: any) => {
-    const mode = getMode();
+    let mode = getMode();
 
     // ---- Mode switching via omp-approve-mode command ----
     if (event.toolName === "bash") {
@@ -719,7 +746,7 @@ The user runs commands in a NixOS environment with home-manager. Commands touchi
 
     // ---- Edit/write tools (all modes — enforce Read/Edit/Write deny/allow rules) ----
     if (event.toolName === "edit" || event.toolName === "write") {
-      const filePath = event.input?.path || event.input?.file || "";
+      const filePath = event.input?.path || event.input?.file || event.input?.filePath || "";
       let resolved = filePath;
       if (filePath.startsWith("local://")) {
         resolved = path.join(repoRoot(), filePath.slice("local://".length));
@@ -764,10 +791,20 @@ The user runs commands in a NixOS environment with home-manager. Commands touchi
     const cmd = String(event.input.command ?? "");
 
     // 1. Whitelist check (all modes) — checks permissions.allow / permissions.deny
-    if (checkWhitelist(cmd)) return;
+    if (checkWhitelist(cmd, mode)) return;
 
     // 2. Per-mode behavior
+
     if (mode === "auto") {
+      // Auto-mode fallback: if LLM blocks 3 consecutive or 20 total commands,
+      // fall back to normal mode prompting (Claude Code behavior)
+      if (autoBlockConsecutive >= AUTO_BLOCK_CONSECUTIVE_MAX || autoBlockTotal >= AUTO_BLOCK_TOTAL_MAX) {
+        ctx.ui.notify("Auto mode paused — too many blocks. Prompting manually.", "warning");
+        mode = "normal"; // force normal mode for this command
+        autoBlockConsecutive = 0;
+        autoBlockTotal = 0;
+        // Fall through to normal mode handler below
+      } else {
       // Local classifier runs first — deny patterns are non-negotiable.
       // Claude Code's architecture: allow/deny rules → file ops → classifier.
       // A compromised LLM must never override hardcoded unsafe patterns.
@@ -782,8 +819,10 @@ The user runs commands in a NixOS environment with home-manager. Commands touchi
           "⚠ Unsafe command (policy)", cmd.slice(0, 200) + "\n\n" + localVerdict.reason + "\n\nAllow?");
         if (!ok) {
           ctx.ui.notify("Command denied", "error");
+          autoBlockConsecutive++; autoBlockTotal++;
           return { block: true, reason: "Denied: " + localVerdict.reason };
         }
+        autoBlockConsecutive = 0; // user approved, reset consecutive
         ctx.ui.notify("Command approved by user", "success");
         return;
       }
@@ -797,7 +836,7 @@ The user runs commands in a NixOS environment with home-manager. Commands touchi
       let verdict = await classifyCommand(cmd, ctx.modelRegistry);
       if (!verdict) {
         console.error("[approve] all LLM classifiers unreachable, using local fallback");
-        ctx.ui.notify("LLM safety classifiers unreachable — blocking unrecognized command", "warning");
+        ctx.ui.notify("LLM safety classifiers unreachable — prompting for unrecognized command", "warning");
         // Unrecognized + LLM unavailable → block (conservative)
         if (!ctx.hasUI) {
           return { block: true, reason: "Command blocked (unrecognized, LLM unreachable): " + localVerdict.reason };
@@ -805,9 +844,10 @@ The user runs commands in a NixOS environment with home-manager. Commands touchi
         const ok2 = await ctx.ui.confirm(
           "Unrecognized command", cmd.slice(0, 200) + "\n\n" + localVerdict.reason + "\n\nAllow?");
         if (!ok2) {
-          ctx.ui.notify("Command denied", "error");
+          autoBlockConsecutive++; autoBlockTotal++;
           return { block: true, reason: "Denied: " + localVerdict.reason };
         }
+        autoBlockConsecutive = 0;
         ctx.ui.notify("Command approved by user", "success");
         return;
       }
@@ -820,10 +860,13 @@ The user runs commands in a NixOS environment with home-manager. Commands touchi
         "Unsafe command", cmd.slice(0, 200) + "\n\n" + verdict.reason + "\n\nAllow?");
       if (!ok3) {
         ctx.ui.notify("Command denied", "error");
+        autoBlockConsecutive++; autoBlockTotal++;
         return { block: true, reason: "Denied: " + verdict.reason };
       }
+      autoBlockConsecutive = 0;
       ctx.ui.notify("Command approved by user", "success");
       return;
+    }
     }
 
     // Normal / Edits mode: user confirms, then optional whitelist
@@ -844,15 +887,27 @@ The user runs commands in a NixOS environment with home-manager. Commands touchi
       return { block: true, reason: "Denied: " + localVerdict.reason };
     }
 
-    // Offer to whitelist — saves as Bash(...) rule in permissions.allow
-    const { rule, description } = generatePermissionRule(cmd);
+    // Offer to whitelist each subcommand separately
+    // Compound commands (&&, ||, ;, |) are split so each gets its own rule
+    const subcommands = splitCompoundCommands(cmd);
+    const rules: string[] = [];
+    for (const sub of subcommands) {
+      const { rule } = generatePermissionRule(sub);
+      if (!rules.includes(rule)) rules.push(rule);
+    }
+    if (rules.length === 0) {
+      const { rule } = generatePermissionRule(cmd);
+      rules.push(rule);
+    }
+
+    const ruleList = rules.map(r => "  " + r).join("\n");
     const whitelistOk = await ctx.ui.confirm(
       "Always allow?",
-      "Rule: " + rule + "\nDescription: " + description + "\n\nSaved to .claude/settings.local.json\nFuture matching commands will run without confirmation."
+      "Rules:\n" + ruleList + "\n\nSaved to .claude/settings.local.json\nFuture matching commands will run without confirmation."
     );
     if (whitelistOk) {
-      addToWhitelist(rule);
-      ctx.ui.notify("Allowed: " + rule, "success");
+      for (const rule of rules) addToWhitelist(rule);
+      ctx.ui.notify("Allowed: " + rules.join(", "), "success");
     }
 
     ctx.ui.notify("Command approved by user", "success");

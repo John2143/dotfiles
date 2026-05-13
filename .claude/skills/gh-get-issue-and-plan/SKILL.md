@@ -12,7 +12,7 @@ tool-hints: |
 
 Parse `$ARGUMENTS`:
 - First positional argument is an optional `$ISSUE_NUMBER`. If provided, fetch that issue. If omitted, auto-discover the first open issue without an `in-progress` label.
-- If the issue body is empty or underspecified, ask the user to clarify requirements before exploring code.
+- If the issue body is empty or underspecified: if invoked as part of a multi-phase workflow (not standalone), follow `do-gh-issue` stuck protocol — surface the ambiguity and set phase to stuck. If standalone: ask the user to clarify requirements before exploring code.
 
 ---
 
@@ -30,18 +30,16 @@ Parse `$ARGUMENTS`:
    ```
    Filter to issues without `in-progress` label. Skip issues labeled `question` or `discussion`.
 3. If no eligible issues: report "No eligible open issues found" and stop.
-4. Present the first eligible issue to the user (number, title, labels, body excerpt).
-5. Ask: "Work on this issue?" If user says no, move to the next. If none remain, stop.
-6. On confirmation: `gh issue edit <number> --add-label in-progress`. Proceed to Step 2.
+4. Present the first eligible issue to the user (number, title, labels, body excerpt). If in loop mode (unattended): auto-accept the first eligible issue — no `ask` call. If not in loop mode: ask for confirmation.
+5. On confirmation: `gh issue edit <number> --add-label in-progress`. Proceed to Step 2.
 
 ### Step 2 — Clarify requirements
 
 If the issue body is empty or the title is informal (e.g., "don't allow people to shoot to the side really far"):
 
-1. Ask: "What is the concrete acceptance criterion? What should the behavior be when complete?"
-2. Surface design choices that need a decision.
-   Example: "When the player aims below 20° from horizontal, should the shot be rejected entirely (nothing fires) or clamped to the nearest allowed angle?"
-3. Do not proceed until the requirement is unambiguous and design choices are resolved.
+1. If in loop mode (unattended): stop. Report "Issue <number> is underspecified — cannot plan without clarification." Return to `do-gh-issue` for stuck handling. Do not proceed.
+2. If not in loop mode: surface design choices (example: "When the player aims below 20° from horizontal, should the shot be rejected entirely or clamped to the nearest allowed angle?") and ask the user for concrete acceptance criteria. Do not proceed until requirements are unambiguous.
+
 
 ### Step 3 — Explore (read-only)
 

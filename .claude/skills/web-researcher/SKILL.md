@@ -12,12 +12,23 @@ tool-hints: |
   Research files live inside ai_research/{topic-slug}/ — never write research content outside this directory.
 ---
 
-Parse `$ARGUMENTS`:
-- The first positional argument is `$RESEARCH_QUESTION` — the primary question to research, provided as a quoted string (e.g., `"What is the global effect of a new US economic policy?"`).
-- All text after the closing quote is `$CONTEXT` — additional constraints, focus areas, exclusions, skill levels, or any other guidance the user provides. Pass `$CONTEXT` through to every sub-agent so they incorporate it into their research.
-- If no quoted string is provided, ask the user: "What is the primary research question you want me to investigate?"
-- Derive `$TOPIC_SLUG` from `$RESEARCH_QUESTION`: lowercase the question, replace every non-alphanumeric character with a hyphen, collapse consecutive hyphens into one, strip leading and trailing hyphens, and truncate to 64 characters.
-- If the derived slug is empty (e.g., the question was only punctuation), ask the user to rephrase.
+Parse `$ARGUMENTS` using these rules exactly, in order:
+
+1. **Strip outer quotes from the raw argument string.** If `$ARGUMENTS` starts AND ends with the same quote character (`"` or `'`), strip those outer characters. After this step you have the user's literal input. Example: raw `'"What is X?" focus here'` → stripped `"What is X?" focus here`.
+
+2. **Extract `$RESEARCH_QUESTION`.** Scan the stripped string for the first `"` (double-quote) character.
+   - **Found:** Capture everything after that `"` up to the next `"`. The text between the quotes (without the quote marks) is `$RESEARCH_QUESTION`. The closing `"` marks the boundary — everything after it is `$CONTEXT`.
+   - **Not found (user wrote plain text without quotes):** The entire stripped string IS `$RESEARCH_QUESTION` and `$CONTEXT` is empty. Do NOT ask for clarification just because quotes are missing — the user's intent is clear.
+   - **Only ask "What is the primary research question…"** if `$ARGUMENTS` is literally empty or whitespace-only after stripping.
+
+3. **Extract `$CONTEXT`.** All text after the closing `"` (or empty string if no closing quote). Strip leading whitespace. Pass `$CONTEXT` verbatim to every sub-agent.
+
+4. **Derive `$TOPIC_SLUG`** by running this exact bash snippet (substitutes `$RESEARCH_QUESTION` into an env var, pipes through slugify, captures output):
+   ```bash
+   TOPIC_SLUG=$(printf '%s' "$RESEARCH_QUESTION" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9]/-/g; s/-\+/-/g; s/^-//; s/-$//' | cut -c1-64)
+   if [ -z "$TOPIC_SLUG" ]; then echo "EMPTY_SLUG"; else echo "$TOPIC_SLUG"; fi
+   ```
+   If the output is `EMPTY_SLUG`, ask the user to rephrase.
 
 Example invocations:
 - `/skill:web-researcher "find me a variety of cake recipes" focus on medium difficulty, at-home cakes. I can do decorating well. exclude fondant.`
@@ -57,7 +68,7 @@ All files live under `ai_research/{topic-slug}/` relative to the repo root. None
    | `setting_up` | SETUP (resume — plan was partially written) |
    | `dispatching` | DISPATCH |
    | `synthesizing` | SYNTHESIZE |
-   | `done` | Report: research is complete. Point the user to `ai_research/{topic-slug}/final_report.md`. If invoked in loop mode, call `exit_loop_mode('Research complete — final report at ai_research/{topic-slug}/final_report.md')`. |
+   | `done` | Report: research is complete. Point to the report, then call `exit_loop_mode('Research complete — final report at ai_research/{topic-slug}/final_report.md')`. If `exit_loop_mode` is unavailable (interactive session), the text report alone is sufficient — stop immediately. Do NOT keep re-invoking. |
 
 3. Execute that one category. When its final step says **STOP**, stop immediately.
 
@@ -79,6 +90,12 @@ That reasoning is always wrong. The skill is designed for multiple invocations. 
 ### Anti-pattern: "I'll just check the next section"
 
 Do not scroll past the STOP line to see what the next category requires. If you do, you have already violated the boundary. The state file is the only link between sessions — not your memory of the next step.
+### Anti-pattern: "Let me archive the old project so it resets"
+
+When `phase_status` is `done` and the same question is re-invoked:
+> "The user keeps re-invoking. They must want fresh news. Let me `mv` the old directory somewhere else so the slug becomes free and SETUP fires again."
+
+Never do this. The state file is the authority. If it says `done`, you call `exit_loop_mode` and stop. You do not rename directories, suggest the user rephrase their question, or otherwise try to "fix" the fact that the project is finished. Archiving completed research without explicit user confirmation violates the "may not delete research files" constraint and destroys the audit trail. If the user wants fresh research, they will give you a new question.
 ## How to work
 
 ### Category: SETUP
@@ -88,7 +105,10 @@ Do not scroll past the STOP line to see what the next category requires. If you 
 1. Create the directory `ai_research/{topic-slug}/` and the `reports/` subdirectory:
    - Use `mkdir -p ai_research/{topic-slug}/reports/`.
    - Before creating, check whether the directory already exists (`ls ai_research/{topic-slug}/`). If it exists and contains prior research, do not overwrite it — treat it as an existing project. Read its `research_state.md` and follow the normal session start flow instead. If it exists but contains only empty directories or no state files, proceed with fresh SETUP.
-2. Formalize `$RESEARCH_QUESTION` into a crisp, answerable primary research question. If the user's phrasing is ambiguous, vague, or unanswerable as stated: **stop and ask the user for clarification.** Do not proceed with a poorly-defined question. Write the refined question into `research_plan.md`.
+2. Formalize `$RESEARCH_QUESTION` into a crisp, answerable primary research question. If the user's phrasing is ambiguous, vague, or unanswerable as stated:
+   - **If invoked in loop mode**: formalize to the best interpretation, note the assumption explicitly in `research_plan.md` under `## Context`, and proceed. Do not stall.
+   - **If not in loop mode**: **stop and ask the user for clarification.** Do not proceed with a poorly-defined question.
+   Write the refined question into `research_plan.md`.
 3. Record the full `$CONTEXT` in `research_plan.md` under a `## Context` heading so every sub-agent receives it.
 4. Decompose the primary question into 3–10 sub-topics. Each sub-topic must be:
    - Independently researchable (one sub-agent can complete it without waiting for another sub-topic's results).
@@ -251,7 +271,9 @@ All sources in APA format. Each entry must include the full URL.
    → Append the new sub-questions to `research_plan.md` as sub-topics for the next phase (do not edit existing sub-topics — only append). Add the new sub-topic slugs to the `Pending:` list in `research_state.md`, update `Total sub-topics`, increment the phase number, and set `phase_status` to `dispatching`. Rewrite `research_state.md` atomically. **STOP.** Do not dispatch new sub-topics in this session. Next session: DISPATCH new sub-topics.
 
    **STUCK**: The primary question cannot be answered without user input. This may be because the question is fundamentally unanswerable with available sources, contradictory evidence cannot be resolved, or the scope needs narrowing.
-   → Set `phase_status` to `stuck` in `research_state.md`. **STOP.** Present the user with: a summary of what was found, what the blocker is, and 2–3 concrete options for how to proceed (e.g., narrow scope, accept a qualified answer, pursue a specific missing source). Do not proceed until the user responds in a future session.
+   → Set `phase_status` to `stuck` in `research_state.md`. **STOP.**
+   - **If invoked in loop mode**: write `stuck_summary.md` (summary, blocker, 2–3 concrete options) and call `exit_loop_mode('Research stuck — see ai_research/{topic-slug}/stuck_summary.md')`.
+   - **If not in loop mode**: present the user with the same summary and options inline. Do not proceed until the user responds in a future session.
 
 6. **STOP.** You have completed SYNTHESIZE. The state file reflects the decision (finalizing, dispatching, or stuck). Do not proceed to the next step regardless of the decision. The user will invoke the skill again.
 
@@ -304,7 +326,7 @@ Consolidated bibliography from all phase summaries.
 
 3. If the answer is short enough to fit comfortably in a chat response (under ~500 words), you may write `final_report.md` yourself instead of dispatching a sub-agent. Either way, the file must exist when FINALIZE completes.
 4. Mark `phase_status` as `done` in `research_state.md`.
-5. Report to the user: state that research is complete, provide the answer if short, and point to `ai_research/{topic-slug}/final_report.md` for the full report. If running in loop mode, call `exit_loop_mode('Research complete — final report at ai_research/{topic-slug}/final_report.md')`.
+5. Report to the user: state that research is complete, provide the answer if short, and point to `ai_research/{topic-slug}/final_report.md` for the full report. Then call `exit_loop_mode('Research complete — final report at ai_research/{topic-slug}/final_report.md')`. If the tool is unavailable, the text report is sufficient — stop immediately.
 
 6. **STOP.** You have completed FINALIZE. Research is done. `phase_status` is `done`.
 
@@ -317,12 +339,12 @@ Consolidated bibliography from all phase summaries.
 - You may proceed autonomously through research phases when the question is clear and the evidence is sufficient.
 - You may not write any file outside `ai_research/{topic-slug}/`.
 - You may not delete research files without explicit user confirmation.
-- You may not proceed with an ambiguous or unanswerable primary research question — stop and ask the user for clarification at SETUP.
+- You may not proceed with an ambiguous or unanswerable primary research question — see SETUP step 2 for loop-mode vs interactive handling.
 - You may not assign equal weight to all sources regardless of credibility — evaluate and state source quality in every report.
 - You may not run more than 10 sub-agents per phase without explicit user approval in `$CONTEXT`.
 - You may not ask the user questions during active research phases — only at SETUP (if the question is unclear) or when genuinely stuck at SYNTHESIZE.
 - **You may not chain multiple categories in one session.** Execute exactly one category, update state, and stop. After writing a STOP line, your session is over — do not scroll further in this SKILL.md. Do not read the next category's instructions. Do not evaluate whether "it would be faster" to do the next step now. The state file is the only handoff mechanism between sessions.
-- If invoked in loop mode and `phase_status` reaches `done`, call `exit_loop_mode('<summary>')` to prevent infinite re-invocations.
+- When `phase_status` is `done`, always call `exit_loop_mode('<summary>')`. Do not evaluate whether you are in loop mode — just call it. If the tool fails (not in loop mode), your text report is sufficient. Under no circumstances should a `done` project be re-entered — the state file is the authority: if it says `done`, you exit.
 
 ## TLDR
 
