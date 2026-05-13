@@ -719,7 +719,7 @@ The user runs commands in a NixOS environment with home-manager. Commands touchi
 
     // ---- Edit/write tools (all modes — enforce Read/Edit/Write deny/allow rules) ----
     if (event.toolName === "edit" || event.toolName === "write") {
-      const filePath = event.input?.path || event.input?.file || "";
+      const filePath = event.input?.path || event.input?.file || event.input?.filePath || "";
       let resolved = filePath;
       if (filePath.startsWith("local://")) {
         resolved = path.join(repoRoot(), filePath.slice("local://".length));
@@ -797,7 +797,7 @@ The user runs commands in a NixOS environment with home-manager. Commands touchi
       let verdict = await classifyCommand(cmd, ctx.modelRegistry);
       if (!verdict) {
         console.error("[approve] all LLM classifiers unreachable, using local fallback");
-        ctx.ui.notify("LLM safety classifiers unreachable — blocking unrecognized command", "warning");
+        ctx.ui.notify("LLM safety classifiers unreachable — prompting for unrecognized command", "warning");
         // Unrecognized + LLM unavailable → block (conservative)
         if (!ctx.hasUI) {
           return { block: true, reason: "Command blocked (unrecognized, LLM unreachable): " + localVerdict.reason };
@@ -844,15 +844,27 @@ The user runs commands in a NixOS environment with home-manager. Commands touchi
       return { block: true, reason: "Denied: " + localVerdict.reason };
     }
 
-    // Offer to whitelist — saves as Bash(...) rule in permissions.allow
-    const { rule, description } = generatePermissionRule(cmd);
+    // Offer to whitelist each subcommand separately
+    // Compound commands (&&, ||, ;, |) are split so each gets its own rule
+    const subcommands = splitCompoundCommands(cmd);
+    const rules: string[] = [];
+    for (const sub of subcommands) {
+      const { rule } = generatePermissionRule(sub);
+      if (!rules.includes(rule)) rules.push(rule);
+    }
+    if (rules.length === 0) {
+      const { rule } = generatePermissionRule(cmd);
+      rules.push(rule);
+    }
+
+    const ruleList = rules.map(r => "  " + r).join("\n");
     const whitelistOk = await ctx.ui.confirm(
       "Always allow?",
-      "Rule: " + rule + "\nDescription: " + description + "\n\nSaved to .claude/settings.local.json\nFuture matching commands will run without confirmation."
+      "Rules:\n" + ruleList + "\n\nSaved to .claude/settings.local.json\nFuture matching commands will run without confirmation."
     );
     if (whitelistOk) {
-      addToWhitelist(rule);
-      ctx.ui.notify("Allowed: " + rule, "success");
+      for (const rule of rules) addToWhitelist(rule);
+      ctx.ui.notify("Allowed: " + rules.join(", "), "success");
     }
 
     ctx.ui.notify("Command approved by user", "success");
