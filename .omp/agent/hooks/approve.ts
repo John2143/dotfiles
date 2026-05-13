@@ -290,21 +290,18 @@ The user runs commands in a NixOS environment with home-manager. Commands touchi
    * Process wrappers (timeout, time, nice, nohup, stdbuf, bare xargs)
    * are stripped before matching.
    */
-  function bashRuleMatches(rule: string, cmd: string): boolean {
+  function bashRuleMatches(rule: string, cmd: string, matchAnySub = false): boolean {
     if (!rule.startsWith("Bash(") || !rule.endsWith(")")) return false;
-    const glob = rule.slice(5, -1); // Extract content between Bash( and )
+    const glob = rule.slice(5, -1);
 
-    // Special case: "Bash" or "Bash(*)" matches everything
     if (glob === "*" || glob === "") return true;
 
     const subcommands = splitCompoundCommands(cmd);
     if (subcommands.length === 0) return false;
 
     const regex = globToRegex(glob);
-    return subcommands.every(sub => {
-      const stripped = stripWrappers(sub);
-      return regex.test(stripped);
-    });
+    const test = (sub: string) => regex.test(stripWrappers(sub));
+    return matchAnySub ? subcommands.some(test) : subcommands.every(test);
   }
 
   // ============================================================
@@ -462,7 +459,7 @@ The user runs commands in a NixOS environment with home-manager. Commands touchi
 
     // Deny takes precedence (Claude Code semantics: deny → ask → allow)
     for (const rule of deny) {
-      if (bashRuleMatches(rule, trimmed)) return false;
+      if (bashRuleMatches(rule, trimmed, true)) return false;
     }
 
     for (const rule of allow) {
@@ -488,6 +485,11 @@ The user runs commands in a NixOS environment with home-manager. Commands touchi
 
   function generatePermissionRule(cmd: string): { rule: string; description: string } {
     const trimmed = cmd.trim();
+    const words = trimmed.split(/\s+/);
+    // Single-word command → exact match (Bash(lsof) not Bash(lsof *))
+    if (words.length <= 1) {
+      return { rule: "Bash(" + trimmed + ")", description: trimmed };
+    }
     const base = extractCommandBase(trimmed);
     const rule = "Bash(" + base + " *)";
     return { rule, description: base + " *" };

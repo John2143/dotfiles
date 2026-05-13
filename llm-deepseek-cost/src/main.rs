@@ -1,5 +1,6 @@
 use chrono::NaiveDate;
 use clap::Parser;
+use colored::Colorize;
 use serde::Deserialize;
 use std::collections::HashMap;
 use std::fs;
@@ -78,7 +79,6 @@ fn main() {
 
     // Parse amount CSV
     let mut reader = csv::Reader::from_path(&amount_path).expect("Failed to open amount CSV");
-    // Map: (date, user, model) -> ModelStats
     let mut data: HashMap<(String, String, String), ModelStats> = HashMap::new();
 
     for result in reader.deserialize() {
@@ -99,7 +99,7 @@ fn main() {
             "input_cache_hit_tokens" => entry.hit_tokens += row.amount,
             "input_cache_miss_tokens" => entry.miss_tokens += row.amount,
             "output_tokens" => entry.out_tokens += row.amount,
-            _ => {} // request_count ignored
+            _ => {}
         }
     }
 
@@ -113,7 +113,7 @@ fn main() {
         *cost_check.entry(key).or_insert(0.0) += row.cost;
     }
 
-    // Cross-check: aggregate amount-derived costs by (date, model)
+    // Cross-check
     let mut amount_totals: HashMap<(String, String), f64> = HashMap::new();
     for ((date, _user, model), stats) in &data {
         let key = (date.clone(), model.clone());
@@ -139,18 +139,32 @@ fn main() {
         .into_iter()
         .collect();
 
-    // Sort chronologically
     dates.sort_by_key(|d| NaiveDate::parse_from_str(d, "%Y-%m-%d").unwrap_or(NaiveDate::MIN));
 
+    let mut grand_total: f64 = 0.0;
+
     for date in &dates {
-        // Format date as "Mon DD"
         let parsed = NaiveDate::parse_from_str(date, "%Y-%m-%d")
             .expect("Invalid date format");
         let month_name = parsed.format("%B");
         let day = parsed.format("%d").to_string().trim_start_matches('0').to_string();
-        println!("{} {}", month_name, day);
 
-        // Collect users for this date and their total costs
+        // Compute daily total
+        let daily_total: f64 = data
+            .iter()
+            .filter(|((d, _, _), _)| d == date)
+            .map(|(_, s)| s.cost)
+            .sum();
+        grand_total += daily_total;
+
+        // Date header with daily total
+        println!(
+            "{}  {}",
+            format!("{} {}", month_name, day).bold().bright_cyan(),
+            format!("${:.2}", daily_total).bold().bright_cyan()
+        );
+
+        // Collect users for this date
         let mut users: Vec<(String, f64)> = data
             .iter()
             .filter(|((d, _, _), _)| d == date)
@@ -162,23 +176,25 @@ fn main() {
             .into_iter()
             .collect();
 
-        // Sort users by cost descending
         users.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
 
         for (user, user_total) in &users {
             if *user_total < 0.005 {
-                continue; // skip users with essentially zero cost
+                continue;
             }
-            println!(" - {}: ${:.2}", user, user_total);
+            println!(
+                " {} {} {}",
+                "-".dimmed(),
+                user.bold().white(),
+                format!("${:.2}", user_total).bold().green()
+            );
 
-            // Collect models for this user+date
             let mut models: Vec<(String, &ModelStats)> = data
                 .iter()
                 .filter(|((d, u, _), _)| d == date && u == user)
                 .map(|((_, _, m), s)| (m.clone(), s))
                 .collect();
 
-            // Sort models by cost descending
             models.sort_by(|a, b| b.1.cost.partial_cmp(&a.1.cost).unwrap_or(std::cmp::Ordering::Equal));
 
             for (model, stats) in &models {
@@ -192,7 +208,6 @@ fn main() {
                 let miss = humanize_tokens(stats.miss_tokens);
                 let out = humanize_tokens(stats.out_tokens);
 
-                // Build token breakdown string
                 let mut token_parts: Vec<String> = Vec::new();
                 if stats.hit_tokens > 0 {
                     token_parts.push(format!("{} cache", hit));
@@ -204,15 +219,25 @@ fn main() {
                     token_parts.push("0 in".to_string());
                 }
 
+                let token_str = format!("{} -> {} out", token_parts.join(" + "), out);
+
                 println!(
-                    "   - {} ${:.2} ({:.1}%): {} -> {} out",
-                    model,
-                    stats.cost,
-                    pct,
-                    token_parts.join(" + "),
-                    out
+                    "   {} {} {} {} {}",
+                    "-".dimmed(),
+                    format!("{:<20}", model),
+                    format!("${:>7.2}", stats.cost).bright_yellow(),
+                    format!("({:>5.1}%)", pct).dimmed(),
+                    token_str.dimmed(),
                 );
             }
         }
     }
+
+    // Grand total
+    println!("{}", "---".dimmed());
+    println!(
+        "{}  {}",
+        "Total".bold().white(),
+        format!("${:.2}", grand_total).bold().bright_green()
+    );
 }
