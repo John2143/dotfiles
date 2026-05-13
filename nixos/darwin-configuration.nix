@@ -43,31 +43,7 @@
       vim
       btop
       inputs.agenix.packages.${pkgs.stdenv.hostPlatform.system}.default
-    ]
-    ++ [
-      (let
-        claude-unwrapped = inputs.claude-code-nix.packages.${pkgs.stdenv.hostPlatform.system}.default;
-      in
-        pkgs.writeShellScriptBin "claude" ''
-          if [ -f /run/agenix/llm-runtime-keys ]; then
-            set -a
-            . /run/agenix/llm-runtime-keys
-            set +a
-          fi
-          mkdir -p "$HOME/.claude"
-          ${claude-unwrapped}/bin/claude "$@"
-        '')
-      (let
-        claw-unwrapped = pkgs.claw;
-      in
-        pkgs.writeShellScriptBin "claw" ''
-          if [ -f /run/agenix/llm-runtime-keys ]; then
-            set -a
-            . /run/agenix/llm-runtime-keys
-            set +a
-          fi
-          exec ${claw-unwrapped}/bin/claw "$@"
-        '')
+      inputs.claude-code-nix.packages.${pkgs.stdenv.hostPlatform.system}.default
     ];
 
   programs.fish.enable = true;
@@ -101,24 +77,24 @@
       cleanup = "zap";
     };
     casks = [
-      "bruno"
+      # "bruno"
       "krita"
       "obs"
       "vlc"
-      "warp"
-      "lens"
-      "insomnia"
-      "pgadmin4"
-      "plex"
+      # "warp"
+      # "lens"
+      # "insomnia"
+      # "pgadmin4"
+      # "plex"
       "mongodb-compass"
-      "keycastr"
-      "sage"
+      # "keycastr"
+      # "sage"
     ];
     brews = [
-      "probe-rs"
+      # "probe-rs"
     ];
     taps = [
-      "probe-rs/probe-rs"
+      # "probe-rs/probe-rs"
     ];
   };
 
