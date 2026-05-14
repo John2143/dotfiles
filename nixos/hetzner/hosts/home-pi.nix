@@ -50,7 +50,7 @@
 
   # Galera node-specific — fourth multi-master node (permanent)
   services.mysql.settings.mysqld = {
-    wsrep_cluster_address = "gcomm://k3s-ashburn.9s.pics,k3s-hillsboro.9s.pics,k3s-nuremberg.9s.pics,home-pi.9s.pics";
+    wsrep_cluster_address = "gcomm://k3s-ashburn.ts.9s.pics,k3s-hillsboro.ts.9s.pics,k3s-nuremberg.ts.9s.pics,home-pi.ts.9s.pics";
     wsrep_node_name = "home-pi";
     auto_increment_offset = 4;
   };

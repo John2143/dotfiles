@@ -7,6 +7,7 @@
   pkgs,
   pkgs-stable,
   inputs,
+  compName,
   ...
 }: {
   # flakes
@@ -32,6 +33,14 @@
   };
   nixpkgs.overlays = [
     (import ./overlays/claw-overlay.nix)
+    (final: prev: {
+      btop =
+        if compName == "office"
+        then prev.btop.override {rocmSupport = true;}
+        else if compName == "arch"
+        then prev.btop.override {cudaSupport = true;}
+        else prev.btop;
+    })
   ];
 
   _module.args.pkgs-stable = import inputs.nixpkgs-stable {
@@ -66,16 +75,16 @@
         omp-src = pkgs.fetchFromGitHub {
           owner = "John2143";
           repo = "oh-my-pi";
-          rev = "7f8fabf9e1eb5ac77b2021c03ff6ab776dd04a80";
-          hash = "sha256-lLz19UZ99bEC3ZcMpPwmcDfrW2psnDRQRCFi2Sh68ok=";
+          rev = "ac74ad5adc3b76d5441f27dc1768262a7e7f389f";
+          hash = "sha256-PTNFN3onNycgzvWd4QED0FTVERqUaS0GzLoQZB/kLLU=";
         };
         omp-unwrapped = (inputs.llm-agents.packages.${pkgs.stdenv.hostPlatform.system}.omp.overrideAttrs (old: {
-          version = "14.9.3";
+          version = "15.0.0";
           src = omp-src;
           cargoDeps = pkgs.rustPlatform.fetchCargoVendor {
-            name = "omp-14.9.3-cargo-vendor";
+            name = "omp-15.0.0-cargo-vendor";
             src = omp-src;
-            hash = "sha256-lSWYXvk4w3QFt4FdlvAqdEJF8rV8CIfG35Mu3Iq7QFM=";
+            hash = "sha256-5EHbrnNFaQfX7rcBcEAOLb4RUqd9D8UGnyisLUmHtW0=";
           };
           bunDeps = let
             bun2nix' = (pkgs.extend inputs.llm-agents.inputs.bun2nix.overlays.default).bun2nix;

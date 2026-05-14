@@ -19,7 +19,7 @@
 
       dns = {
         magic_dns = true;
-        base_domain = "9s.pics";
+        base_domain = "ts.9s.pics";
         override_local_dns = true;
         nameservers.global = ["1.1.1.1" "9.9.9.9"];
       };

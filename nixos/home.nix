@@ -189,23 +189,13 @@ in {
     then primaryPackages ++ optionalPackagesUpstairs ++ extensionPackages
     else primaryPackages;
 
-  nixpkgs.overlays = [
-    #(import ./overlays/r2modman-overlay.nix)
-    (final: prev: {
-      btop =
-        if compName == "office"
-        then prev.btop.override {rocmSupport = true;}
-        else if compName == "arch"
-        then prev.btop.override {cudaSupport = true;}
-        else prev.btop;
-    })
-  ];
 
   wayland.windowManager.hyprland = {
     enable = true;
     package = pkgs.hyprland;
     xwayland.enable = true;
     systemd.enable = true;
+    configType = "hyprlang";
     extraConfig = builtins.readFile ../.config/hypr/hyprland.conf;
   };
 
