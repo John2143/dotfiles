@@ -1,3 +1,5 @@
+import { Box, Text } from "@oh-my-pi/pi-tui";
+
 // UI stats extension — timestamps in chat, timing in widget, tokens/sec in footer.
 //
 // Chat: injects timestamp banners via `before_agent_start`.
@@ -30,8 +32,7 @@ export default function (pi: any) {
   function formatTokens(n: number): string {
     if (n >= 1000000) return (n / 1000000).toFixed(1) + "M";
     if (n >= 1000) return (n / 1000).toFixed(1) + "k";
-    // Round small floats to avoid 29.77605404729138/s
-    return n < 10 ? n.toFixed(1) : String(Math.round(n));
+    return String(Math.round(n));
   }
 
   function extractUsage(obj: any): { input: number; output: number } | null {
@@ -59,8 +60,36 @@ export default function (pi: any) {
   }
 
   // ============================================================
+  // Custom message renderer: render timestamp without [type] label
+  // ============================================================
+
+  pi.registerMessageRenderer("timestamp", (msg: any, _opts: any, _theme: any) => {
+    const dim = "\x1b[2m";
+    const reset = "\x1b[0m";
+    const content = typeof msg.content === "string" ? msg.content : "";
+    const box = new Box(1, 1);
+    box.addChild(new Text(`${dim}${content}${reset}`, 0, 0));
+    return box;
+  });
+
+  // ============================================================
   // Hook handlers
   // ============================================================
+
+  // Chat timestamp banner
+  pi.on("before_agent_start", async (_event: any, _ctx: any) => {
+    const ts = isoNow();
+    const bold = "\x1b[1m";
+    const dim = "\x1b[2m";
+    const reset = "\x1b[0m";
+    return {
+      message: {
+        customType: "timestamp",
+        content: `╭─ ${bold}${ts}${reset}${dim} ──────────────`,
+        display: true,
+      },
+    };
+  });
 
   pi.on("session_start", async (_event: any, ctx: any) => {
     // Footer segment — live tokens/sec from OMP's built-in computation
@@ -71,7 +100,7 @@ export default function (pi: any) {
           if (!tps || tps <= 0) return { content: "", visible: false };
           const dim = "\x1b[2m";
           const reset = "\x1b[0m";
-          return { content: `${dim}⏱ ${formatTokens(tps)}/s${reset}`, visible: true };
+          return { content: `${dim}⏱ ${tps.toFixed(1)}/s${reset}`, visible: true };
         }
       });
     }
