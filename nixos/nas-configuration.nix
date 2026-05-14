@@ -48,6 +48,13 @@
 #      sudo zfs create -o mountpoint=/tank/immich   tank/immich
 #      sudo zfs create -o mountpoint=/tank/scratch  tank/scratch
 #      sudo zfs create -o mountpoint=/tank/private  tank/private
+#      sudo zfs create -o mountpoint=/tank/atticd   tank/atticd
+
+#    Attic Nix cache — chunk-level dedup binary cache shared across all
+#    machines. Store paths land on the raidz1 HDDs with lz4 compression:
+#      sudo zfs create -o mountpoint=/tank/atticd \
+#        -o recordsize=1M -o compression=lz4 -o atime=off tank/atticd
+#      sudo chown atticd:atticd /tank/atticd
 #
 #    Minecraft — pinned entirely to the SSD special mirror for fast chunk
 #    reads and mirrored integrity. recordsize=special_small_blocks=128K
@@ -450,6 +457,59 @@
     };
   };
 
+  # ====================
+  # === Attic Cache ===
+  # ====================
+
+  # One-time setup before first deploy:
+  #   sudo zfs create -o mountpoint=/tank/atticd \
+  #     -o recordsize=1M -o compression=lz4 -o atime=off tank/atticd
+  #   sudo chown atticd:atticd /tank/atticd
+  #
+  # After first deploy, create the cache:
+  #   sudo atticd-atticadm make-cache 2143nix
+  #   sudo atticd-atticadm cache info 2143nix   # note the public key for clients
+
+  services.atticd = {
+    enable = true;
+    environmentFile = config.age.secrets.attic-jwt-secret.path;
+    settings = {
+      listen = "[::]:8080";
+      allowed-hosts = ["nas.ts.2143.me" "nas" "nas.local" "localhost"];
+      api-endpoint = "http://nas:8080/";
+      database.url = "sqlite:///tank/atticd/server.db?mode=rwc";
+      storage = {
+        type = "local";
+        path = "/tank/atticd/storage";
+      };
+    };
+  };
+
+  age.secrets.attic-jwt-secret = {
+    file = ../secrets/attic-jwt-secret.age;
+    mode = "0400";
+    owner = "atticd";
+    group = "atticd";
+  };
+
+  # Persistent user for ZFS dataset ownership.
+  # The nixpkgs module already defines atticd as a system user; these
+  # declarations merge with the module's defaults.
+  users.users.atticd = {
+    isSystemUser = true;
+    group = "atticd";
+  };
+  users.groups.atticd = {};
+
+  # Disable DynamicUser + PrivateUsers so atticd can own ZFS datasets
+  # that persist across reboots. ReadWritePaths covers the full
+  # /tank/atticd tree (database + storage subdirectory).
+  systemd.services.atticd.serviceConfig = {
+    DynamicUser = lib.mkForce false;
+    PrivateUsers = lib.mkForce false;
+    ReadWritePaths = [ "/tank/atticd" ];
+  };
+
   security.rtkit.enable = true;
 
   networking.firewall = {
@@ -458,6 +518,7 @@
       2049 # nfsv4 (Longhorn backup target)
       2283 # immich
       25565 # minecraft
+      8080 # attic nix cache
     ];
   };
 

@@ -37,6 +37,7 @@ in {
   home-manager = {
     useGlobalPkgs = true;
     useUserPackages = true;
+    backupFileExtension = "hm-backup";
     # home-manager uses extraSpecialArgs instead of specialArgs, but it does the same thing
     extraSpecialArgs = {
       pkgs-stable = pkgs-stable;

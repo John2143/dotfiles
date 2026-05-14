@@ -19,17 +19,18 @@
 
       dns = {
         magic_dns = true;
-        base_domain = "9s.pics";
+        base_domain = "ts.9s.pics";
         override_local_dns = true;
         nameservers.global = ["1.1.1.1" "9.9.9.9"];
       };
 
       # DERP relay servers — one per region on raw IPs
+      # DERP relay servers — Tailscale's public DERP map
       derp = {
-        urls = [];
+        urls = ["https://controlplane.tailscale.com/derpmap/default"];
         paths = [];
-        auto_update_enabled = false;
-        server.enabled = false; # DERP runs as a separate app on each k3s node
+        auto_update_enabled = true;
+        server.enabled = false;
       };
     };
   };

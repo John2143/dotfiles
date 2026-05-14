@@ -84,7 +84,7 @@ fi
 
 echoerr "Starting upload"
 dunstify "Starting upload"
-URL=`curl -k -X POST --limit-rate 5M -F "$JUUSH_KEY=@$FILE;type=$MIME_TYPE" $REMOTE`
+URL=`curl -k -X POST -F "$JUUSH_KEY=@$FILE;type=$MIME_TYPE" $REMOTE`
 echo -n "$URL" | xclip -selection clipboard
 notify-send "Got Url: $URL"
 echo $URL

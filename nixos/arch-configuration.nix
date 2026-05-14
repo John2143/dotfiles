@@ -149,6 +149,78 @@ let
         '{text: $t, tooltip: $tt, class: $c}'
     '';
   };
+  teamspeak-mute-status = pkgs.writeShellApplication {
+    name = "teamspeak-mute-status";
+    runtimeInputs = [ pkgs.libressl.nc ];
+    text = ''
+      INIFILE=""
+      for candidate in \
+        "$HOME/.var/app/com.teamspeak.TeamSpeak3/.ts3client/clientquery.ini" \
+        "$HOME/.ts3client/clientquery.ini" \
+        "/home/john/.var/app/com.teamspeak.TeamSpeak3/.ts3client/clientquery.ini"; do
+        if [ -f "$candidate" ]; then
+          INIFILE="$candidate"
+          break
+        fi
+      done
+      HOST="127.0.0.1"
+      PORT=25639
+
+      ts3_query() {
+        printf '%s\n' "$@" "quit" | nc -w 1 "$HOST" "$PORT" 2>/dev/null
+      }
+
+      # Read API key from config
+      APIKEY=""
+      if [ -n "$INIFILE" ]; then
+        APIKEY=$(grep -oP '^api_key=\K.*' "$INIFILE" 2>/dev/null || echo "")
+      fi
+
+      if [ "$1" = "--toggle" ]; then
+        # Get current state to determine what to toggle to
+        RESP=$(ts3_query "auth apikey=$APIKEY" "whoami")
+        CLID=$(echo "$RESP" | grep -oP '^clid=\K\d+')
+        if [ -z "$CLID" ]; then
+          exit 0  # Not connected, nothing to toggle
+        fi
+        # Get current mute state
+        RESP2=$(ts3_query "auth apikey=$APIKEY" "clientvariable clid=$CLID client_input_muted")
+        CUR=$(echo "$RESP2" | grep -oP 'client_input_muted=\K\d+')
+        if [ "$CUR" = "1" ]; then
+          NEW=0
+        else
+          NEW=1
+        fi
+        ts3_query "auth apikey=$APIKEY" "clientupdate client_input_muted=$NEW" > /dev/null
+        exit 0
+      fi
+
+      # Query current status
+      RESP=$(ts3_query "auth apikey=$APIKEY" "whoami")
+
+      if echo "$RESP" | grep -q 'error id=1796'; then
+        # Not connected to a server
+        echo '{"text": "  ⬜", "class": "disconnected", "alt": "disconnected", "tooltip": "TeamSpeak not connected to a server"}'
+        exit 0
+      fi
+
+      CLID=$(echo "$RESP" | grep -oP '^clid=\K\d+')
+      if [ -z "$CLID" ]; then
+        echo '{"text": "  ⬜", "class": "disconnected", "alt": "disconnected", "tooltip": "TeamSpeak not connected to a server"}'
+        exit 0
+      fi
+
+      # Get mute state
+      RESP2=$(ts3_query "auth apikey=$APIKEY" "clientvariable clid=$CLID client_input_muted")
+      MUTED=$(echo "$RESP2" | grep -oP 'client_input_muted=\K\d+')
+
+      if [ "$MUTED" = "1" ]; then
+        echo '{"text": "  🔴", "class": "muted", "alt": "muted", "tooltip": "Mic Muted (click to unmute)"}'
+      else
+        echo '{"text": "  🟢", "class": "unmuted", "alt": "unmuted", "tooltip": "Mic Active (click to mute)"}'
+      fi
+    '';
+  };
 in
 {
   imports = [
@@ -257,6 +329,7 @@ in
   environment.systemPackages = [
     hass-macro
     hass-thermostat-status
+    teamspeak-mute-status
     inputs.hyprcap.packages.x86_64-linux.default
   ];
 
@@ -279,7 +352,7 @@ in
     after = ["network.target"];
     wantedBy = ["multi-user.target"];
     serviceConfig = {
-      ExecStart = "${pkgs.nix}/bin/nix run ~/dotfiles/screen-control";
+      ExecStart = "${pkgs.nix}/bin/nix run /home/john/dotfiles/screen-control";
       Restart = "always";
       RestartSec = 5;
     };

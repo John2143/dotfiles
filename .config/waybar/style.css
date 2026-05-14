@@ -112,7 +112,7 @@ window#waybar {
 }
 
 #tray, #pulseaudio, #network, #battery, #temperature, #memory, #cpu, #clock,
-#custom-vast, #custom-thermostat, #custom-weather,
+#custom-vast, #custom-thermostat, #custom-weather, #custom-teamspeak,
 #custom-playerctl.backward, #custom-playerctl.play, #custom-playerctl.foward{
     /*font-family: Jet Brains Mono Nerd Font;*/
     /*font-weight: bold;*/
@@ -158,4 +158,16 @@ window#waybar {
 
 #custom-vast.vast-tunnel-down {
     color: #FF8888;
+}
+
+#custom-teamspeak.muted {
+    color: #FF4444;
+}
+
+#custom-teamspeak.unmuted {
+    color: #44FF44;
+}
+
+#custom-teamspeak.disconnected {
+    color: #666666;
 }
