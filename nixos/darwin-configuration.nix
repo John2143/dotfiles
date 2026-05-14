@@ -36,11 +36,10 @@
   };
 
   nix.registry.nixpkgs.flake = inputs.nixpkgs;
+  # hostname : DCIL-L562P1Q5NQ-M
+  networking.hostName = "DCIL-L562P1Q5NQ-M";
 
   nixpkgs.config.allowUnfree = true;
-  nixpkgs.overlays = [
-    (import ./overlays/claw-overlay.nix)
-  ];
 
   _module.args.pkgs-stable = import inputs.nixpkgs-stable {
     inherit (pkgs.stdenv.hostPlatform) system;
