@@ -352,7 +352,7 @@ in
     after = ["network.target"];
     wantedBy = ["multi-user.target"];
     serviceConfig = {
-      ExecStart = "${inputs.screen-control.defaultPackage.x86_64-linux}/bin/screen-control";
+      ExecStart = "${pkgs.nix}/bin/nix run ~/dotfiles/screen-control";
       Restart = "always";
       RestartSec = 5;
     };

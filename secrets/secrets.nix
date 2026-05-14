@@ -15,10 +15,11 @@ let
   security = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAILO6ntnqr4ERZLUdL2MOMeC++HPIsigce4d42h8UogA2 john@security";
   secu = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIN4vMixKG/e9b3ttJy9Xb5ymavp7Gny6dxKrViQl8AUl john@secu";
   nas = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIPzgxUuaZUG9Dr5ZTZImKqt3SUSPVD/FLO2wKQfwz98A john@nas";
+  mac = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDOnQAO6xyPOM67ut324LHAm07OQ67bKJ0R9c0aTWA1o jschmidt@DCIL-L562P1Q5NQ-M";
   # generate with `ssh-keygen -f ~/.ssh/age; cat ~/.ssh/age.pub -p` on each host, then paste here
 
   # Collect all keys that should be able to re-encrypt / manage secrets.
-  allKeys = [office arch];
+  allKeys = [office arch mac];
 in {
   # Readable only by the office machine (k3s agent token).
   "k3s-local-token.age".publicKeys = [office arch pite nas];
@@ -56,14 +57,14 @@ in {
   #   DEEPSEEK_API_KEY=sk-...      (https://platform.deepseek.com/api_keys)
   # pite is included so the canary host can decrypt a same-named bait file
   # (overridden via mkForce in nixos/pite-canary.nix to point at the bait .age).
-  "llm-runtime-keys.age".publicKeys = [office arch pite];
+  "llm-runtime-keys.age".publicKeys = [office arch pite mac];
 
   # Admin LLM keys — only consumed by `llm-load-keys` (interactive shell helper),
   # never by a wrapped third-party process. Kept off pite/canary entirely.
   # Format:
   #   ANTHROPIC_ADMIN_KEY=sk-ant-admin-...  (console.anthropic.com/settings/admin-keys)
   #   OPENAI_ADMIN_KEY=sk-admin-...
-  "llm-admin-keys.age".publicKeys = [office arch];
+  "llm-admin-keys.age".publicKeys = [office arch mac];
 
   # Bait runtime keys for the pite canary. Same env-var names as the real
   # runtime file but with canarytokens.org-issued AWS-shaped tokens that ping

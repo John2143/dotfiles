@@ -1,4 +1,4 @@
-{ ... }:
+{ pkgs, lib, ... }:
 {
 
   programs.fish.functions = {
@@ -66,7 +66,7 @@
       if test -f $creds_file
         envsource $creds_file
       end
-      bash /home/john/dotfiles/.config/juush.bash $argv
+      bash ~/dotfiles/.config/juush.bash $argv
       env-cleanup $_pre_vars
     '';
     juush.description = "Upload a file to juush and get a short URL";
@@ -79,7 +79,7 @@
       set -l _pre_vars (set --names -x)
       envsource $creds_file
       mc alias set rustfs https://files.john2143.com $RUSTFS_USER $RUSTFS_PASSWORD 2>/dev/null
-      bash /home/john/dotfiles/.config/nas-share.sh $argv
+      bash ~/dotfiles/.config/nas-share.sh $argv
       env-cleanup $_pre_vars
     '';
     bigjuush.description = "Upload files to RustFS and get public share links";
@@ -416,6 +416,7 @@
           end
       end < "$envfile"
     '';
+  } // lib.optionalAttrs pkgs.stdenv.isLinux {
     agent-cron-list.body = ''
       systemctl --user list-timers --all --no-pager 2>/dev/null | \
         awk 'NR==1 || /agent-/ || /NEXT/' | \

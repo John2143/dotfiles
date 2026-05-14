@@ -30,14 +30,15 @@ in {
     inherit (config.nixpkgs) config;
   };
 
-  # Home Manager needs a bit of information about you and the paths it should
-  # manage.
-  home.username = "john";
-  home.homeDirectory = "/home/john";
+  home.username =
+    if pkgs.stdenv.isDarwin
+    then "jschmidt"
+    else "john";
+  home.homeDirectory =
+    if pkgs.stdenv.isDarwin
+    then "/Users/jschmidt"
+    else "/home/john";
 
-  nixpkgs.config = {
-    allowUnfree = true;
-  };
 
   # This value determines the Home Manager release that your configuration is
   # compatible with. This helps avoid breakage when a new Home Manager release
@@ -50,76 +51,64 @@ in {
 
   # The home.packages option allows you to install Nix packages into your
   # environment.
-  home.packages = with pkgs; [
-    # neovim
+  home.packages = with pkgs;
+    [
+      # cli
+      btop # btop++ > bpytop > htop > top
+      choose # awk replacement
+      dust # df/du replacement
+      ncdu # du / disk usage
+      killall # like pkill
+      jq
+      unzip
+      unrar
+      dive
 
-    # cli
-    gocryptfs
-    bat # cat replacement
-    eza # ls replacement
-    ripgrep # grep replacement
-    btop # btop++ > bpytop > htop > top
-    choose # awk replacement
-    dust # df/du replacement
-    ncdu # du / disk usage
-    fzf
-    fd # find replacement
-    #update-nix-fetchgit # update fetchgit urls
-    delta # pager
-    gptfdisk # disk partitioning tool
-    killall # like pkill
-    gh # github
-    timg # image viewer
-    jq
-    unzip
-    unrar
-    systemctl-tui
-    dive
-    bind # network utilities
+      # k8s
+      kubecolor # kubectl color
+      k9s
+      argocd
 
-    # k8s
-    # kubectl # from k3s
-    kubecolor # kubectl color
-    k9s
-    k3s
-    argocd
+      cargo-generate # rust project generator
 
-    direnv # nixos env manager: see also (direnv hook fish)
-    # clang # compiler
-    # clang # compiler
-    # rustup # rust compiler
-    # bacon # rust build tool
-    cargo-generate # rust project generator
+      file # file info
 
-    # screenshots
-    file # file info
+      nodejs
 
-    # embedded programming
-    # gcc-arm-embedded # arm compiler
-    # openocd # open debugger
-    # probe-rs # rust <-> stm32
-    # stlink # stm32 programmer
-    # stm32cubemx # stm32 ide
-    # kicad # PCB Hardware Layout
-
-    # Other / unsorted
-    # kubernetes-helm
-    nodejs
-    #nodePackages."@tailwindcss/language-server" # tailwindcss language server for neovim
-    #nodePackages.yaml-language-server # yaml language server for neovim
-
-    fastfetch
-    distrobox
-    # sage
-    nh
-    nixd
-    trash-cli # bound to "rmm"
-    s3cmd
-    minio-client # provides `mc` for RustFS/S3 operations
-    websocat
-    zip
-    lxqt.lxqt-policykit
-  ];
+      fastfetch
+      nh
+      nixd
+      trash-cli # bound to "rmm"
+      s3cmd
+      minio-client # provides `mc` for RustFS/S3 operations
+      websocat
+      zip
+    ]
+    ++ lib.optionals pkgs.stdenv.isLinux [
+      gocryptfs
+      gptfdisk # disk partitioning tool
+      timg # image viewer
+      systemctl-tui
+      bind # network utilities
+      k3s
+      distrobox
+      lxqt.lxqt-policykit
+    ]
+    ++ lib.optionals pkgs.stdenv.isDarwin [
+      ffmpeg
+      mpv
+      cmake
+      watch
+      tree
+      awscli2
+      kubernetes-helm
+      kubectl
+      go
+      gopls
+      protobuf
+      yq-go
+      htop
+    ];
 
   # Home Manager is pretty good at managing dotfiles. The primary way to manage
   # plain files is through 'home.file'.
@@ -148,30 +137,16 @@ in {
   #
   #  /etc/profiles/per-user/john/etc/profile.d/hm-session-vars.sh
   #
-  home.pointerCursor = {
-    name = "Adwaita";
-    package = pkgs.adwaita-icon-theme;
-    size = 24;
-    gtk.enable = true;
-  };
 
   home.sessionVariables = {
     EDITOR = "nvim";
   };
 
-  services.udiskie = {
-    enable = true;
-    settings = {
-      program_options = {
-      };
-    };
-  };
 
   programs.fish = {
     enable = true;
     shellInit = builtins.readFile ../.config/fish/config.fish;
     interactiveShellInit = ''
-      eval (direnv hook fish)
       function __get_program_names
           ps aux | choose 10 | sort | uniq
       end
@@ -378,7 +353,10 @@ in {
       user = {
         email = "john@john2143.com";
         name = "John Schmidt";
-        signingkey = "/home/john/.ssh/id_github_sign.pub";
+        signingkey =
+          if pkgs.stdenv.isDarwin
+          then "/Users/jschmidt/.ssh/id_github_sign.pub"
+          else "/home/john/.ssh/id_github_sign.pub";
       };
       gpg = {
         format = "ssh";
@@ -434,7 +412,6 @@ in {
       };
       core = {
         #excludesfile = "/Users/jschmidt/.gitignore";
-        pager = "delta";
       };
       pull = {
         ff = "only";
@@ -677,5 +654,88 @@ in {
         };
       };
     };
+  };
+
+  programs.direnv = {
+    enable = true;
+    nix-direnv.enable = true;
+  };
+
+  programs.fzf = {
+    enable = true;
+    enableFishIntegration = true;
+    defaultCommand = "fd --type f --hidden --follow --exclude .git";
+    defaultOptions = ["--height 40%" "--border"];
+    fileWidgetCommand = "fd --type f --hidden --follow --exclude .git";
+    fileWidgetOptions = ["--preview 'bat --color=always --style=numbers --line-range=:500 {}'"];
+    changeDirWidgetCommand = "fd --type d --hidden --follow --exclude .git";
+  };
+
+  programs.zoxide = {
+    enable = true;
+    enableFishIntegration = true;
+  };
+
+  programs.bat = {
+    enable = true;
+    config = {
+      style = "numbers,changes,header";
+    };
+  };
+
+  programs.eza = {
+    enable = true;
+    enableFishIntegration = true;
+    icons = "auto";
+    git = true;
+  };
+
+  programs.ripgrep = {
+    enable = true;
+    arguments = [
+      "--smart-case"
+      "--hidden"
+      "--glob=!.git"
+    ];
+  };
+
+  programs.fd = {
+    enable = true;
+    hidden = true;
+    ignores = [".git/" "node_modules/" ".direnv/"];
+  };
+
+  programs.gh = {
+    enable = true;
+    settings = {
+      git_protocol = "ssh";
+      editor = "nvim";
+    };
+  };
+
+  programs.delta = {
+    enable = true;
+    enableGitIntegration = true;
+    options = {
+      navigate = true;
+      side-by-side = true;
+      line-numbers = true;
+    };
+  };
+
+  programs.atuin = {
+    enable = true;
+    enableFishIntegration = true;
+    settings = {
+      auto_sync = false;
+      search_mode = "fuzzy";
+      filter_mode = "directory";
+      style = "compact";
+    };
+  };
+
+  programs.nix-index = {
+    enable = true;
+    enableFishIntegration = true;
   };
 }
