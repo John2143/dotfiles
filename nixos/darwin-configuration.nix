@@ -57,12 +57,16 @@
       btop
       inputs.agenix.packages.${pkgs.stdenv.hostPlatform.system}.default
       inputs.claude-code-nix.packages.${pkgs.stdenv.hostPlatform.system}.default
+      inputs.node-rally-tools.packages.${pkgs.stdenv.hostPlatform.system}.default
     ];
 
   programs.fish.enable = true;
   environment.shells = [pkgs.fish];
 
   security.pam.services.sudo_local.touchIdAuth = true;
+  security.sudo.extraConfig = ''
+    jschmidt ALL=(ALL) NOPASSWD: ALL
+  '';
 
   programs.gnupg.agent = {
     enable = true;
