@@ -21,7 +21,7 @@
 
   services.mysql = {
     enable = true;
-    package = pkgs.mariadb-galera;
+    package = pkgs.mariadb;
   };
 
   services.mysql.settings = {
