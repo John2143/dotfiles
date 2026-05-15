@@ -87,7 +87,8 @@
             hash = "sha256-5EHbrnNFaQfX7rcBcEAOLb4RUqd9D8UGnyisLUmHtW0=";
           };
           bunDeps = let
-            bun2nix' = (pkgs.extend inputs.llm-agents.inputs.bun2nix.overlays.default).bun2nix;
+            bunPkgs = pkgs.extend (final: prev: { inherit omp-src; });
+            bun2nix' = (bunPkgs.extend inputs.llm-agents.inputs.bun2nix.overlays.default).bun2nix;
           in bun2nix'.fetchBunDeps {
             bunNix = ./omp-bun.nix;
           };

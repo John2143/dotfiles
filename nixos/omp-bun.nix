@@ -6,7 +6,7 @@
 # or `pkgs.callPackage` if you wish to handle
 # it manually.
 {
-  copyPathToStore,
+  omp-src,
   fetchFromGitHub,
   fetchgit,
   fetchurl,
@@ -633,15 +633,15 @@
     url = "https://registry.npmjs.org/@octokit/types/-/types-16.0.0.tgz";
     hash = "sha512-sKq+9r1Mm4efXW1FCk7hFSeJo4QKreL/tTbR0rz/qx/r1Oa2VV83LTA/H/MuCOX7uCIJmQVRKBcbmWoySjAnSg==";
   };
-  "@oh-my-pi/omp-stats" = copyPathToStore /nix/store/mx7jd1rnzcx084x9vh7yzgpq832wb5am-source/packages/stats;
-  "@oh-my-pi/pi-agent-core" = copyPathToStore /nix/store/mx7jd1rnzcx084x9vh7yzgpq832wb5am-source/packages/agent;
-  "@oh-my-pi/pi-ai" = copyPathToStore /nix/store/mx7jd1rnzcx084x9vh7yzgpq832wb5am-source/packages/ai;
-  "@oh-my-pi/pi-coding-agent" = copyPathToStore /nix/store/mx7jd1rnzcx084x9vh7yzgpq832wb5am-source/packages/coding-agent;
-  "@oh-my-pi/pi-natives" = copyPathToStore /nix/store/mx7jd1rnzcx084x9vh7yzgpq832wb5am-source/packages/natives;
-  "@oh-my-pi/pi-tui" = copyPathToStore /nix/store/mx7jd1rnzcx084x9vh7yzgpq832wb5am-source/packages/tui;
-  "@oh-my-pi/pi-utils" = copyPathToStore /nix/store/mx7jd1rnzcx084x9vh7yzgpq832wb5am-source/packages/utils;
-  "@oh-my-pi/swarm-extension" = copyPathToStore /nix/store/mx7jd1rnzcx084x9vh7yzgpq832wb5am-source/packages/swarm-extension;
-  "@oh-my-pi/typescript-edit-benchmark" = copyPathToStore /nix/store/mx7jd1rnzcx084x9vh7yzgpq832wb5am-source/packages/typescript-edit-benchmark;
+  "@oh-my-pi/omp-stats" = "${omp-src}/packages/stats";
+  "@oh-my-pi/pi-agent-core" = "${omp-src}/packages/agent";
+  "@oh-my-pi/pi-ai" = "${omp-src}/packages/ai";
+  "@oh-my-pi/pi-coding-agent" = "${omp-src}/packages/coding-agent";
+  "@oh-my-pi/pi-natives" = "${omp-src}/packages/natives";
+  "@oh-my-pi/pi-tui" = "${omp-src}/packages/tui";
+  "@oh-my-pi/pi-utils" = "${omp-src}/packages/utils";
+  "@oh-my-pi/swarm-extension" = "${omp-src}/packages/swarm-extension";
+  "@oh-my-pi/typescript-edit-benchmark" = "${omp-src}/packages/typescript-edit-benchmark";
   "@protobufjs/aspromise@1.1.2" = fetchurl {
     url = "https://registry.npmjs.org/@protobufjs/aspromise/-/aspromise-1.1.2.tgz";
     hash = "sha512-j+gKExEuLmKwvz3OgROXtrJ2UG2x8Ch2YZUxahh+s1F2HZ+wAceUNLkvy6zKCPVRkU++ZWQrdxsUeQXmcg4uoQ==";
