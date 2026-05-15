@@ -95,8 +95,8 @@ in {
   "vast-credentials.age".publicKeys = [office arch];
 
   # Attic JWT RS256 signing secret. Only the NAS needs it at runtime;
-  # office is included so admin machines can re-encrypt / re-deploy.
-  # Generate: openssl genrsa -traditional 4096 | base64 -w0
+  # office+arch are included so admin machines can re-encrypt / re-deploy.
+  # Generate: nix-shell -p openssl --run 'openssl genrsa -traditional 4096 | base64 -w0'
   # Then:    echo "ATTIC_SERVER_TOKEN_RS256_SECRET_BASE64=<output>" | agenix -e attic-jwt-secret.age -i ~/.ssh/age
-  "attic-jwt-secret.age".publicKeys = [office nas];
+  "attic-jwt-secret.age".publicKeys = [office arch nas];
 }
