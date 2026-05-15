@@ -1,7 +1,7 @@
 # Headscale — Self-hosted Tailscale coordination server
 #
 # Runs on the Home Pi. All Hetzner nodes + home machines join this tailnet.
-# Tailscale on the same host connects via localhost:8080.
+# Tailscale on the same host connects via localhost:6767.
 # External nodes connect via headscale.9s.pics (routed through closet's Traefik).
 {
   config,
@@ -12,10 +12,10 @@
   services.headscale = {
     enable = true;
     address = "0.0.0.0";
-    port = 8080;
+    port = 6767;
 
     settings = {
-      server_url = "https://headscale.9s.pics";
+      server_url = "http://headscale.9s.pics:6767";
 
       dns = {
         magic_dns = true;

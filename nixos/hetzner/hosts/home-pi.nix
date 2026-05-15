@@ -46,7 +46,7 @@
  };
 
   # Connect to the local Headscale instance running on this host
-  custom.headscaleServer = "http://localhost:8080";
+  custom.headscaleServer = "http://localhost:6767";
 
   # Galera node-specific — fourth multi-master node (permanent)
   services.mysql.settings.mysqld = {
