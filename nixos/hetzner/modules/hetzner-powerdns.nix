@@ -60,7 +60,7 @@
     # Override ExecStart to use the runtime-generated config
     serviceConfig.ExecStart = lib.mkForce [
       ""
-      "${pkgs.powerdns}/bin/pdns_server --config-dir=/run/pdns --guardian=no --daemon=no --disable-syslog --log-timestamp=no --write-pid=no"
+      "${pkgs.pdns}/bin/pdns_server --config-dir=/run/pdns --guardian=no --daemon=no --disable-syslog --log-timestamp=no --write-pid=no"
     ];
   };
 
