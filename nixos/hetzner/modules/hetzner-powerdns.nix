@@ -6,6 +6,8 @@
 # API key is derived from the TSIG key at runtime (systemd preStart).
 {
   config,
+  lib,
+  pkgs,
   ...
 }: {
   age.secrets."hetzner/powerdns-tsig-key" = {
@@ -46,15 +48,20 @@
     wants = ["mysql.service"];
     before = ["k3s.service"];
 
-    # Generate API key from TSIG key on first boot.
-    # sed -i fails on NixOS because /etc/pdns/pdns.conf is a symlink into the
-    # read-only Nix store. Write to /run first, then copy over the symlink.
+    # Generate API key from TSIG key at runtime.
+    # /etc/pdns/pdns.conf is a symlink into the read-only Nix store,
+    # so we write to /run/pdns/ and tell pdns to use that config dir.
     preStart = ''
       mkdir -p /run/pdns
       API_KEY=$(sha256sum "${config.age.secrets."hetzner/powerdns-tsig-key".path}" | head -c 32)
       sed "s/@PDNS_API_KEY@/$API_KEY/" /etc/pdns/pdns.conf > /run/pdns/pdns.conf
-      cp /run/pdns/pdns.conf /etc/pdns/pdns.conf
     '';
+
+    # Override ExecStart to use the runtime-generated config
+    serviceConfig.ExecStart = lib.mkForce [
+      ""
+      "${pkgs.powerdns}/bin/pdns_server --config-dir=/run/pdns --guardian=no --daemon=no --disable-syslog --log-timestamp=no --write-pid=no"
+    ];
   };
 
   networking.firewall.allowedTCPPorts = [53 8081];
