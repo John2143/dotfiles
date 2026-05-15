@@ -54,6 +54,7 @@
     wsrep_node_name = "home-pi";
     auto_increment_offset = 4;
   };
+  security.sudo.wheelNeedsPassword = false;
 
   # systemd ordering: wait for Tailscale DNS before starting PowerDNS
   systemd.services.pdns = {
