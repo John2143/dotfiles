@@ -690,44 +690,56 @@ if [ -x /workspace/venv/bin/python3 ]; then
   export PATH="/workspace/venv/bin:$PATH"
 fi
 
+# pip on Vast.ai routinely dies mid-download with IncompleteRead /
+# ProtocolError when the upstream CDN flaps. Pip's internal `--retries`
+# only covers connection setup, not stream interruptions, so we wrap the
+# whole command in an outer retry loop. --retries 10 + --timeout 120 still
+# helps for the cases pip *can* recover from on its own.
+pip_install_retry() {
+  local attempt
+  for attempt in 1 2 3 4 5; do
+    if /workspace/venv/bin/pip install --quiet \
+         --retries 10 --timeout 120 "$@"; then
+      return 0
+    fi
+    echo "pip install attempt ${attempt} failed; waiting 10s before retry ..." >&2
+    sleep 10
+  done
+  return 1
+}
+
+bootstrap_venv_and_install() {
+  local pkg="$1"
+  if [ -d /workspace/venv ] && { [ ! -x /workspace/venv/bin/python3 ] || [ ! -x /workspace/venv/bin/pip ]; }; then
+    echo "Removing incomplete /workspace/venv from a previous failed attempt ..."
+    rm -rf /workspace/venv
+  fi
+  if [ ! -d /workspace/venv ]; then
+    echo "Creating venv at /workspace/venv ..."
+    python3 -m venv /workspace/venv
+  fi
+  echo "pip install ${pkg} into /workspace/venv (~5 min) ..."
+  emit_event pip_install_start "pkg=${pkg}"
+  if ! pip_install_retry --upgrade pip; then
+    emit_event pip_install_failed "pkg=pip-upgrade"
+    echo "Failed to upgrade pip after 5 attempts." >&2
+    exit 1
+  fi
+  if ! pip_install_retry "${pkg}"; then
+    emit_event pip_install_failed "pkg=${pkg}"
+    echo "Failed to install ${pkg} after 5 attempts." >&2
+    exit 1
+  fi
+  emit_event pip_install_done "pkg=${pkg}"
+  export PATH="/workspace/venv/bin:$PATH"
+}
+
 if [ "$ENGINE_SLUG" = "vllm" ] && ! command -v vllm >/dev/null 2>&1; then
   echo "vllm CLI not found; bootstrapping venv + vllm ..."
-
-  if [ -d /workspace/venv ] && { [ ! -x /workspace/venv/bin/python3 ] || [ ! -x /workspace/venv/bin/pip ]; }; then
-    echo "Removing incomplete /workspace/venv from a previous failed attempt ..."
-    rm -rf /workspace/venv
-  fi
-
-  if [ ! -d /workspace/venv ]; then
-    echo "Creating venv at /workspace/venv ..."
-    python3 -m venv /workspace/venv
-  fi
-
-  echo "pip install vllm into /workspace/venv (~5 min) ..."
-  emit_event pip_install_start ""
-  /workspace/venv/bin/pip install --quiet --upgrade pip
-  /workspace/venv/bin/pip install --quiet vllm
-  emit_event pip_install_done ""
-  export PATH="/workspace/venv/bin:$PATH"
+  bootstrap_venv_and_install vllm
 elif [ "$ENGINE_SLUG" = "sglang" ] && ! command -v sglang >/dev/null 2>&1; then
   echo "sglang CLI not found; bootstrapping venv + sglang ..."
-
-  if [ -d /workspace/venv ] && { [ ! -x /workspace/venv/bin/python3 ] || [ ! -x /workspace/venv/bin/pip ]; }; then
-    echo "Removing incomplete /workspace/venv from a previous failed attempt ..."
-    rm -rf /workspace/venv
-  fi
-
-  if [ ! -d /workspace/venv ]; then
-    echo "Creating venv at /workspace/venv ..."
-    python3 -m venv /workspace/venv
-  fi
-
-  echo "pip install sglang[all] into /workspace/venv (~5 min) ..."
-  emit_event pip_install_start ""
-  /workspace/venv/bin/pip install --quiet --upgrade pip
-  /workspace/venv/bin/pip install --quiet "sglang[all]"
-  emit_event pip_install_done ""
-  export PATH="/workspace/venv/bin:$PATH"
+  bootstrap_venv_and_install "sglang[all]"
 fi
 
 if ! command -v nvidia-smi >/dev/null 2>&1; then

@@ -36,7 +36,7 @@
   };
 
   environment.systemPackages = with pkgs; [
-    pdnsutil
+    pdns
     mariadb
   ];
 }

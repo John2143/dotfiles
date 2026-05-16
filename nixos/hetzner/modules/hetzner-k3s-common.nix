@@ -34,9 +34,9 @@
       "--disable=servicelb"
       "--cluster-cidr=10.42.0.0/16"
       "--service-cidr=10.43.0.0/16"
-      "--node-external-ip=${lib.head config.networking.interfaces.eth0.ipv4.addresses}.address"
     ];
   };
+
 
   # ── Cilium kernel requirements ──
   boot.kernel.sysctl = {
@@ -194,36 +194,13 @@
     group = "root";
   };
 
-  # ── Split-IP firewall (runtime — reads actual IPs) ──
-  systemd.services.split-ip-firewall = {
-    description = "Apply split-IP DDoS firewall rules";
-    after = ["network-online.target"];
-    wants = ["network-online.target"];
-    wantedBy = ["multi-user.target"];
-    serviceConfig = {
-      Type = "oneshot";
-      RemainAfterExit = true;
-    };
-    script = ''
-      PROTECTED_IP=$(ip -4 addr show eth0 | grep -oP 'inet \K[\d.]+' | head -1)
-      RAW_IP=$(ip -4 addr show eth0 | grep -oP 'inet \K[\d.]+' | tail -1)
-      [ -z "$RAW_IP" ] && RAW_IP="$PROTECTED_IP"
+  # ── Split-IP firewall — DISABLED for initial deployment ──
+  # Must be re-enabled after agenix identity is working and floating IPs verified.
+  # systemd.services.split-ip-firewall = {
+  #   ...
+  # };
 
-      # Protected IP: rate-limited HTTP/S only
-      iptables -A INPUT -d "$PROTECTED_IP" -p tcp -m multiport --dports 80,443 -m state --state NEW -m recent --set
-      iptables -A INPUT -d "$PROTECTED_IP" -p tcp -m multiport --dports 80,443 -m state --state NEW -m recent --update --seconds 1 --hitcount 50 -j DROP
-      iptables -A INPUT -d "$PROTECTED_IP" -p tcp -m multiport --dports 80,443 -j ACCEPT
-      iptables -A INPUT -d "$PROTECTED_IP" -j DROP
-
-      # Raw IP: game/TS/DERP ports
-      iptables -A INPUT -d "$RAW_IP" -p udp --dport 3478 -j ACCEPT
-      iptables -A INPUT -d "$RAW_IP" -p udp --dport 9987 -j ACCEPT
-      iptables -A INPUT -d "$RAW_IP" -p tcp -m multiport --dports 80,443,30033 -j ACCEPT
-      iptables -A INPUT -d "$RAW_IP" -j DROP
-    '';
-  };
-
-  networking.firewall.allowedTCPPorts = [6443 80 443 53 3306 4444 4567 4568];
+  networking.firewall.allowedTCPPorts = [22 6443 80 443 53 3306 4444 4567 4568];
   networking.firewall.allowedUDPPorts = [53 8472];
 
   environment.systemPackages = with pkgs; [

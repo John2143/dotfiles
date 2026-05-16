@@ -28,7 +28,7 @@
 
     oh-my-pi = {
       url = "github:John2143/oh-my-pi/john";
-      flake = false;
+      inputs.nixpkgs.follows = "nixpkgs";
     };
 
     claude-code-nix = {

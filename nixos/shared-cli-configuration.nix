@@ -72,36 +72,11 @@
       # uv on PATH so my_claw (in fish-functions.nix) can `uvx litellm`
       # without needing a writeShellScriptBin nix-store substitution.
       pkgs.uv
-      # omp wrapper: builds from John2143/oh-my-pi (john branch).
-      #
-      # To bump to a newer commit:
-      #   1. `nix flake update oh-my-pi`
-      #   2. Get the new src store path:
-      #        SRC=$(nix-instantiate --eval --expr \
-      #          'let f = builtins.getFlake (toString ./.); in f.inputs.oh-my-pi.outPath' \
-      #          | tr -d '"')
-      #   3. Regenerate omp-bun.nix (absolute copy-prefix avoids
-      #      `./packages/...` resolving relative to nixos/):
-      #        nix run nixpkgs#bun2nix -- -l "$SRC/bun.lock" -c "$SRC/" \
-      #          -o nixos/omp-bun.nix
-      #      (or use the bun2nix from llm-agents' inputs, same binary)
-      #   4. Set cargoDeps.hash below to lib.fakeHash, run `nh os switch`,
-      #      copy the "got:" hash from the error back into the file.
+      # omp wrapper: consumes the fork's own flake (John2143/oh-my-pi#omp).
+      # Bump via `nix flake update oh-my-pi`. All build hashes (cargoHash,
+      # bun.nix) live in the fork.
       (let
-        omp-src = inputs.oh-my-pi;
-        omp-unwrapped = inputs.llm-agents.packages.${pkgs.stdenv.hostPlatform.system}.omp.overrideAttrs (_: {
-          src = omp-src;
-          cargoDeps = pkgs.rustPlatform.fetchCargoVendor {
-            name = "omp-cargo-vendor";
-            src = omp-src;
-            hash = "sha256-RJQa2pEeu0UM9d4diYeIoso4lP0sc1LTMzY4x8QrFTQ=";
-          };
-          bunDeps = let
-            bun2nix' = (pkgs.extend inputs.llm-agents.inputs.bun2nix.overlays.default).bun2nix;
-          in bun2nix'.fetchBunDeps {
-            bunNix = ./omp-bun.nix;
-          };
-        });
+        omp-unwrapped = inputs.oh-my-pi.packages.${pkgs.stdenv.hostPlatform.system}.omp;
       in
       pkgs.writeShellScriptBin "omp" ''
           if [ -f /run/agenix/llm-runtime-keys ]; then
