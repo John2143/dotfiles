@@ -24,12 +24,11 @@
   nix.settings.extra-trusted-public-keys = [
     "niks3.numtide.com-1:DTx8wZduET09hRmMtKdQDxNNthLQETkc/yaX7M4qK0g="
     "claude-code.cachix.org-1:YeXf2aNu7UTX8Vwrze0za1WEDS+4DuI2kVeWEE4fsRk="
-    "2143nix:<INSERT-PUBLIC-KEY-FROM-NAS>"
+    "2143nix:Ysam0ozURtK+1tkP62M6lzbfoi8BVeL6s7ZWJlB6UxE="
   ];
 
 
-  # Attic self-hosted Nix cache — substitute the placeholder key after
-  # creating the cache: attic cache info 2143nix (run on NAS)
+  # Attic self-hosted Nix cache on NAS (nas:8280)
   #nix.gc.automatic = true;
 
   # setup my two input channels
@@ -73,42 +72,36 @@
       # uv on PATH so my_claw (in fish-functions.nix) can `uvx litellm`
       # without needing a writeShellScriptBin nix-store substitution.
       pkgs.uv
-      # omp wrapper: sandboxed via bubblewrap so a compromised binary can't
-      # read /run/agenix/*, ~/.ssh, or the dotfiles secrets directory.
-      # omp is a status display tool that doesn't need broad filesystem access.
+      # omp wrapper: builds from John2143/oh-my-pi (john branch).
+      #
+      # To bump to a newer commit:
+      #   1. `nix flake update oh-my-pi`
+      #   2. Get the new src store path:
+      #        SRC=$(nix-instantiate --eval --expr \
+      #          'let f = builtins.getFlake (toString ./.); in f.inputs.oh-my-pi.outPath' \
+      #          | tr -d '"')
+      #   3. Regenerate omp-bun.nix (absolute copy-prefix avoids
+      #      `./packages/...` resolving relative to nixos/):
+      #        nix run nixpkgs#bun2nix -- -l "$SRC/bun.lock" -c "$SRC/" \
+      #          -o nixos/omp-bun.nix
+      #      (or use the bun2nix from llm-agents' inputs, same binary)
+      #   4. Set cargoDeps.hash below to lib.fakeHash, run `nh os switch`,
+      #      copy the "got:" hash from the error back into the file.
       (let
-        omp-src = pkgs.fetchFromGitHub {
-          owner = "John2143";
-          repo = "oh-my-pi";
-          rev = "ac74ad5adc3b76d5441f27dc1768262a7e7f389f";
-          hash = "sha256-PTNFN3onNycgzvWd4QED0FTVERqUaS0GzLoQZB/kLLU=";
-        };
-        bun-1_3_14 = pkgs.bun.overrideAttrs {
-          version = "1.3.14";
-          src = pkgs.fetchurl {
-            url = "https://github.com/oven-sh/bun/releases/download/bun-v1.3.14/bun-linux-x64.zip";
-            hash = "sha256-lR7iruhV8IWVruxiJSJqKY0/6oOj3NZGXAnLzN9+hI8=";
-          };
-        };
-        omp-unwrapped = (inputs.llm-agents.packages.${pkgs.stdenv.hostPlatform.system}.omp.overrideAttrs (old: {
-          version = "15.0.0";
+        omp-src = inputs.oh-my-pi;
+        omp-unwrapped = inputs.llm-agents.packages.${pkgs.stdenv.hostPlatform.system}.omp.overrideAttrs (_: {
           src = omp-src;
           cargoDeps = pkgs.rustPlatform.fetchCargoVendor {
-            name = "omp-15.0.0-cargo-vendor";
+            name = "omp-cargo-vendor";
             src = omp-src;
-            hash = "sha256-5EHbrnNFaQfX7rcBcEAOLb4RUqd9D8UGnyisLUmHtW0=";
+            hash = "sha256-RJQa2pEeu0UM9d4diYeIoso4lP0sc1LTMzY4x8QrFTQ=";
           };
           bunDeps = let
-            bunPkgs = pkgs.extend (final: prev: { inherit omp-src; });
-            bun2nix' = (bunPkgs.extend inputs.llm-agents.inputs.bun2nix.overlays.default).bun2nix;
+            bun2nix' = (pkgs.extend inputs.llm-agents.inputs.bun2nix.overlays.default).bun2nix;
           in bun2nix'.fetchBunDeps {
             bunNix = ./omp-bun.nix;
           };
-          nativeBuildInputs = (old.nativeBuildInputs or []) ++ [pkgs.makeBinaryWrapper];
-          postInstall = (old.postInstall or "") + ''
-            wrapProgram "$out/bin/omp" --prefix PATH : ${bun-1_3_14}/bin
-          '';
-        }));
+        });
       in
       pkgs.writeShellScriptBin "omp" ''
           if [ -f /run/agenix/llm-runtime-keys ]; then

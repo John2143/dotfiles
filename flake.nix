@@ -26,6 +26,11 @@
       url = "github:numtide/llm-agents.nix";
     };
 
+    oh-my-pi = {
+      url = "github:John2143/oh-my-pi/john";
+      flake = false;
+    };
+
     claude-code-nix = {
       url = "github:sadjow/claude-code-nix";
       inputs.nixpkgs.follows = "nixpkgs";
