@@ -326,7 +326,7 @@
   # All NixOS hosts that push/pull need this.
   age.secrets.attic-admin-token =
     lib.mkIf
-    (builtins.elem config.networking.hostName ["office" "arch" "closet" "secu" "nas"])
+    (builtins.elem config.networking.hostName ["office" "arch" "closet" "secu" "nas" "pite" "vpin"])
     {
       file = ../secrets/attic-admin-token.age;
       mode = "0400";

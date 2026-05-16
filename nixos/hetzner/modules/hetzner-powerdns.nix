@@ -24,6 +24,7 @@
       gmysql-port=3306
       gmysql-dbname=pdns
       gmysql-user=pdns
+      gmysql-password=pdns
 
       local-address=0.0.0.0
       local-port=53

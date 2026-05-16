@@ -12,6 +12,7 @@ let
   arch = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIJbTSIq65Gz8pgHX5uLas3Z/paU9SC5KvG1G2lNMfPH7 john@arch";
   closet = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIN3VC6q1KhVCI3BRzbTi9Di/pS7I1ASEYoNBwBzU4jgT john@closet";
   pite = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAh9fgjUMvSfYUYteUHeI/JkjxUJLwVAnoLyluU1Uknd john@pite";
+  vpin = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAII4YCIowmPxLCTuH2fVxCtK/sKj7Sefr1s+itj0dtVED john@vpin";
   security = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAILO6ntnqr4ERZLUdL2MOMeC++HPIsigce4d42h8UogA2 john@security";
   secu = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIN4vMixKG/e9b3ttJy9Xb5ymavp7Gny6dxKrViQl8AUl john@secu";
   nas = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIPzgxUuaZUG9Dr5ZTZImKqt3SUSPVD/FLO2wKQfwz98A john@nas";
@@ -103,5 +104,5 @@ in {
   # Attic admin token — lets each machine authenticate to atticd for
   # push/pull. Generated once on the NAS with atticd-atticadm make-token.
   # Encrypt to all NixOS hosts that import shared-cli-configuration.nix.
-  "attic-admin-token.age".publicKeys = [office arch closet secu nas];
+  "attic-admin-token.age".publicKeys = [office arch closet secu nas pite vpin];
 }
