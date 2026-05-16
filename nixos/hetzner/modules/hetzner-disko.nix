@@ -1,15 +1,21 @@
 # Hetzner k3s Node — Declarative Disk Layout (disko)
 #
 # Used by nixos-anywhere to partition Hetzner Cloud VMs.
-# Layout: EFI System Partition (512MB) + ext4 root (rest of disk).
-# LUKS encryption removed — requires interactive password entry at boot
-# which isn't viable for cloud VMs. Encryption is handled at the
-# application layer (SeaweedFS encryptVolumeData, etc).
+# Layout follows the NixOS wiki for Hetzner Cloud:
+#   BIOS boot (1M, EF02) + EFI System Partition (512M) + ext4 root (rest)
 #
 # Reference: nixos.wiki/wiki/Install_NixOS_on_Hetzner_Cloud
 {
+  config,
+  lib,
+  pkgs,
+  modulesPath,
   ...
 }: {
+  imports = [
+    (modulesPath + "/profiles/qemu-guest.nix")
+  ];
+
   disko.devices = {
     disk.main = {
       device = "/dev/sda";
@@ -17,6 +23,12 @@
       content = {
         type = "gpt";
         partitions = {
+          # BIOS boot partition — required for GRUB on GPT
+          boot = {
+            size = "1M";
+            type = "EF02";
+            priority = 1;
+          };
           ESP = {
             size = "512M";
             type = "EF00";
@@ -40,11 +52,21 @@
     };
   };
 
-  # Boot loader — UEFI only (Hetzner Cloud uses EFI)
+  # Boot loader — GRUB on /dev/sda, UEFI supported
   boot.loader.grub = {
     enable = true;
-    device = "nodev";
+    device = "/dev/sda";
     efiSupport = true;
-    efiInstallAsRemovable = true;
   };
+
+  # Kernel modules needed for Hetzner Cloud virtio
+  boot.initrd.availableKernelModules = [
+    "ahci"
+    "xhci_pci"
+    "virtio_pci"
+    "virtio_scsi"
+    "sd_mod"
+    "sr_mod"
+    "ext4"
+  ];
 }

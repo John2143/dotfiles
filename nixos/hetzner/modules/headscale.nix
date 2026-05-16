@@ -13,6 +13,7 @@
     enable = true;
     address = "0.0.0.0";
     port = 6767;
+    openFirewall = true;
 
     settings = {
       server_url = "http://headscale.9s.pics:6767";

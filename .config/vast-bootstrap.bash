@@ -35,30 +35,38 @@
 #   SERVE_INTERNAL_PORT private port engine binds to under LOGGING_PROXY=1
 #                      (default 18000). Ignored otherwise.
 #
-# Auto-tuning targets DeepSeek-V4-Flash with 1-2 light users (rare concurrent
-# big queries). V4-Flash KV at 1M ctx is only ~6 GiB/seq (7% of V3.2's, via
-# CSA+HCA), so the binding constraint is the ~150 GB weight footprint, not KV:
+# Auto-tuning is VRAM-driven, not GPU-count-driven. For known DSv4 SKUs the
+# script estimates the weight footprint, subtracts an activation reserve
+# (10 GiB on FP8-native GPUs, 20 GiB on Marlin-emulating Ampere), and picks
+# a (MAX_LEN, MEM_UTIL, MAX_NUM_SEQS) tier from the remaining KV budget:
 #
-#   1 GPU  (B200, 192 GB):  MAX_LEN=524288  MEM_UTIL=0.93 MAX_NUM_SEQS=16
-#                           (weights eat ~80% VRAM; tighter MEM_UTIL avoids
-#                           OOM during graph capture; max-prefill-tokens capped
-#                           at 8192 to bound prefill activation spikes)
-#   2 GPUs (2×B200, 384):   MAX_LEN=1000000 MEM_UTIL=0.95 MAX_NUM_SEQS=32
-#   4 GPUs (4×B200, 768):   MAX_LEN=1000000 MEM_UTIL=0.95 MAX_NUM_SEQS=64
-#   8 GPUs (8×B200, 1536):  MAX_LEN=1000000 MEM_UTIL=0.95 MAX_NUM_SEQS=128
+#   KV_BUDGET ≥ 500 GiB → MAX_LEN=1M     MAX_NUM_SEQS=128 MEM_UTIL=0.95
+#             ≥ 250    → MAX_LEN=1M     MAX_NUM_SEQS=64  MEM_UTIL=0.95
+#             ≥ 100    → MAX_LEN=1M     MAX_NUM_SEQS=32  MEM_UTIL=0.95
+#             ≥ 50     → MAX_LEN=512k   MAX_NUM_SEQS=16  MEM_UTIL=0.93
+#             ≥ 25     → MAX_LEN=128k   MAX_NUM_SEQS=8   MEM_UTIL=0.92
+#             ≥ 12     → MAX_LEN=64k    MAX_NUM_SEQS=4   MEM_UTIL=0.90
+#             ≥ 8      → MAX_LEN=32k    MAX_NUM_SEQS=2   MEM_UTIL=0.88
+#             < 8      → refuse (won't fit)
+#
+# Worked examples for DSv4-Flash (~150 GiB FP8 weights):
+#   8×B200 (1536 GiB) → KV=1376 GiB → top tier (1M, 128 seq)
+#   4×B200 (768)      → KV=608      → top tier (1M, 64 seq)
+#   1×B200 (192)      → KV=32       → tight tier (128k, 8 seq)
+#   4×A40  (192)      → KV=22       → very tight (64k, 4 seq, Marlin dequant)
 #
 # DeepSeek-V4-Pro is the large MoE variant: 1.6T total / 49B activated.
-# Native quantization (FP4 experts + FP8 other) puts weights at ~865 GB on
-# disk, so 4×B200 (768 GB VRAM) CANNOT load it — 8×B200 (1536 GB) is the
-# realistic minimum. When MODEL matches *DeepSeek-V4-Pro* we override:
+# Native quantization (FP4 experts + FP8 other) puts weights at ~865 GiB on
+# disk, so anything under 8×B200 (1536 GiB) hits the < 8 GiB refusal path.
 #
-#   8 GPUs (8×B200, 1536):  MAX_LEN=524288 MEM_UTIL=0.94 MAX_NUM_SEQS=32
-#                           (~865 GB weights leaves ~580 GB for KV+activations)
-#
-# Topology choice: TP+EP (each request uses all GPUs). SGLang on DSv4 produces
-# zero CJK bad tokens vs vLLM's 50-75% (vllm#41985); no sampling overrides
-# needed. When ENGINE=vllm, DeepSeek V4 gets temp=0.6/top_p=0.95/top_k=40 as
-# a workaround for the MLA Attention FP8 precision bug.
+# Topology choice: TP+EP (each request uses all GPUs). FP8 native (SM 9.0+:
+# Hopper, Blackwell) uses native FP8 tensor cores. FP8 non-native (SM 8.x and
+# below: Ampere) goes through Marlin W8A16 dequant — quality identical, ~2-3×
+# compute slowdown on prefill, decode mostly unaffected (memory-bound). vLLM
+# is preferred over SGLang on non-native FP8 for DSv4 (more mature Marlin).
+# SGLang on DSv4 produces zero CJK bad tokens vs vLLM's 50-75% (vllm#41985);
+# no sampling overrides needed. When ENGINE=vllm, DeepSeek V4 gets temp=0.6/
+# top_p=0.95/top_k=40 as a workaround for the MLA Attention FP8 precision bug.
 #
 # Idempotent: if a server is already responding on $SERVE_PORT it exits 0
 # unless FORCE_RESTART is set.
@@ -746,49 +754,105 @@ if ! command -v nvidia-smi >/dev/null 2>&1; then
   echo "Warning: nvidia-smi not found inside the rental. ${ENGINE_SLUG} will likely fail to start." >&2
 fi
 
-# Detect GPU count so we can pick topology-aware defaults.
+# Detect GPU count, per-GPU VRAM, and compute capability. Tiering is
+# VRAM-driven (not GPU-count-driven) so the script works on any architecture
+# with enough memory — B200/H100/H200, A100/A40/A6000 via Marlin FP8 dequant,
+# and anything in between.
 GPU_COUNT=1
+TOTAL_VRAM_GIB=0
+FP8_NATIVE=1
+GPU_NAME="unknown"
+CC=""
 if command -v nvidia-smi >/dev/null 2>&1; then
   DETECTED=$(nvidia-smi --list-gpus 2>/dev/null | wc -l)
   [ "${DETECTED}" -ge 1 ] && GPU_COUNT="${DETECTED}"
+  GPU_NAME=$(nvidia-smi --query-gpu=name --format=csv,noheader 2>/dev/null | head -1)
+  VRAM_MIB=$(nvidia-smi --query-gpu=memory.total --format=csv,noheader,nounits 2>/dev/null | head -1)
+  if [ -n "${VRAM_MIB}" ]; then
+    TOTAL_VRAM_GIB=$(awk -v n="${GPU_COUNT}" -v m="${VRAM_MIB}" \
+      'BEGIN{printf "%d", n*m/1024}')
+  fi
+  # SM 9.0+ (Hopper, Blackwell) has native FP8 tensor cores; SM 8.x (Ampere)
+  # and earlier emulate FP8 via Marlin W8A16 dequant. Quality identical;
+  # compute path is slower and needs ~2× the per-layer activation reserve.
+  CC=$(nvidia-smi --query-gpu=compute_cap --format=csv,noheader 2>/dev/null | head -1)
+  CC_MAJOR=$(printf '%s' "${CC}" | cut -d. -f1)
+  if [ -n "${CC_MAJOR}" ] && [ "${CC_MAJOR}" -lt 9 ] 2>/dev/null; then
+    FP8_NATIVE=0
+  fi
 fi
+echo "GPU topology: ${GPU_COUNT}× ${GPU_NAME} (CC ${CC:-?}, ${TOTAL_VRAM_GIB} GiB total, FP8-native=${FP8_NATIVE})"
 
-# Resolve "auto" defaults based on GPU count. See header for rationale.
-# Track which knobs the caller left as "auto" so the V4-Pro override below
-# only adjusts auto-resolved values, not explicit caller settings.
+# Estimate weight footprint for known DeepSeek V4 SKUs. Unknown models fall
+# back to a GPU-count tier table (assumes B200-class headroom).
+WEIGHT_GIB=0
+case "$MODEL" in
+  *DeepSeek-V4-Pro*|*deepseek-v4-pro*)  WEIGHT_GIB=865 ;;
+  *DeepSeek-V4*|*deepseek-v4*)          WEIGHT_GIB=150 ;;
+esac
+
+# Resolve "auto" defaults. Track which knobs the caller left as "auto" so
+# overrides below only adjust auto-resolved values, not explicit settings.
 MAX_LEN_AUTO=0; MEM_UTIL_AUTO=0; MAX_NUM_SEQS_AUTO=0
 [ "$MAX_LEN" = auto ]      && MAX_LEN_AUTO=1
 [ "$MEM_UTIL" = auto ]     && MEM_UTIL_AUTO=1
 [ "$MAX_NUM_SEQS" = auto ] && MAX_NUM_SEQS_AUTO=1
 
-case "${GPU_COUNT}" in
-  1) DEF_MAX_LEN=524288  DEF_MEM_UTIL=0.93 DEF_MAX_NUM_SEQS=16  ;;
-  2) DEF_MAX_LEN=1000000 DEF_MEM_UTIL=0.95 DEF_MAX_NUM_SEQS=32  ;;
-  4) DEF_MAX_LEN=1000000 DEF_MEM_UTIL=0.95 DEF_MAX_NUM_SEQS=64  ;;
-  8) DEF_MAX_LEN=1000000 DEF_MEM_UTIL=0.95 DEF_MAX_NUM_SEQS=128 ;;
-  *) DEF_MAX_LEN=1000000 DEF_MEM_UTIL=0.95 DEF_MAX_NUM_SEQS=64  ;;
-esac
+KV_BUDGET=0
+if [ "$WEIGHT_GIB" -gt 0 ] && [ "$TOTAL_VRAM_GIB" -gt 0 ]; then
+  # Activation reserve covers per-layer intermediate buffers + CUDA graph
+  # capture + torch.compile workspace. Doubled on non-FP8-native GPUs because
+  # Marlin produces BF16 intermediates that don't exist on Hopper/Blackwell.
+  ACT_RESERVE=10
+  [ "$FP8_NATIVE" = 0 ] && ACT_RESERVE=20
+  KV_BUDGET=$((TOTAL_VRAM_GIB - WEIGHT_GIB - ACT_RESERVE))
 
-# DeepSeek-V4-Pro: 1.6T MoE, ~865 GB weights in native FP4/FP8 quant.
-# Needs 8×B200 (1536 GB) minimum — 4×B200 (768 GB) is short by ~100 GB of
-# weight storage alone. Pull MAX_LEN and MAX_NUM_SEQS down so KV fits in
-# the smaller post-weights headroom (~580 GB on 8×B200).
-case "$MODEL" in
-  *DeepSeek-V4-Pro*|*deepseek-v4-pro*)
-    if [ "${GPU_COUNT}" -lt 8 ]; then
-      echo "Error: DeepSeek V4 Pro needs ≥8 B200s (~865 GB weights); you have ${GPU_COUNT} GPU(s)." >&2
-      echo "       Use V4-Flash on smaller rentals, or rent an 8×B200 host." >&2
-      exit 1
-    fi
-    DEF_MAX_LEN=524288 DEF_MEM_UTIL=0.94 DEF_MAX_NUM_SEQS=32
-    ;;
-esac
+  if [ "$KV_BUDGET" -lt 8 ]; then
+    echo "Error: ${TOTAL_VRAM_GIB} GiB total VRAM is insufficient for ${MODEL}." >&2
+    echo "       Needs ~${WEIGHT_GIB} GiB weights + ${ACT_RESERVE} GiB activations + ≥8 GiB KV." >&2
+    echo "       Rent more/bigger GPUs, or pick a smaller model." >&2
+    exit 1
+  fi
+
+  # Tiers calibrated for V4-Flash KV (~6 KiB/token at full MLA). Bigger KV
+  # budget → bigger context + more concurrent sequences. MEM_UTIL is pulled
+  # down on tight tiers to leave room for graph-capture spikes.
+  if   [ "$KV_BUDGET" -ge 500 ]; then DEF_MAX_LEN=1000000 DEF_MEM_UTIL=0.95 DEF_MAX_NUM_SEQS=128
+  elif [ "$KV_BUDGET" -ge 250 ]; then DEF_MAX_LEN=1000000 DEF_MEM_UTIL=0.95 DEF_MAX_NUM_SEQS=64
+  elif [ "$KV_BUDGET" -ge 100 ]; then DEF_MAX_LEN=1000000 DEF_MEM_UTIL=0.95 DEF_MAX_NUM_SEQS=32
+  elif [ "$KV_BUDGET" -ge 50 ];  then DEF_MAX_LEN=524288  DEF_MEM_UTIL=0.93 DEF_MAX_NUM_SEQS=16
+  elif [ "$KV_BUDGET" -ge 25 ];  then DEF_MAX_LEN=131072  DEF_MEM_UTIL=0.92 DEF_MAX_NUM_SEQS=8
+  elif [ "$KV_BUDGET" -ge 12 ];  then DEF_MAX_LEN=65536   DEF_MEM_UTIL=0.90 DEF_MAX_NUM_SEQS=4
+  else                                DEF_MAX_LEN=32768   DEF_MEM_UTIL=0.88 DEF_MAX_NUM_SEQS=2
+  fi
+  echo "Memory plan: weights≈${WEIGHT_GIB} GiB + activations≈${ACT_RESERVE} GiB + KV budget=${KV_BUDGET} GiB → tier MAX_LEN=${DEF_MAX_LEN} MAX_NUM_SEQS=${DEF_MAX_NUM_SEQS}"
+else
+  # Unknown model: fall back to GPU-count tiers (assumes B200-class headroom).
+  case "${GPU_COUNT}" in
+    1) DEF_MAX_LEN=524288  DEF_MEM_UTIL=0.93 DEF_MAX_NUM_SEQS=16  ;;
+    2) DEF_MAX_LEN=1000000 DEF_MEM_UTIL=0.95 DEF_MAX_NUM_SEQS=32  ;;
+    4) DEF_MAX_LEN=1000000 DEF_MEM_UTIL=0.95 DEF_MAX_NUM_SEQS=64  ;;
+    8) DEF_MAX_LEN=1000000 DEF_MEM_UTIL=0.95 DEF_MAX_NUM_SEQS=128 ;;
+    *) DEF_MAX_LEN=1000000 DEF_MEM_UTIL=0.95 DEF_MAX_NUM_SEQS=64  ;;
+  esac
+fi
 
 [ "$MAX_LEN_AUTO" = 1 ]      && MAX_LEN="$DEF_MAX_LEN"
 [ "$MEM_UTIL_AUTO" = 1 ]     && MEM_UTIL="$DEF_MEM_UTIL"
 [ "$MAX_NUM_SEQS_AUTO" = 1 ] && MAX_NUM_SEQS="$DEF_MAX_NUM_SEQS"
 
-echo "Topology: ${GPU_COUNT} GPU(s) → MAX_LEN=${MAX_LEN} MEM_UTIL=${MEM_UTIL} MAX_NUM_SEQS=${MAX_NUM_SEQS}"
+echo "Tuning: MAX_LEN=${MAX_LEN} MEM_UTIL=${MEM_UTIL} MAX_NUM_SEQS=${MAX_NUM_SEQS}"
+
+# Heads-up on non-FP8-native GPUs running SGLang with DSv4. vLLM's Marlin
+# FP8→BF16 path is more battle-tested than SGLang's for V4 specifically.
+if [ "$FP8_NATIVE" = 0 ] && [ "$ENGINE_SLUG" = "sglang" ]; then
+  case "$MODEL" in
+    *DeepSeek-V4*|*deepseek-v4*)
+      echo "Note: ${GPU_NAME} (CC ${CC}) lacks native FP8 tensor cores." >&2
+      echo "      If sglang fails to load DSv4, retry with VAST_ENGINE=vllm." >&2
+      ;;
+  esac
+fi
 
 # TP=GPU_COUNT on multi-GPU; favors single-request latency over throughput.
 # vLLM: --tensor-parallel-size; SGLang: --tp-size
@@ -807,9 +871,21 @@ if [ -z "${TENSOR_PARALLEL}" ]; then
   fi
 fi
 
-# Single-GPU prefill activation can spike past the ~30 GB free after V4-Flash
-# weights. vLLM: --max-num-batched-tokens; SGLang: --max-prefill-tokens
-if [ "${GPU_COUNT}" = "1" ]; then
+# Prefill activation cap. Triggers whenever per-GPU headroom is tight: either
+# (a) we know KV_BUDGET and per-GPU headroom is < 40 GiB (e.g. 1×B200, 4×A40),
+# or (b) we couldn't compute KV_BUDGET but GPU_COUNT==1 (legacy fallback for
+# unknown models). vLLM: --max-num-batched-tokens; SGLang: --max-prefill-tokens
+PER_GPU_HEADROOM=0
+if [ "$KV_BUDGET" -gt 0 ] && [ "$GPU_COUNT" -gt 0 ]; then
+  PER_GPU_HEADROOM=$((KV_BUDGET / GPU_COUNT))
+fi
+NEED_PREFILL_CAP=0
+if [ "$PER_GPU_HEADROOM" -gt 0 ] && [ "$PER_GPU_HEADROOM" -lt 40 ]; then
+  NEED_PREFILL_CAP=1
+elif [ "$KV_BUDGET" = 0 ] && [ "${GPU_COUNT}" = "1" ]; then
+  NEED_PREFILL_CAP=1
+fi
+if [ "$NEED_PREFILL_CAP" = 1 ]; then
   if [ "$ENGINE_SLUG" = "vllm" ] && ! has_extra_flag --max-num-batched-tokens; then
     EXTRA_ARGS="--max-num-batched-tokens ${MAX_NUM_BATCHED_TOKENS} ${EXTRA_ARGS}"
   elif [ "$ENGINE_SLUG" = "sglang" ] && ! has_extra_flag --max-prefill-tokens; then

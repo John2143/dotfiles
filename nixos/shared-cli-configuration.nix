@@ -352,7 +352,11 @@
     wants = [ "network-online.target" ];
     serviceConfig = {
       Type = "oneshot";
-      ExecStart = "${pkgs.attic-client}/bin/attic login nas http://nas:8280 /run/agenix/attic-admin-token";
+      # `attic login` takes the literal token string, not a file path.
+      # Read it from the agenix mount at start time.
+      ExecStart = pkgs.writeShellScript "attic-login" ''
+        exec ${pkgs.attic-client}/bin/attic login nas http://nas:8280 "$(cat /run/agenix/attic-admin-token)"
+      '';
       RemainAfterExit = true;
     };
     wantedBy = [ "default.target" ];
