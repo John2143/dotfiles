@@ -4,9 +4,9 @@
 # in PowerDNS on first boot. Uses pdnsutil (pdns 5.0.x command syntax).
 # State file prevents re-run.
 #
-# Only runs on nodes with PowerDNS (Ashburn, Nuremberg, Home Pi).
-# Only one node needs to create the zone — Galera replicates it.
-# Uses a state file guard so it only runs once cluster-wide.
+# Runs on all 3 server nodes + Home Pi (via mkServer/mkHome).
+# Only the first node to execute creates the zone — Galera replicates to others.
+# State file guard prevents re-execution on any node.
 #
 # NOTE: pdns 5.0.x renamed many subcommands:
 #   create-zone → zone create

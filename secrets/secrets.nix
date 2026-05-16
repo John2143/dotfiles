@@ -16,6 +16,9 @@ let
   security = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAILO6ntnqr4ERZLUdL2MOMeC++HPIsigce4d42h8UogA2 john@security";
   secu = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIN4vMixKG/e9b3ttJy9Xb5ymavp7Gny6dxKrViQl8AUl john@secu";
   nas = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIPzgxUuaZUG9Dr5ZTZImKqt3SUSPVD/FLO2wKQfwz98A john@nas";
+  # NOTE: mac is a work computer. Only grant it keys that are work-appropriate
+  # (LLM API keys, admin tools). Do NOT grant: hass-credentials, ntfy-topic-url,
+  # restic passwords, smb credentials, gocryptfs, NAS, or personal secrets.
   mac = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDOnQAO6xyPOM67ut324LHAm07OQ67bKJ0R9c0aTWA1o jschmidt@DCIL-L562P1Q5NQ-M";
   # generate with `ssh-keygen -f ~/.ssh/age; cat ~/.ssh/age.pub -p` on each host, then paste here
 
@@ -72,7 +75,7 @@ in {
   # a webhook on use. See nixos/pite-canary.nix.
   "llm-runtime-keys-bait.age".publicKeys = [pite];
 
-  "hass-credentials.age".publicKeys = [arch];
+  "hass-credentials.age".publicKeys = [office arch];
   "canary-tokens.age".publicKeys = [office arch pite];
 
   # Vast.ai credentials — combined API key + SSH private key. Both are
@@ -108,5 +111,5 @@ in {
   # ntfy.sh topic URL for OMP agent notifications. Topic name is not a
   # cryptographic secret (public server, anyone with the name can publish),
   # but keeping it out of the Nix store avoids accidental exposure.
-  "ntfy-topic-url.age".publicKeys = [office arch mac];
+  "ntfy-topic-url.age".publicKeys = [office arch];
 }

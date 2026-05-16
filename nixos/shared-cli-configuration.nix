@@ -298,6 +298,18 @@
       group = "users";
     };
 
+  # Home Assistant long-lived access token. Used by omp system prompt for
+  # critical iOS notifications (bypasses Do Not Disturb / mute).
+  age.secrets.hass-credentials =
+    lib.mkIf
+    (builtins.elem config.networking.hostName ["office" "arch"])
+    {
+      file = ../secrets/hass-credentials.age;
+      mode = "0400";
+      owner = "john";
+      group = "users";
+    };
+
   # Admin key (ANTHROPIC_ADMIN_KEY) — sourced by `llm-load-keys` for interactive
   # `llm-costs` and `llm-topup-anthropic` use. Never mounted on pite.
   age.secrets.llm-admin-keys =

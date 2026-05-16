@@ -12,28 +12,26 @@ tool-hints: |
   Research files live inside ai_research/{topic-slug}/ — never write research content outside this directory.
 ---
 
-Parse `$ARGUMENTS` using these rules exactly, in order:
+Parse `$ARGUMENTS` by running the deterministic parser script — do NOT manually reason about quote positions:
 
-1. **Strip outer quotes from the raw argument string.** If `$ARGUMENTS` starts AND ends with the same quote character (`"` or `'`), strip those outer characters. After this step you have the user's literal input. Example: raw `'"What is X?" focus here'` → stripped `"What is X?" focus here`.
+```bash
+eval "$(.claude/skills/web-researcher/parse-args.py << 'ARGSEOF'
+<paste the raw $ARGUMENTS string here exactly as you received it>
+ARGSEOF
+)"
+```
 
-2. **Extract `$RESEARCH_QUESTION`.** Scan the stripped string for the first `"` (double-quote) character.
-   - **Found:** Capture everything after that `"` up to the next `"`. The text between the quotes (without the quote marks) is `$RESEARCH_QUESTION`. The closing `"` marks the boundary — everything after it is `$CONTEXT`.
-   - **Not found (user wrote plain text without quotes):** The entire stripped string IS `$RESEARCH_QUESTION` and `$CONTEXT` is empty. Do NOT ask for clarification just because quotes are missing — the user's intent is clear.
-   - **Only ask "What is the primary research question…"** if `$ARGUMENTS` is literally empty or whitespace-only after stripping.
+This sets `$RESEARCH_QUESTION`, `$CONTEXT`, `$TOPIC_SLUG`, and `$EMPTY` as shell variables.
 
-3. **Extract `$CONTEXT`.** All text after the closing `"` (or empty string if no closing quote). Strip leading whitespace. Pass `$CONTEXT` verbatim to every sub-agent.
-
-4. **Derive `$TOPIC_SLUG`** by running this exact bash snippet (substitutes `$RESEARCH_QUESTION` into an env var, pipes through slugify, captures output):
-   ```bash
-   TOPIC_SLUG=$(printf '%s' "$RESEARCH_QUESTION" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9]/-/g; s/-\+/-/g; s/^-//; s/-$//' | cut -c1-64)
-   if [ -z "$TOPIC_SLUG" ]; then echo "EMPTY_SLUG"; else echo "$TOPIC_SLUG"; fi
-   ```
-   If the output is `EMPTY_SLUG`, ask the user to rephrase.
+- If `$EMPTY` is `true`: the arguments were empty or whitespace-only. Ask "What is the primary research question…?"
+- Otherwise: `$RESEARCH_QUESTION` is the question text, `$CONTEXT` is everything after the closing quote (may be empty).
+- Pass `$CONTEXT` verbatim to every sub-agent.
 
 Example invocations:
 - `/skill:web-researcher "find me a variety of cake recipes" focus on medium difficulty, at-home cakes. I can do decorating well. exclude fondant.`
-  → `$RESEARCH_QUESTION` = `"find me a variety of cake recipes"`, `$CONTEXT` = `focus on medium difficulty, at-home cakes. I can do decorating well. exclude fondant.`
+  → `$RESEARCH_QUESTION` = `find me a variety of cake recipes`, `$CONTEXT` = `focus on medium difficulty, at-home cakes. I can do decorating well. exclude fondant.`
 - `/skill:web-researcher "how effective are four-day work weeks in tech companies?"`
+  → `$RESEARCH_QUESTION` = `how effective are four-day work weeks in tech companies?`, `$CONTEXT` is empty
 
 ---
 

@@ -29,8 +29,8 @@
       "ecdsa-sha2-nistp256 AAAAE2VjZHNhLXNoYTItbmlzdHAyNTYAAAAIbmlzdHAyNTYAAABBBHjc0NNrHCwjrBUvUByFoFPW9vKGVFsWVD6LoKp1FLtNaIjyigMTYXoCKZSNNguKdNwUiyqKIZfCExZmgc3Cccw= phone"
     ];
 
-    # All 3 server nodes are identical. Hillsboro runs PowerDNS + Galera too
-    # (enables rolling node rotation — every node is a drop-in replacement).
+    # All 3 server nodes are fully identical — drop-in replaceable.
+    # Each runs k3s + PowerDNS + Galera via the same mkServer function.
     mkServer = { compName, galeraOffset }: nixpkgs.lib.nixosSystem {
       inherit system;
       specialArgs = { inherit inputs compName galeraOffset; sshKeys = my-keys; };

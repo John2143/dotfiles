@@ -337,12 +337,6 @@ in
   # doesn't trip exit-code-4 in switch-to-configuration's post-activation scan.
   systemd.services.openrgb.enable = lib.mkForce false;
 
-  age.secrets.hass-credentials = {
-    file = ../secrets/hass-credentials.age;
-    owner = "john";
-    group = "root";
-    mode = "0400";
-  };
 
   custom.k3sNodeTaints = ["seated=true:NoSchedule"];
   custom.backup.enable = true;

@@ -337,6 +337,13 @@ in
       ntfy.sh for job completion and status updates only (not questions):
         curl -H "Priority: max" -H "Tags: warning" -d "message" "$NTFY_TOPIC_URL"
 
+      Home Assistant for critical alerts that must bypass Do Not Disturb / silent mode:
+        TOKEN=$(cat /run/agenix/hass-credentials 2>/dev/null)
+        curl -sf -X POST -H "Authorization: Bearer $TOKEN" \
+          -H "Content-Type: application/json" \
+          -d '{"title":"TITLE","message":"MESSAGE","data":{"push":{"sound":{"name":"default","critical":1,"volume":1.0}}}}' \
+          "https://home.ts.2143.me/api/services/notify/mobile_app_johns_iphone_16_pro"
+
       Fallback: notify-send for local desktop. Craft an SVG, convert to PNG,
       save to /tmp/dunstimg-{desc}.png:
         notify-send -u critical "Title" "Body" -h string:image-path:/tmp/dunstimg-{desc}.png -A "key=Label"

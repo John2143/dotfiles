@@ -1,9 +1,9 @@
 # Hetzner k3s Common — shared k3s + Cilium + ArgoCD + firewall config
 #
-# Imported by hetzner-k3s-server.nix (adds PowerDNS + Galera)
-# and by hillsboro-server.nix (no DNS/DB needed).
+# Imported by hetzner-k3s-server.nix (adds PowerDNS + Galera on top).
+# All 3 server nodes are identical — drop-in replaceable.
 #
-# Does NOT import PowerDNS or Galera modules.
+# Does NOT import PowerDNS or Galera modules (those are in k3s-server).
 {
   config,
   lib,
