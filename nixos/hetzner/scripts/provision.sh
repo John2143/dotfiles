@@ -109,10 +109,11 @@ echo "    age identity copied"
 nixos-rebuild switch --flake "${FLAKE}" --target-host "root@${IP}" --use-remote-sudo 2>/dev/null || true
 echo "    agenix secrets decrypted"
 
-# Import pdns schema (needed before pdns can start; pdns 5.0.x uses MySQL backend)
+# Import pdns schema (needed before pdns can start)
 if [[ "$ROLE" == "server" ]]; then
   PDNS_SCHEMA=$(ssh "root@${IP}" "find /nix/store -path '*/pdns*schema.mysql.sql' -not -name '*to_*' -not -name '*dnssec*' | head -1")
-  ssh "root@${IP}" "mysql -u pdns -ppdns pdns < ${PDNS_SCHEMA} 2>/dev/null || mysql -u root --socket=/run/mysqld/mysqld.sock pdns < ${PDNS_SCHEMA} 2>/dev/null || true"
+  ssh "root@${IP}" "mysql -u root --socket=/run/mysqld/mysqld.sock -e 'CREATE DATABASE IF NOT EXISTS pdns; DROP USER IF EXISTS \"pdns\"@\"localhost\"; CREATE USER \"pdns\"@\"localhost\" IDENTIFIED BY \"pdns\"; GRANT ALL PRIVILEGES ON pdns.* TO \"pdns\"@\"localhost\"; FLUSH PRIVILEGES;' 2>/dev/null"
+  ssh "root@${IP}" "mysql -u pdns -ppdns pdns < ${PDNS_SCHEMA} 2>/dev/null || true"
   echo "    pdns schema imported"
 fi
 
@@ -120,7 +121,7 @@ fi
 echo "  [6/7] Connecting tailscale..."
 AUTHKEY=$(ssh "root@${IP}" "cat /run/agenix/hetzner/headscale-preauth-key 2>/dev/null" || echo "")
 if [ -n "$AUTHKEY" ]; then
-  ssh "root@${IP}" "tailscale up --login-server=http://headscale.9s.pics:6767 --authkey=${AUTHKEY} --accept-routes 2>&1 || true"
+  ssh "root@${IP}" "systemctl restart tailscaled 2>/dev/null || true; sleep 3; tailscale up --reset --login-server=http://headscale.9s.pics:6767 --authkey=${AUTHKEY} --accept-routes 2>&1 || true"
   echo "    tailscale connected"
 else
   echo "    WARNING: no preauth key found, tailscale not connected"

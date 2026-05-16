@@ -3,10 +3,10 @@
 # (vast-bootstrap fish function in nixos/home-cli.nix) sets these env vars
 # from /run/agenix/vast-credentials + ~/.config/vast/profile + defaults:
 #
-#   ENGINE             inference engine: "sglang" (default) or "vllm"
-#                        SGLang recommended for DeepSeek V4 — zero CJK token
-#                        injection vs vLLM's 50-75% rate (vllm#41985 unfixed).
-#                        vLLM kept for A/B comparison and non-DS models.
+#   ENGINE             inference engine: "vllm" (default) or "sglang"
+#                        vLLM recommended for DeepSeek V4 — vllm#41985 (CJK token
+#                        injection) fixed in v0.21.0+ (PR #42287, 2026-05-11).
+#                        SGLang kept as fallback for A/B comparison and non-DS models.
 #   MODEL              HF model id (required)
 #   SERVED             served-model-name exposed on the OpenAI API (default deepseek-v4-flash)
 #   SERVE_PORT         listen port inside the rental (default 8000)
@@ -64,9 +64,9 @@
 # below: Ampere) goes through Marlin W8A16 dequant — quality identical, ~2-3×
 # compute slowdown on prefill, decode mostly unaffected (memory-bound). vLLM
 # is preferred over SGLang on non-native FP8 for DSv4 (more mature Marlin).
-# SGLang on DSv4 produces zero CJK bad tokens vs vLLM's 50-75% (vllm#41985);
-# no sampling overrides needed. When ENGINE=vllm, DeepSeek V4 gets temp=0.6/
-# top_p=0.95/top_k=40 as a workaround for the MLA Attention FP8 precision bug.
+# vllm#41985 (CJK token injection) fixed in v0.21.0 (PR #42287: swiglu_limit
+# clamp on marlin MoE backend). No sampling workarounds needed for vLLM ≥ 0.21.0.
+# Root cause was SwiGLU activation clamping, not MLA Attention FP8.
 #
 # Idempotent: if a server is already responding on $SERVE_PORT it exits 0
 # unless FORCE_RESTART is set.
@@ -77,7 +77,7 @@
 # missing. The venv lives at /workspace/venv and persists across reboots.
 set -euo pipefail
 
-: "${ENGINE:=sglang}"
+: "${ENGINE:=vllm}"
 : "${MODEL:?missing MODEL}"
 : "${SERVED:=deepseek-v4-flash}"
 # SERVE_PORT is the canonical name; VLLM_PORT still accepted for backward compat.
@@ -193,21 +193,16 @@ has_extra_flag() {
   printf '%s\n' "$EXTRA_ARGS" | grep -qE -- "(^|[[:space:]])$1([[:space:]]|=|\$)"
 }
 
-# vLLM-specific DeepSeek V4 workarounds. SGLang needs none of these —
-# its MLA attention implementation has correct FP8 precision (zero CJK
-# bad tokens vs vLLM's 50-75% at temp=1.0/top_p=1.0, per vllm#41985).
+# vLLM-specific DeepSeek V4 config. vllm#41985 (CJK token injection, 50-75%
+# bad token rate) is fixed in v0.21.0+ via PR #42287 (swiglu_limit clamp on
+# marlin MoE backend). The temp=0.6 sampling workaround has been removed.
+# SGLang has its own MLA attention path; no DSv4-specific config needed.
 if [ "$ENGINE_SLUG" = "vllm" ]; then
   case "$MODEL" in
     *DeepSeek-V4*|*deepseek-v4*)
       if ! has_extra_flag --kv-cache-dtype; then
         echo "Auto-setting --kv-cache-dtype fp8 for DeepSeek V4 (vLLM)."
         EXTRA_ARGS="--kv-cache-dtype fp8 ${EXTRA_ARGS}"
-      fi
-      # Sampling override for vllm#41985 (CJK token injection) +
-      # repetition collapse. Drop when vllm#41985 closes. See header.
-      if ! has_extra_flag --override-generation-config; then
-        echo "Auto-overriding sampling: temp=0.6 top_p=0.95 top_k=40 (vllm#41985 + repetition collapse)."
-        EXTRA_ARGS="--override-generation-config {\"temperature\":0.6,\"top_p\":0.95,\"top_k\":40} ${EXTRA_ARGS}"
       fi
       if [ -z "$TOOL_PARSER" ] && ! has_extra_flag --tool-call-parser; then
         echo "Auto-setting --tool-call-parser deepseek_v4 for DeepSeek V4 (vLLM)."
@@ -220,7 +215,7 @@ if [ "$ENGINE_SLUG" = "vllm" ]; then
       ;;
   esac
 else
-  echo "ENGINE=sglang: no DeepSeek V4 workarounds needed (MLA attention precision is correct)."
+  echo "ENGINE=sglang: SGLang's MLA attention path has correct precision (no CJK injection)."
 fi
 
 # Background sampler: nvidia-smi GPU stats + vLLM /metrics scrape, every 5s,

@@ -11,14 +11,33 @@ tool-hints: |
   Use `ast_grep` for structural code search and rewrites.
 ---
 
-Parse `$ARGUMENTS`:
-- Normalize the argument: strip leading `./`, trailing `/`, and surrounding whitespace before matching.
-- If the normalized argument starts with `@`, strip the `@` — this prefix means the file was passed automatically by the harness context, not by the user. Treat the rest of the argument normally.
-- If the normalized argument is exactly `loop`, follow **Mode: Loop Prompt Generation** below.
-- If the normalized argument is a quoted string (starts and ends with `"`), strip the quotes and treat the content as inline prompt text — follow **Mode: Inline Prompt Optimization** below.
-- If the normalized argument is a path to an existing regular file, follow **Mode: Prompt Improvement** below.
-- If the normalized argument matches no existing file and is not a quoted string: treat it as inline prompt text — follow **Mode: Inline Prompt Optimization** below.
-- If no argument was given, ask the user: "Do you want to (1) improve an existing prompt file, (2) optimize a short prompt inline, or (3) generate a loop prompt for this repo?"
+
+### Parse `$ARGUMENTS`
+
+Run the deterministic parser script — do NOT manually reason about quote positions, `@` prefixes, path normalization, or file existence:
+
+```bash
+eval "$(.claude/skills/prompt-engineer/parse-args.py << 'ARGSEOF'
+<paste the raw $ARGUMENTS string here exactly as you received it>
+ARGSEOF
+)"
+```
+
+This sets `$MODE`, `$TEXT`, `$PROMPT_PATH`, and `$HAS_AT_PREFIX` as shell variables.
+
+| Variable | Meaning |
+|----------|---------|
+| `$MODE` | `loop`, `inline`, `file`, or `ask` |
+| `$TEXT` | For `loop` mode: `"loop"`. For `inline` mode: the extracted prompt text (already de-quoted). For `file`/`ask`: empty. |
+| `$PROMPT_PATH` | For `file` mode: the normalized file path. Otherwise empty. |
+| `$HAS_AT_PREFIX` | `true` if the original argument had an `@` prefix (file was auto-attached by harness context, not user input). |
+
+Mode routing:
+- If `$MODE` is `ask`: the user provided no argument. Ask: "Do you want to (1) improve an existing prompt file, (2) optimize a short prompt inline, or (3) generate a loop prompt for this repo?"
+- If `$MODE` is `loop`: follow **Mode: Loop Prompt Generation** below.
+- If `$MODE` is `file`: use `$PROMPT_PATH` as the file to improve. Follow **Mode: Prompt Improvement** below.
+- If `$MODE` is `inline`: use `$TEXT` as the inline prompt text. Follow **Mode: Inline Prompt Optimization** below.
+- `$HAS_AT_PREFIX` is informational — you may note it but it does not change routing.
 
 ---
 
