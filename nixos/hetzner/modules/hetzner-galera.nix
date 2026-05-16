@@ -29,12 +29,15 @@
       innodb_flush_log_at_trx_commit = 2;
       innodb_buffer_pool_size = "128M";
 
+      # Galera requires ROW-based binary logging
+      binlog_format = "ROW";
+
       wsrep_provider = "${pkgs.mariadb-galera}/lib/galera/libgalera_smm.so";
       wsrep_on = 1;  # Required in MariaDB 11.x (defaults to OFF)
       wsrep_cluster_name = "powerdns";
       wsrep_cluster_address = lib.mkDefault "gcomm://";
       wsrep_node_name = lib.mkDefault "${config.networking.hostName}";
-      wsrep_node_address = lib.mkDefault "0.0.0.0";  # Auto-detect from hostname DNS
+      wsrep_node_address = lib.mkDefault "";  # Auto-detect from hostname
 
       wsrep_sst_method = "rsync";
       wsrep_slave_threads = 2;
