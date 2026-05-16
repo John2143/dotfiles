@@ -763,29 +763,43 @@ elif [ "$ENGINE_SLUG" = "sglang" ] && ! engine_importable sglang; then
   bootstrap_venv_and_install "sglang[all]"
 fi
 
-# DeepSeek V4 ships `model_type: "deepseek_v4"` in its config.json. The
-# released transformers version that sglang/vllm pin doesn't know about
-# this model_type and trust_remote_code can't recover (the model repo
-# doesn't expose auto_map for the base config). Upgrade transformers from
-# git for DSv4 models — idempotent, only runs if the model_type isn't
-# already registered. Must happen AFTER engine install since sglang/vllm
-# pin transformers and would otherwise downgrade it.
-case "$MODEL" in
-  *DeepSeek-V4*|*deepseek-v4*)
-    if [ -x /workspace/venv/bin/python ] && \
-       ! /workspace/venv/bin/python -c 'from transformers.models.auto.configuration_auto import CONFIG_MAPPING; assert "deepseek_v4" in CONFIG_MAPPING' >/dev/null 2>&1; then
-      echo "Upgrading transformers from git (DSv4 model_type not yet in released transformers) ..."
-      emit_event transformers_upgrade_start ""
-      if pip_install_retry --upgrade \
-           'git+https://github.com/huggingface/transformers.git'; then
-        emit_event transformers_upgrade_done ""
-      else
-        emit_event transformers_upgrade_failed ""
-        echo "Warning: transformers git upgrade failed — DSv4 may not load." >&2
+# DeepSeek V4 ships `model_type: "deepseek_v4"` in its config.json. Released
+# transformers doesn't know this model_type, and trust_remote_code can't
+# recover (the model repo doesn't expose auto_map for the base config).
+#
+# Engine-specific behavior:
+#   - vllm has its own model registry that maps deepseek_v4 → DeepseekV4ForCausalLM
+#     and loads weights efficiently in FP8. No transformers upgrade needed.
+#   - sglang versions before native deepseek_v4 support fall back to the
+#     generic transformers backend, which works but loads weights via the
+#     HF wrapper (~15-20% extra VRAM). For 1×B200 (179 GiB) this fallback
+#     OOMs V4-Flash at load time. Upgrading transformers from git lets the
+#     fallback at least *try* — fixes the AutoConfig KeyError — but won't
+#     rescue the OOM. The real fix on sglang is either >=2 B200s or installing
+#     sglang from git (whichever release first registers deepseek_v4 natively).
+#
+# So we only do the transformers upgrade when ENGINE=sglang. vllm is left
+# alone with its pinned transformers.
+if [ "$ENGINE_SLUG" = "sglang" ]; then
+  case "$MODEL" in
+    *DeepSeek-V4*|*deepseek-v4*)
+      if [ -x /workspace/venv/bin/python ] && \
+         ! /workspace/venv/bin/python -c 'from transformers.models.auto.configuration_auto import CONFIG_MAPPING; assert "deepseek_v4" in CONFIG_MAPPING' >/dev/null 2>&1; then
+        echo "Upgrading transformers from git (DSv4 model_type not yet in released transformers) ..."
+        echo "Note: sglang's transformers-fallback uses ~15-20% extra VRAM vs native;"
+        echo "      1×B200 may still OOM. If so, switch to VAST_ENGINE=vllm."
+        emit_event transformers_upgrade_start ""
+        if pip_install_retry --upgrade \
+             'git+https://github.com/huggingface/transformers.git'; then
+          emit_event transformers_upgrade_done ""
+        else
+          emit_event transformers_upgrade_failed ""
+          echo "Warning: transformers git upgrade failed — DSv4 may not load." >&2
+        fi
       fi
-    fi
-    ;;
-esac
+      ;;
+  esac
+fi
 
 if ! command -v nvidia-smi >/dev/null 2>&1; then
   echo "Warning: nvidia-smi not found inside the rental. ${ENGINE_SLUG} will likely fail to start." >&2

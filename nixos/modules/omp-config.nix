@@ -334,9 +334,12 @@ in
       Prefer `--model="office-ollama/qwen3.6:27b"` for cheap background queries; save paid models for complex work.
       </agent-cron>
       <user-notification>
-      To ping the user when blocked: craft an SVG illustrating the problem, convert to PNG (`convert in.svg out.png`), save to `/tmp/dunstimg-{desc}.png`, then:
+      ntfy.sh for job completion and status updates only (not questions):
+        curl -H "Priority: max" -H "Tags: warning" -d "message" "$NTFY_TOPIC_URL"
+
+      Fallback: notify-send for local desktop. Craft an SVG, convert to PNG,
+      save to /tmp/dunstimg-{desc}.png:
         notify-send -u critical "Title" "Body" -h string:image-path:/tmp/dunstimg-{desc}.png -A "key=Label"
-      Use sparingly — only when the user is not watching the terminal.
       </user-notification>
     '';
   };

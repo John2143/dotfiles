@@ -84,6 +84,11 @@
             . /run/agenix/llm-runtime-keys
             set +a
           fi
+          if [ -f /run/agenix/ntfy-topic-url ]; then
+            set -a
+            . /run/agenix/ntfy-topic-url
+            set +a
+          fi
           ${omp-unwrapped}/bin/omp --system-prompt "$HOME/.omp/agent/system-prompt.md" "$@"
           # exec ${pkgs.bubblewrap}/bin/bwrap \
           #   --ro-bind /nix/store /nix/store \
@@ -276,6 +281,18 @@
     (builtins.elem config.networking.hostName ["office" "arch" "pite"])
     {
       file = ../secrets/llm-runtime-keys.age;
+      mode = "0400";
+      owner = "john";
+      group = "users";
+    };
+
+  # ntfy.sh topic URL for agent notifications. Sourced by omp wrapper
+  # so the agent can ping the user when blocked.
+  age.secrets.ntfy-topic-url =
+    lib.mkIf
+    (builtins.elem config.networking.hostName ["office" "arch"])
+    {
+      file = ../secrets/ntfy-topic-url.age;
       mode = "0400";
       owner = "john";
       group = "users";

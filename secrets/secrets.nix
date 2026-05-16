@@ -105,4 +105,8 @@ in {
   # push/pull. Generated once on the NAS with atticd-atticadm make-token.
   # Encrypt to all NixOS hosts that import shared-cli-configuration.nix.
   "attic-admin-token.age".publicKeys = [office arch closet secu nas pite vpin];
+  # ntfy.sh topic URL for OMP agent notifications. Topic name is not a
+  # cryptographic secret (public server, anyone with the name can publish),
+  # but keeping it out of the Nix store avoids accidental exposure.
+  "ntfy-topic-url.age".publicKeys = [office arch mac];
 }
