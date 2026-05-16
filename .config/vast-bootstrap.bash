@@ -669,6 +669,10 @@ command -v gcc >/dev/null 2>&1 || NEED_APT=1
 python3 -c 'import ensurepip, venv' >/dev/null 2>&1 || NEED_APT=1
 PYVER=$(python3 -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")' 2>/dev/null || echo "")
 [ -n "$PYVER" ] && [ -e "/usr/include/python${PYVER}/Python.h" ] || NEED_APT=1
+# libnuma.so.1 is a runtime dep of sgl_kernel and vllm's NUMA binding. The
+# cuda devel image doesn't ship it; without it sgl_kernel's prebuilt wheel
+# fails to load even though the .so is on disk.
+ldconfig -p 2>/dev/null | grep -q 'libnuma\.so\.1' || NEED_APT=1
 if [ "$NEED_APT" = 1 ]; then
   echo "Installing python3 + pip + venv + dev headers + build-essential via apt ..."
   emit_event apt_install_start ""
@@ -677,7 +681,8 @@ if [ "$NEED_APT" = 1 ]; then
     if apt-get update -qq && apt-get install -y -qq --no-install-recommends \
       python3 python3-pip python3-venv python3-dev \
       build-essential ca-certificates curl \
-      moreutils gawk; then
+      moreutils gawk \
+      libnuma1; then
       APT_OK=1
       break
     fi
@@ -757,6 +762,30 @@ elif [ "$ENGINE_SLUG" = "sglang" ] && ! engine_importable sglang; then
   echo "sglang not importable; bootstrapping venv + sglang ..."
   bootstrap_venv_and_install "sglang[all]"
 fi
+
+# DeepSeek V4 ships `model_type: "deepseek_v4"` in its config.json. The
+# released transformers version that sglang/vllm pin doesn't know about
+# this model_type and trust_remote_code can't recover (the model repo
+# doesn't expose auto_map for the base config). Upgrade transformers from
+# git for DSv4 models — idempotent, only runs if the model_type isn't
+# already registered. Must happen AFTER engine install since sglang/vllm
+# pin transformers and would otherwise downgrade it.
+case "$MODEL" in
+  *DeepSeek-V4*|*deepseek-v4*)
+    if [ -x /workspace/venv/bin/python ] && \
+       ! /workspace/venv/bin/python -c 'from transformers.models.auto.configuration_auto import CONFIG_MAPPING; assert "deepseek_v4" in CONFIG_MAPPING' >/dev/null 2>&1; then
+      echo "Upgrading transformers from git (DSv4 model_type not yet in released transformers) ..."
+      emit_event transformers_upgrade_start ""
+      if pip_install_retry --upgrade \
+           'git+https://github.com/huggingface/transformers.git'; then
+        emit_event transformers_upgrade_done ""
+      else
+        emit_event transformers_upgrade_failed ""
+        echo "Warning: transformers git upgrade failed — DSv4 may not load." >&2
+      fi
+    fi
+    ;;
+esac
 
 if ! command -v nvidia-smi >/dev/null 2>&1; then
   echo "Warning: nvidia-smi not found inside the rental. ${ENGINE_SLUG} will likely fail to start." >&2
