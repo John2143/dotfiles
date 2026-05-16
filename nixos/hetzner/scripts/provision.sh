@@ -37,8 +37,7 @@ case "${REGION}-${ROLE}" in
   *) echo "Unknown region/role: ${REGION}-${ROLE}"; exit 1 ;;
 esac
 
-FLAKE_ATTR="nixosConfigurations.${HOSTNAME}"
-FLAKE=".#${FLAKE_ATTR}"
+FLAKE=".#${HOSTNAME}"
 
 echo "=== Provisioning ${HOSTNAME} (${PLAN}, ${LOCATION}) ==="
 
@@ -50,7 +49,7 @@ SERVER_ID=$(hcloud server create \
   --type "${PLAN}" \
   --location "${LOCATION}" \
   --ssh-key john@arch \
-  --output-format json \
+  -o json \
   | jq -r '.server.id')
 
 echo "  VM created: ${SERVER_ID}"
@@ -68,17 +67,20 @@ echo "  Protected IP: ${PROTECTED_IP}"
 # Allocate a second floating IP for raw game/TS/DERP traffic
 RAW_IP=""
 if hcloud floating-ip list | grep -q "${HOSTNAME}" ; then
-  RAW_IP=$(hcloud floating-ip list --output-format json | jq -r '.[] | select(.description=="'"${HOSTNAME}-raw"'") | .ip')
-  echo "  Reusing existing raw IP: ${RAW_IP}"
+  RAW_IP_ID=$(hcloud floating-ip list -o json | jq -r '.[] | select(.description=="'"${HOSTNAME}-raw"'") | .id')
+  echo "  Reusing existing raw IP ID: ${RAW_IP_ID}"
 else
-  RAW_IP=$(hcloud floating-ip create \
+  RAW_IP_ID=$(hcloud floating-ip create \
     --description "${HOSTNAME}-raw" \
     --home-location "${LOCATION}" \
     --type ipv4 \
-    --output-format json | jq -r '.floating_ip.ip')
-  hcloud floating-ip assign "${RAW_IP}" "${SERVER_ID}"
-  echo "  Raw IP created: ${RAW_IP}"
+    -o json | jq -r '.floating_ip.id')
+  hcloud floating-ip assign "${RAW_IP_ID}" "${SERVER_ID}"
+  echo "  Raw IP created and assigned"
 fi
+# Get the actual raw IP for display
+RAW_IP=$(hcloud floating-ip describe "${RAW_IP_ID}" -o json 2>/dev/null | jq -r '.floating_ip.ip // .ip // "unknown"')
+
 
 # ── Step 3: Deploy NixOS via nixos-anywhere ──
 echo "  [2/4] Deploying NixOS..."

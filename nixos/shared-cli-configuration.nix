@@ -7,6 +7,7 @@
   pkgs,
   pkgs-stable,
   inputs,
+  compName,
   ...
 }: {
   # flakes
@@ -18,12 +19,16 @@
   nix.settings.extra-substituters = [
     "https://cache.numtide.com"
     "https://claude-code.cachix.org"
+    "http://nas:8280/2143nix"
   ];
   nix.settings.extra-trusted-public-keys = [
     "niks3.numtide.com-1:DTx8wZduET09hRmMtKdQDxNNthLQETkc/yaX7M4qK0g="
     "claude-code.cachix.org-1:YeXf2aNu7UTX8Vwrze0za1WEDS+4DuI2kVeWEE4fsRk="
+    "2143nix:Ysam0ozURtK+1tkP62M6lzbfoi8BVeL6s7ZWJlB6UxE="
   ];
 
+
+  # Attic self-hosted Nix cache on NAS (nas:8280)
   #nix.gc.automatic = true;
 
   # setup my two input channels
@@ -32,6 +37,14 @@
   };
   nixpkgs.overlays = [
     (import ./overlays/claw-overlay.nix)
+    (final: prev: {
+      btop =
+        if compName == "office"
+        then prev.btop.override {rocmSupport = true;}
+        else if compName == "arch"
+        then prev.btop.override {cudaSupport = true;}
+        else prev.btop;
+    })
   ];
 
   _module.args.pkgs-stable = import inputs.nixpkgs-stable {
@@ -59,30 +72,11 @@
       # uv on PATH so my_claw (in fish-functions.nix) can `uvx litellm`
       # without needing a writeShellScriptBin nix-store substitution.
       pkgs.uv
-      # omp wrapper: sandboxed via bubblewrap so a compromised binary can't
-      # read /run/agenix/*, ~/.ssh, or the dotfiles secrets directory.
-      # omp is a status display tool that doesn't need broad filesystem access.
+      # omp wrapper: consumes the fork's own flake (John2143/oh-my-pi#omp).
+      # Bump via `nix flake update oh-my-pi`. All build hashes (cargoHash,
+      # bun.nix) live in the fork.
       (let
-        omp-src = pkgs.fetchFromGitHub {
-          owner = "John2143";
-          repo = "oh-my-pi";
-          rev = "7f8fabf9e1eb5ac77b2021c03ff6ab776dd04a80";
-          hash = "sha256-lLz19UZ99bEC3ZcMpPwmcDfrW2psnDRQRCFi2Sh68ok=";
-        };
-        omp-unwrapped = (inputs.llm-agents.packages.${pkgs.stdenv.hostPlatform.system}.omp.overrideAttrs (old: {
-          version = "14.9.3";
-          src = omp-src;
-          cargoDeps = pkgs.rustPlatform.fetchCargoVendor {
-            name = "omp-14.9.3-cargo-vendor";
-            src = omp-src;
-            hash = "sha256-lSWYXvk4w3QFt4FdlvAqdEJF8rV8CIfG35Mu3Iq7QFM=";
-          };
-          bunDeps = let
-            bun2nix' = (pkgs.extend inputs.llm-agents.inputs.bun2nix.overlays.default).bun2nix;
-          in bun2nix'.fetchBunDeps {
-            bunNix = ./omp-bun.nix;
-          };
-        }));
+        omp-unwrapped = inputs.oh-my-pi.packages.${pkgs.stdenv.hostPlatform.system}.omp;
       in
       pkgs.writeShellScriptBin "omp" ''
           if [ -f /run/agenix/llm-runtime-keys ]; then
@@ -328,6 +322,18 @@
       group = "users";
     };
 
+  # Attic admin token — authenticates this machine to the NAS cache.
+  # All NixOS hosts that push/pull need this.
+  age.secrets.attic-admin-token =
+    lib.mkIf
+    (builtins.elem config.networking.hostName ["office" "arch" "closet" "secu" "nas" "pite" "vpin"])
+    {
+      file = ../secrets/attic-admin-token.age;
+      mode = "0400";
+      owner = "john";
+      group = "users";
+    };
+
   # # Open ports in the firewall.
   # networking.firewall.allowedTCPPorts = [
   #   5353 # avahi
@@ -336,4 +342,39 @@
   # networking.firewall.allowedUDPPorts = [  ];
   # Or disable the firewall altogether.
   networking.firewall.enable = false;
+
+
+  # Attic login — oneshot that authenticates to the NAS cache before
+  # watch-store starts. Uses the age-encrypted admin token.
+  systemd.user.services.attic-login = {
+    description = "Attic cache login";
+    after = [ "network-online.target" ];
+    wants = [ "network-online.target" ];
+    serviceConfig = {
+      Type = "oneshot";
+      # `attic login` takes the literal token string, not a file path.
+      # Read it from the agenix mount at start time.
+      ExecStart = pkgs.writeShellScript "attic-login" ''
+        exec ${pkgs.attic-client}/bin/attic login nas http://nas:8280 "$(cat /run/agenix/attic-admin-token)"
+      '';
+      RemainAfterExit = true;
+    };
+    wantedBy = [ "default.target" ];
+  };
+  # Attic watch-store — per-machine daemon that watches /nix/store for
+  # new paths and pushes them to the NAS cache. Runs on every machine so
+  # both x86_64-linux and aarch64-linux builds populate the cache.
+  systemd.user.services.attic-watch-store = {
+    description = "Attic Nix cache upload daemon";
+    requires = [ "attic-login.service" ];
+    after = [ "attic-login.service" "network-online.target" ];
+    wants = [ "network-online.target" ];
+    serviceConfig = {
+      Type = "simple";
+      ExecStart = "${pkgs.attic-client}/bin/attic watch-store 2143nix";
+      Restart = "on-failure";
+      RestartSec = 30;
+    };
+    wantedBy = [ "default.target" ];
+  };
 }

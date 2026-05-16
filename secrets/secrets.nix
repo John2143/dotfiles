@@ -12,6 +12,7 @@ let
   arch = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIJbTSIq65Gz8pgHX5uLas3Z/paU9SC5KvG1G2lNMfPH7 john@arch";
   closet = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIN3VC6q1KhVCI3BRzbTi9Di/pS7I1ASEYoNBwBzU4jgT john@closet";
   pite = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAh9fgjUMvSfYUYteUHeI/JkjxUJLwVAnoLyluU1Uknd john@pite";
+  vpin = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAII4YCIowmPxLCTuH2fVxCtK/sKj7Sefr1s+itj0dtVED john@vpin";
   security = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAILO6ntnqr4ERZLUdL2MOMeC++HPIsigce4d42h8UogA2 john@security";
   secu = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIN4vMixKG/e9b3ttJy9Xb5ymavp7Gny6dxKrViQl8AUl john@secu";
   nas = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIPzgxUuaZUG9Dr5ZTZImKqt3SUSPVD/FLO2wKQfwz98A john@nas";
@@ -93,4 +94,15 @@ in {
   # so every future rental auto-authorizes this key. Full workflow in
   # ../Vast.md.
   "vast-credentials.age".publicKeys = [office arch];
+
+  # Attic JWT RS256 signing secret. Only the NAS needs it at runtime;
+  # office+arch are included so admin machines can re-encrypt / re-deploy.
+  # Generate: nix-shell -p openssl --run 'openssl genrsa -traditional 4096 | base64 -w0'
+  # Then:    echo "ATTIC_SERVER_TOKEN_RS256_SECRET_BASE64=<output>" | agenix -e attic-jwt-secret.age -i ~/.ssh/age
+  "attic-jwt-secret.age".publicKeys = [office arch nas];
+
+  # Attic admin token — lets each machine authenticate to atticd for
+  # push/pull. Generated once on the NAS with atticd-atticadm make-token.
+  # Encrypt to all NixOS hosts that import shared-cli-configuration.nix.
+  "attic-admin-token.age".publicKeys = [office arch closet secu nas pite vpin];
 }

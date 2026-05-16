@@ -39,7 +39,6 @@ in {
     then "/Users/jschmidt"
     else "/home/john";
 
-  nixpkgs.config.allowUnfree = true;
 
   # This value determines the Home Manager release that your configuration is
   # compatible with. This helps avoid breakage when a new Home Manager release
@@ -55,18 +54,11 @@ in {
   home.packages = with pkgs;
     [
       # cli
-      bat # cat replacement
-      eza # ls replacement
-      ripgrep # grep replacement
       btop # btop++ > bpytop > htop > top
       choose # awk replacement
       dust # df/du replacement
       ncdu # du / disk usage
-      fzf
-      fd # find replacement
-      delta # pager
       killall # like pkill
-      gh # github
       jq
       unzip
       unrar
@@ -77,7 +69,6 @@ in {
       k9s
       argocd
 
-      direnv
       cargo-generate # rust project generator
 
       file # file info
@@ -109,7 +100,6 @@ in {
       cmake
       watch
       tree
-      zoxide
       awscli2
       kubernetes-helm
       kubectl
@@ -157,7 +147,6 @@ in {
     enable = true;
     shellInit = builtins.readFile ../.config/fish/config.fish;
     interactiveShellInit = ''
-      eval (direnv hook fish)
       function __get_program_names
           ps aux | choose 10 | sort | uniq
       end
@@ -423,7 +412,6 @@ in {
       };
       core = {
         #excludesfile = "/Users/jschmidt/.gitignore";
-        pager = "delta";
       };
       pull = {
         ff = "only";
@@ -666,5 +654,88 @@ in {
         };
       };
     };
+  };
+
+  programs.direnv = {
+    enable = true;
+    nix-direnv.enable = true;
+  };
+
+  programs.fzf = {
+    enable = true;
+    enableFishIntegration = true;
+    defaultCommand = "fd --type f --hidden --follow --exclude .git";
+    defaultOptions = ["--height 40%" "--border"];
+    fileWidgetCommand = "fd --type f --hidden --follow --exclude .git";
+    fileWidgetOptions = ["--preview 'bat --color=always --style=numbers --line-range=:500 {}'"];
+    changeDirWidgetCommand = "fd --type d --hidden --follow --exclude .git";
+  };
+
+  programs.zoxide = {
+    enable = true;
+    enableFishIntegration = true;
+  };
+
+  programs.bat = {
+    enable = true;
+    config = {
+      style = "numbers,changes,header";
+    };
+  };
+
+  programs.eza = {
+    enable = true;
+    enableFishIntegration = true;
+    icons = "auto";
+    git = true;
+  };
+
+  programs.ripgrep = {
+    enable = true;
+    arguments = [
+      "--smart-case"
+      "--hidden"
+      "--glob=!.git"
+    ];
+  };
+
+  programs.fd = {
+    enable = true;
+    hidden = true;
+    ignores = [".git/" "node_modules/" ".direnv/"];
+  };
+
+  programs.gh = {
+    enable = true;
+    settings = {
+      git_protocol = "ssh";
+      editor = "nvim";
+    };
+  };
+
+  programs.delta = {
+    enable = true;
+    enableGitIntegration = true;
+    options = {
+      navigate = true;
+      side-by-side = true;
+      line-numbers = true;
+    };
+  };
+
+  programs.atuin = {
+    enable = true;
+    enableFishIntegration = true;
+    settings = {
+      auto_sync = false;
+      search_mode = "fuzzy";
+      filter_mode = "directory";
+      style = "compact";
+    };
+  };
+
+  programs.nix-index = {
+    enable = true;
+    enableFishIntegration = true;
   };
 }

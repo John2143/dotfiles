@@ -1,6 +1,6 @@
 # Tailscale / Headscale VPN client
 #
-# Parameterized: Home Pi connects to local headscale (http://localhost:8080),
+# Parameterized: Home Pi connects to local headscale (http://localhost:6767),
 # Hetzner nodes connect to the Home Pi's headscale server via its Tailscale FQDN.
 #
 # All nodes use a preauth key from agenix to auto-join the tailnet.
@@ -11,9 +11,9 @@
 }: {
   options.custom.headscaleServer = lib.mkOption {
     type = lib.types.str;
-    default = "https://headscale.9s.pics";
+    default = "http://headscale.9s.pics:6767";
     description = "Headscale server URL for tailscale up --login-server";
-    example = "http://localhost:8080";
+    example = "http://localhost:6767";
   };
 
   config = {

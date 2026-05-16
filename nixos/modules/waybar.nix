@@ -24,6 +24,7 @@
         ]) ++ [
           "custom/vast"
           "custom/weather"
+          "custom/teamspeak"
           "battery"
           "tray"
           "pulseaudio"
@@ -183,6 +184,14 @@
           interval = 900;
           format = "{}";
           tooltip = true;
+        };
+        "custom/teamspeak" = {
+          exec = "teamspeak-mute-status";
+          return-type = "json";
+          interval = 2;
+          format = "{}";
+          tooltip = true;
+          on-click = "teamspeak-mute-status --toggle";
         };
         tray = {
           iconSize = 21;

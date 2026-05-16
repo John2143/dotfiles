@@ -45,7 +45,6 @@
     };
 
     # Agent nodes join the corresponding server's k3s cluster.
-    # serverAddr is derived from compName (strip "-agent" suffix).
     mkAgent = { compName }: nixpkgs.lib.nixosSystem {
       inherit system;
       specialArgs = { inherit inputs compName; sshKeys = my-keys; };
