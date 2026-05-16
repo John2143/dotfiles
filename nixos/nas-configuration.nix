@@ -479,7 +479,7 @@
     environmentFile = config.age.secrets.attic-jwt-secret.path;
     settings = {
       listen = "[::]:8280";
-      allowed-hosts = ["nas.ts.2143.me" "nas" "nas.local" "localhost"];
+      allowed-hosts = ["nas.ts.2143.me" "nas" "nas.local" "localhost" "nas:8280" "localhost:8280" "nas.local:8280"];
       api-endpoint = "http://nas:8280/";
       database.url = "sqlite:///tank/atticd/server.db?mode=rwc";
       storage = {
