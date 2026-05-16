@@ -355,6 +355,8 @@ in
       ExecStart = "${pkgs.nix}/bin/nix run /home/john/dotfiles/screen-control";
       Restart = "always";
       RestartSec = 5;
+      User = "john";
+      Group = "users";
     };
     path = [pkgs.hyprland];
   };
