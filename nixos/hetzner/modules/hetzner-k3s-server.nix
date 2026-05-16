@@ -22,7 +22,13 @@
 
   networking.hostName = compName;
 
-  # Galera node-specific — uses Tailscale MagicDNS
+  # Galera cluster — uses Tailscale MagicDNS for cross-node discovery.
+  # WARNING: Never do `tailscale logout; tailscale up` after initial deploy.
+  # This creates a new identity with a different DNS name (e.g. k3s-ashburn → k3s-ashburn-XXXX).
+  # If tailscale needs reconnection, restart `tailscaled-autoconnect` instead:
+  #   systemctl restart tailscaled-autoconnect
+  # If identities MUST be regenerated, clean stale nodes from headscale first:
+  #   sudo headscale nodes delete --identifier <id> --force
   services.mysql.settings.mysqld = {
     wsrep_cluster_address = "gcomm://k3s-ashburn.ts.9s.pics,k3s-hillsboro.ts.9s.pics,k3s-nuremberg.ts.9s.pics,home-pi.ts.9s.pics";
     wsrep_node_name = compName;

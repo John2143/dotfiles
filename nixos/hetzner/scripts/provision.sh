@@ -5,7 +5,7 @@
 #   region: ashburn | hillsboro | nuremberg
 #   role:   server  | agent
 #
-# Requires: HCLOUD_TOKEN env var, hcloud CLI, nixos-anywhere
+# Requires: HCLOUD_TOKEN env var, hcloud CLI, nixos-anywhere, age key at ~/.ssh/age
 #
 # Example:
 #   export HCLOUD_TOKEN="your-token"
@@ -42,7 +42,7 @@ FLAKE=".#${HOSTNAME}"
 echo "=== Provisioning ${HOSTNAME} (${PLAN}, ${LOCATION}) ==="
 
 # ── Step 1: Create Hetzner VM ──
-echo "  [1/4] Creating VM..."
+echo "  [1/7] Creating VM..."
 SERVER_ID=$(hcloud server create \
   --name "${HOSTNAME}" \
   --image ubuntu-24.04 \
@@ -81,28 +81,62 @@ fi
 # Get the actual raw IP for display
 RAW_IP=$(hcloud floating-ip describe "${RAW_IP_ID}" -o json 2>/dev/null | jq -r '.floating_ip.ip // .ip // "unknown"')
 
-
 # ── Step 3: Deploy NixOS via nixos-anywhere ──
-echo "  [2/4] Deploying NixOS..."
+echo "  [3/7] Deploying NixOS..."
 nix run github:nix-community/nixos-anywhere -- \
   --flake "${FLAKE}" \
   --target-host "root@${IP}" \
   --build-on-remote
 
-echo "  [3/4] Waiting for SSH..."
-sleep 10
-ssh "root@${IP}" "echo '  NixOS booted. Hostname: '\$(hostname)"
+# ── Step 4: Wait for NixOS to boot ──
+echo "  [4/7] Waiting for NixOS boot..."
+ssh-keygen -R "${IP}" 2>/dev/null || true
+for i in $(seq 1 20); do
+  ssh -o ConnectTimeout=5 -o StrictHostKeyChecking=accept-new "root@${IP}" "hostname" 2>/dev/null && break
+  echo "    waiting... ($i/20)"
+  sleep 10
+done
+echo "  NixOS booted: $(ssh -o StrictHostKeyChecking=accept-new "root@${IP}" hostname 2>/dev/null || echo unknown)"
 
-# ── Step 4: Verify ──
-echo "  [4/4] Verification..."
+# ── Step 5: Post-deploy setup ──
+echo "  [5/7] Post-deploy setup..."
+# Copy age identity so agenix can decrypt secrets
+scp ~/.ssh/age "root@${IP}:/etc/ssh/age-identity"
+ssh "root@${IP}" "chmod 600 /etc/ssh/age-identity"
+echo "    age identity copied"
 
+# Rebuild to decrypt agenix secrets
+nixos-rebuild switch --flake "${FLAKE}" --target-host "root@${IP}" --use-remote-sudo 2>/dev/null || true
+echo "    agenix secrets decrypted"
+
+# Import pdns schema (needed before pdns can start; pdns 5.0.x uses MySQL backend)
 if [[ "$ROLE" == "server" ]]; then
-  ssh "root@${IP}" "systemctl is-active k3s pdns mariadb"
-  ssh "root@${IP}" "kubectl get nodes"
-  echo "  Server ${HOSTNAME}: k3s + PowerDNS + MariaDB — all active"
+  PDNS_SCHEMA=$(ssh "root@${IP}" "find /nix/store -path '*/pdns*schema.mysql.sql' -not -name '*to_*' -not -name '*dnssec*' | head -1")
+  ssh "root@${IP}" "mysql -u pdns -ppdns pdns < ${PDNS_SCHEMA} 2>/dev/null || mysql -u root --socket=/run/mysqld/mysqld.sock pdns < ${PDNS_SCHEMA} 2>/dev/null || true"
+  echo "    pdns schema imported"
+fi
+
+# ── Step 6: Connect tailscale ──
+echo "  [6/7] Connecting tailscale..."
+AUTHKEY=$(ssh "root@${IP}" "cat /run/agenix/hetzner/headscale-preauth-key 2>/dev/null" || echo "")
+if [ -n "$AUTHKEY" ]; then
+  ssh "root@${IP}" "tailscale up --login-server=http://headscale.9s.pics:6767 --authkey=${AUTHKEY} --accept-routes 2>&1 || true"
+  echo "    tailscale connected"
 else
-  ssh "root@${IP}" "systemctl is-active k3s-agent"
-  echo "  Agent ${HOSTNAME}: k3s agent — joined cluster"
+  echo "    WARNING: no preauth key found, tailscale not connected"
+fi
+
+# ── Step 7: Restart services and verify ──
+echo "  [7/7] Restarting services..."
+if [[ "$ROLE" == "server" ]]; then
+  ssh "root@${IP}" "systemctl restart pdns 2>/dev/null || true"
+  sleep 3
+  echo "  --- Service Status ---"
+  ssh "root@${IP}" "echo 'k3s:' \$(systemctl is-active k3s); echo 'mysql:' \$(systemctl is-active mysql); echo 'pdns:' \$(systemctl is-active pdns); echo 'tailscaled:' \$(systemctl is-active tailscaled)"
+  ssh "root@${IP}" "kubectl get nodes 2>/dev/null" || echo "    (k3s not ready yet)"
+  ssh "root@${IP}" "tailscale status 2>/dev/null" || echo "    (tailscale not connected yet)"
+else
+  ssh "root@${IP}" "systemctl is-active k3s-agent 2>/dev/null || echo 'inactive'"
 fi
 
 echo ""

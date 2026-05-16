@@ -48,7 +48,7 @@
   # Connect to the local Headscale instance running on this host
   custom.headscaleServer = "http://localhost:6767";
 
-  # Galera node-specific — fourth multi-master node (permanent)
+  # Galera cluster — see hetzner-k3s-server.nix for DNS/identity warnings
   services.mysql.settings.mysqld = {
     wsrep_cluster_address = "gcomm://k3s-ashburn.ts.9s.pics,k3s-hillsboro.ts.9s.pics,k3s-nuremberg.ts.9s.pics,home-pi.ts.9s.pics";
     wsrep_node_name = "home-pi";
