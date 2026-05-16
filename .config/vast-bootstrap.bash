@@ -742,11 +742,19 @@ bootstrap_venv_and_install() {
   export PATH="/workspace/venv/bin:$PATH"
 }
 
-if [ "$ENGINE_SLUG" = "vllm" ] && ! command -v vllm >/dev/null 2>&1; then
-  echo "vllm CLI not found; bootstrapping venv + vllm ..."
+# Use python-import as the "is installed" probe rather than `command -v`:
+# sglang's top-level CLI varies across releases (some ship a `sglang` script,
+# some don't), but `import sglang` is stable. Same for vllm — bare `vllm` is
+# fine but importable is the canonical "we can launch" signal.
+engine_importable() {
+  [ -x /workspace/venv/bin/python ] && \
+    /workspace/venv/bin/python -c "import $1" >/dev/null 2>&1
+}
+if [ "$ENGINE_SLUG" = "vllm" ] && ! engine_importable vllm; then
+  echo "vllm not importable; bootstrapping venv + vllm ..."
   bootstrap_venv_and_install vllm
-elif [ "$ENGINE_SLUG" = "sglang" ] && ! command -v sglang >/dev/null 2>&1; then
-  echo "sglang CLI not found; bootstrapping venv + sglang ..."
+elif [ "$ENGINE_SLUG" = "sglang" ] && ! engine_importable sglang; then
+  echo "sglang not importable; bootstrapping venv + sglang ..."
   bootstrap_venv_and_install "sglang[all]"
 fi
 
@@ -800,31 +808,52 @@ MAX_LEN_AUTO=0; MEM_UTIL_AUTO=0; MAX_NUM_SEQS_AUTO=0
 
 KV_BUDGET=0
 if [ "$WEIGHT_GIB" -gt 0 ] && [ "$TOTAL_VRAM_GIB" -gt 0 ]; then
-  # Activation reserve covers per-layer intermediate buffers + CUDA graph
-  # capture + torch.compile workspace. Doubled on non-FP8-native GPUs because
-  # Marlin produces BF16 intermediates that don't exist on Hopper/Blackwell.
+  # Activation reserve covers per-layer intermediate buffers, CUDA graph
+  # capture, and torch.compile workspace. 30 GiB on non-FP8-native GPUs
+  # because Marlin produces BF16 intermediates per layer that don't exist
+  # on Hopper/Blackwell — empirically ~3× the native FP8 reserve.
   ACT_RESERVE=10
-  [ "$FP8_NATIVE" = 0 ] && ACT_RESERVE=20
+  [ "$FP8_NATIVE" = 0 ] && ACT_RESERVE=30
   KV_BUDGET=$((TOTAL_VRAM_GIB - WEIGHT_GIB - ACT_RESERVE))
 
-  if [ "$KV_BUDGET" -lt 8 ]; then
+  if [ "$KV_BUDGET" -lt 4 ]; then
     echo "Error: ${TOTAL_VRAM_GIB} GiB total VRAM is insufficient for ${MODEL}." >&2
-    echo "       Needs ~${WEIGHT_GIB} GiB weights + ${ACT_RESERVE} GiB activations + ≥8 GiB KV." >&2
+    echo "       Needs ~${WEIGHT_GIB} GiB weights + ${ACT_RESERVE} GiB activations + ≥4 GiB KV." >&2
     echo "       Rent more/bigger GPUs, or pick a smaller model." >&2
     exit 1
   fi
 
-  # Tiers calibrated for V4-Flash KV (~6 KiB/token at full MLA). Bigger KV
-  # budget → bigger context + more concurrent sequences. MEM_UTIL is pulled
-  # down on tight tiers to leave room for graph-capture spikes.
-  if   [ "$KV_BUDGET" -ge 500 ]; then DEF_MAX_LEN=1000000 DEF_MEM_UTIL=0.95 DEF_MAX_NUM_SEQS=128
-  elif [ "$KV_BUDGET" -ge 250 ]; then DEF_MAX_LEN=1000000 DEF_MEM_UTIL=0.95 DEF_MAX_NUM_SEQS=64
-  elif [ "$KV_BUDGET" -ge 100 ]; then DEF_MAX_LEN=1000000 DEF_MEM_UTIL=0.95 DEF_MAX_NUM_SEQS=32
-  elif [ "$KV_BUDGET" -ge 50 ];  then DEF_MAX_LEN=524288  DEF_MEM_UTIL=0.93 DEF_MAX_NUM_SEQS=16
-  elif [ "$KV_BUDGET" -ge 25 ];  then DEF_MAX_LEN=131072  DEF_MEM_UTIL=0.92 DEF_MAX_NUM_SEQS=8
-  elif [ "$KV_BUDGET" -ge 12 ];  then DEF_MAX_LEN=65536   DEF_MEM_UTIL=0.90 DEF_MAX_NUM_SEQS=4
-  else                                DEF_MAX_LEN=32768   DEF_MEM_UTIL=0.88 DEF_MAX_NUM_SEQS=2
+  # Tiers calibrated to V4-Flash on real hardware (nvidia-smi reports raw
+  # VRAM minus reserved; B200 shows ~179 GiB not 192). Breakpoints land each
+  # canonical config on its proven tuning:
+  #
+  #   1×B200 (KV≈19)   → 512k ctx, 16 seq
+  #   2×B200 (KV≈198)  → 1M ctx, 32 seq
+  #   4×B200 (KV≈556)  → 1M ctx, 64 seq
+  #   8×B200 (KV≈1272) → 1M ctx, 128 seq
+  #   4×A40  (KV≈12)   → 128k ctx, 8 seq (FP8 non-native, ACT_RESERVE=30)
+  #
+  # V4-Flash MLA KV is ~6 KiB/token; engines page KV so over-committed
+  # max_len × max_seqs is fine — only physical use matters.
+  if   [ "$KV_BUDGET" -ge 1000 ]; then DEF_MAX_LEN=1000000 DEF_MEM_UTIL=0.95 DEF_MAX_NUM_SEQS=128
+  elif [ "$KV_BUDGET" -ge 400 ];  then DEF_MAX_LEN=1000000 DEF_MEM_UTIL=0.95 DEF_MAX_NUM_SEQS=64
+  elif [ "$KV_BUDGET" -ge 100 ];  then DEF_MAX_LEN=1000000 DEF_MEM_UTIL=0.95 DEF_MAX_NUM_SEQS=32
+  elif [ "$KV_BUDGET" -ge 15 ];   then DEF_MAX_LEN=524288  DEF_MEM_UTIL=0.93 DEF_MAX_NUM_SEQS=16
+  elif [ "$KV_BUDGET" -ge 8 ];    then DEF_MAX_LEN=131072  DEF_MEM_UTIL=0.92 DEF_MAX_NUM_SEQS=8
+  else                                 DEF_MAX_LEN=65536   DEF_MEM_UTIL=0.90 DEF_MAX_NUM_SEQS=4
   fi
+
+  # V4-Pro has ~5-6× the per-step activation of V4-Flash (1.6T vs ~150B
+  # params, 49B activated vs ~25B). Clamp context and halve concurrency
+  # at any tier so prefill activation spikes don't OOM.
+  case "$MODEL" in
+    *DeepSeek-V4-Pro*|*deepseek-v4-pro*)
+      [ "$DEF_MAX_LEN" -gt 524288 ] && DEF_MAX_LEN=524288
+      DEF_MAX_NUM_SEQS=$((DEF_MAX_NUM_SEQS / 2))
+      [ "$DEF_MAX_NUM_SEQS" -lt 8 ] && DEF_MAX_NUM_SEQS=8
+      ;;
+  esac
+
   echo "Memory plan: weights≈${WEIGHT_GIB} GiB + activations≈${ACT_RESERVE} GiB + KV budget=${KV_BUDGET} GiB → tier MAX_LEN=${DEF_MAX_LEN} MAX_NUM_SEQS=${DEF_MAX_NUM_SEQS}"
 else
   # Unknown model: fall back to GPU-count tiers (assumes B200-class headroom).
@@ -926,7 +955,9 @@ else
 fi
 
 if [ "$ENGINE_SLUG" = "vllm" ]; then
-  ARGS=(serve "${MODEL}")
+  # vllm's CLI entry point lives in /workspace/venv/bin/vllm; absolute path
+  # makes the launch robust against PATH issues inside the nohup'd shell.
+  ARGS=(/workspace/venv/bin/vllm serve "${MODEL}")
   has_extra_flag --host                       || ARGS+=(--host "${BIND_HOST}")
   has_extra_flag --port                       || ARGS+=(--port "${BIND_PORT}")
   has_extra_flag --trust-remote-code          || ARGS+=(--trust-remote-code)
@@ -947,8 +978,8 @@ if [ "$ENGINE_SLUG" = "vllm" ]; then
     ARGS+=(--tensor-parallel-size "${TENSOR_PARALLEL}")
   fi
 else
-  # SGLang CLI
-  ARGS=(sglang.launch_server --model "${MODEL}")
+  # SGLang has no stable top-level CLI script; launch via `python -m`.
+  ARGS=(/workspace/venv/bin/python -m sglang.launch_server --model "${MODEL}")
   has_extra_flag --host                       || ARGS+=(--host "${BIND_HOST}")
   has_extra_flag --port                       || ARGS+=(--port "${BIND_PORT}")
   has_extra_flag --trust-remote-code          || ARGS+=(--trust-remote-code)
