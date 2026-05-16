@@ -19,12 +19,17 @@
   nix.settings.extra-substituters = [
     "https://cache.numtide.com"
     "https://claude-code.cachix.org"
+    "http://nas:8280/2143nix"
   ];
   nix.settings.extra-trusted-public-keys = [
     "niks3.numtide.com-1:DTx8wZduET09hRmMtKdQDxNNthLQETkc/yaX7M4qK0g="
     "claude-code.cachix.org-1:YeXf2aNu7UTX8Vwrze0za1WEDS+4DuI2kVeWEE4fsRk="
+    "2143nix:<INSERT-PUBLIC-KEY-FROM-NAS>"
   ];
 
+
+  # Attic self-hosted Nix cache — substitute the placeholder key after
+  # creating the cache: attic cache info 2143nix (run on NAS)
   #nix.gc.automatic = true;
 
   # setup my two input channels
@@ -78,6 +83,13 @@
           rev = "ac74ad5adc3b76d5441f27dc1768262a7e7f389f";
           hash = "sha256-PTNFN3onNycgzvWd4QED0FTVERqUaS0GzLoQZB/kLLU=";
         };
+        bun-1_3_14 = pkgs.bun.overrideAttrs {
+          version = "1.3.14";
+          src = pkgs.fetchurl {
+            url = "https://github.com/oven-sh/bun/releases/download/bun-v1.3.14/bun-linux-x64.zip";
+            hash = "sha256-lR7iruhV8IWVruxiJSJqKY0/6oOj3NZGXAnLzN9+hI8=";
+          };
+        };
         omp-unwrapped = (inputs.llm-agents.packages.${pkgs.stdenv.hostPlatform.system}.omp.overrideAttrs (old: {
           version = "15.0.0";
           src = omp-src;
@@ -92,6 +104,10 @@
           in bun2nix'.fetchBunDeps {
             bunNix = ./omp-bun.nix;
           };
+          nativeBuildInputs = (old.nativeBuildInputs or []) ++ [pkgs.makeBinaryWrapper];
+          postInstall = (old.postInstall or "") + ''
+            wrapProgram "$out/bin/omp" --prefix PATH : ${bun-1_3_14}/bin
+          '';
         }));
       in
       pkgs.writeShellScriptBin "omp" ''
@@ -338,6 +354,18 @@
       group = "users";
     };
 
+  # Attic admin token — authenticates this machine to the NAS cache.
+  # All NixOS hosts that push/pull need this.
+  age.secrets.attic-admin-token =
+    lib.mkIf
+    (builtins.elem config.networking.hostName ["office" "arch" "closet" "secu" "nas"])
+    {
+      file = ../secrets/attic-admin-token.age;
+      mode = "0400";
+      owner = "john";
+      group = "users";
+    };
+
   # # Open ports in the firewall.
   # networking.firewall.allowedTCPPorts = [
   #   5353 # avahi
@@ -346,4 +374,35 @@
   # networking.firewall.allowedUDPPorts = [  ];
   # Or disable the firewall altogether.
   networking.firewall.enable = false;
+
+
+  # Attic login — oneshot that authenticates to the NAS cache before
+  # watch-store starts. Uses the age-encrypted admin token.
+  systemd.user.services.attic-login = {
+    description = "Attic cache login";
+    after = [ "network-online.target" ];
+    wants = [ "network-online.target" ];
+    serviceConfig = {
+      Type = "oneshot";
+      ExecStart = "${pkgs.attic-client}/bin/attic login nas http://nas:8280 /run/agenix/attic-admin-token";
+      RemainAfterExit = true;
+    };
+    wantedBy = [ "default.target" ];
+  };
+  # Attic watch-store — per-machine daemon that watches /nix/store for
+  # new paths and pushes them to the NAS cache. Runs on every machine so
+  # both x86_64-linux and aarch64-linux builds populate the cache.
+  systemd.user.services.attic-watch-store = {
+    description = "Attic Nix cache upload daemon";
+    requires = [ "attic-login.service" ];
+    after = [ "attic-login.service" "network-online.target" ];
+    wants = [ "network-online.target" ];
+    serviceConfig = {
+      Type = "simple";
+      ExecStart = "${pkgs.attic-client}/bin/attic watch-store 2143nix";
+      Restart = "on-failure";
+      RestartSec = 30;
+    };
+    wantedBy = [ "default.target" ];
+  };
 }

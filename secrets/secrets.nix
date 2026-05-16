@@ -99,4 +99,9 @@ in {
   # Generate: nix-shell -p openssl --run 'openssl genrsa -traditional 4096 | base64 -w0'
   # Then:    echo "ATTIC_SERVER_TOKEN_RS256_SECRET_BASE64=<output>" | agenix -e attic-jwt-secret.age -i ~/.ssh/age
   "attic-jwt-secret.age".publicKeys = [office arch nas];
+
+  # Attic admin token — lets each machine authenticate to atticd for
+  # push/pull. Generated once on the NAS with atticd-atticadm make-token.
+  # Encrypt to all NixOS hosts that import shared-cli-configuration.nix.
+  "attic-admin-token.age".publicKeys = [office arch closet secu nas];
 }

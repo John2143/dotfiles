@@ -467,16 +467,20 @@
   #   sudo chown atticd:atticd /tank/atticd
   #
   # After first deploy, create the cache:
-  #   sudo atticd-atticadm make-cache 2143nix
-  #   sudo atticd-atticadm cache info 2143nix   # note the public key for clients
+  #   TOKEN=$(sudo atticd-atticadm make-token --sub john --validity 1y \
+  #     --create-cache '*' --pull '*' --push '*' --delete '*' \
+  #     --configure-cache '*' --configure-cache-retention '*')
+  #   nix-shell -p attic-client --run "attic login nas http://nas:8280 $TOKEN"
+  #   nix-shell -p attic-client --run "attic cache create 2143nix"
+  #   nix-shell -p attic-client --run "attic cache info 2143nix"
 
   services.atticd = {
     enable = true;
     environmentFile = config.age.secrets.attic-jwt-secret.path;
     settings = {
-      listen = "[::]:8080";
+      listen = "[::]:8280";
       allowed-hosts = ["nas.ts.2143.me" "nas" "nas.local" "localhost"];
-      api-endpoint = "http://nas:8080/";
+      api-endpoint = "http://nas:8280/";
       database.url = "sqlite:///tank/atticd/server.db?mode=rwc";
       storage = {
         type = "local";
@@ -518,7 +522,7 @@
       2049 # nfsv4 (Longhorn backup target)
       2283 # immich
       25565 # minecraft
-      8080 # attic nix cache
+      8280 # attic nix cache
     ];
   };
 
