@@ -1,5 +1,5 @@
 ---
-description: "General-purpose code review with parallel analysis personas (security, duplication, patterns, functionality, goals)"
+description: "Review a git diff or single file using five parallel analysis personas, producing a severity-ranked findings report with merge recommendation"
 argument-hint: "[@path | --focus persona1,persona2]"
 allowed-tools: Read, Search, Find, Bash, LSP, Task
 tool-hints: |
@@ -11,6 +11,9 @@ tool-hints: |
   Read `AGENTS.md` or `CLAUDE.md` if present for project-specific conventions.
   This skill is read-only — never modify files.
 ---
+## Mission
+
+Your job is to perform a structured, multi-persona code review on a git diff or single file, producing a severity-ranked findings report with a merge/no-merge verdict.
 
 Parse `$ARGUMENTS`:
 - If `$ARGUMENTS` contains a path matching `@` followed by a file path (e.g., `@./src/handler.ts`), extract the path and enter **Single-File Review** mode. The `@` prefix is a harness convention for file attachments; treat the path as the single review target.
@@ -57,6 +60,8 @@ The default mode. Infer the diff target from git state.
 ### Phase 2 — Classify and weight
 
 Read each changed file (the full file, not just the diff). Classify changes by domain to weight each persona. Use this mapping:
+- **Skip binary files** (images, compiled artifacts) and files larger than 500KB. Note skipped files in the report Summary.
+- For **deep** reviews (<100 lines changed), additionally use `lsp references` on changed function/class symbols to identify callers that might break.
 
 | Signal in diff | Weight adjustments |
 |----------------|-------------------|
@@ -128,6 +133,8 @@ Collect all subagent outputs. For each:
 4. **Produce a unified findings table** with columns: `# | Severity | File:Line | Persona | Problem | Fix`.
 5. **Write the final report** using the format below.
 
+**If a persona subagent fails or returns no output**, note it in the report: "⚠ <Persona> subagent did not return results — this dimension was not reviewed." Continue with the remaining personas.
+
 ### Report Format
 
 ```
@@ -149,6 +156,8 @@ Collect all subagent outputs. For each:
 | 1 | HIGH | src/foo.ts:42 | security | SQL injection via unsanitized input | Use parameterized query |
 | 2 | MEDIUM | src/bar.ts:15 | duplication | Identical logic in utils.ts:30 | Extract shared helper |
 
+
+The findings table lists **all** findings across all personas (not just highlights). The per-persona sections below expand on each one with full context.
 ### Security
 (Findings from the Security Researcher persona)
 

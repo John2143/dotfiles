@@ -1,7 +1,24 @@
 # MariaDB Galera Cluster Member
 #
-# Multi-master replication for PowerDNS backend across 3 locations.
-# Nodes: ashburn-server, nuremberg-server, home-pi.
+# Multi-master replication for PowerDNS backend.
+# Nodes: k3s-ashburn, k3s-hillsboro, k3s-nuremberg, home-pi.
+#
+# BOOTSTRAP PROCEDURE (run after all 4 nodes are on the tailnet):
+#   1. On home-pi (bootstrap the cluster):
+#      sudo systemctl stop mysql
+#      sudo rm -f /run/mysqld/mysqld.sock
+#      echo 1 | sudo tee /var/lib/mysql/grastate.dat
+#      sudo systemctl start mysql
+#      # Verify: sudo mysql -e "SHOW STATUS LIKE 'wsrep%'" | grep -E 'cluster_size|status'
+#      # Should show cluster_size=1, cluster_status=Primary
+#
+#   2. On each Hetzner node (join the cluster):
+#      sudo systemctl restart mysql
+#      # MySQL will auto-join via wsrep_cluster_address (Tailscale DNS)
+#      # Verify cluster_size grows: 1 → 2 → 3 → 4
+#
+# NOTE: MariaDB 11.x requires wsrep_on=1 and binlog_format=ROW (set below).
+#       The wsrep_provider must be explicitly loaded (set below).
 {
   config,
   lib,

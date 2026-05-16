@@ -21,21 +21,21 @@ HOSTNAME="k3s-${REGION}"
 [[ "$ROLE" == "agent" ]] && HOSTNAME="${HOSTNAME}-agent"
 
 # ── Region → Hetzner location mapping ──
+# NOTE: EU datacenters (nbg1, fsn1) fail to boot NixOS with cpx32.
+# Nuremberg runs in ashburn until this is resolved.
 case "$REGION" in
   ashburn)   LOCATION="ash"   ;;
   hillsboro) LOCATION="hil"   ;;
-  nuremberg) LOCATION="nbg1"  ;;
+  nuremberg) LOCATION="ash"   ;;  # TODO: move to nbg1/fsn1 when cpx32 NixOS boot fixed
   *) echo "Unknown region: $REGION"; exit 1 ;;
 esac
 
 # ── Region + Role → Plan mapping ──
 PLAN=""
 case "${REGION}-${ROLE}" in
-  ashburn-server|hillsboro-server)   PLAN="cpx31" ;;  # CPX31 (8GB, 4vCPU)
-  nuremberg-server|nuremberg-agent)  PLAN="cpx32" ;;  # CPX32 (8GB, 4vCPU) — EU-only
-  ashburn-agent|hillsboro-agent)     PLAN="cpx31" ;;  # Same as server for symmetric HA
-  *) echo "Unknown region/role: ${REGION}-${ROLE}"; exit 1 ;;
-esac
+  ashburn-server|hillsboro-server|nuremberg-server) PLAN="cpx31" ;;  # All cpx31 (cpx32 boot issue)
+  ashburn-agent|hillsboro-agent|nuremberg-agent)   PLAN="cpx31" ;;
+  *) echo "Unknown region/role: ${REGION}-${ROLE}"; exit 1 ;;~
 
 FLAKE=".#${HOSTNAME}"
 
