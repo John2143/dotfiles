@@ -390,6 +390,23 @@
     };
     wantedBy = [ "default.target" ];
   };
+  # Nix binary-cache netrc for attic authentication.
+  # attic-login.service writes to ~/.config/attic/netrc, which only the attic
+  # CLI reads. Nix's built-in substituter mechanism reads /etc/nix/netrc
+  # (the default netrc location). Written at activation time so all users
+  # (including the nix-daemon running as root) can pull from the cache.
+  system.activationScripts.atticNetrc =
+    lib.mkIf
+    (builtins.elem config.networking.hostName ["office" "arch" "closet" "secu" "nas" "pite" "vpin"])
+    {
+      deps = [ "agenix" ];
+      text = ''
+        mkdir -p /etc/nix
+        echo "machine nas login attic password $(cat /run/agenix/attic-admin-token)" \
+          > /etc/nix/netrc
+        chmod 0400 /etc/nix/netrc
+      '';
+    };
   # Attic watch-store — per-machine daemon that watches /nix/store for
   # new paths and pushes them to the NAS cache. Runs on every machine so
   # both x86_64-linux and aarch64-linux builds populate the cache.
