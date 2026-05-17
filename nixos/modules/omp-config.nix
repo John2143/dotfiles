@@ -7,10 +7,17 @@ let
   skills = builtins.readDir skillsDir;
   skillNames = builtins.filter (name: skills.${name} == "directory") (builtins.attrNames skills);
 
-  mkSkillLinks = name: {
-    ".claude/skills/${name}/SKILL.md".source = "${skillsDir}/${name}/SKILL.md";
-    ".omp/agent/skills/${name}/SKILL.md".source = "${skillsDir}/${name}/SKILL.md";
-  };
+  mkSkillLinks = name:
+    let
+      skillDir = skillsDir + "/${name}";
+      dirContents = builtins.readDir skillDir;
+      files = builtins.filter (fname: dirContents.${fname} == "regular") (builtins.attrNames dirContents);
+      mkLink = fname: {
+        ".claude/skills/${name}/${fname}".source = "${skillsDir}/${name}/${fname}";
+        ".omp/agent/skills/${name}/${fname}".source = "${skillsDir}/${name}/${fname}";
+      };
+    in
+      builtins.foldl' (acc: fname: acc // mkLink fname) { } files;
 
   skillLinks = builtins.foldl' (acc: name: acc // mkSkillLinks name) { } skillNames;
 in
