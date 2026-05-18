@@ -48,11 +48,11 @@
   # Connect to the local Headscale instance running on this host
   custom.headscaleServer = "http://localhost:6767";
 
-  # Galera cluster — see hetzner-k3s-server.nix for DNS/identity warnings
+  # Galera cluster — node address must be explicit because home-pi has
+  # multiple interfaces (eth0 + tailscale) and auto-detect picks eth0 IP.
   services.mysql.settings.mysqld = {
-    # wsrep_cluster_address is set post-bootstrap (see README Galera bootstrap).
-    # Default from hetzner-galera.nix is gcomm:// (standalone).
     wsrep_node_name = "home-pi";
+    wsrep_node_address = "100.64.0.2";  # static tailscale IP
     auto_increment_offset = 4;
   };
   security.sudo.wheelNeedsPassword = false;

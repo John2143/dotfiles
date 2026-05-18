@@ -52,9 +52,9 @@
       wsrep_provider = "${pkgs.mariadb-galera}/lib/galera/libgalera_smm.so";
       wsrep_on = 1;  # Required in MariaDB 11.x (defaults to OFF)
       wsrep_cluster_name = "powerdns";
-      wsrep_cluster_address = lib.mkDefault "gcomm://";
+      wsrep_cluster_address = lib.mkDefault "gcomm://k3s-ashburn.ts.9s.pics,k3s-hillsboro.ts.9s.pics,k3s-nuremberg.ts.9s.pics,home-pi-clnydbkx.ts.9s.pics";
       wsrep_node_name = lib.mkDefault "${config.networking.hostName}";
-      wsrep_node_address = lib.mkDefault "";  # Auto-detect from hostname
+      wsrep_node_address = lib.mkDefault "";  # auto-detect (correct for single-interface Hetzner nodes)
 
       wsrep_sst_method = "rsync";
       wsrep_slave_threads = 2;
@@ -69,5 +69,18 @@
   systemd.services.mysql = {
     after = ["tailscaled.service"];
     wants = ["tailscaled.service"];
+    # rsync and mariadb bin must be in PATH for wsrep_sst_method=rsync to work
+    # (posix_spawnp needs to find wsrep_sst_rsync and rsync)
+    path = [ pkgs.rsync pkgs.mariadb ];
+    # ProtectSystem=strict and stacked systemd hardening options create 21 seccomp
+    # filters that block execve/clone in child processes, breaking posix_spawnp()
+    # used by wsrep_sst_rsync.  Explicitly allow @process syscalls to override.
+    serviceConfig = {
+      ProtectSystem = lib.mkForce "full";
+      SystemCallFilter = lib.mkForce "@default @process";
+    };
   };
+
+  # Galera ports: 4567 (group comm), 4568 (IST), 4444 (SST/rsync)
+  networking.firewall.allowedTCPPorts = [ 4444 4567 4568 ];
 }
