@@ -104,6 +104,7 @@
     # also clang ICE in rusty-v8 on unstable, so pull from stable
     pkgs-stable.yt-dlp # youtube-dl
     pkgs-stable.mpv # video player
+    nicotine-plus # soulseek client
 
     #mullvad-vpn # vpn
     plex-desktop # plex

@@ -16,14 +16,11 @@
     "flakes"
   ];
 
-  nix.settings.extra-substituters = [
-    "https://cache.numtide.com"
-    "https://claude-code.cachix.org"
+  # Self-hosted Attic cache — the only substituter.
+  nix.settings.substituters = [
     "http://nas:8280/2143nix"
   ];
-  nix.settings.extra-trusted-public-keys = [
-    "niks3.numtide.com-1:DTx8wZduET09hRmMtKdQDxNNthLQETkc/yaX7M4qK0g="
-    "claude-code.cachix.org-1:YeXf2aNu7UTX8Vwrze0za1WEDS+4DuI2kVeWEE4fsRk="
+  nix.settings.trusted-public-keys = [
     "2143nix:Ysam0ozURtK+1tkP62M6lzbfoi8BVeL6s7ZWJlB6UxE="
   ];
 
@@ -417,7 +414,7 @@
     wants = [ "network-online.target" ];
     serviceConfig = {
       Type = "simple";
-      ExecStart = "${pkgs.attic-client}/bin/attic watch-store 2143nix";
+      ExecStart = "${pkgs.attic-client}/bin/attic watch-store 2143nix --ignore-upstream-cache-filter";
       Restart = "on-failure";
       RestartSec = 30;
     };
