@@ -95,6 +95,8 @@ in {
       k3s
       distrobox
       lxqt.lxqt-policykit
+      # add python3 to basically everything with omp on it
+      python3
     ]
     ++ lib.optionals pkgs.stdenv.isDarwin [
       ffmpeg

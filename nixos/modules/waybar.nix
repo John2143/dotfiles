@@ -21,10 +21,10 @@
           "temperature"
         ] ++ (lib.optionals (compName == "arch") [
           "custom/thermostat"
+          "custom/teamspeak"
         ]) ++ [
           "custom/vast"
           "custom/weather"
-          "custom/teamspeak"
           "battery"
           "tray"
           "pulseaudio"
@@ -168,6 +168,15 @@
           on-click-middle = "hass-macro thermostat-toggle";
           tooltip = true;
         };
+
+        "custom/teamspeak" = {
+          exec = "teamspeak-mute-status";
+          return-type = "json";
+          interval = 2;
+          format = "{}";
+          tooltip = true;
+          on-click = "teamspeak-mute-status --toggle";
+        };
       }) // {
         "custom/vast" = {
           exec = "vast-waybar-status";
@@ -184,14 +193,6 @@
           interval = 900;
           format = "{}";
           tooltip = true;
-        };
-        "custom/teamspeak" = {
-          exec = "teamspeak-mute-status";
-          return-type = "json";
-          interval = 2;
-          format = "{}";
-          tooltip = true;
-          on-click = "teamspeak-mute-status --toggle";
         };
         tray = {
           iconSize = 21;
