@@ -390,25 +390,21 @@
     };
     wantedBy = [ "default.target" ];
   };
-  # Nix binary-cache auth for attic. Netrc sends Basic auth, but atticd
-  # expects Bearer tokens. Use access-tokens via !include so the token
-  # stays in agenix ramfs instead of world-readable /etc/nix/nix.conf.
-  nix.extraOptions =
-    lib.mkIf
-    (builtins.elem config.networking.hostName ["office" "arch" "closet" "secu" "nas" "pite" "vpin"])
-    ''
-      !include /run/agenix/attic-access-tokens
-    '';
+  # Nix binary-cache auth for attic. Nix reads netrc-file for substituter
+  # HTTP requests. atticd extracts the JWT from the Basic auth password field
+  # — this is explicitly documented in attic's token/src/lib.rs: "The JWT
+  # can be supplied ... As the password in Basic Auth (used by Nix)."
+  nix.settings.netrc-file = "/run/agenix/attic-netrc";
 
-  system.activationScripts.atticAccessTokens =
+  system.activationScripts.atticNetrc =
     lib.mkIf
     (builtins.elem config.networking.hostName ["office" "arch" "closet" "secu" "nas" "pite" "vpin"])
     {
       deps = [ "agenix" ];
       text = ''
-        printf 'access-tokens = nas=%s\n' "$(cat /run/agenix/attic-admin-token)" \
-          > /run/agenix/attic-access-tokens
-        chmod 0444 /run/agenix/attic-access-tokens
+        printf 'machine nas password %s\n' "$(cat /run/agenix/attic-admin-token)" \
+          > /run/agenix/attic-netrc
+        chmod 0444 /run/agenix/attic-netrc
       '';
     };
   # Attic watch-store — per-machine daemon that watches /nix/store for
