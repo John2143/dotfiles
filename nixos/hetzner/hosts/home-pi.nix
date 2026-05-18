@@ -50,7 +50,8 @@
 
   # Galera cluster — see hetzner-k3s-server.nix for DNS/identity warnings
   services.mysql.settings.mysqld = {
-    wsrep_cluster_address = "gcomm://k3s-ashburn.ts.9s.pics,k3s-hillsboro.ts.9s.pics,k3s-nuremberg.ts.9s.pics,home-pi-clnydbkx.ts.9s.pics";
+    # wsrep_cluster_address is set post-bootstrap (see README Galera bootstrap).
+    # Default from hetzner-galera.nix is gcomm:// (standalone).
     wsrep_node_name = "home-pi";
     auto_increment_offset = 4;
   };

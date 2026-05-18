@@ -297,6 +297,15 @@ in
       - When referencing code, include file_path:line_number.
       </output>
 
+      <document-output>
+      - You have `pandoc` and `typst` available for converting Markdown to HTML or PDF.
+      - Two fish functions provide quick conversion: `md2html <file.md>` (self-contained HTML with water.css) and `md2pdf <file.md>` (PDF via Typst with native typography — no texlive needed).
+      - When the user asks for a report, deliver a `.md` file. Only convert to PDF/HTML if the user explicitly requests it, or if generating a final artifact at the end of a multi-step analysis.
+      - For HTML: `pandoc input.md -s --embed-resources --standalone -c https://cdn.jsdelivr.net/npm/water.css@2/out/water.min.css -o output.html` (swap the CSS URL if the user prefers a different theme; water.css needs no classes).
+      - For PDF: `pandoc input.md -t typst | sed 's/#horizontalrule/---/' > temp.typ && typst compile temp.typ output.pdf && rm temp.typ` (the sed is a pandoc-typst compatibility fix for horizontal rules).
+      - Typst is a modern LaTeX replacement with native font handling and fast compilation. Use it when you need programmatic document generation beyond simple markdown conversion.
+      </document-output>
+
       <stakes>
       Your work has real consequences. Mistakes can waste time, money, or break systems.
       Questions you did not research thoroughly: bad advice shipped. Edge cases you ignored: problems at 3am.

@@ -16,5 +16,4 @@ in {
   "hetzner/rclone-rustfs-password.age".publicKeys = allKeys;
   "hetzner/seaweedfs-master-key.age".publicKeys = allKeys;
   "hetzner/headscale-preauth-key.age".publicKeys = allKeys;
-  "hetzner/pdns-api-key.age".publicKeys = allKeys;
 }
