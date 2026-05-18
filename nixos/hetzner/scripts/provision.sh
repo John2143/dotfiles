@@ -136,6 +136,12 @@ if [[ "$ROLE" == "server" ]]; then
   echo "  --- Service Status ---"
   ssh "root@${IP}" "echo 'k3s:' \$(systemctl is-active k3s); echo 'mysql:' \$(systemctl is-active mysql); echo 'pdns:' \$(systemctl is-active pdns); echo 'tailscaled:' \$(systemctl is-active tailscaled)"
   ssh "root@${IP}" "kubectl get nodes 2>/dev/null" || echo "    (k3s not ready yet)"
+  # Remove stale Cilium taint if present (from previous Cilium installation)
+  ssh "root@${IP}" "kubectl taint node --all node.cilium.io/agent-not-ready:NoSchedule- 2>/dev/null || true"
+  # If k3s shows flannel.1 conflict on restart, clean up stale kernel interfaces
+  if ! ssh "root@${IP}" "kubectl get nodes &>/dev/null"; then
+    ssh "root@${IP}" "ip link delete flannel.1 2>/dev/null || true; ip link delete cilium_vxlan 2>/dev/null || true; ip link delete cilium_host 2>/dev/null || true; ip link delete cilium_net 2>/dev/null || true; systemctl restart k3s; sleep 15" 2>/dev/null || true
+  fi
   ssh "root@${IP}" "tailscale status 2>/dev/null" || echo "    (tailscale not connected yet)"
 else
   ssh "root@${IP}" "systemctl is-active k3s-agent 2>/dev/null || echo 'inactive'"

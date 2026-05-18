@@ -58,7 +58,7 @@
       pdnsutil zone create 9s.pics
       pdnsutil zone set-kind 9s.pics master
       # Set SOA via rrset replace (set-soa removed in 5.0.x)
-      pdnsutil rrset replace 9s.pics @ SOA 60 "ns1.9s.pics hostmaster.9s.pics 1 10800 3600 604800 60"
+      pdnsutil rrset replace 9s.pics 9s.pics SOA 60 "ns1.9s.pics. hostmaster.9s.pics. 1 10800 3600 604800 60"
 
       # Create TSIG key for ExternalDNS RFC2136 updates
       TSIG_KEY=$(tr -d '\n' < "${config.age.secrets."hetzner/powerdns-tsig-key".path}")
@@ -66,8 +66,9 @@
       pdnsutil tsigkey import externaldns hmac-sha256 "$TSIG_KEY"
 
       # Set NS records
-      pdnsutil rrset add 9s.pics @ NS 60 ns1.9s.pics
-      pdnsutil rrset add 9s.pics @ NS 60 ns2.9s.pics
+      pdnsutil rrset add 9s.pics 9s.pics NS 60 ns1.9s.pics
+      pdnsutil rrset add 9s.pics 9s.pics NS 60 ns2.9s.pics
+      pdnsutil rrset add 9s.pics 9s.pics NS 60 ns3.9s.pics
 
       # Allow TSIG key to update the zone
       pdnsutil metadata set 9s.pics TSIG-ALLOW-DNSUPDATE externaldns
