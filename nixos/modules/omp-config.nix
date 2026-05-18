@@ -176,6 +176,7 @@ in
         default: deepseek/deepseek-v4-pro
         #smol: office-ollama-cpu/gemma4
         smol: deepseek/deepseek-v4-flash
+        slow: anthropic/claude-opus-4-7
 
       modelProviderOrder:
         - vast-vllm
