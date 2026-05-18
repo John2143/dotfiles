@@ -83,6 +83,8 @@ in {
       minio-client # provides `mc` for RustFS/S3 operations
       websocat
       zip
+      pandoc # markdown → HTML/Typst/PDF conversion
+      typst # modern LaTeX replacement for beautiful PDF rendering
     ]
     ++ lib.optionals pkgs.stdenv.isLinux [
       gocryptfs

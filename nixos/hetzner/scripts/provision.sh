@@ -35,7 +35,8 @@ PLAN=""
 case "${REGION}-${ROLE}" in
   ashburn-server|hillsboro-server|nuremberg-server) PLAN="cpx31" ;;  # All cpx31 (cpx32 boot issue)
   ashburn-agent|hillsboro-agent|nuremberg-agent)   PLAN="cpx31" ;;
-  *) echo "Unknown region/role: ${REGION}-${ROLE}"; exit 1 ;;~
+  *) echo "Unknown region/role: ${REGION}-${ROLE}"; exit 1 ;;
+esac
 
 FLAKE=".#${HOSTNAME}"
 

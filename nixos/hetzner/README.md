@@ -109,14 +109,32 @@ echo -n "hskey-auth-..." | agenix -e nixos/hetzner/secrets/hetzner/headscale-pre
 
 ## Galera bootstrap
 
-After all 3 nodes are provisioned and on the tailnet, bootstrap the Galera cluster:
+Nodes start with standalone MySQL (`wsrep_cluster_address=gcomm://` — the default in `hetzner-galera.nix`).
+After all 3 Hetzner nodes are provisioned and on the tailnet, form the 4-node Galera cluster:
 
 ```bash
+# 0. On ALL nodes, set the full cluster address
+CLUSTER_ADDR="gcomm://k3s-ashburn.ts.9s.pics,k3s-hillsboro.ts.9s.pics,k3s-nuremberg.ts.9s.pics,home-pi-clnydbkx.ts.9s.pics"
+for IP in <ASHBURN_IP> <HILLSBORO_IP> <NUREMBERG_IP>; do
+  ssh root@$IP "
+    sudo mkdir -p /etc/my.cnf.d
+    echo '[mysqld]' | sudo tee /etc/my.cnf.d/galera-cluster.cnf
+    echo \"wsrep_cluster_address=$CLUSTER_ADDR\" | sudo tee -a /etc/my.cnf.d/galera-cluster.cnf
+  "
+done
+# Home Pi (uses different SSH user)
+ssh 192.168.0.154 "
+  sudo mkdir -p /etc/my.cnf.d
+  echo '[mysqld]' | sudo tee /etc/my.cnf.d/galera-cluster.cnf
+  echo \"wsrep_cluster_address=$CLUSTER_ADDR\" | sudo tee -a /etc/my.cnf.d/galera-cluster.cnf
+"
+
 # 1. On home-pi (create the cluster)
 ssh 192.168.0.154 "
   sudo systemctl stop mysql
   sudo rm -f /run/mysqld/mysqld.sock
-  echo 1 | sudo tee /var/lib/mysql/grastate.dat
+  sudo rm -f /var/lib/mysql/grastate.dat
+  echo 1 | sudo -u mysql tee /var/lib/mysql/grastate.dat
   sudo systemctl start mysql
 "
 # Verify: sudo mysql -e "SHOW STATUS LIKE 'wsrep%'" | grep cluster_size

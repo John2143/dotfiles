@@ -59,7 +59,7 @@
     after = ["k3s.service"];
     wants = ["k3s.service"];
     wantedBy = ["multi-user.target"];
-    path = [pkgs.k3s pkgs.curl];
+    path = [pkgs.k3s pkgs.curl pkgs.git];
     serviceConfig = {
       Type = "oneshot";
       RemainAfterExit = true;
@@ -77,11 +77,11 @@
       kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
       kubectl wait --for=condition=available deployment/argocd-server -n argocd --timeout=120s || true
       # Apply ArgoCD ConfigMap (health-check fix for sync-wave ordering + resource tracking)
-      kubectl apply -f https://raw.githubusercontent.com/2143-Labs/2143-59s/main/argocd/argocd-cm.yaml
+      kubectl apply -f https://raw.githubusercontent.com/2143-Labs/2143-59s/master/argocd/argocd-cm.yaml
       kubectl rollout restart deployment/argocd-server -n argocd || true
       kubectl wait --for=condition=available deployment/argocd-server -n argocd --timeout=60s || true
       # Apply root Application — wires ArgoCD to the GitOps repo
-      kubectl apply -f https://raw.githubusercontent.com/2143-Labs/2143-59s/main/argocd/root-app.yaml
+      kubectl apply -f https://raw.githubusercontent.com/2143-Labs/2143-59s/master/argocd/root-app.yaml
     '';
   };
 
@@ -102,7 +102,7 @@
         kubectl get nodes &>/dev/null && break
         sleep 2
       done
-      cilium install
+      cilium install --set k8sServiceHost=127.0.0.1 --set k8sServicePort=6443
     '';
   };
 
