@@ -122,22 +122,22 @@ for IP in <ASHBURN_IP> <HILLSBORO_IP> <NUREMBERG_IP>; do
     echo \"wsrep_cluster_address=$CLUSTER_ADDR\" | sudo tee -a /etc/my.cnf.d/galera-cluster.cnf
   "
 done
-# Home Pi (uses different SSH user)
-ssh 192.168.0.154 "
+# Home Pi
+ssh john@home-pi "
   sudo mkdir -p /etc/my.cnf.d
   echo '[mysqld]' | sudo tee /etc/my.cnf.d/galera-cluster.cnf
   echo \"wsrep_cluster_address=$CLUSTER_ADDR\" | sudo tee -a /etc/my.cnf.d/galera-cluster.cnf
 "
 
 # 1. On home-pi (create the cluster)
-ssh 192.168.0.154 "
+ssh john@home-pi "
   sudo systemctl stop mysql
   sudo rm -f /run/mysqld/mysqld.sock
   sudo rm -f /var/lib/mysql/grastate.dat
   echo 1 | sudo -u mysql tee /var/lib/mysql/grastate.dat
   sudo systemctl start mysql
 "
-# Verify: sudo mysql -e "SHOW STATUS LIKE 'wsrep%'" | grep cluster_size
+# Verify: ssh john@home-pi "sudo mysql -e 'SHOW STATUS LIKE \"wsrep%\"' | grep cluster_size"
 # Should show: cluster_size=1, cluster_status=Primary
 
 # 2. On each Hetzner node (join the cluster)
