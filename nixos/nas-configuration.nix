@@ -488,11 +488,9 @@
         type = "local";
         path = "/tank/atticd/storage";
       };
-      caches."2143nix" = {
-        retention-period = "180d";
-      };
     };
   };
+
 
   age.secrets.attic-jwt-secret = {
     file = ../secrets/attic-jwt-secret.age;
