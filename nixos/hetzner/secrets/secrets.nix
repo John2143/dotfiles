@@ -6,8 +6,7 @@ let
   allKeys = [office arch aman];
 in {
   "hetzner/powerdns-tsig-key.age".publicKeys = allKeys;
-  "hetzner/galera-password.age".publicKeys = allKeys;
-  "hetzner/mariadb-root-password.age".publicKeys = allKeys;
+  "hetzner/postgres-pdns-password.age".publicKeys = allKeys;
   "hetzner/k3s-token.age".publicKeys = allKeys;
   "hetzner/hcloud-token.age".publicKeys = allKeys;
   "hetzner/luks-passphrase.age".publicKeys = allKeys;

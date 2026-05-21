@@ -1,9 +1,9 @@
 # Hetzner k3s Common — shared k3s + Cilium + ArgoCD + firewall config
 #
-# Imported by hetzner-k3s-server.nix (adds PowerDNS + Galera on top).
+# Imported by hetzner-k3s-server.nix (adds PowerDNS + PostgreSQL schema on top).
 # All 3 server nodes are identical — drop-in replaceable.
 #
-# Does NOT import PowerDNS or Galera modules (those are in k3s-server).
+# Does NOT import PowerDNS or PostgreSQL schema modules (those are in k3s-server).
 {
   config,
   lib,
@@ -88,7 +88,7 @@
   # Runs after k3s is ready, before ArgoCD applies the root app.
   # Secrets: rfc2136-credentials, crowdsec-bouncer-key, mongo-creds,
   #   mongo-encryption-key, b2-credentials, seaweedfs-master-key,
-  #   rclone-config, healthchecks-url, temporal-postgres-password
+  #   rclone-config, healthchecks-url, pdns-postgres-password
   systemd.services.k8s-secrets-bootstrap = {
     description = "Inject agenix secrets into Kubernetes Secrets";
     after = ["k3s.service" "argocd-bootstrap.service"];
@@ -145,9 +145,9 @@
         --from-literal=HC_URL=https://hc-ping.com/PLACEHOLDER_UUID \
         --dry-run=client -o yaml | kubectl apply -f -
 
-      # Temporal postgres password
-      kubectl create secret generic temporal-postgres-password -n default \
-        --from-literal=password="$(head -c 24 /dev/urandom | base64)" \
+      # PowerDNS PostgreSQL password for CloudNativePG
+      kubectl create secret generic pdns-postgres-password -n default \
+        --from-literal=password="$(cat ${config.age.secrets."hetzner/postgres-pdns-password".path})" \
         --dry-run=client -o yaml | kubectl apply -f -
     '';
   };
@@ -177,7 +177,7 @@
   #   ...
   # };
 
-  networking.firewall.allowedTCPPorts = [22 6443 80 443 53 3306 4444 4567 4568];
+  networking.firewall.allowedTCPPorts = [22 6443 80 443 53 30432 4567 4568];
   networking.firewall.allowedUDPPorts = [53 8472];
 
   environment.systemPackages = with pkgs; [

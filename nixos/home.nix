@@ -191,13 +191,299 @@ in {
     else primaryPackages;
 
 
-  wayland.windowManager.hyprland = {
+  wayland.windowManager.hyprland = let
+    mkLua = lib.generators.mkLuaInline;
+  in {
     enable = true;
     package = pkgs.hyprland;
     xwayland.enable = true;
     systemd.enable = true;
-    configType = "hyprlang";
-    extraConfig = builtins.readFile ../.config/hypr/hyprland.conf;
+    configType = "lua";
+
+    settings = {
+      # ---- Locals (Lua variables) ----
+      terminal = { _var = "alacritty"; };
+      fileManager = { _var = "dolphin"; };
+      menu = { _var = ''fish -c "mkdir -p ~/drun_logs/ ; wofi --show drun > ~/drun_logs/(date)"''; };
+      mainMod = { _var = "SUPER"; };
+      MONITOR_LEFT = { _var = "DP-3"; };
+      MONITOR_RIGHT = { _var = "HDMI-A-2"; };
+
+      # ---- Monitors ----
+      monitor = [
+        { output = "DP-3"; mode = "highrr"; position = "0x0"; scale = 1; bitdepth = 8; }
+        { output = "HDMI-A-2"; mode = "highrr"; position = "2560x0"; scale = 1; }
+      ];
+
+      # ---- Environment ----
+      env = [
+        { _args = ["XCURSOR_SIZE" "24"]; }
+        { _args = ["XCURSOR_THEME" "Adwaita"]; }
+      ];
+
+      # ---- Curves ----
+      curve = [
+        { _args = ["myBezier" { type = "bezier"; points = [ [0.05 0.9] [0.1 1.05] ]; }]; }
+      ];
+
+      # ---- Animations ----
+      animation = [
+        { _args = [{ leaf = "windows"; enabled = true; speed = 7; bezier = "myBezier"; }]; }
+        { _args = [{ leaf = "windowsOut"; enabled = true; speed = 7; bezier = "default"; style = "popin 80%"; }]; }
+        { _args = [{ leaf = "border"; enabled = true; speed = 10; bezier = "default"; }]; }
+        { _args = [{ leaf = "borderangle"; enabled = true; speed = 8; bezier = "default"; }]; }
+        { _args = [{ leaf = "fade"; enabled = true; speed = 7; bezier = "default"; }]; }
+        { _args = [{ leaf = "workspaces"; enabled = true; speed = 6; bezier = "default"; }]; }
+      ];
+
+      # ---- Main config (hl.config) ----
+      config = {
+        debug = {
+          disable_logs = false;
+        };
+
+        general = {
+          gaps_in = 2;
+          gaps_out = 5;
+          border_size = 2;
+          col = {
+            active_border = {
+              colors = ["rgba(33ccffee)" "rgba(00ff99ee)"];
+              angle = 45;
+            };
+            inactive_border = "rgba(595959aa)";
+          };
+          layout = "dwindle";
+          allow_tearing = true;
+        };
+
+        decoration = {
+          rounding = 3;
+          blur = {
+            enabled = true;
+            size = 3;
+            passes = 1;
+          };
+        };
+
+        dwindle = {
+          preserve_split = true;
+        };
+
+        misc = {
+          disable_splash_rendering = true;
+          force_default_wallpaper = 0;
+        };
+
+        input = {
+          kb_layout = "us";
+          kb_variant = "";
+          kb_model = "";
+          kb_options = "ctrl:nocaps,fkeys:basic_13-24";
+          kb_rules = "";
+          follow_mouse = 0;
+          touchpad = {
+            natural_scroll = false;
+          };
+          sensitivity = -0.2;
+          accel_profile = "flat";
+        };
+      };
+
+      # ---- Workspace rules ----
+      workspace_rule = [
+        { workspace = "name:A1"; monitor = "DP-3"; default = true; }
+        { workspace = "name:A2"; monitor = "DP-3"; default = true; }
+        { workspace = "name:A3"; monitor = "DP-3"; default = true; }
+        { workspace = "name:A4"; monitor = "DP-3"; default = true; }
+        { workspace = "name:A5"; monitor = "DP-3"; default = true; }
+        { workspace = "name:B1"; monitor = "HDMI-A-2"; default = true; }
+        { workspace = "name:B2"; monitor = "HDMI-A-2"; default = true; }
+        { workspace = "name:B3"; monitor = "HDMI-A-2"; default = true; }
+        { workspace = "name:B4"; monitor = "HDMI-A-2"; default = true; }
+        { workspace = "name:B5"; monitor = "HDMI-A-2"; default = true; }
+        { workspace = "name:ts"; monitor = "HDMI-A-2"; default = true; }
+        { workspace = "name:disc"; monitor = "HDMI-A-2"; default = true; }
+        { workspace = "name:steam"; monitor = "HDMI-A-2"; default = true; }
+        { workspace = "name:obsidian"; monitor = "HDMI-A-2"; default = true; }
+        { workspace = "name:spotify"; monitor = "HDMI-A-2"; default = true; }
+      ];
+      # ---- Window rules ----
+      window_rule = [
+        # steam
+        { match = { class = "steam"; }; workspace = "name:steam"; no_initial_focus = true; }
+        # TeamSpeak + qpwgraph
+        { match = { class = "TeamSpeak 3"; }; workspace = "name:ts"; }
+        { match = { class = "org.rncbc.qpwgraph"; }; workspace = "name:ts"; }
+        # discord / vesktop
+        { match = { class = "vesktop"; }; workspace = "name:disc"; no_initial_focus = true; }
+        { match = { class = "discord"; }; workspace = "name:disc"; no_initial_focus = true; }
+        # obsidian
+        { match = { class = "obsidian"; }; workspace = "name:obsidian"; no_initial_focus = true; }
+        # spotify
+        { match = { class = "Spotify"; }; workspace = "name:spotify"; no_initial_focus = true; }
+        # xwaylandvideobridge (hide)
+        { match = { class = "^xwaylandvideobridge$"; }; opacity = "0.0 override 0.0 override"; no_anim = true; no_focus = true; no_initial_focus = true; }
+        # awakened-poe-trade (hide)
+        { match = { class = "^awakened-poe-trade$"; }; no_anim = true; no_focus = true; no_blur = true; no_initial_focus = true; }
+        # polkit auth dialogs
+        { match = { title = "^(Authentication required|Authentication Required).*"; }; float = true; center = true; }
+      ];
+
+      # ---- Exec commands (exec-once / exec) ----
+      exec_cmd = [
+        { _args = ["lxqt-policykit-agent"]; }
+        { _args = [''fish -c "tmux new-session -d ; sleep 1; fish ~/dotfiles/.config/startup.fish"'']; }
+        { _args = ["fish ~/.xprofile.fish"]; }
+        { _args = ["wl-paste --type text --watch cliphist store"]; }
+        { _args = ["wl-paste --type image --watch cliphist store"]; }
+      ];
+      # ---- Binds ----
+      bind = [
+        # App launchers
+        { _args = [(mkLua ''mainMod .. " + Return"'') (mkLua "hl.dsp.exec_cmd(terminal)")]; }
+        { _args = [(mkLua ''mainMod .. " + Space"'') (mkLua "hl.dsp.exec_cmd(menu)")]; }
+        { _args = [(mkLua ''mainMod .. " + CTRL + Space"'') (mkLua "hl.dsp.exec_cmd(fileManager)")]; }
+        { _args = [(mkLua ''mainMod .. " + E"'') (mkLua "hl.dsp.exec_cmd(fileManager)")]; }
+        { _args = [(mkLua ''mainMod .. " + Q"'') (mkLua "hl.dsp.window.close()")]; }
+
+        # bspwm-like
+        { _args = [(mkLua ''mainMod .. " + D"'') (mkLua "hl.dsp.window.pseudo()")]; }
+        { _args = [(mkLua ''mainMod .. " + F"'') (mkLua "hl.dsp.window.fullscreen()")]; }
+        { _args = [(mkLua ''mainMod .. " + S"'') (mkLua ''hl.dsp.window.float({ action = "toggle" })'')]; }
+        { _args = [(mkLua ''mainMod .. " + SHIFT + S"'') (mkLua ''hl.dsp.layout("togglesplit")'')]; }
+
+        # Clipboard
+        { _args = ["SUPER + V" (mkLua ''hl.dsp.exec_cmd([[cliphist list | wofi --dmenu | cliphist decode | wl-copy]])'')]; }
+
+        # Screenshots
+        { _args = ["CTRL + SHIFT + 1" (mkLua ''hl.dsp.exec_cmd([[fish -c 'grim -g (slurp) - | wl-copy']])'')]; }
+        { _args = ["CTRL + SHIFT + ALT + 1" (mkLua ''hl.dsp.exec_cmd([[fish -c 'grim -g (slurp) - | wl-copy']])'')]; }
+        { _args = ["CTRL + SHIFT + 2" (mkLua ''hl.dsp.exec_cmd([[fish -c 'set loc (screenshot_location); grim -g (slurp) - | swappy -f - -o "$loc"; juush $loc']])'')]; }
+        { _args = ["CTRL + SHIFT + 3" (mkLua ''hl.dsp.exec_cmd([[fish -c 'set loc (screenshot_location); set ll (slurp) ; sleep 1 ; grim -g $ll $loc; juush $loc']])'')]; }
+        { _args = ["CTRL + SHIFT + ALT + 4" (mkLua ''hl.dsp.exec_cmd([[fish -c 'set loc (screenshot_location); grim -g (slurp) $loc; juush $loc']])'')]; }
+        { _args = ["CTRL + SHIFT + 4" (mkLua ''hl.dsp.exec_cmd([[fish -c 'set loc (screenshot_location); grim -g (slurp) $loc; juush $loc']])'')]; }
+        { _args = ["CTRL + SHIFT + 5" (mkLua ''hl.dsp.exec_cmd([[fish -c 'wl-paste > ~/screenshots/clipboard.txt; juush ~/screenshots/clipboard.txt']])'')]; }
+        { _args = ["CTRL + SHIFT + 9" (mkLua ''hl.dsp.exec_cmd([[fish -c 'set loc (string replace "png" "mkv" (screenshot_location)); notify-send "Starting recording "(loc); wf-recorder -g (slurp) -f $loc; set -Ux LAST_VID $loc']])'')]; }
+        { _args = ["CTRL + SHIFT + 6" (mkLua ''hl.dsp.exec_cmd([[fish -c 'killall -s SIGINT wf-recorder; notify-send "Finished Recording, starting transcode"; ffmpeg -i $LAST_VID -c:v libx264 $LAST_VID.mp4; notify-send "Finished Transcode, starting upload"; juush $LAST_VID.mp4']])'')]; }
+        { _args = ["CTRL + SHIFT + 7" (mkLua ''hl.dsp.exec_cmd([[fish -c 'hyprpicker | wl-copy']])'')]; }
+
+        # Move focus (vim keys)
+        { _args = [(mkLua ''mainMod .. " + H"'') (mkLua ''hl.dsp.focus({ direction = "left" })'')]; }
+        { _args = [(mkLua ''mainMod .. " + J"'') (mkLua ''hl.dsp.focus({ direction = "down" })'')]; }
+        { _args = [(mkLua ''mainMod .. " + K"'') (mkLua ''hl.dsp.focus({ direction = "up" })'')]; }
+        { _args = [(mkLua ''mainMod .. " + L"'') (mkLua ''hl.dsp.focus({ direction = "right" })'')]; }
+
+        # Workspace switching (left monitor A1-A5)
+        { _args = [(mkLua ''mainMod .. " + 1"'') (mkLua ''function() hl.dispatch(hl.dsp.focus({ monitor = MONITOR_LEFT })) hl.dispatch(hl.dsp.focus({ workspace = "name:A1" })) end'')]; }
+        { _args = [(mkLua ''mainMod .. " + 2"'') (mkLua ''function() hl.dispatch(hl.dsp.focus({ monitor = MONITOR_LEFT })) hl.dispatch(hl.dsp.focus({ workspace = "name:A2" })) end'')]; }
+        { _args = [(mkLua ''mainMod .. " + 3"'') (mkLua ''function() hl.dispatch(hl.dsp.focus({ monitor = MONITOR_LEFT })) hl.dispatch(hl.dsp.focus({ workspace = "name:A3" })) end'')]; }
+        { _args = [(mkLua ''mainMod .. " + 4"'') (mkLua ''function() hl.dispatch(hl.dsp.focus({ monitor = MONITOR_LEFT })) hl.dispatch(hl.dsp.focus({ workspace = "name:A4" })) end'')]; }
+        { _args = [(mkLua ''mainMod .. " + 5"'') (mkLua ''function() hl.dispatch(hl.dsp.focus({ monitor = MONITOR_LEFT })) hl.dispatch(hl.dsp.focus({ workspace = "name:A5" })) end'')]; }
+
+        # Workspace switching (right monitor B1-B5, named)
+        { _args = [(mkLua ''mainMod .. " + SHIFT + 1"'') (mkLua ''function() hl.dispatch(hl.dsp.focus({ monitor = MONITOR_RIGHT })) hl.dispatch(hl.dsp.focus({ workspace = "name:B1" })) end'')]; }
+        { _args = [(mkLua ''mainMod .. " + SHIFT + 2"'') (mkLua ''function() hl.dispatch(hl.dsp.focus({ monitor = MONITOR_RIGHT })) hl.dispatch(hl.dsp.focus({ workspace = "name:B2" })) end'')]; }
+        { _args = [(mkLua ''mainMod .. " + SHIFT + 3"'') (mkLua ''function() hl.dispatch(hl.dsp.focus({ monitor = MONITOR_RIGHT })) hl.dispatch(hl.dsp.focus({ workspace = "name:B3" })) end'')]; }
+        { _args = [(mkLua ''mainMod .. " + SHIFT + 4"'') (mkLua ''function() hl.dispatch(hl.dsp.focus({ monitor = MONITOR_RIGHT })) hl.dispatch(hl.dsp.focus({ workspace = "name:B4" })) end'')]; }
+        { _args = [(mkLua ''mainMod .. " + SHIFT + 5"'') (mkLua ''function() hl.dispatch(hl.dsp.focus({ monitor = MONITOR_RIGHT })) hl.dispatch(hl.dsp.focus({ workspace = "name:B5" })) end'')]; }
+        { _args = [(mkLua ''mainMod .. " + SHIFT + Q"'') (mkLua ''function() hl.dispatch(hl.dsp.focus({ monitor = MONITOR_RIGHT })) hl.dispatch(hl.dsp.focus({ workspace = "name:ts" })) end'')]; }
+        { _args = [(mkLua ''mainMod .. " + SHIFT + W"'') (mkLua ''function() hl.dispatch(hl.dsp.focus({ monitor = MONITOR_RIGHT })) hl.dispatch(hl.dsp.focus({ workspace = "name:disc" })) end'')]; }
+        { _args = [(mkLua ''mainMod .. " + SHIFT + E"'') (mkLua ''function() hl.dispatch(hl.dsp.focus({ monitor = MONITOR_RIGHT })) hl.dispatch(hl.dsp.focus({ workspace = "name:obsidian" })) end'')]; }
+
+        # Workspace scroll
+        { _args = [(mkLua ''mainMod .. " + bracketright"'') (mkLua ''hl.dsp.focus({ workspace = "e-1" })'')]; }
+        { _args = [(mkLua ''mainMod .. " + bracketleft"'') (mkLua ''hl.dsp.focus({ workspace = "e+1" })'')]; }
+
+        # Move workspace to monitor
+        { _args = [(mkLua ''mainMod .. " + CTRL + bracketright"'') (mkLua ''hl.dsp.exec_cmd("hyprctl dispatch movecurrentworkspacetomonitor r")'')]; }
+        { _args = [(mkLua ''mainMod .. " + CTRL + bracketleft"'') (mkLua ''hl.dsp.exec_cmd("hyprctl dispatch movecurrentworkspacetomonitor l")'')]; }
+        { _args = [(mkLua ''mainMod .. " + CTRL + period"'') (mkLua ''hl.dsp.exec_cmd("hyprctl dispatch movecurrentworkspacetomonitor 0")'')]; }
+        { _args = [(mkLua ''mainMod .. " + CTRL + comma"'') (mkLua ''hl.dsp.exec_cmd("hyprctl dispatch movecurrentworkspacetomonitor 1")'')]; }
+        { _args = [(mkLua ''mainMod .. " + CTRL + slash"'') (mkLua ''hl.dsp.exec_cmd("hyprctl dispatch movecurrentworkspacetomonitor 2")'')]; }
+
+        # Move window to workspace
+        { _args = [(mkLua ''mainMod .. " + CTRL + SHIFT + 1"'') (mkLua ''hl.dsp.window.move({ workspace = "name:A1" })'')]; }
+        { _args = [(mkLua ''mainMod .. " + CTRL + SHIFT + 2"'') (mkLua ''hl.dsp.window.move({ workspace = "name:A2" })'')]; }
+        { _args = [(mkLua ''mainMod .. " + CTRL + SHIFT + 3"'') (mkLua ''hl.dsp.window.move({ workspace = "name:A3" })'')]; }
+        { _args = [(mkLua ''mainMod .. " + CTRL + SHIFT + 4"'') (mkLua ''hl.dsp.window.move({ workspace = "name:A4" })'')]; }
+        { _args = [(mkLua ''mainMod .. " + CTRL + SHIFT + 5"'') (mkLua ''hl.dsp.window.move({ workspace = "name:A5" })'')]; }
+        { _args = [(mkLua ''mainMod .. " + CTRL + SHIFT + 6"'') (mkLua ''hl.dsp.window.move({ workspace = "name:B1" })'')]; }
+        { _args = [(mkLua ''mainMod .. " + CTRL + SHIFT + 7"'') (mkLua ''hl.dsp.window.move({ workspace = "name:B2" })'')]; }
+        { _args = [(mkLua ''mainMod .. " + CTRL + SHIFT + 8"'') (mkLua ''hl.dsp.window.move({ workspace = "name:B3" })'')]; }
+        { _args = [(mkLua ''mainMod .. " + CTRL + SHIFT + 9"'') (mkLua ''hl.dsp.window.move({ workspace = "name:B4" })'')]; }
+        { _args = [(mkLua ''mainMod .. " + CTRL + SHIFT + 0"'') (mkLua ''hl.dsp.window.move({ workspace = "name:B5" })'')]; }
+        { _args = [(mkLua ''mainMod .. " + CTRL + SHIFT + Q"'') (mkLua ''hl.dsp.window.move({ workspace = "name:ts" })'')]; }
+        { _args = [(mkLua ''mainMod .. " + CTRL + SHIFT + W"'') (mkLua ''hl.dsp.window.move({ workspace = "name:disc" })'')]; }
+        { _args = [(mkLua ''mainMod .. " + CTRL + SHIFT + E"'') (mkLua ''hl.dsp.window.move({ workspace = "name:obsidian" })'')]; }
+
+        # Sleep / wake / quit
+        { _args = ["CTRL + ALT + L" (mkLua ''hl.dsp.exec_cmd([[fish -c "hyprlock &; sleep 1 && hyprctl dispatch dpms off"]])'')]; }
+        { _args = ["Print" (mkLua ''hl.dsp.exec_cmd([[fish -c "hyprctl dispatch dpms on"]])'')]; }
+        { _args = [(mkLua ''mainMod .. " + SHIFT + M"'') (mkLua "hl.dsp.exit()")]; }
+
+        # Media keys
+        { _args = ["XF86AudioRaiseVolume" (mkLua ''hl.dsp.exec_cmd([[fish -c "pamixer -i 5"]])'')]; }
+        { _args = ["XF86AudioLowerVolume" (mkLua ''hl.dsp.exec_cmd([[fish -c "pamixer -d 5"]])'')]; }
+        { _args = [(mkLua ''mainMod .. " + XF86AudioRaiseVolume"'') (mkLua ''hl.dsp.exec_cmd([[fish -c "~/.config/focussed-vol-adjust.sh 0.05+"]])'')]; }
+        { _args = [(mkLua ''mainMod .. " + XF86AudioLowerVolume"'') (mkLua ''hl.dsp.exec_cmd([[fish -c "~/.config/focussed-vol-adjust.sh 0.05-"]])'')]; }
+        { _args = [(mkLua ''mainMod .. " + XF86AudioMute"'') (mkLua ''hl.dsp.exec_cmd([[fish -c "~/.config/focussed-vol-adjust.sh toggle"]])'')]; }
+
+        # Macro pad F18 group — lights
+        { _args = ["F18" (mkLua ''hl.dsp.exec_cmd("hass-macro light-lamp")'')]; }
+        { _args = ["CTRL + F18" (mkLua ''hl.dsp.exec_cmd("hass-macro light-dresser")'')]; }
+        { _args = ["ALT + F18" (mkLua ''hl.dsp.exec_cmd("hass-macro light-ac")'')]; }
+        { _args = ["SUPER + F18" (mkLua ''hl.dsp.exec_cmd("hass-macro light-bedroom")'')]; }
+
+        # Macro pad F19 group — climate
+        { _args = ["F19" (mkLua ''hl.dsp.exec_cmd("hass-macro thermostat-toggle")'')]; }
+        { _args = ["CTRL + F19" (mkLua ''hl.dsp.exec_cmd("hass-macro thermostat-down")'')]; }
+        { _args = ["ALT + F19" (mkLua ''hl.dsp.exec_cmd("hass-macro thermostat-up")'')]; }
+        { _args = ["SUPER + F19" (mkLua ''hl.dsp.exec_cmd("hass-macro ac-toggle")'')]; }
+        { _args = ["CTRL + ALT + F19" (mkLua ''hl.dsp.exec_cmd("hass-macro fan-toggle")'')]; }
+
+        # Macro pad F20 group — display
+        { _args = ["F20" (mkLua ''hl.dsp.exec_cmd("hyprctl dispatch dpms on")'')]; }
+        { _args = ["CTRL + F20" (mkLua ''hl.dsp.exec_cmd("hyprctl dispatch dpms off")'')]; }
+
+        # TeamSpeak / Discord mute
+        { _args = ["Prior" (mkLua ''hl.dsp.pass({ class = "^TeamSpeak 3$" })'')]; }
+        { _args = ["Next" (mkLua ''hl.dsp.pass({ class = "^TeamSpeak 3$" })'')]; }
+        { _args = ["KP_Subtract" (mkLua ''hl.dsp.pass({ class = "^discord$" })'')]; }
+        { _args = ["XF86AudioPrev" (mkLua ''hl.dsp.pass({ class = "^discord$" })'')]; }
+
+        # Pass CTRL+ALT+D to awakened-poe-trade
+        { _args = ["CTRL + ALT + D" (mkLua ''hl.dsp.pass({ class = "^awakened-poe-trade$" })'')]; }
+        { _args = [(mkLua ''mainMod .. " + CTRL + ALT + D"'') (mkLua "hl.dsp.exec_cmd(terminal)")]; }
+
+        # PoE shortcuts
+        { _args = [(mkLua ''mainMod .. " + Z"'') (mkLua ''hl.dsp.exec_cmd([[fish -c 'ydotool key 28:1 28:0; ydotool type "/hideout"; ydotool key 28:1 28:0;']])'')]; }
+        { _args = [(mkLua ''mainMod .. " + X"'') (mkLua ''hl.dsp.exec_cmd([[fish -c 'ydotool key 28:1 28:0; ydotool type "/menagerie"; ydotool key 28:1 28:0;']])'')]; }
+
+        # Notify slurp result
+        { _args = [(mkLua ''mainMod .. " + N"'') (mkLua ''hl.dsp.exec_cmd([[fish -c "notify-send (slurp -p)"]])'')]; }
+
+        # Rename workspace to active window class
+        { _args = [(mkLua ''mainMod .. " + R"'') (mkLua ''hl.dsp.exec_cmd([[fish -c 'hyprctl dispatch renameworkspace $(hyprctl activeworkspace -j | jq -r ".id") $(hyprctl activewindow -j | jq -r ".class")']])'')]; }
+
+        # Scroll workspaces
+        { _args = [(mkLua ''mainMod .. " + mouse_down"'') (mkLua ''hl.dsp.focus({ workspace = "e+1" })'')]; }
+        { _args = [(mkLua ''mainMod .. " + mouse_up"'') (mkLua ''hl.dsp.focus({ workspace = "e-1" })'')]; }
+
+        # Mouse binds for move/resize
+        { _args = [(mkLua ''mainMod .. " + mouse:272"'') (mkLua "hl.dsp.window.drag()") { mouse = true; }]; }
+        { _args = [(mkLua ''mainMod .. " + mouse:273"'') (mkLua "hl.dsp.window.resize()") { mouse = true; }]; }
+      ];
+
+      # ---- Startup hook (runs after compositor is ready) ----
+      on = [
+        { _args = ["hyprland.start" (mkLua ''
+          function()
+            hl.exec_cmd("tmux setenv -g HYPRLAND_INSTANCE_SIGNATURE " .. os.getenv("HYPRLAND_INSTANCE_SIGNATURE"))
+          end
+        '')]; }
+      ];
+    };
   };
 
   services.gammastep = {

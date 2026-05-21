@@ -30,10 +30,10 @@
     ];
 
     # All 3 server nodes are fully identical — drop-in replaceable.
-    # Each runs k3s + PowerDNS + Galera via the same mkServer function.
-    mkServer = { compName, galeraOffset }: nixpkgs.lib.nixosSystem {
+    # Each runs k3s + PowerDNS. PostgreSQL runs inside k3s via CloudNativePG.
+    mkServer = { compName }: nixpkgs.lib.nixosSystem {
       inherit system;
-      specialArgs = { inherit inputs compName galeraOffset; sshKeys = my-keys; };
+      specialArgs = { inherit inputs compName; sshKeys = my-keys; postgresHost = "127.0.0.1"; };
       modules = [
         disko.nixosModules.default
         agenix.nixosModules.default
@@ -60,19 +60,19 @@
   in {
     nixosConfigurations = {
       # ── Server nodes (LA mode, 24/7) ──
-      k3s-ashburn   = mkServer { compName = "k3s-ashburn";   galeraOffset = 1; };
-      k3s-hillsboro = mkServer { compName = "k3s-hillsboro"; galeraOffset = 2; };
-      k3s-nuremberg = mkServer { compName = "k3s-nuremberg"; galeraOffset = 3; };
+      k3s-ashburn   = mkServer { compName = "k3s-ashburn";   };
+      k3s-hillsboro = mkServer { compName = "k3s-hillsboro"; };
+      k3s-nuremberg = mkServer { compName = "k3s-nuremberg"; };
 
       # ── Agent nodes (HA toggle, provisioned/destroyed via scripts) ──
       k3s-ashburn-agent   = mkAgent { compName = "k3s-ashburn-agent";   };
       k3s-hillsboro-agent = mkAgent { compName = "k3s-hillsboro-agent"; };
       k3s-nuremberg-agent = mkAgent { compName = "k3s-nuremberg-agent"; };
 
-      # ── Home Pi (Headscale + Galera #4 + PowerDNS #4) ──
+      # ── Home Pi (Headscale + PowerDNS) ──
       home-pi = nixpkgs.lib.nixosSystem {
         system = piSystem;
-        specialArgs = { inherit inputs; compName = "home-pi"; sshKeys = my-keys; };
+        specialArgs = { inherit inputs; compName = "home-pi"; sshKeys = my-keys; postgresHost = "k3s-ashburn.ts.9s.pics"; };
         modules = [
           agenix.nixosModules.default
           ./hosts/home-pi.nix

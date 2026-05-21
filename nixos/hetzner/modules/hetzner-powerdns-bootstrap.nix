@@ -5,7 +5,8 @@
 # State file prevents re-run.
 #
 # Runs on all 3 server nodes + Home Pi (via mkServer/mkHome).
-# Only the first node to execute creates the zone — Galera replicates to others.
+# Each node independently creates the zone in its own view of the
+# PostgreSQL database (single CNPG cluster, shared data).
 # State file guard prevents re-execution on any node.
 #
 # NOTE: pdns 5.0.x renamed many subcommands:
@@ -23,8 +24,8 @@
 }: {
   systemd.services.pdns-zone-bootstrap = {
     description = "Create PowerDNS zone and TSIG key for 9s.pics";
-    after = ["pdns.service" "mysql.service"];
-    wants = ["pdns.service" "mysql.service"];
+    after = ["pdns.service"];
+    wants = ["pdns.service"];
     wantedBy = ["multi-user.target"];
     path = [pkgs.pdns];
     serviceConfig = {
@@ -32,7 +33,6 @@
       RemainAfterExit = true;
     };
 
-    # Only run on ashburn (first server provisioned). Galera replicates to others.
     # State file in /var/lib guards against re-execution.
     script = ''
       STATE_FILE=/var/lib/pdns-zone-bootstrap-done
@@ -47,9 +47,9 @@
         sleep 2
       done
 
-      # Check if zone already exists (replicated via Galera from another node)
+      # Check if zone already exists
       if pdnsutil list-all-zones | grep -q "9s.pics"; then
-        echo "Zone 9s.pics already exists (replicated via Galera), skipping creation."
+        echo "Zone 9s.pics already exists, skipping creation."
         touch "$STATE_FILE"
         exit 0
       fi
