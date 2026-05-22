@@ -151,22 +151,43 @@ All hosts run NixOS (except mac which is nix-darwin). Managed from `~/dotfiles` 
 | RustFS (S3) | (TBD) | `files.john2143.com` |
 
 
-## Cameras and UniFi
+## Cameras (Reolink)
 
-| Device | IP | MAC | Notes |
-|--------|-----|-----|-------|
-| UniFi NVR | 192.168.5.163 (DHCP) | EC:71:DB:8B:92:93 | UniFi Protect recorder |
-| Front (doorbell?) | 192.168.5.174 (DHCP) | EC:71:DB:3E:2F:21 | hostname=Front |
-| Camera? | 192.168.5.197 (static) | EC:71:DB:8B:92:93 | Same MAC as NVR — second NIC? |
-| Camera? | 192.168.5.154 (static) | EC:71:DB:8B:92:93 | Same MAC as NVR |
-| Camera? | 192.168.5.152 (static) | EC:71:DB:0B:3C:76 | Ubiquiti MAC prefix |
-| Camera? | 192.168.5.150 (static) | 90:41:B2:D6:74:DB | |
-| Camera? | 192.168.5.149 (static) | 1C:0B:8B:50:FF:7E | |
-| Camera? | 192.168.5.151 (static) | 94:B3:F7:18:52:CC | |
-| Camera? | 192.168.5.219 (static) | C8:FF:77:57:E0:3D | |
+Reolink cameras — ONVIF/RTSP, not UniFi. Use DHCP reservations for IP management.
+Migrated/being migrated from 5.0/24 to dedicated 1.0/24 camera subnet.
 
-All cameras wired through the upstairs/downstairs switches. UniFi NVR records feeds.
-`secu` (192.168.5.140) has "Security camera NVR" in its NixOS role but no recognizable NVR package in its config — possibly Frigate via container, or Home Assistant handles cameras directly. Verify before assuming.
+**IP strategy: Router-side DHCP reservations.**
+```
+mikrotik-connect r '/ip dhcp-server lease make-static [find host-name=Side]'
+```
+
+| Camera | IP | Subnet | Connection | MAC |
+|--------|-----|--------|-----------|-----|
+| Back yard | 192.168.1.60 | 1.0/24 | WiFi, static | 78:93:C3:8E:34:9F |
+| Garage | 192.168.1.61 | 1.0/24 | WiFi, static | EC:71:DB:F4:DC:49 |
+| Front porch | 192.168.1.63 | 1.0/24 | Wired, static | EC:71:DB:89:D8:8B |
+| Front Gate | 192.168.1.64 | 1.0/24 | Wired, static | EC:71:DB:65:58:A3 |
+| Side yard | 192.168.5.169 | 5.0/24 | WiFi, DHCP | 94:B3:F7:18:52:CC |
+| Front Driveway | 192.168.5.174 | 5.0/24 | Wired, DHCP | EC:71:DB:3E:2F:21 |
+
+Side yard has stale duplicate IPs (.151, 1.62) to clean up. `secu` (192.168.5.140) handles NVR duties.
+No UniFi cameras — only UniFi APs and UniFi controller (below).
+
+## UniFi (APs + Controller)
+
+| Device | IP | Model | MAC |
+|--------|-----|-------|-----|
+| U7 Lite (Blue Room) | 192.168.5.173 (DHCP) | U7 Lite | 1C:0B:8B:50:FF:7E |
+| U7 Pro XGS (Office) | 192.168.5.171 (DHCP) | U7 Pro XGS | 90:41:B2:D6:74:DB |
+
+UniFi controller runs in k8s (namespace: default) on closet:
+- `unifi` pod — controller web UI (port 8443/TCP, NodePort 30443)
+- `unifi-mongodb` pod — database backend
+- `unifi-discovery` (LoadBalancer, 10001/UDP) — L2 device discovery (svclb on closet, arch, nas)
+- `unifi-inform` (LoadBalancer, 8080/TCP) — device inform/adoption (svclb on closet, arch, nas)
+
+APs discover the controller via broadcast (same L2 segment) — no special DNS or routing needed.
+Remaining unidentified static-ARP devices: .149, .150, .152, .154, .197, .219. Possibly more cameras or IoT devices.
 ## Live Network State
 
 When you need to confirm what's actually on the network RIGHT NOW, run these read-only queries:

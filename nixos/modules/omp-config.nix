@@ -168,6 +168,98 @@ in
               cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }
               contextWindow: 128000
               maxTokens: 8192
+
+        # OpenRouter — unified API gateway for 300+ models. Used for:
+        #   - Gemini Flash/Pro (cheap, fast, 1M context — excellent smol)
+        #   - Web search via :online suffix ($0.005/req Exa search)
+        #   - Anthropic fallback (routes around direct-API outages)
+        #   - Provider diversity for resilience
+        # Requires OPENROUTER_API_KEY in /run/agenix/llm-runtime-keys.
+        # Get one: https://openrouter.ai/settings/keys
+        openrouter:
+          baseUrl: https://openrouter.ai/api/v1
+          api: openai-completions
+          apiKey: OPENROUTER_API_KEY
+          models:
+            # Gemini Flash Lite — cheapest smol option on OR. $0.10/$0.40 per 1M,
+            # 1M context. Lightweight reasoning model, faster than full Flash.
+            - id: google/gemini-2.5-flash-lite
+              name: Gemini 2.5 Flash Lite (OpenRouter)
+              reasoning: true
+              input: [text]
+              cost: { input: 0.10, output: 0.40, cacheRead: 0, cacheWrite: 0 }
+              contextWindow: 1048576
+              maxTokens: 65536
+
+            # Gemini Flash — Google's workhorse. $0.30/$2.50 per 1M, 1M context.
+            # Built-in thinking, configurable reasoning effort.
+            - id: google/gemini-2.5-flash
+              name: Gemini 2.5 Flash (OpenRouter)
+              reasoning: true
+              input: [text]
+              cost: { input: 0.30, output: 2.50, cacheRead: 0.03, cacheWrite: 0.08333 }
+              contextWindow: 1048576
+              maxTokens: 65536
+
+            # Gemini Flash with OpenRouter web search. Adds $0.005/req for Exa
+            # search results appended to the prompt. Use for research tasks.
+            - id: google/gemini-2.5-flash:online
+              name: Gemini 2.5 Flash Online (OpenRouter)
+              reasoning: true
+              input: [text]
+              cost: { input: 0.30, output: 2.50, cacheRead: 0.03, cacheWrite: 0.08333 }
+              contextWindow: 1048576
+              maxTokens: 65536
+
+            # Gemini Pro — heavier reasoning for hard tasks. $1.25/$10 per 1M.
+            - id: google/gemini-2.5-pro
+              name: Gemini 2.5 Pro (OpenRouter)
+              reasoning: true
+              input: [text]
+              cost: { input: 1.25, output: 10.00, cacheRead: 0.03125, cacheWrite: 0 }
+              contextWindow: 1048576
+              maxTokens: 65536
+
+            # Claude Sonnet via OpenRouter — fallback when direct Anthropic is
+            # down. Same $3/$15 pricing as direct, but OR can route through
+            # multiple providers (including Anthropic itself).
+            - id: anthropic/claude-sonnet-4-6
+              name: Claude Sonnet 4.6 (OpenRouter)
+              reasoning: true
+              input: [text]
+              cost: { input: 3.00, output: 15.00, cacheRead: 0.30, cacheWrite: 3.75 }
+              contextWindow: 1000000
+              maxTokens: 65536
+
+            # Claude Haiku via OpenRouter. $1/$5 per 1M.
+            - id: anthropic/claude-haiku-4-5
+              name: Claude Haiku 4.5 (OpenRouter)
+              reasoning: true
+              input: [text]
+              cost: { input: 1.00, output: 5.00, cacheRead: 0.08, cacheWrite: 1.00 }
+              contextWindow: 200000
+              maxTokens: 65536
+
+            # DeepSeek V4 Flash via OpenRouter — actually CHEAPER than direct
+            # ($0.10/$0.20 vs $0.14/$0.28). Text-only, 1M context. Use as
+            # primary DeepSeek fallback when the direct API is down.
+            - id: deepseek/deepseek-v4-flash
+              name: DeepSeek V4 Flash (OpenRouter)
+              reasoning: true
+              input: [text]
+              cost: { input: 0.10, output: 0.20, cacheRead: 0, cacheWrite: 0 }
+              contextWindow: 1000000
+              maxTokens: 65536
+
+            # DeepSeek V4 Pro via OpenRouter. $0.435/$0.87 per 1M (same as
+            # direct). Fallback when direct DeepSeek Pro is down.
+            - id: deepseek/deepseek-v4-pro
+              name: DeepSeek V4 Pro (OpenRouter)
+              reasoning: true
+              input: [text]
+              cost: { input: 0.435, output: 0.87, cacheRead: 0, cacheWrite: 0 }
+              contextWindow: 1000000
+              maxTokens: 65536
     '';
 
     ".omp/agent/config.yml".text = ''
@@ -181,6 +273,7 @@ in
       modelProviderOrder:
         - vast-vllm
         - deepseek
+        - openrouter
         - office-vllm
         - office-ollama
         - office-ollama-cpu
@@ -196,6 +289,7 @@ in
         - "office-ollama-cpu/*"
         - "arch-ollama/*"
         - "anthropic/*"
+        - "openrouter/*"
         - "openai/*"
 
       retry:
@@ -205,9 +299,14 @@ in
         fallbackChains:
           default:
             - "deepseek/deepseek-v4-pro"
+            - "openrouter/deepseek/deepseek-v4-pro"
+            - "openrouter/deepseek/deepseek-v4-flash"
+            - "openrouter/anthropic/claude-sonnet-4-6"
             - "anthropic/claude-sonnet-4-6"
             - "office-ollama/qwen3.6:27b"
           smol:
+            - "openrouter/deepseek/deepseek-v4-flash"
+            - "openrouter/google/gemini-2.5-flash-lite"
             - "anthropic/claude-haiku-4-5"
     '';
 
