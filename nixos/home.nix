@@ -218,7 +218,6 @@ in {
 
   xdg.configFile = {
     "alacritty".source = config.lib.file.mkOutOfStoreSymlink ../.config/alacritty;
-    "dunst".source = config.lib.file.mkOutOfStoreSymlink ../.config/dunst;
     "hypr/hyprlock.conf".source = config.lib.file.mkOutOfStoreSymlink ../.config/hypr/hyprlock.conf;
     "hypr/hyprpaper.conf".text = "
       preload = /home/john/backgrounds/luna_1.png
@@ -240,6 +239,6 @@ in {
 
   services.dunst = {
     enable = true;
-    configFile = "${config.home.homeDirectory}/.config/dunst/dunstrc";
+    configFile = "${config.home.homeDirectory}/dotfiles/.config/dunst/dunstrc";
   };
 }
