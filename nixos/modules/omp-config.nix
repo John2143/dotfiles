@@ -192,21 +192,22 @@ in
               maxTokens: 65536
 
             # Gemini Flash — Google's workhorse. $0.30/$2.50 per 1M, 1M context.
-            # Built-in thinking, configurable reasoning effort.
+            # Supports text, image, video, audio, and PDF input. Built-in
+            # thinking with configurable reasoning effort.
             - id: google/gemini-2.5-flash
-              name: Gemini 2.5 Flash (OpenRouter)
+              name: Gemini 2.5 Flash Multimodal (OpenRouter)
               reasoning: true
-              input: [text]
+              input: [text, image, video, audio]
               cost: { input: 0.30, output: 2.50, cacheRead: 0.03, cacheWrite: 0.08333 }
               contextWindow: 1048576
               maxTokens: 65536
 
             # Gemini Flash with OpenRouter web search. Adds $0.005/req for Exa
-            # search results appended to the prompt. Use for research tasks.
+            # search results. Same multimodal support (text, image, video, audio).
             - id: google/gemini-2.5-flash:online
-              name: Gemini 2.5 Flash Online (OpenRouter)
+              name: Gemini 2.5 Flash Multimodal Online (OpenRouter)
               reasoning: true
-              input: [text]
+              input: [text, image, video, audio]
               cost: { input: 0.30, output: 2.50, cacheRead: 0.03, cacheWrite: 0.08333 }
               contextWindow: 1048576
               maxTokens: 65536
@@ -308,6 +309,12 @@ in
             - "openrouter/deepseek/deepseek-v4-flash"
             - "openrouter/google/gemini-2.5-flash-lite"
             - "anthropic/claude-haiku-4-5"
+
+      # Tools — enable setting-gated tools that ship disabled by default.
+      inspect_image.enabled: true
+      calc.enabled: true
+      render_mermaid.enabled: true
+      checkpoint.enabled: true
     '';
 
     ".omp/agent/keybindings.json".text = ''
@@ -416,7 +423,10 @@ in
       - Never run `find` (built-in Find tool, `fd`, `locate`, bash `find`, etc.) on /nix/store, ~/private, or ~ — those subtrees are enormous or encrypted and will hang. Always narrow to a specific subdirectory instead.
       - Do not write or edit files outside the repo root without confirmation.
       - Never read, print, or commit secrets, .env files, or private keys.
-      - nixos-rebuild switch, home-manager switch, nix-collect-garbage: confirm first.
+      - Never run `nh os switch`.
+      - Never run `nixos-rebuild switch`.
+      - Never run `home-manager switch`.
+      - Never try to edit this computer's system configuration. This machine is not managed by the agent; system mutation is prohibited.
       </remember>
 
       <permissions>

@@ -499,7 +499,8 @@ in {
   '';
 
   xdg.configFile = {
-    "alacritty".source = config.lib.file.mkOutOfStoreSymlink ../.config/alacritty;
+    "alacritty/alacritty.toml".source = config.lib.file.mkOutOfStoreSymlink ../.config/alacritty/alacritty.toml;
+    "dunst/dunstrc".source = config.lib.file.mkOutOfStoreSymlink ../.config/dunst/dunstrc;
     "hypr/hyprlock.conf".source = config.lib.file.mkOutOfStoreSymlink ../.config/hypr/hyprlock.conf;
     "hypr/hyprpaper.conf".text = "
       preload = /home/john/backgrounds/luna_1.png
