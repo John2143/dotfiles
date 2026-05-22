@@ -192,22 +192,22 @@ in
               maxTokens: 65536
 
             # Gemini Flash — Google's workhorse. $0.30/$2.50 per 1M, 1M context.
-            # Supports text, image, video, audio, and PDF input. Built-in
-            # thinking with configurable reasoning effort.
+            # Supports text and image input (video/audio not yet in OMP schema).
+            # Built-in thinking with configurable reasoning effort.
             - id: google/gemini-2.5-flash
               name: Gemini 2.5 Flash Multimodal (OpenRouter)
               reasoning: true
-              input: [text, image, video, audio]
+              input: [text, image]
               cost: { input: 0.30, output: 2.50, cacheRead: 0.03, cacheWrite: 0.08333 }
               contextWindow: 1048576
               maxTokens: 65536
 
             # Gemini Flash with OpenRouter web search. Adds $0.005/req for Exa
-            # search results. Same multimodal support (text, image, video, audio).
+            # search results. Supports text and image input.
             - id: google/gemini-2.5-flash:online
               name: Gemini 2.5 Flash Multimodal Online (OpenRouter)
               reasoning: true
-              input: [text, image, video, audio]
+              input: [text, image]
               cost: { input: 0.30, output: 2.50, cacheRead: 0.03, cacheWrite: 0.08333 }
               contextWindow: 1048576
               maxTokens: 65536
