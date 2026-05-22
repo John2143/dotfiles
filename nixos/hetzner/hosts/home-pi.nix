@@ -1,8 +1,8 @@
-# Home Pi — Headscale server + Galera #4 + PowerDNS #4
+# Home Pi — Headscale server + PowerDNS
 #
 # Dedicated Raspberry Pi running Headscale for the Hetzner tailnet.
-# Also serves as a MariaDB Galera node (PowerDNS backend) and
-# authoritative PowerDNS server (multi-provider tiebreaker).
+# Also serves as authoritative PowerDNS server (multi-provider tiebreaker).
+# PowerDNS connects to CloudNativePG PostgreSQL on k3s-ashburn via tailnet.
 #
 # Permanent node — not part of the Hetzner rolling rotation.
 # Provisioned manually at home.
@@ -19,7 +19,7 @@
     ../modules/headscale.nix
     ../modules/hetzner-ssh.nix
     ../modules/hetzner-powerdns-bootstrap.nix
-    ../modules/hetzner-galera.nix
+    ../modules/hetzner-postgres-schema.nix
     ../modules/hetzner-powerdns.nix
     ../modules/tailscale.nix
   ];
@@ -48,18 +48,37 @@
   # Connect to the local Headscale instance running on this host
   custom.headscaleServer = "http://localhost:6767";
 
-  # Galera cluster — node address must be explicit because home-pi has
-  # multiple interfaces (eth0 + tailscale) and auto-detect picks eth0 IP.
-  services.mysql.settings.mysqld = {
-    wsrep_node_name = "home-pi";
-    wsrep_node_address = "100.64.0.2";  # static tailscale IP
-    auto_increment_offset = 4;
-  };
+  # PowerDNS connects to CloudNativePG on k3s-ashburn via tailnet
+  # Override gpgsql-host from default 127.0.0.1 to the remote node
+  services.powerdns.extraConfig = ''
+    launch=gpgsql
+    gpgsql-host=k3s-ashburn.ts.9s.pics
+    gpgsql-port=30432
+    gpgsql-dbname=pdns
+    gpgsql-user=pdns
+    gpgsql-password=@PDNS_PG_PASSWORD@
+
+    local-address=0.0.0.0
+    local-port=53
+
+    dnsupdate=yes
+    allow-dnsupdate-from=127.0.0.0/8
+
+    default-ttl=60
+
+    api=yes
+    api-key=@PDNS_API_KEY@
+    webserver=yes
+    webserver-address=127.0.0.1
+    webserver-port=8081
+
+    allow-axfr-ips=127.0.0.1
+  '';
   security.sudo.wheelNeedsPassword = false;
 
   # systemd ordering: wait for Tailscale DNS before starting PowerDNS
   systemd.services.pdns = {
-    after = ["mysql.service" "tailscaled.service"];
-    wants = ["mysql.service" "tailscaled.service"];
+    after = ["hetzner-postgres-schema.service" "tailscaled.service"];
+    wants = ["hetzner-postgres-schema.service" "tailscaled.service"];
   };
 }

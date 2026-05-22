@@ -107,6 +107,7 @@ Use the `ask` tool to present all clarifying questions at once. Skip any dimensi
 ```
 
 After the user responds, produce a short **Scope Summary** (3-5 sentences) confirming your understanding. Present it in chat.
+After presenting the Scope Summary, STOP and wait for the user to confirm before proceeding to Phase 2. Do not begin Phase 2 until the user explicitly approves the summary. If the user requests changes, revise the summary and wait again.
 
 ### Phase 2 — Design the skill structure
 
@@ -145,12 +146,22 @@ For **loop prompts** (designed for the `/loop` harness, which calls the same pro
 - "Do not ask questions" in constraints (the agent runs unattended).
 - See `.claude/skills/prompt-engineer/SKILL.md` Mode: Loop Prompt Generation for the full template.
 
-Present the proposed design to the user as a structured outline. Ask for confirmation before proceeding.
+Present the proposed design to the user as a structured outline, then STOP and wait for confirmation before proceeding to Phase 3. Do not begin Phase 3 until the user explicitly approves the design.
 
 ### Phase 3 — Research
 
-First, write the current skill draft — based on the Phase 2 design and all clarifications so far — to a temporary file: `.claude/skills/<skill-name>/SKILL.draft.md`. This serves as a persistent reference throughout the remaining phases. Use `write` to create it.
+First, save the current skill draft — based on the Phase 2 design and all clarifications so far — to a temporary file.
 
+1. Ensure the directory exists:
+   ```bash
+   mkdir -p .claude/skills/<skill-name>/
+   ```
+2. Write the draft to `.claude/skills/<skill-name>/SKILL.draft.md` using `write`. Include:
+   - Complete frontmatter (as designed in Phase 2).
+   - Argument parsing section.
+   - Mode structure outline with section headings and brief content notes.
+   - This draft will evolve into the final SKILL.md in Phase 4 — write real content, not placeholders.
+3. Verify the draft was saved: use `read` to check the first 10 lines of `.claude/skills/<skill-name>/SKILL.draft.md`. If the file is missing, empty, or truncated, STOP and report: "Draft save failed: \<reason\>." Do not continue to research until the draft is confirmed saved.
 Then research the following using your tools:
 
 - Read 2-3 existing skills from `.claude/skills/*/SKILL.md` to match conventions, argument patterns, and frontmatter style.
@@ -159,6 +170,7 @@ Then research the following using your tools:
 
 Report findings concisely. Flag any risks (e.g., tool unavailable, ambiguous naming).
 
+After reporting findings, STOP and wait for the user to confirm before proceeding to Phase 4. Ask explicitly: "Ready to write the final SKILL.md based on these findings?" Do not begin Phase 4 until the user approves.
 ### Phase 4 — Write the skill
 
 Write the SKILL.md file to `.claude/skills/<skill-name>/SKILL.md`.
@@ -178,6 +190,7 @@ After writing, present a brief **checklist** to the user:
 - [ ] All modes are accounted for
 - [ ] Instructions are self-contained
 
+After presenting the checklist, STOP and wait for the user to review the written skill before proceeding to Phase 5. The user may want changes to the file — apply any requested edits and re-present the checklist. Do not offer Phase 5 until the user signals satisfaction.
 ### Phase 5 — Refine
 
 If the user passed `--refine`, run the prompt-engineer refinement automatically. Otherwise, offer to run it:

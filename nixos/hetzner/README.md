@@ -2,7 +2,7 @@
 
 3-node + Home Pi Kubernetes platform on Hetzner Cloud.
 
-**Stack**: NixOS / k3s / Cilium / ArgoCD / PowerDNS (MariaDB Galera) / ExternalDNS (RFC2136) / SeaweedFS / B2 / Longhorn / MongoDB / CloudNativePG / Temporal
+**Stack**: NixOS / k3s / Cilium / ArgoCD / PowerDNS / ExternalDNS (RFC2136) / SeaweedFS / B2 / Longhorn / MongoDB / CloudNativePG (PostgreSQL) / Temporal
 
 **Modes**: LA (3 server nodes, ~$75/mo) or HA (6 nodes, ~$140/mo).
 
@@ -15,7 +15,7 @@
 │  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐      │
 │  │ k3s-ashburn  │  │k3s-hillsboro │  │k3s-nuremberg │      │
 │  │ control-plane│  │ control-plane│  │ control-plane│      │
-│  │ pdns + mysql │  │ pdns + mysql │  │ pdns + mysql │      │
+│  │ pdns         │  │ pdns         │  │ pdns         │      │
 │  └──────────────┘  └──────────────┘  └──────────────┘      │
 │          │                 │                 │              │
 │          └─────────┬───────┴─────────────────┘              │
@@ -23,13 +23,12 @@
 │           ┌────────┴────────┐                               │
 │           │    home-pi      │                               │
 │           │ Headscale :6767 │                               │
-│           │ Galera node #4  │                               │
-│           │ pdns node #4    │                               │
+│           │ pdns (tiebreak) │                               │
 │           └─────────────────┘                               │
 └─────────────────────────────────────────────────────────────┘
 ```
 
-All 3 server nodes are fully interchangeable (identical mkServer config). Each runs k3s + PowerDNS + MariaDB Galera. Nodes communicate over the tailnet (Headscale at home-pi) — all DNS, service discovery, and MySQL replication uses Tailscale IPs/DNS.
+All 3 server nodes are fully interchangeable (identical mkServer config). Each runs k3s + PowerDNS. PostgreSQL runs inside k3s via CloudNativePG — all services (PowerDNS, Temporal, future) share a single PostgreSQL cluster. Nodes communicate over the tailnet (Headscale at home-pi).
 
 ## Structure
 
@@ -40,16 +39,16 @@ nixos/hetzner/
 │   ├── hetzner-disko.nix         # Disk layout (EF02 + EFI + ext4)
 │   ├── hetzner-ssh.nix           # SSH + agenix identity
 │   ├── hetzner-k3s-common.nix    # k3s + Cilium + ArgoCD + split-IP firewall
-│   ├── hetzner-k3s-server.nix    # Adds PowerDNS + Galera on top
+│   ├── hetzner-k3s-server.nix    # Adds PowerDNS + PostgreSQL schema import
 │   ├── hetzner-k3s-agent.nix     # Agent node (k3s agent only)
 │   ├── hetzner-powerdns.nix      # PowerDNS authoritative server
 │   ├── hetzner-powerdns-bootstrap.nix  # Zone creation (oneshot)
-│   ├── hetzner-galera.nix        # MariaDB Galera cluster member
+│   ├── hetzner-postgres-schema.nix  # Import pdns schema into CNPG PostgreSQL
 │   ├── headscale.nix             # Headscale coordination server
 │   ├── tailscale.nix             # Tailscale client (parameterized login-server)
 │   └── longhorn-host.nix         # Longhorn storage
 ├── hosts/
-│   ├── home-pi.nix               # Home Pi (Headscale + Galera + pdns)
+│   ├── home-pi.nix               # Home Pi (Headscale + pdns)
 │   └── home-pi-hardware-configuration.nix
 ├── secrets/
 │   ├── secrets.nix               # agenix public key mapping
@@ -93,8 +92,7 @@ agenix -e hetzner/hcloud-token.age -i ~/.ssh/age
 
 # Generated secrets
 echo -n "$(head -c 32 /dev/urandom | base64)" | agenix -e hetzner/k3s-token.age -i ~/.ssh/age
-echo -n "$(head -c 24 /dev/urandom | base64)" | agenix -e hetzner/galera-password.age -i ~/.ssh/age
-echo -n "$(head -c 24 /dev/urandom | base64)" | agenix -e hetzner/mariadb-root-password.age -i ~/.ssh/age
+echo -n "$(head -c 24 /dev/urandom | base64)" | agenix -e hetzner/postgres-pdns-password.age -i ~/.ssh/age
 echo -n "$(head -c 32 /dev/urandom | base64)" | agenix -e hetzner/powerdns-tsig-key.age -i ~/.ssh/age
 ```
 
@@ -107,45 +105,30 @@ ssh home-pi "sudo headscale preauthkeys create --user 1 --reusable --expiration 
 echo -n "hskey-auth-..." | agenix -e nixos/hetzner/secrets/hetzner/headscale-preauth-key.age -i ~/.ssh/age
 ```
 
-## Galera bootstrap
+## CloudNativePG setup
 
-Nodes start with standalone MySQL (`wsrep_cluster_address=gcomm://` — the default in `hetzner-galera.nix`).
-After all 3 Hetzner nodes are provisioned and on the tailnet, form the 4-node Galera cluster:
+PostgreSQL runs inside k3s via CloudNativePG. The operator must be pre-installed:
 
 ```bash
-# 0. On ALL nodes, set the full cluster address
-CLUSTER_ADDR="gcomm://k3s-ashburn.ts.9s.pics,k3s-hillsboro.ts.9s.pics,k3s-nuremberg.ts.9s.pics,home-pi-clnydbkx.ts.9s.pics"
-for IP in <ASHBURN_IP> <HILLSBORO_IP> <NUREMBERG_IP>; do
-  ssh root@$IP "
-    sudo mkdir -p /etc/my.cnf.d
-    echo '[mysqld]' | sudo tee /etc/my.cnf.d/galera-cluster.cnf
-    echo \"wsrep_cluster_address=$CLUSTER_ADDR\" | sudo tee -a /etc/my.cnf.d/galera-cluster.cnf
-  "
-done
-# Home Pi
-ssh john@home-pi "
-  sudo mkdir -p /etc/my.cnf.d
-  echo '[mysqld]' | sudo tee /etc/my.cnf.d/galera-cluster.cnf
-  echo \"wsrep_cluster_address=$CLUSTER_ADDR\" | sudo tee -a /etc/my.cnf.d/galera-cluster.cnf
-"
-
-# 1. On home-pi (create the cluster)
-ssh john@home-pi "
-  sudo systemctl stop mysql
-  sudo rm -f /run/mysqld/mysqld.sock
-  sudo rm -f /var/lib/mysql/grastate.dat
-  echo 1 | sudo -u mysql tee /var/lib/mysql/grastate.dat
-  sudo systemctl start mysql
-"
-# Verify: ssh john@home-pi "sudo mysql -e 'SHOW STATUS LIKE \"wsrep%\"' | grep cluster_size"
-# Should show: cluster_size=1, cluster_status=Primary
-
-# 2. On each Hetzner node (join the cluster)
-ssh root@<IP> "sudo systemctl restart mysql"
-# Cluster size grows: 1 → 2 → 3 → 4
+kubectl apply --server-side -f \
+  https://raw.githubusercontent.com/cloudnative-pg/cloudnative-pg/release-1.25/releases/cnpg-1.25.1.yaml
 ```
 
-MariaDB 11.x requires `wsrep_on=1` and `binlog_format=ROW` (set in `hetzner-galera.nix`).
+After provisioning, the CNPG Cluster CR (deployed by ArgoCD wave 5) creates the
+`temporal-postgres` cluster with `pdns` and `temporal` databases. The
+`hetzner-postgres-schema` systemd oneshot waits for PostgreSQL to be reachable
+(via NodePort 30432) and imports the PowerDNS schema.
+
+```bash
+# Verify PostgreSQL is accessible
+ssh root@<IP> "pg_isready -h 127.0.0.1 -p 30432 -U pdns -d pdns"
+
+# Verify PowerDNS can connect
+ssh root@<IP> "systemctl status pdns"
+```
+
+The single PostgreSQL cluster serves all services (PowerDNS, Temporal, future).
+Backup is handled by CNPG's barman-cloud to Backblaze B2 (30-day retention).
 
 ## Provisioning lessons (from attempts #1 and #2)
 
@@ -162,13 +145,13 @@ MariaDB 11.x requires `wsrep_on=1` and `binlog_format=ROW` (set in `hetzner-gale
 ### tailscale connectivity
 - `tailscale up` needs `--reset` flag to override existing config (left from initial deploy).
 - Must restart `tailscaled` before `tailscale up` on fresh deploys.
-- Never `tailscale logout; tailscale up` — creates duplicate identities that break Galera DNS. Use `systemctl restart tailscaled-autoconnect` instead.
-- Tailscale DNS names must match Galera cluster address. The home-pi DNS is `home-pi-clnydbkx.ts.9s.pics` (not `home-pi.ts.9s.pics`).
+- Never `tailscale logout; tailscale up` — creates duplicate identities. Use `systemctl restart tailscaled-autoconnect` instead.
+- Tailscale DNS names must be consistent across reboots.
 
 ### PowerDNS
 - pdns 5.0.x renamed many commands: `create-zone` → `zone create`, `set-soa` → `rrset replace`, `generate-tsig-key` → `tsigkey generate`, `set-meta` → `metadata set`.
-- MySQL schema must be imported before pdns can start: `mysql -u pdns -ppdns pdns < /nix/store/*pdns*/share/doc/pdns/schema.mysql.sql`.
-- pdns user must exist in MySQL with password matching `gmysql-password` in config.
+- PostgreSQL schema is imported automatically by `hetzner-postgres-schema` oneshot (waits for CNPG NodePort, imports `schema.pgsql.sql`).
+- `pdns` user and database are created declaratively by CloudNativePG Cluster CR (`spec.managed`).
 
 ### k3s
 - `--node-external-ip` can't be determined at build time (IP not known). Removed from extraFlags — k3s auto-detects.

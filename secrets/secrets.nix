@@ -59,6 +59,7 @@ in {
   #   ANTHROPIC_API_KEY=sk-ant-...
   #   OPENAI_API_KEY=sk-...
   #   DEEPSEEK_API_KEY=sk-...      (https://platform.deepseek.com/api_keys)
+  #   OPENROUTER_API_KEY=sk-or-v1-... (https://openrouter.ai/settings/keys)
   # pite is included so the canary host can decrypt a same-named bait file
   # (overridden via mkForce in nixos/pite-canary.nix to point at the bait .age).
   "llm-runtime-keys.age".publicKeys = [office arch pite mac];
@@ -112,4 +113,17 @@ in {
   # cryptographic secret (public server, anyone with the name can publish),
   # but keeping it out of the Nix store avoids accidental exposure.
   "ntfy-topic-url.age".publicKeys = [office arch];
+  # MikroTik SSH key — router (192.168.1.1) + two switches.
+  # Upstairs: 192.168.5.3, Downstairs: 192.168.5.2. All use admin@.
+  # Decrypted by the mikrotik-connect fish helper (key-based, no sshpass).
+  # Format:
+  #   MIKROTIK_SSH_PRIVATE_KEY_B64=<base64 -w0 of an ed25519 private key>
+  # Generate:
+  #   ssh-keygen -t ed25519 -f /tmp/mikrotik-key -N ""
+  #   # Import /tmp/mikrotik-key.pub on each MikroTik:
+  #   #   /user ssh-keys import public-key-file=mikrotik-key.pub user=admin
+  #   echo "MIKROTIK_SSH_PRIVATE_KEY_B64=$(base64 -w0 /tmp/mikrotik-key)" \
+  #     | agenix -e secrets/mikrotik-credentials.age -i ~/.ssh/age
+  #   rm /tmp/mikrotik-key /tmp/mikrotik-key.pub
+  "mikrotik-credentials.age".publicKeys = [office arch];
 }

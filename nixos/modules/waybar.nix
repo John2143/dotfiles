@@ -201,4 +201,6 @@
       };
     };
   };
+
+  systemd.user.services.waybar.Install.WantedBy = [ "graphical-session.target" ];
 }

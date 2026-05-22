@@ -122,13 +122,7 @@ for n in data:
 " 2>/dev/null || true
   echo "    stale headscale nodes cleaned"
 
-# Import pdns schema (needed before pdns can start)
-if [[ "$ROLE" == "server" ]]; then
-  PDNS_SCHEMA=$(ssh "root@${IP}" "find /nix/store -path '*/pdns*schema.mysql.sql' -not -name '*to_*' -not -name '*dnssec*' | head -1")
-  ssh "root@${IP}" "mysql -u root --socket=/run/mysqld/mysqld.sock -e 'CREATE DATABASE IF NOT EXISTS pdns; DROP USER IF EXISTS \"pdns\"@\"localhost\"; CREATE USER \"pdns\"@\"localhost\" IDENTIFIED BY \"pdns\"; GRANT ALL PRIVILEGES ON pdns.* TO \"pdns\"@\"localhost\"; FLUSH PRIVILEGES;' 2>/dev/null"
-  ssh "root@${IP}" "mysql -u pdns -ppdns pdns < ${PDNS_SCHEMA} 2>/dev/null || true"
-  echo "    pdns schema imported"
-fi
+
 
 # ── Step 6: Connect tailscale ──
 echo "  [6/7] Connecting tailscale..."
@@ -146,7 +140,7 @@ if [[ "$ROLE" == "server" ]]; then
   ssh "root@${IP}" "systemctl restart pdns 2>/dev/null || true"
   sleep 3
   echo "  --- Service Status ---"
-  ssh "root@${IP}" "echo 'k3s:' \$(systemctl is-active k3s); echo 'mysql:' \$(systemctl is-active mysql); echo 'pdns:' \$(systemctl is-active pdns); echo 'tailscaled:' \$(systemctl is-active tailscaled)"
+  ssh "root@${IP}" "echo 'k3s:' \$(systemctl is-active k3s); echo 'pdns:' \$(systemctl is-active pdns); echo 'tailscaled:' \$(systemctl is-active tailscaled)"
   ssh "root@${IP}" "kubectl get nodes 2>/dev/null" || echo "    (k3s not ready yet)"
   # Remove stale Cilium taint if present (from previous Cilium installation)
   ssh "root@${IP}" "kubectl taint node --all node.cilium.io/agent-not-ready:NoSchedule- 2>/dev/null || true"

@@ -51,7 +51,7 @@
   };
 
   # systemd: ensure headscale starts before tailscale on the same host
-  systemd.services.tailscale = {
+  systemd.services.tailscaled = {
     after = ["headscale.service"];
     wants = ["headscale.service"];
   };

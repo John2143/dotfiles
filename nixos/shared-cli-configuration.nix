@@ -208,6 +208,17 @@
         fi
         exec ${pkgs.uv}/bin/uvx --quiet vastai "$@"
       '')
+
+      # Bash wrappers for fish helpers — so they work from bash/omp harness too.
+      (pkgs.writeShellScriptBin "mikrotik-connect" ''
+        exec fish -c 'mikrotik-connect $argv' -- "$@"
+      '')
+      (pkgs.writeShellScriptBin "juush" ''
+        exec fish -c 'juush $argv' -- "$@"
+      '')
+      (pkgs.writeShellScriptBin "bigjuush" ''
+        exec fish -c 'bigjuush $argv' -- "$@"
+      '')
     ];
 
   programs.gnupg.agent = {
@@ -329,6 +340,20 @@
     (builtins.elem config.networking.hostName ["office" "arch"])
     {
       file = ../secrets/vast-credentials.age;
+      mode = "0400";
+      owner = "john";
+      group = "users";
+    };
+
+  # MikroTik router + switches (upstairs/downstairs) SSH key.
+  # Decrypted by the mikrotik-connect fish helper on first use.
+  # Format: MIKROTIK_SSH_PRIVATE_KEY_B64=<base64 ed25519 private key>
+  # Generate: ssh-keygen -t ed25519 -f /tmp/mikrotik-key -N ""
+  age.secrets.mikrotik-credentials =
+    lib.mkIf
+    (builtins.elem config.networking.hostName ["office" "arch"])
+    {
+      file = ../secrets/mikrotik-credentials.age;
       mode = "0400";
       owner = "john";
       group = "users";

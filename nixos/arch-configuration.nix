@@ -176,7 +176,7 @@ let
         APIKEY=$(grep -oP '^api_key=\K.*' "$INIFILE" 2>/dev/null || echo "")
       fi
 
-      if [ "$1" = "--toggle" ]; then
+      if [ "''${1:-}" = "--toggle" ]; then
         # Get current state to determine what to toggle to
         RESP=$(ts3_query "auth apikey=$APIKEY" "whoami")
         CLID=$(echo "$RESP" | grep -oP '^clid=\K\d+')

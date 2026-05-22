@@ -55,6 +55,8 @@
       tmux
       vim
       btop
+      acli
+      pipx
       inputs.agenix.packages.${pkgs.stdenv.hostPlatform.system}.default
       inputs.claude-code-nix.packages.${pkgs.stdenv.hostPlatform.system}.default
       inputs.node-rally-tools.packages.${pkgs.stdenv.hostPlatform.system}.default
