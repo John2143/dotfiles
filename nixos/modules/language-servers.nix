@@ -1,4 +1,4 @@
-{ pkgs, ... }:
+{ pkgs, pkgs-stable, ... }:
 
 {
   home.packages = with pkgs; [
@@ -16,7 +16,7 @@
     # ── Python (.py, .pyi) ──────────────────────────────────────────
     pyright
     basedpyright
-    python3Packages.python-lsp-server  # pylsp
+    pkgs-stable.python3Packages.python-lsp-server  # pylsp
     ruff                               # linter
 
     # ── Shell (.sh, .bash, .zsh) ────────────────────────────────────
