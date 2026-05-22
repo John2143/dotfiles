@@ -36,7 +36,6 @@
     pkgs-stable.pamixer # volume control
     cliphist # clipboard history
     wl-clipboard-x11 # clipboard compatibility for some apps
-    dunst # desktop alert notificaitons
     libnotify # notifications cli
     fuzzel # dmenu replacement for dunst actions
     gammastep # redshift / f.lux / night light
@@ -521,25 +520,8 @@ in {
       + "/hpfva.sh";
   };
 
-  # Ensure D-Bus can activate dunst (dbus-broker only scans ~/.local/share/dbus-1/services/)
-  xdg.dataFile."dbus-1/services/org.knopwob.dunst.service".source =
-    "${pkgs.dunst}/share/dbus-1/services/org.knopwob.dunst.service";
-
-  # Auto-start dunst with the graphical session
-  systemd.user.services.dunst = {
-    Unit = {
-      Description = "Dunst notification daemon";
-      Documentation = "man:dunst(1)";
-      PartOf = [ "graphical-session.target" ];
-      After = [ "graphical-session.target" ];
-    };
-    Service = {
-      Type = "dbus";
-      BusName = "org.freedesktop.Notifications";
-      ExecStart = "${pkgs.dunst}/bin/dunst";
-      ExecReload = "${pkgs.dunst}/bin/dunstctl reload";
-      Slice = "session.slice";
-    };
-    Install.WantedBy = [ "graphical-session.target" ];
+  services.dunst = {
+    enable = true;
+    configFile = "${config.home.homeDirectory}/.config/dunst/dunstrc";
   };
 }
