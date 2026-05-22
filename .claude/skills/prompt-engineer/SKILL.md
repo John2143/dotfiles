@@ -81,6 +81,10 @@ A numbered list. Each item must:
 - Give a concrete rewrite or addition — not just "add an example" but the actual example text
 
 Order by impact: highest-impact changes first. Stop at 8 items max; quality over quantity.
+#### Before the revised prompt
+After presenting the numbered improvements list, pause and ask the user: "Which of these would you like me to apply? (Reply with numbers, 'all', or describe your priority.)" Wait for their answer before producing the revised prompt. This avoids wasting work on suggestions the user doesn't care about.
+
+If the prompt being reviewed has an ambiguous or underspecified goal — where you cannot confidently determine what the author intended — ask one clarifying question before proceeding with the analysis. Examples: "Is this prompt meant for a human or an AI agent?" / "Should the output be a single file or a directory of files?"
 
 *Example improvement item (for illustration only — do not include this specific item in your output):*
 *1. **Goal clarity** — The first paragraph reads "This prompt helps you write good prompts" which conflates audience (the agent) with purpose (the deliverable). Replace with: "Your job is to critique and rewrite a given prompt document." This makes the agent the subject and the prompt file the object.*
@@ -102,6 +106,15 @@ Display the revised prompt in your output. Do not write it back to the file unle
 
 You are an expert prompt engineer. The user has given you a short prompt as raw text. Your job is to produce an improved version: spell-checked, grammatically clean, and optimized for consumption by another AI.
 
+### When to ask
+
+Before fixing, read the prompt and decide: can you confidently determine what the user wants? If the intent is genuinely ambiguous — you could interpret the prompt in two materially different ways — ask **one** clarifying question before optimizing. Do not guess and then optimize a guess. Examples of when to ask:
+- Vague audience: "for my project" could mean a README, a design doc, or an API spec
+- Conflicting signals: the prompt says "be brief" but also "cover everything in detail"
+- Missing deliverable: the prompt describes a problem but not what output to produce
+
+If the intent is clear, proceed with fixes:
+
 ### What to fix
 
 1. **Spelling and grammar** — Fix typos, punctuation errors, and awkward phrasing. Do not change the user's voice or intent.
@@ -115,7 +128,7 @@ You are an expert prompt engineer. The user has given you a short prompt as raw 
 
 - Do not add features the user didn't ask for.
 - Do not rewrite the prompt into a different task.
-- Do not produce analysis or commentary — output only the improved prompt.
+- When the intent is ambiguous (per "When to ask" above), ask one clarifying question. Otherwise, do not produce analysis or commentary — output only the improved prompt.
 - Do not run the full 8-dimension analysis framework from Prompt Improvement mode (that's for file-based review).
 
 ### Output format
@@ -163,6 +176,8 @@ Before writing the prompt, decide on the minimal set of files the agent will use
 | Background & scope | `background_and_goals.md` | Requirements, scope, constraints — written once, rarely changes |
 
 Add data directories or other files only if the repo genuinely needs them. Do not invent state files that have no natural home in this codebase.
+### Step 2.5 — Confirm the layout
+Before writing the prompt, show the user your proposed state file layout and ask: "Here's the state file layout I'm planning. Does this look right? Any files you'd rename, remove, or add?" Wait for confirmation before proceeding to Step 3. This prevents the most common failure mode of loop prompts: an agent faithfully following a prompt that references files the user doesn't want in their repo.
 
 ### Step 3 — Write the loop prompt
 
