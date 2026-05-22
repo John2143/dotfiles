@@ -206,13 +206,13 @@ in {
       fileManager = { _var = "dolphin"; };
       menu = { _var = ''fish -c "mkdir -p ~/drun_logs/ ; wofi --show drun > ~/drun_logs/(date)"''; };
       mainMod = { _var = "SUPER"; };
-      MONITOR_LEFT = { _var = "DP-3"; };
-      MONITOR_RIGHT = { _var = "HDMI-A-2"; };
+      MONITOR_LEFT = { _var = if compName == "office" then "DP-1" else "DP-3"; };
+      MONITOR_RIGHT = { _var = if compName == "office" then "DP-2" else "HDMI-A-2"; };
 
       # ---- Monitors ----
       monitor = [
-        { output = "DP-3"; mode = "highrr"; position = "0x0"; scale = 1; bitdepth = 8; }
-        { output = "HDMI-A-2"; mode = "highrr"; position = "2560x0"; scale = 1; }
+        { output = mkLua "MONITOR_LEFT"; mode = "highrr"; position = "0x0"; scale = 1; bitdepth = 8; }
+        { output = mkLua "MONITOR_RIGHT"; mode = "highrr"; position = "2560x0"; scale = 1; }
       ];
 
       # ---- Environment ----
@@ -292,21 +292,21 @@ in {
 
       # ---- Workspace rules ----
       workspace_rule = [
-        { workspace = "name:A1"; monitor = "DP-3"; default = true; }
-        { workspace = "name:A2"; monitor = "DP-3"; default = true; }
-        { workspace = "name:A3"; monitor = "DP-3"; default = true; }
-        { workspace = "name:A4"; monitor = "DP-3"; default = true; }
-        { workspace = "name:A5"; monitor = "DP-3"; default = true; }
-        { workspace = "name:B1"; monitor = "HDMI-A-2"; default = true; }
-        { workspace = "name:B2"; monitor = "HDMI-A-2"; default = true; }
-        { workspace = "name:B3"; monitor = "HDMI-A-2"; default = true; }
-        { workspace = "name:B4"; monitor = "HDMI-A-2"; default = true; }
-        { workspace = "name:B5"; monitor = "HDMI-A-2"; default = true; }
-        { workspace = "name:ts"; monitor = "HDMI-A-2"; default = true; }
-        { workspace = "name:disc"; monitor = "HDMI-A-2"; default = true; }
-        { workspace = "name:steam"; monitor = "HDMI-A-2"; default = true; }
-        { workspace = "name:obsidian"; monitor = "HDMI-A-2"; default = true; }
-        { workspace = "name:spotify"; monitor = "HDMI-A-2"; default = true; }
+        { workspace = "name:A1"; monitor = mkLua "MONITOR_LEFT"; default = true; }
+        { workspace = "name:A2"; monitor = mkLua "MONITOR_LEFT"; default = true; }
+        { workspace = "name:A3"; monitor = mkLua "MONITOR_LEFT"; default = true; }
+        { workspace = "name:A4"; monitor = mkLua "MONITOR_LEFT"; default = true; }
+        { workspace = "name:A5"; monitor = mkLua "MONITOR_LEFT"; default = true; }
+        { workspace = "name:B1"; monitor = mkLua "MONITOR_RIGHT"; default = true; }
+        { workspace = "name:B2"; monitor = mkLua "MONITOR_RIGHT"; default = true; }
+        { workspace = "name:B3"; monitor = mkLua "MONITOR_RIGHT"; default = true; }
+        { workspace = "name:B4"; monitor = mkLua "MONITOR_RIGHT"; default = true; }
+        { workspace = "name:B5"; monitor = mkLua "MONITOR_RIGHT"; default = true; }
+        { workspace = "name:ts"; monitor = mkLua "MONITOR_RIGHT"; default = true; }
+        { workspace = "name:disc"; monitor = mkLua "MONITOR_RIGHT"; default = true; }
+        { workspace = "name:steam"; monitor = mkLua "MONITOR_RIGHT"; default = true; }
+        { workspace = "name:obsidian"; monitor = mkLua "MONITOR_RIGHT"; default = true; }
+        { workspace = "name:spotify"; monitor = mkLua "MONITOR_RIGHT"; default = true; }
       ];
       # ---- Window rules ----
       window_rule = [
@@ -328,15 +328,6 @@ in {
         { match = { class = "^awakened-poe-trade$"; }; no_anim = true; no_focus = true; no_blur = true; no_initial_focus = true; }
         # polkit auth dialogs
         { match = { title = "^(Authentication required|Authentication Required).*"; }; float = true; center = true; }
-      ];
-
-      # ---- Exec commands (exec-once / exec) ----
-      exec_cmd = [
-        { _args = ["lxqt-policykit-agent"]; }
-        { _args = [''fish -c "tmux new-session -d ; sleep 1; fish ~/dotfiles/.config/startup.fish"'']; }
-        { _args = ["fish ~/.xprofile.fish"]; }
-        { _args = ["wl-paste --type text --watch cliphist store"]; }
-        { _args = ["wl-paste --type image --watch cliphist store"]; }
       ];
       # ---- Binds ----
       bind = [
@@ -418,8 +409,8 @@ in {
         { _args = [(mkLua ''mainMod .. " + CTRL + SHIFT + E"'') (mkLua ''hl.dsp.window.move({ workspace = "name:obsidian" })'')]; }
 
         # Sleep / wake / quit
-        { _args = ["CTRL + ALT + L" (mkLua ''hl.dsp.exec_cmd([[fish -c "hyprlock &; sleep 1 && hyprctl dispatch dpms off"]])'')]; }
-        { _args = ["Print" (mkLua ''hl.dsp.exec_cmd([[fish -c "hyprctl dispatch dpms on"]])'')]; }
+        { _args = ["CTRL + ALT + L" (mkLua ''function() hl.dsp.exec_cmd("hyprlock &") hl.timer(function() hl.dsp.dpms({ action = "disable" }) end, {timeout = 1000, type = "oneshot"}) end'')]; }
+        { _args = ["Print" (mkLua ''hl.dsp.dpms({ action = "enable" })'')]; }
         { _args = [(mkLua ''mainMod .. " + SHIFT + M"'') (mkLua "hl.dsp.exit()")]; }
 
         # Media keys
@@ -443,17 +434,17 @@ in {
         { _args = ["CTRL + ALT + F19" (mkLua ''hl.dsp.exec_cmd("hass-macro fan-toggle")'')]; }
 
         # Macro pad F20 group — display
-        { _args = ["F20" (mkLua ''hl.dsp.exec_cmd("hyprctl dispatch dpms on")'')]; }
-        { _args = ["CTRL + F20" (mkLua ''hl.dsp.exec_cmd("hyprctl dispatch dpms off")'')]; }
+        { _args = ["F20" (mkLua ''hl.dsp.dpms({ action = "enable" })'')]; }
+        { _args = ["CTRL + F20" (mkLua ''hl.dsp.dpms({ action = "disable" })'')]; }
 
         # TeamSpeak / Discord mute
-        { _args = ["Prior" (mkLua ''hl.dsp.pass({ class = "^TeamSpeak 3$" })'')]; }
-        { _args = ["Next" (mkLua ''hl.dsp.pass({ class = "^TeamSpeak 3$" })'')]; }
-        { _args = ["KP_Subtract" (mkLua ''hl.dsp.pass({ class = "^discord$" })'')]; }
-        { _args = ["XF86AudioPrev" (mkLua ''hl.dsp.pass({ class = "^discord$" })'')]; }
+        { _args = ["Prior" (mkLua ''hl.dsp.pass({ window = "class:^(TeamSpeak 3)$" })'')]; }
+        { _args = ["Next" (mkLua ''hl.dsp.pass({ window = "class:^(TeamSpeak 3)$" })'')]; }
+        { _args = ["KP_Subtract" (mkLua ''hl.dsp.pass({ window = "class:^(discord)$" })'')]; }
+        { _args = ["XF86AudioPrev" (mkLua ''hl.dsp.pass({ window = "class:^(discord)$" })'')]; }
 
         # Pass CTRL+ALT+D to awakened-poe-trade
-        { _args = ["CTRL + ALT + D" (mkLua ''hl.dsp.pass({ class = "^awakened-poe-trade$" })'')]; }
+        { _args = ["CTRL + ALT + D" (mkLua ''hl.dsp.pass({ window = "class:^(awakened-poe-trade)$" })'')]; }
         { _args = [(mkLua ''mainMod .. " + CTRL + ALT + D"'') (mkLua "hl.dsp.exec_cmd(terminal)")]; }
 
         # PoE shortcuts
@@ -480,6 +471,11 @@ in {
         { _args = ["hyprland.start" (mkLua ''
           function()
             hl.exec_cmd("tmux setenv -g HYPRLAND_INSTANCE_SIGNATURE " .. os.getenv("HYPRLAND_INSTANCE_SIGNATURE"))
+            hl.exec_cmd("lxqt-policykit-agent")
+            hl.exec_cmd("fish -c \"tmux new-session -d ; sleep 1; fish ~/dotfiles/.config/startup.fish\"")
+            hl.exec_cmd("fish ~/.xprofile.fish")
+            hl.exec_cmd("wl-paste --type text --watch cliphist store")
+            hl.exec_cmd("wl-paste --type image --watch cliphist store")
           end
         '')]; }
       ];

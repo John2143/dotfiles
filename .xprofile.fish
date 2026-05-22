@@ -10,11 +10,6 @@ set brightness_night 0.75
 set loc "38.897916:-77.035476"
 
 if test "$HOST" = "arch"
-    killall spotifyd || true
-    spotifyd -p $SPOTIFY_PASSWORD -u $SPOTIFY_USERNAME --device-name $HOST --device-type computer --bitrate 320 --backend pulseaudio &
-
-    killall gammastep || true
-    gammastep -l $loc -b $brightness_day:$brightness_night -t $color_temp_day:$color_temp_night &
 end
 
 if test "$HOST" = "office"
@@ -23,11 +18,6 @@ if test "$HOST" = "office"
     #set right_mon "DP-2"
     #xrandr --output $left_mon --mode 2560x1440 --rate 239.97 --primary
     #xrandr --output $right_mon --mode 1920x1080 --rate 144.00 --right-of $left_mon
-    killall spotifyd || true
-    spotifyd -p $SPOTIFY_PASSWORD -u $SPOTIFY_USERNAME --device-name $HOST --device-type computer --bitrate 320 --backend pulseaudio &
-
-    killall gammastep || true
-    gammastep -l $loc -b $brightness_day:$brightness_night -t $color_temp_day:$color_temp_night &
 
     echo 0 | sudo tee /sys/devices/system/cpu/cpu8/online
     echo 0 | sudo tee /sys/devices/system/cpu/cpu9/online
