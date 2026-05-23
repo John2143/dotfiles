@@ -42,6 +42,14 @@
             "on-click-window" = "hyprctl dispatch focuswindow address:{address}";
             "ignore-list" = ["^xwaylandvideobridge$"];
           };
+          persistent_workspaces = let
+            left = if compName == "office" then "DP-2" else "DP-3";
+            right = if compName == "office" then "DP-1" else "HDMI-A-2";
+          in {
+            "A1" = [left]; "A2" = [left]; "A3" = [left]; "A4" = [left]; "A5" = [left];
+            "B1" = [right]; "B2" = [right]; "B3" = [right]; "B4" = [right]; "B5" = [right];
+            "ts" = [right]; "disc" = [right]; "steam" = [right]; "obsidian" = [right]; "spotify" = [right];
+          };
         };
 
         battery = {

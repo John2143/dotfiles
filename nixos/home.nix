@@ -205,8 +205,8 @@ in {
       fileManager = { _var = "dolphin"; };
       menu = { _var = ''fish -c "mkdir -p ~/drun_logs/ ; wofi --show drun > ~/drun_logs/(date)"''; };
       mainMod = { _var = "SUPER"; };
-      MONITOR_LEFT = { _var = if compName == "office" then "DP-1" else "DP-3"; };
-      MONITOR_RIGHT = { _var = if compName == "office" then "DP-2" else "HDMI-A-2"; };
+      MONITOR_LEFT = { _var = if compName == "office" then "DP-2" else "DP-3"; };
+      MONITOR_RIGHT = { _var = if compName == "office" then "DP-1" else "HDMI-A-2"; };
 
       # ---- Monitors ----
       monitor = [
