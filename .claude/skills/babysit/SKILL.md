@@ -4,13 +4,13 @@ argument-hint: '<task description>'
 allowed-tools: Read, Search, Find, Write, Edit, Bash, Task, Ask
 tool-hints: |
   Use `mktemp` to create the state file; print its path on every update.
-  Use `sleep(duration, reason)` when waiting for external events (PR checks, deploys, timers).
-  Use `exit_loop_mode(reason)` to stop permanently when work is complete or unsafe to continue.
-  Use `notify-send -u critical "BABYSIT: <one-line summary>" "<context>
+  Use Bash `sleep <seconds>` to wait between iterations. Include a comment: `sleep 120 # waiting for PR checks to complete`.
+  Use the `exit_loop_mode` tool with `summary` parameter to stop permanently. It is ONLY available while `/loop` mode is active; outside loop mode it is hidden by the harness.
+  Run via Bash: `notify-send -u critical "BABYSIT: <one-line summary>" "<context>
 
   Question: <specific question>
 
-  Reply with: <expected action>"` to alert the human desktop for blocking decisions (pauses forever until human responds).
+  Reply with: <expected action>"` to alert the human desktop for blocking decisions (pauses forever until human responds). (This is a real CLI command, not pseudo-code. Use it via the Bash tool.)
   Use `ask` for non-blocking questions (auto-picks default after 30s).
   Use Task subagents for parallel monitoring streams with ≤120s timeouts; restart them each loop iteration.
   Always check tool availability (e.g., `which gh`) before relying on a tool — do not assume any specific CLI is present.
@@ -18,7 +18,7 @@ tool-hints: |
 
 Parse `$ARGUMENTS`:
 - Single positional argument: a free-form task description string (e.g., "make sure this PR passes all checks", "fix build errors and commit", "watch this cluster for anything new").
-- If no argument provided, check session context for a previously stated task. If still nothing, call `exit_loop_mode("no task provided — nothing to babysit")`.
+- If no argument provided, check session context for a previously stated task. If still nothing, call `exit_loop_mode` with `summary: "no task provided — nothing to babysit"`.
 - The task description is your mission. Everything else flows from it.
 
 ---
@@ -27,8 +27,36 @@ Parse `$ARGUMENTS`:
 
 You are an autonomous orchestrator called by the `/loop` harness. You receive no human input per iteration. Your job is to take a task description, build a state machine, execute it, and evolve it as you learn — all tracked in a single temp file so you can recover across loop iterations.
 
-**Each invocation does exactly one unit of work**: execute the current state's actions, evaluate results, determine the transition, update the state file, then stop (or call `sleep`/`exit_loop_mode`). The harness re-invokes you for the next state. Never try to run multiple states in one invocation.
+**Each invocation does exactly one unit of work**: execute the current state's actions, evaluate results, determine the transition, update the state file, then stop (or call Bash `sleep` / `exit_loop_mode`). The harness re-invokes you for the next state. Never try to run multiple states in one invocation.
 
+
+### Anti-pattern: Chaining states
+
+**NEVER do this** — running the next state in the same invocation:
+
+```
+WRONG (one invocation):
+1. Execute state A → transition to B
+2. Immediately execute state B → transition to C
+3. Immediately execute state C → terminal_done
+
+RIGHT (three invocations):
+1. Execute state A → evaluate → transition to B
+2. Update state file with current_state: "B"
+3. STOP. The harness re-invokes you.
+4. (Next invocation) Phase 1 loads state file, sees current_state: "B"
+5. Execute state B → evaluate → transition to C
+6. Update state file with current_state: "C"
+7. STOP. The harness re-invokes you.
+
+Each invocation ends with exactly ONE of:
+- A state file write (set current_state, stop)
+- An `exit_loop_mode` call (terminal, stop)
+- A Bash `sleep N` call (waiting, stop)
+
+If you find yourself about to `bash` the next state's action after a transition,
+STOP. You are chaining. Write the state file and yield.
+```
 ### Key files
 
 | Role | Location | Purpose |
@@ -105,7 +133,7 @@ From `unknown`, you design the custom state needed, add it to `states`, wire tra
 
 #### Standard terminal states
 
-There are exactly five terminal states. Use them instead of inventing ad-hoc terminal names. Every terminal state triggers `exit_loop_mode` with a predefined message template.
+There are exactly five terminal states. Use them instead of inventing ad-hoc terminal names. Every terminal state triggers the `exit_loop_mode` tool with a `summary` matching the message template.
 
 | Terminal | When to use | exit_loop_mode message |
 |----------|-------------|------------------------|
@@ -122,8 +150,9 @@ Validate these rules in Phase 2 whenever states are created or modified, and aga
 1. Every non-terminal state has at least one declared transition (plus the implicit `unknown` fallback).
 2. No state transitions to a nonexistent state name.
 3. Terminal states have zero transitions (they exit immediately, never persist as `current_state`).
-4. `current_state` must never be a terminal state. If a transition targets a terminal, call `exit_loop_mode` and do not write the terminal as `current_state`.
+4. `current_state` must never be a terminal state. If a transition targets a terminal, call `exit_loop_mode` with the appropriate `summary` and do not write the terminal as `current_state`.
 5. No orphan states: every custom state should be reachable from the first state by following transitions. The pre-wired `unknown` state is always reachable.
+6. Every `history[].state` must match a key in `states` (or be `"init"` for iteration 0 before any states are defined). If you evolve the machine by removing old states, also update or annotate history entries that referenced them — do not leave dangling references.
 
 ### Phase 1 — Initialize or recover state
 
@@ -165,7 +194,7 @@ If this is the first iteration (no states defined yet), design an initial state 
    - `flexible`: multiple possible next states with conditions (e.g., "Fixing errors" → "Committing fixes" or "Checking deploy state")
    - `terminal`: one of the five standard terminals above
 
-5. **Run invariant validation** on the state machine. Check all five invariants from the Machine invariants section above. Fix any violations before writing.
+5. **Run invariant validation** on the state machine. Check all six invariants from the Machine invariants section above. Fix any violations before writing.
 6. Write the states to the state file. Set `current_state` to the first state.
 
 If this is a recovery iteration (states already exist):
@@ -179,11 +208,11 @@ Unlike standard loop prompts that scan a repo for work, babysit derives work fro
 
 ### Phase 3 — Execute current state
 
-1. **Check iteration budget.** If `iteration >= max_iterations`, call `exit_loop_mode("TIMEOUT: <N> iterations exhausted, last state: <state>")`. Do not execute further.
+1. **Check iteration budget.** If `iteration >= max_iterations`, call `exit_loop_mode` with `summary: "TIMEOUT: <N> iterations exhausted, last state: <state>"`. Do not execute further.
 2. **Read the current state** from the state file. Understand its `goal`, `actions`, and `transitions`.
 3. **Run the actions** in order. Use `bash` for commands. Capture output.
    - Before running any command, check the tool exists: `which <tool> 2>/dev/null || echo "MISSING"`
-   - If a required tool is missing, call `exit_loop_mode("IMPOSSIBLE: missing tool: <tool>")`.
+   - If a required tool is missing, call `exit_loop_mode` with `summary: "IMPOSSIBLE: missing tool: <tool>"`.
 4. **Evaluate results** against the transition conditions. Be precise — prefer exit codes and structured output over free-text parsing.
    - Example: `gh pr view <number> --json state,statusCheckRollup` gives structured data. Parse the JSON.
    - Example: `curl -s -o /dev/null -w '%{http_code}' <url>` gives a clean status code.
@@ -192,7 +221,8 @@ Unlike standard loop prompts that scan a repo for work, babysit derives work fro
    - Increment `iteration`.
    - Append to `history` with actions taken, truncated outputs, and the decision.
    - Update `updated` timestamp.
-   - Print the state file path: `echo "BABYSIT STATEFILE: $STATEFILE"`
+   - Print the state file path: `echo "BABYSIT STATEFILE: $STATEFILE"` (MUST do this after EVERY write — it is your only link between iterations)
+6. **Self-check**: Did you echo the state file path? If not, run `echo "BABYSIT STATEFILE: $STATEFILE"` now.
 
 ### Phase 4 — Transition
 
@@ -200,7 +230,7 @@ Unlike standard loop prompts that scan a repo for work, babysit derives work fro
 2. **If exactly one transition matches**: set `current_state` to that target.
 3. **If multiple transitions could match**: pick the most specific one. If truly ambiguous, prefer the safer path (escalate/wait over mutate).
 4. **If no transition matches**: transition to `unknown`. Do not try to evolve the machine inline — let `unknown`'s calm analysis handle it next iteration.
-5. **If the next state is a terminal**: call `exit_loop_mode` with the corresponding message template from the standard terminals table. Do not write the terminal as `current_state` — exit before updating.
+5. **If the next state is a terminal**: call `exit_loop_mode` with the corresponding message template from the standard terminals table (e.g., `summary: "DONE: <what was accomplished>"`). Do not write the terminal as `current_state` — exit before updating.
 6. **Run invariant validation** on the updated state machine (skip if exiting).
 7. Update `current_state` in the state file. Write it out.
 
@@ -209,12 +239,12 @@ Unlike standard loop prompts that scan a repo for work, babysit derives work fro
 | Situation | Action |
 |-----------|--------|
 | Next state has concrete actions to run immediately | Stop. Let the loop harness re-invoke you (next iteration starts at Phase 1, loads state, executes). |
-| Need to wait for an external event (PR checks running, deploy in progress, timer) | `sleep(<duration>, "<reason>")` — e.g., `sleep(3min, "PR checks still running — rechecking soon")` |
-| All work complete, goal achieved | `exit_loop_mode("DONE: <summary>")` |
-| Blocked on human decision (important) | `notify-send -u critical "BABYSIT: <one-line summary>" "<context>\n\nQuestion: <specific question>\n\nReply with: <expected action>"` then `sleep(30min, "awaiting human response to desktop notification")` |
+| Need to wait for an external event (PR checks running, deploy in progress, timer) | `sleep <seconds> # <reason>` — e.g., `sleep 180 # PR checks still running, rechecking soon` |
+| All work complete, goal achieved | `exit_loop_mode` with `summary: "DONE: <summary>"` |
+| Blocked on human decision (important) | `notify-send -u critical "BABYSIT: <one-line summary>" "<context>\n\nQuestion: <specific question>\n\nReply with: <expected action>"` then `sleep 1800 # awaiting human response to desktop notification` |
 | Blocked on human decision (minor, has reasonable default) | Use `ask` with the default marked as recommended. If no response in 30s, the harness auto-picks the default. |
-| Something went wrong, unsure, or unsafe | `exit_loop_mode("UNSAFE: <what happened and why stopping>")` — yield to human immediately |
-| Nothing to do, no external events expected | `exit_loop_mode("DONE: <summary>")` |
+| Something went wrong, unsure, or unsafe | `exit_loop_mode` with `summary: "UNSAFE: <what happened and why stopping>"` — yield to human immediately |
+| Nothing to do, no external events expected | `exit_loop_mode` with `summary: "DONE: <summary>"` |
 
 ### Parallel monitoring (Task subagents)
 
@@ -252,7 +282,7 @@ timeout 120 kubectl get events --sort-by='.lastTimestamp' --output json | jq '.i
 - Action: `gh pr view --json number,state,statusCheckRollup`
 - Result: PR #42, state=OPEN, checks still running (statusCheckRollup has pending items)
 - Transition: "still running" → `wait_for_checks`
-- Decision: `sleep(2min, "PR #42 checks still running — rechecking in 2 minutes")`
+- Decision: `sleep 120 # PR #42 checks still running — rechecking in 2 minutes`
 
 **Iteration 3** — Execute `wait_for_checks` (after sleep expired, harness re-invokes):
 - Current state is `wait_for_checks`. Its action is to transition to `check_pr_status`.
@@ -286,24 +316,25 @@ timeout 120 kubectl get events --sort-by='.lastTimestamp' --output json | jq '.i
 
 **Iteration 50+** — Budget exhausted:
 - `iteration` reaches `max_iterations`. Phase 3 budget check triggers.
-- `exit_loop_mode("TIMEOUT: 50 iterations exhausted, last state: check_pr_status, last action: re-checking PR status")`.
+- `exit_loop_mode` with `summary: "TIMEOUT: 50 iterations exhausted, last state: check_pr_status, last action: re-checking PR status"`.
 
 ### Constraints
 
 - **Do not ask questions.** You run unattended in a loop. Use `ask` with 30s timeout for minor choices, `notify-send` for blocking human alerts, `exit_loop_mode` to yield.
 - **No destructive commands.** No `rm -rf`, no force-push, no `--no-verify`, no `kubectl delete` without explicit task authorization. When in doubt, escalate — don't destroy.
-- **When uncertain, scared, or think you broke something: transition to `terminal_unsafe` via `exit_loop_mode("UNSAFE: <reason>")` immediately.** Yielding to a human is always safe. Proceeding while unsure is not.
-- **Verify tools before using them.** Run `which <tool>` before any command that depends on a specific CLI. If missing, `exit_loop_mode("IMPOSSIBLE: missing tool: <tool>")`.
+- **When uncertain, scared, or think you broke something: call `exit_loop_mode` with `summary: "UNSAFE: <what happened and why stopping>"` immediately.** Yielding to a human is always safe. Proceeding while unsure is not.
+- **Code conflicts are human territory.** When `git rebase` or `git merge` produces conflicts in source files, do NOT resolve them autonomously with `--ours`/`--theirs`. Instead, call `exit_loop_mode` with `summary: "BLOCKED: merge conflict in <files>. Resolution requires human judgment. Conflict is at commit <sha>."`. The only exception is when the task description explicitly authorizes autonomous conflict resolution AND you can explain what each side contributes.
+- **Verify tools before using them.** Run `which <tool>` before any command that depends on a specific CLI. If missing, call `exit_loop_mode` with `summary: "IMPOSSIBLE: missing tool: <tool>"`.
 - **Cap subagent timeouts at 120s.** The loop harness will re-invoke you; you can restart monitors.
-- **Print the state file path on every update.** `echo "BABYSIT STATEFILE: $STATEFILE"` after every write. It is your only link between iterations. If you lose it, you lose all progress.
+- **Print the state file path on every update.** `echo "BABYSIT STATEFILE: $STATEFILE"` (MUST do this after EVERY write — it is your only link between iterations. If you lose it, you lose all progress.)
 - **Keep state file valid JSON at all times.** A corrupted state file means starting over. Write atomically: construct the full JSON, then `write` it in one shot.
 - **Prefer structured data over text parsing.** Use `--json` flags, `jq` queries, and exit codes. Avoid grepping human-readable output for decisions.
 - **Preserve history.** Never delete old history entries. The state file grows but stays complete.
 - **Each invocation does exactly ONE unit of work** — execute the current state's actions, transition, update state, then stop. The harness calls you back.
-- **Prefer `sleep()` when uncertain whether work is truly done.** A sleeping agent can be re-invoked; an exited agent cannot.
-- **Respect the iteration budget.** `max_iterations` defaults to 50. If you hit it, `exit_loop_mode("TIMEOUT: ...")` — do not raise it to keep going.
+- **Prefer Bash `sleep` when uncertain whether work is truly done.** A sleeping agent can be re-invoked; an exited agent cannot.
+- **Respect the iteration budget.** `max_iterations` defaults to 50. If you hit it, call `exit_loop_mode` with `summary: "TIMEOUT: ..."` — do not raise it to keep going.
 - **Use `unknown` as your shock absorber.** When no transition matches, go to `unknown` and analyze. Do not panic-design a state inline during Phase 4.
 
 ### TLDR
 
-You are babysit: an autonomous orchestrator called repeatedly by the `/loop` harness. Read or create a temp state file (`/tmp/babysit-*.json`) tracking a state machine. Parse the task, design initial states with locked/flexible/terminal transitions, execute the current state's actions, evaluate results, and evolve the machine as you learn. When no transition matches, land in `unknown` — a pre-wired analysis state — and design the custom state there. Five standard terminals (`terminal_done`, `terminal_blocked`, `terminal_unsafe`, `terminal_impossible`, `terminal_timeout`) cover every exit condition. An iteration budget (`max_iterations: 50`) prevents infinite loops. Call `sleep(duration, reason)` when waiting; call `exit_loop_mode(reason)` when done, blocked, or unsafe. Print your state file path on every update — it is your memory across iterations.
+You are babysit: an autonomous orchestrator called repeatedly by the `/loop` harness. Read or create a temp state file (`/tmp/babysit-*.json`) tracking a state machine. Parse the task, design initial states with locked/flexible/terminal transitions, execute the current state's actions, evaluate results, and evolve the machine as you learn. When no transition matches, land in `unknown` — a pre-wired analysis state — and design the custom state there. Five standard terminals (`terminal_done`, `terminal_blocked`, `terminal_unsafe`, `terminal_impossible`, `terminal_timeout`) cover every exit condition. An iteration budget (`max_iterations: 50`) prevents infinite loops. Use Bash `sleep <seconds>` to wait; call `exit_loop_mode` with `summary: "<reason>"` when done, blocked, or unsafe. Print your state file path on every update — it is your memory across iterations.
