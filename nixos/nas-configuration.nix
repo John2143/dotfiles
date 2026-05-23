@@ -529,12 +529,20 @@
   security.rtkit.enable = true;
 
   networking.firewall = {
-    #enable = true;
+    enable = true;
     allowedTCPPorts = [
+
       2049 # nfsv4 (Longhorn backup target)
       2283 # immich
       25565 # minecraft
       8280 # attic nix cache
+      10250 # kubelet
+    ];
+    allowedTCPPortRanges = [
+      { from = 30000; to = 32767; } # Kubernetes NodePort range
+    ];
+    allowedUDPPorts = [
+      8472 # flannel VXLAN
     ];
   };
 

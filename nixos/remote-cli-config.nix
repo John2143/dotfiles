@@ -100,12 +100,12 @@
 
   security.rtkit.enable = true;
 
-  # networking.firewall.allowedTCPPorts = [
-  #   5353 # avahi
-  #   7777 # games
-  # ];
-  # networking.firewall.allowedUDPPorts = [  ];
-  #networking.firewall.enable = true;
+  # Firewall enabled via shared-cli-configuration.nix.
+  networking.firewall.allowedTCPPorts = [10250];
+  networking.firewall.allowedUDPPorts = [8472];
+  networking.firewall.allowedTCPPortRanges = [
+    { from = 30000; to = 32767; } # Kubernetes NodePort range
+  ];
 
   # Do NOT change this value unless you have manually inspected all the changes it would make to your configuration,
   # and migrated your data accordingly.

@@ -159,6 +159,24 @@ in
     # inputs.home-manager.nixosModules.default
   ];
   home-manager.users."john" = import ./home.nix;
+# FIXME(2026-05-23): Waybar Lua dispatch patch — backports upstream PR #5013
+# to fix workspace button clicks on Hyprland >= 0.55. Remove this overlay
+# (and nixos/modules/waybar-lua-dispatch.patch) once nixpkgs ships a Waybar
+# release > v0.15.0 that includes the upstream fix.
+# Track: https://github.com/Alexays/Waybar/pull/5013
+# Check: https://github.com/Alexays/Waybar/releases
+
+  nixpkgs.overlays = [
+    (final: prev: {
+      waybar = prev.waybar.overrideAttrs (old: {
+        patches = (old.patches or []) ++ [
+          ./modules/waybar-lua-dispatch.patch
+        ];
+      });
+    })
+  ];
+
+
 
   #nix.settings.trusted-users = [ "@wheel" ];
   #nix.settings.trusted-public-keys = [
@@ -282,7 +300,11 @@ in
     path = [pkgs.hyprland];
   };
 
-  networking.firewall.allowedTCPPorts = [50051];
+  networking.firewall.allowedTCPPorts = [50051 10250];
+  networking.firewall.allowedUDPPorts = [8472];
+  networking.firewall.allowedTCPPortRanges = [
+    { from = 30000; to = 32767; } # Kubernetes NodePort range
+  ];
 
   # NAS CIFS mounts live in ./modules/nas-mounts.nix (shared across workstations).
 
@@ -297,14 +319,7 @@ in
   # };
   # vLLM disabled: GPU VRAM too small for the models we'd want to serve here.
 
-  # # Open ports in the firewall.
-  # networking.firewall.allowedTCPPorts = [
-  #   5353 # avahi
-  #   7777 # games
-  # ];
-  # networking.firewall.allowedUDPPorts = [  ];
-  # Or disable the firewall altogether.
-  networking.firewall.enable = false;
+  # Firewall enabled via shared-cli-configuration.nix.
 
   # Copy the NixOS configuration file and link it from the resulting system
   # (/run/current-system/configuration.nix). This is useful in case you

@@ -100,12 +100,7 @@
   #'';
   #};
 
-  # networking.firewall.allowedTCPPorts = [
-  #   5353 # avahi
-  #   7777 # games
-  # ];
-  # networking.firewall.allowedUDPPorts = [  ];
-  networking.firewall.enable = false;
+  # Firewall enabled via shared-cli-configuration.nix.
 
   # Do NOT change this value unless you have manually inspected all the changes it would make to your configuration,
   # and migrated your data accordingly.

@@ -362,13 +362,12 @@
       group = "users";
     };
 
-  # # Open ports in the firewall.
-  # networking.firewall.allowedTCPPorts = [
-  #   5353 # avahi
-  #   7777 # games
-  # ];
-  # networking.firewall.allowedUDPPorts = [  ];
-  # Or disable the firewall altogether.
-  networking.firewall.enable = false;
+  # Firewall enabled — NixOS opens SSH, Tailscale, Avahi automatically.
+  # Tailscale interface trusted so tailnet traffic bypasses the firewall.
+  # Per-host ports (k3s, ollama-cpu, gRPC, etc.) configured in host files.
+  networking.firewall = {
+    enable = true;
+    trustedInterfaces = ["tailscale0"];
+  };
 
 }

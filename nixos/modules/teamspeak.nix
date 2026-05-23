@@ -38,8 +38,6 @@ let
     INIFILE_CANDIDATES = [
         os.path.expandvars(_INI_BASE),
         os.path.expandvars("$HOME/.ts3client/clientquery.ini"),
-        "/home/john/.var/app/com.teamspeak.TeamSpeak3"
-        "/.ts3client/clientquery.ini",
     ]
 
     DISCONNECTED_JSON = json.dumps({
