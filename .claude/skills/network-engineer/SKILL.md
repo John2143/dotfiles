@@ -188,7 +188,7 @@ UniFi controller runs in k8s (namespace: default) on closet:
 - `unifi-inform` (LoadBalancer, 8080/TCP) — device inform/adoption (svclb on closet, arch, nas)
 
 APs discover the controller via broadcast (same L2 segment) — no special DNS or routing needed.
-Remaining unidentified static-ARP devices: .152 (Reolink MAC EC:71:DB:0B:3C:76), .219 (MAC C8:FF:77:57:E0:3D). .149 and .150 previously listed are no longer present.
+Remaining permanent ARP entries: .35 (closet, k3s server — needed for cluster stability) and .219 (unidentified, MAC C8:FF:77:57:E0:3D).
 ## Live Network State
 
 When you need to confirm what's actually on the network RIGHT NOW, run these read-only queries:

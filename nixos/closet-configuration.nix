@@ -25,6 +25,12 @@
     efi.canTouchEfiVariables = true;
   };
 
+  swapDevices = [
+    {
+      device = "/swapfile";
+      size = 8192;
+    }
+  ];
   virtualisation.podman = {
     enable = true;
     dockerCompat = true;

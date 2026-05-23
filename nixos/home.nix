@@ -436,9 +436,9 @@ in {
         { _args = ["F20" (mkLua ''hl.dsp.dpms({ action = "enable" })'')]; }
         { _args = ["CTRL + F20" (mkLua ''hl.dsp.dpms({ action = "disable" })'')]; }
 
-        # TeamSpeak / Discord mute
-        { _args = ["Prior" (mkLua ''hl.dsp.pass({ window = "class:^(TeamSpeak 3)$" })'')]; }
-        { _args = ["Next" (mkLua ''hl.dsp.pass({ window = "class:^(TeamSpeak 3)$" })'')]; }
+        # TeamSpeak mute (via ClientQuery API — avoids pass dispatcher unreliability with flatpak/XWayland)
+        { _args = ["Prior" (mkLua ''hl.dsp.exec_cmd("teamspeak-mute-status --toggle")'')]; }
+        { _args = ["Next" (mkLua ''hl.dsp.exec_cmd("teamspeak-mute-status --toggle")'')]; }
         { _args = ["KP_Subtract" (mkLua ''hl.dsp.pass({ window = "class:^(discord)$" })'')]; }
         { _args = ["XF86AudioPrev" (mkLua ''hl.dsp.pass({ window = "class:^(discord)$" })'')]; }
 
