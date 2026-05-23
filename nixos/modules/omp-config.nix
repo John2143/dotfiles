@@ -314,7 +314,7 @@ in
       checkpoint.enabled: true
       # Search provider for web_search tool. Tavily's free tier covers
       # agentic search loads well; API key lives in llm-runtime-keys.
-      providers.webSearch: tavily
+      providers.webSearch: brave
     '';
 
     ".omp/agent/keybindings.json".text = ''
@@ -339,6 +339,9 @@ in
     # with every `omp` invocation (no --hook needed). Reads token usage from
     # turn_end and agent_end events and displays it via ctx.ui.setStatus.
     ".omp/agent/extensions/ui-stats.ts".source = ../../.omp/agent/extensions/ui-stats.ts;
+    # Web search fallback — chains Brave → Tavily on rate-limit errors.
+    # Intercepts web_search tool calls and retries with next provider transparently.
+    ".omp/agent/extensions/web-search-fallback.ts".source = ../../.omp/agent/extensions/web-search-fallback.ts;
 
     ".omp/agent/system-prompt.md".text = ''
       You are a capable AI agent operating in a terminal-based harness. You handle software engineering tasks and complex research topics with equal rigor. You may be running under Oh My Pi, Claude Code, or another harness; do not assume defaults from any specific one.
