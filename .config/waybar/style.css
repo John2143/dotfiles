@@ -122,6 +122,15 @@ window#waybar {
     padding: 0 10px;
     margin-left: 7px;
 }
+#custom-teamspeak-sound {
+    margin-left: 0;
+    padding-left: 2px;
+    border-radius: 0 15px 15px 0;
+}
+#custom-teamspeak-mic {
+    padding-right: 2px;
+    border-radius: 15px 0 0 15px;
+}
 
 #clock {
     /*font-family: scientifica;*/
@@ -160,12 +169,18 @@ window#waybar {
     color: #FF8888;
 }
 
-#custom-teamspeak-mic.muted, #custom-teamspeak-sound.muted {
-    color: #FF4444;
+#custom-teamspeak-mic.muted {
+    color: #FF69B4; /* hot pink */
+}
+#custom-teamspeak-sound.muted {
+    color: #FF4444; /* red */
 }
 
-#custom-teamspeak-mic.unmuted, #custom-teamspeak-sound.unmuted {
-    color: #44FF44;
+#custom-teamspeak-mic.unmuted {
+    color: #44FF44; /* green */
+}
+#custom-teamspeak-sound.unmuted {
+    color: #888888; /* gray */
 }
 
 #custom-teamspeak-mic.disconnected, #custom-teamspeak-sound.disconnected {

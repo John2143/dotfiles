@@ -279,7 +279,7 @@ let
         os.chmod(SOCK_PATH, 0o600)
         server.setblocking(False)
 
-        signal.signal(signal.SIGPIPE, signal.SIG_DFL)
+        signal.signal(signal.SIGPIPE, signal.SIG_IGN)
         signal.signal(signal.SIGTERM, lambda *_: sys.exit(0))
 
         print(
