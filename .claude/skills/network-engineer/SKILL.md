@@ -97,13 +97,14 @@ Baseline (captured 2026-05-22, corrected):
 
 ```
 192.168.0.0/24  — 2GWAN (upstream ISP via Verizon, DHCP from 192.168.0.1)
-192.168.1.0/24  — bridge (main LAN, router at .1)
-192.168.5.0/24  — bridge (switch LAN, router at .1)
+192.168.1.0/24  — bridge (camera subnet, router at .1, no WAN egress)
+192.168.5.0/24  — bridge (trusted LAN, router at .1, full WAN access)
 192.168.88.0/24 — bridge (legacy factory-default, router at .254, unused)
 ```
 
-Router bridges all subnets. Inter-subnet routing is automatic (no NAT between 1.0/24 and 5.0/24).
+Router bridges all subnets. Inter-subnet routing is automatic (no NAT between 1.0/24 and 5.0/24). Firewall rule blocks 1.0/24 → WAN; inter-subnet traffic passes via allow rule for 192.168.0.0/16 ↔ 192.168.0.0/16.
 
+**DHCP strategy:** Pool restricted to `192.168.5.50-192.168.5.254` — dynamic clients always get a 5.0/24 address. The 1.0/24 camera subnet uses static DHCP reservations only (no dynamic assignments). New devices never accidentally land on the camera subnet.
 ## Device Inventory — NixOS Hosts
 
 All hosts run NixOS (except mac which is nix-darwin). Managed from `~/dotfiles` via `nh os switch .`.
@@ -116,7 +117,7 @@ All hosts run NixOS (except mac which is nix-darwin). Managed from `~/dotfiles` 
 | **arch** | 192.168.5.226 (DHCP) | GenAI workstation, k3s, GPU compute (ollama/vllm) | i9-9900K, 31GB, GTX 1080 Ti |
 | **closet** | 192.168.5.35 (static) | k3s server, Longhorn storage | Ryzen 5 1600, 7.7GB, 4TB USB SSD |
 | **nas** | 192.168.5.175-176 (DHCP, dual NIC) | ZFS file server, atticd cache, k3s + Longhorn | i7-3770K, 15GB, 4×8TB HDD ZFS RAIDZ1, 10GbE SFP+ |
-| **secu** | 192.168.5.140 (DHCP) | Security camera NVR (FDE) | HP EliteDesk 800 G3, i5-6500T, 7.6GB |
+| **secu** | 192.168.5.140 (DHCP) | Camera terminal viewer (FDE) | HP EliteDesk 800 G3, i5-6500T, 7.6GB |
 | **pite** | 192.168.5.213 (DHCP) | k3s agent, canary (honeytoken bait) | Raspberry Pi 4B, 1.8GB, 238GB SD |
 | **vpin** | 192.168.5.252 (DHCP) | Mullvad exit node | Raspberry Pi (3?), 3.7GB, 59.5GB SD |
 | **aman** | DHCP (Tailscale) | Mullvad exit node, Avahi reflector | Raspberry Pi 4B, 3.7GB, 238GB SD |
@@ -154,7 +155,7 @@ All hosts run NixOS (except mac which is nix-darwin). Managed from `~/dotfiles` 
 ## Cameras (Reolink)
 
 Reolink cameras — ONVIF/RTSP, not UniFi. Use DHCP reservations for IP management.
-Migrated/being migrated from 5.0/24 to dedicated 1.0/24 camera subnet.
+All cameras now on dedicated 1.0/24 camera subnet (migration complete). WAN egress blocked for entire subnet via firewall.
 
 **IP strategy: Router-side DHCP reservations.**
 ```
@@ -163,15 +164,15 @@ mikrotik-connect r '/ip dhcp-server lease make-static [find host-name=Side]'
 
 | Camera | IP | Subnet | Connection | MAC |
 |--------|-----|--------|-----------|-----|
-| Back yard | 192.168.1.60 | 1.0/24 | WiFi, static | 78:93:C3:8E:34:9F |
-| Garage | 192.168.1.61 | 1.0/24 | WiFi, static | EC:71:DB:F4:DC:49 |
-| Front porch | 192.168.1.63 | 1.0/24 | Wired, static | EC:71:DB:89:D8:8B |
-| Front Gate | 192.168.1.64 | 1.0/24 | Wired, static | EC:71:DB:65:58:A3 |
-| Side yard | 192.168.5.169 | 5.0/24 | WiFi, DHCP | 94:B3:F7:18:52:CC |
-| Front Driveway | 192.168.5.174 | 5.0/24 | Wired, DHCP | EC:71:DB:3E:2F:21 |
+| Back yard | 192.168.1.60 | 1.0/24 | WiFi, DHCP | 78:93:C3:8E:34:9F |
+| Garage | 192.168.1.61 | 1.0/24 | WiFi, DHCP | EC:71:DB:F4:DC:49 |
+| Front porch | 192.168.1.63 | 1.0/24 | Wired, DHCP | EC:71:DB:89:D8:8B |
+| Front Gate | 192.168.1.64 | 1.0/24 | Wired, DHCP | EC:71:DB:65:58:A3 |
+| NVR | 192.168.1.67 | 1.0/24 | Wired, DHCP | EC:71:DB:8B:92:93 |
+| Side yard | 192.168.1.65 | 1.0/24 | WiFi, DHCP | 94:B3:F7:18:52:CC |
+| Front Driveway | 192.168.1.66 | 1.0/24 | Wired, DHCP | EC:71:DB:3E:2F:21 |
 
-Side yard has stale duplicate IPs (.151, 1.62) to clean up. `secu` (192.168.5.140) handles NVR duties.
-No UniFi cameras — only UniFi APs and UniFi controller (below).
+All seven cameras use DHCP with static reservations on the router. The router hands each camera its reserved IP along with gateway=192.168.1.1 and DNS=192.168.5.1 on every lease.
 
 ## UniFi (APs + Controller)
 
@@ -187,7 +188,7 @@ UniFi controller runs in k8s (namespace: default) on closet:
 - `unifi-inform` (LoadBalancer, 8080/TCP) — device inform/adoption (svclb on closet, arch, nas)
 
 APs discover the controller via broadcast (same L2 segment) — no special DNS or routing needed.
-Remaining unidentified static-ARP devices: .149, .150, .152, .154, .197, .219. Possibly more cameras or IoT devices.
+Remaining unidentified static-ARP devices: .152 (Reolink MAC EC:71:DB:0B:3C:76), .219 (MAC C8:FF:77:57:E0:3D). .149 and .150 previously listed are no longer present.
 ## Live Network State
 
 When you need to confirm what's actually on the network RIGHT NOW, run these read-only queries:
