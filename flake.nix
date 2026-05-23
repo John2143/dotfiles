@@ -132,6 +132,8 @@
           ./nixos/modules/restic-backup.nix
           ./nixos/modules/nas-mounts.nix
           ./nixos/tailscale.nix
+
+          ./nixos/modules/attic.nix
         ];
       }) //
       (mkHost {
@@ -146,6 +148,8 @@
           ./nixos/modules/restic-backup.nix
           ./nixos/modules/nas-mounts.nix
           ./nixos/tailscale.nix
+
+          ./nixos/modules/attic.nix
         ];
       }) //
       (mkHost {
@@ -157,6 +161,8 @@
           ./nixos/modules/restic-backup.nix
           ./nixos/modules/nas-mounts.nix
           ./nixos/tailscale.nix
+
+          ./nixos/modules/attic.nix
         ];
       }) //
       (mkHost {
@@ -175,6 +181,8 @@
           ./nixos/remote-cli-config.nix
           ./nixos/modules/k3s-agent.nix
           ./nixos/tailscale.nix
+
+          ./nixos/modules/attic.nix
         ];
       }) //
       (mkHost {
@@ -199,6 +207,8 @@
           ./nixos/remote-cli-config.nix
           ./nixos/tailscale.nix
           ./nixos/modules/mullvad.nix
+
+          ./nixos/modules/attic.nix
         ];
       }) //
       (mkHost {
@@ -223,6 +233,8 @@
           ./nixos/tailscale.nix
           ## POST-INSTALL: uncomment after TPM enrollment ##
           ./nixos/modules/secu-post-install.nix
+
+          ./nixos/modules/attic.nix
         ];
       }) //
       (mkHost {
@@ -234,6 +246,8 @@
           ./nixos/modules/k3s-agent.nix
           ./nixos/modules/disko_nas.nix
           ./nixos/tailscale.nix
+
+          ./nixos/modules/attic.nix
         ];
       }) //
       {

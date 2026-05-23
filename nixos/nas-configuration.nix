@@ -463,18 +463,27 @@
   # === Attic Cache ===
   # ====================
 
-  # One-time setup before first deploy:
-  #   sudo zfs create -o mountpoint=/tank/atticd \
-  #     -o recordsize=1M -o compression=lz4 -o atime=off tank/atticd
+  # ZFS dataset (one-time): sudo zfs create -o mountpoint=/tank/atticd \
+  #   -o recordsize=1M -o compression=lz4 -o atime=off tank/atticd
   #   sudo chown atticd:atticd /tank/atticd
-  #
-  # After first deploy, create the cache:
-  #   TOKEN=$(sudo atticd-atticadm make-token --sub john --validity 1y \
-  #     --create-cache '*' --pull '*' --push '*' --delete '*' \
-  #     --configure-cache '*' --configure-cache-retention '*')
-  #   nix-shell -p attic-client --run "attic login nas http://nas:8280 $TOKEN"
-  #   nix-shell -p attic-client --run "attic cache create 2143nix"
-  #   nix-shell -p attic-client --run "attic cache info 2143nix"
+
+  # Declarative cache bootstrap — creates + configures the cache on first boot.
+  # Token generation remains imperative: atticd-atticadm make-token
+  systemd.services.attic-cache-bootstrap = {
+    description = "Ensure Attic cache 2143nix exists and is configured";
+    after = [ "atticd.service" ];
+    requires = [ "atticd.service" ];
+    serviceConfig.Type = "oneshot";
+    serviceConfig.RemainAfterExit = true;
+    script = ''
+      TOKEN=$(</run/agenix/attic-admin-token)
+      ${pkgs.attic-client}/bin/attic login nas http://localhost:8280 "$TOKEN"
+      if ! ${pkgs.attic-client}/bin/attic cache info 2143nix >/dev/null 2>&1; then
+        ${pkgs.attic-client}/bin/attic cache create 2143nix
+      fi
+      ${pkgs.attic-client}/bin/attic cache configure 2143nix --priority 41
+    '';
+  };
 
   services.atticd = {
     enable = true;
