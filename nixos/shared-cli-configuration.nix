@@ -52,6 +52,7 @@
       tmux
       vim
       btop
+      aha
       inputs.agenix.packages.${pkgs.stdenv.hostPlatform.system}.default
     ]
     ++ lib.optionals (builtins.elem config.networking.hostName ["office" "arch" "pite"]) [

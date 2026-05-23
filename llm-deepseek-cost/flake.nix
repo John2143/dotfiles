@@ -16,7 +16,14 @@
         pkgs = import nixpkgs {inherit system;};
         naersk-lib = pkgs.callPackage naersk {};
       in {
-        defaultPackage = naersk-lib.buildPackage ./.;
+        defaultPackage = naersk-lib.buildPackage {
+          src = ./.;
+          nativeBuildInputs = [ pkgs.makeWrapper ];
+          postInstall = ''
+            wrapProgram $out/bin/llm-deepseek-cost \
+              --prefix PATH : ${pkgs.aha}/bin
+          '';
+        };
         devShell = with pkgs;
           mkShell {
             buildInputs = [
@@ -25,6 +32,7 @@
               rustfmt
               pre-commit
               rustPackages.clippy
+              aha
               rust-analyzer
             ];
             RUST_SRC_PATH = rustPlatform.rustLibSrc;

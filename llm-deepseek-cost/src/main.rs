@@ -4,7 +4,9 @@ use colored::Colorize;
 use serde::Deserialize;
 use std::collections::HashMap;
 use std::fs;
+use std::io::Write;
 use std::path::PathBuf;
+use std::process::{Command, Stdio};
 
 #[derive(Parser)]
 #[command(name = "llm-deepseek-cost")]
@@ -13,6 +15,10 @@ struct Cli {
     /// Directory containing amount-*.csv and cost-*.csv
     #[arg(default_value = ".")]
     dir: PathBuf,
+
+    /// Output as self-contained HTML (use "-" for stdout)
+    #[arg(long, value_name = "FILE")]
+    html: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -96,15 +102,50 @@ fn print_model_lines(models: &[(String, &ModelStats)], user_total: f64) {
 
         println!(
             "     {} {} {} {}",
-            format!("{:<20}", model).dimmed(),
-            format!("${:>7.2}", stats.cost).dimmed(),
-            format!("({:>5.1}%)", pct).dimmed(),
-            token_str.dimmed(),
+            format!("{:<20}", model).truecolor(128, 128, 128),
+            format!("${:>7.2}", stats.cost).truecolor(128, 128, 128),
+            format!("({:>5.1}%)", pct).truecolor(128, 128, 128),
+            token_str.truecolor(128, 128, 128),
         );
     }
 }
 fn main() {
     let cli = Cli::parse();
+
+    // --html: spawn self with CLICOLOR_FORCE=1, pipe through aha
+    if let Some(html_path) = &cli.html {
+        let exe = std::env::current_exe().unwrap_or_else(|_| {
+            // Fallback: use argv[0] for `cargo run` compat
+            std::env::args().next().map(PathBuf::from).unwrap()
+        });
+        let dir_arg = cli.dir.to_string_lossy().to_string();
+
+        let output = Command::new(&exe)
+            .arg(&dir_arg)
+            .env("CLICOLOR_FORCE", "1")
+            .stdout(Stdio::piped())
+            .stderr(Stdio::inherit())
+            .output()
+            .expect("Failed to spawn self for HTML generation");
+
+        let mut aha = Command::new("aha")
+            .arg("--black")
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .spawn()
+            .expect("aha not found on PATH — install it (nix-shell -p aha)");
+
+        aha.stdin.take().unwrap().write_all(&output.stdout).unwrap();
+        let result = aha.wait_with_output().unwrap();
+
+        if html_path == "-" {
+            std::io::stdout().write_all(&result.stdout).unwrap();
+        } else {
+            fs::write(html_path, &result.stdout).unwrap();
+            eprintln!("Wrote {}", html_path);
+        }
+        return;
+    }
 
     let amount_path = find_file(&cli.dir, "amount-")
         .unwrap_or_else(|| panic!("No amount-*.csv found in {:?}", cli.dir));
@@ -258,8 +299,8 @@ fn main() {
             "{:>25} {} {} {}",
             daily_label.bold(),
             format!("${:>7.2}", daily_total).yellow().bold(),
-            format!("({:>5.1}%)", 100.0).dimmed(),
-            daily_token_str.dimmed(),
+            format!("({:>5.1}%)", 100.0).truecolor(128, 128, 128),
+            daily_token_str.truecolor(128, 128, 128),
         );
 
         println!();
@@ -303,7 +344,7 @@ fn main() {
         format!("{} {}", p.format("%B"), p.format("%d").to_string().trim_start_matches('0'))
     }).unwrap_or_default();
 
-    println!("{}", "---".dimmed());
+    println!("{}", "---".truecolor(128, 128, 128));
     println!(
         "{:>29}",
         "Totals".bold().bright_cyan()
@@ -327,6 +368,6 @@ fn main() {
         "{:>25} {}   {}",
         "Grand Total".bold(),
         format!("${:>7.2}", grand_total).yellow().bold(),
-        format!("{} - {}", first_date, last_date).dimmed(),
+        format!("{} - {}", first_date, last_date).truecolor(128, 128, 128),
     );
 }
