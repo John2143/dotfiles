@@ -1,6 +1,7 @@
 {
   config,
   lib,
+  pkgs,
   ...
 }: let
   # All x86_64-linux builders in the cluster.
@@ -62,6 +63,7 @@ in {
   users.users.nixbuild = lib.mkIf isBuilder {
     isSystemUser = true;
     group = "nixbuild";
+    shell = pkgs.bash;
     createHome = false;
     openssh.authorizedKeys.keys = [
       "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIO+dLtM35wMPfnsd7krzS8lXcKzi7b1A2OEtJi8viHMz build-cluster"
