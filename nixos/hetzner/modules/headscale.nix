@@ -55,7 +55,9 @@
     after = ["headscale.service"];
     wants = ["headscale.service"];
   };
-  # Open firewall for headscale API
-  networking.firewall.allowedTCPPorts = [ 6767 ];
+  # Open firewall for headscale API (headscale.nix:58)
+  networking.firewall.allowedTCPPorts = [
+    6767 # headscale HTTP API
+  ];
 
 }

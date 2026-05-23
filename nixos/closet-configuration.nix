@@ -164,8 +164,13 @@
   };
 
   # Firewall enabled via shared-cli-configuration.nix.
-  networking.firewall.allowedTCPPorts = [6443 10250];
-  networking.firewall.allowedUDPPorts = [8472];
+  networking.firewall.allowedTCPPorts = [
+    6443 # k3s API server (k3s)
+    10250 # kubelet (k3s agent)
+  ];
+  networking.firewall.allowedUDPPorts = [
+    8472 # flannel VXLAN (k3s)
+  ];
   networking.firewall.allowedTCPPortRanges = [
     { from = 30000; to = 32767; } # Kubernetes NodePort range
   ];

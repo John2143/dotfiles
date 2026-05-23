@@ -101,8 +101,12 @@
   security.rtkit.enable = true;
 
   # Firewall enabled via shared-cli-configuration.nix.
-  networking.firewall.allowedTCPPorts = [10250];
-  networking.firewall.allowedUDPPorts = [8472];
+  networking.firewall.allowedTCPPorts = [
+    10250 # kubelet (k3s agent)
+  ];
+  networking.firewall.allowedUDPPorts = [
+    8472 # flannel VXLAN (k3s)
+  ];
   networking.firewall.allowedTCPPortRanges = [
     { from = 30000; to = 32767; } # Kubernetes NodePort range
   ];

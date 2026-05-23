@@ -164,7 +164,9 @@ in {
     # NVIDIA container toolkit so --gpus=all works inside podman.
     hardware.nvidia-container-toolkit.enable = lib.mkIf (cfg.gpuBackend == "nvidia") true;
 
-    networking.firewall.allowedTCPPorts = lib.mkIf cfg.openFirewall [cfg.port];
+    networking.firewall.allowedTCPPorts = lib.mkIf cfg.openFirewall [
+      cfg.port # vLLM OpenAI-compatible API (default 8000) — vllm.nix:65
+    ];
 
     systemd.tmpfiles.rules = [
       "d ${cfg.huggingfaceCacheDir} 0755 john users -"

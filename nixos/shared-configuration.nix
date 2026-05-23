@@ -306,6 +306,14 @@ in {
 
   # games
   services.flatpak.enable = true;
+  # Bubblewrap setuid wrapper — flatpak needs this to create sandboxes.
+  # The flatpak module doesn't auto-configure this in nixpkgs 25.11+.
+  security.wrappers.bubblewrap = {
+    source = "${pkgs.bubblewrap}/bin/bwrap";
+    capabilities = "cap_sys_admin+ep";
+    owner = "root";
+    group = "root";
+  };
 
   programs.ydotool = {
     enable = true;

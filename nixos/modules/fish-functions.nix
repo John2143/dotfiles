@@ -496,19 +496,17 @@
           set_color --bold; printf "=== Daily Activity (last 30 completed UTC days) ===\n"; set_color normal
           printf '%s\n' $act_resp | jq -r '
             [.data[] | select(.usage > 0)]
-            | group_by(.date)
+            | group_by(.date[:10])
             | reverse
             | .[]
             | ([.[].usage] | add | . * 100 | round | . / 100) as $day_total
-            | "  \(.[0].date)  $" + ($day_total | tostring),
-              (.[]
-               | sort_by(-.usage)
-               | "    \(.model)  $" + (.usage | tostring)
-                 + "  \(.requests) reqs  \(.prompt_tokens)→\(.completion_tokens) tok"
-                 + (if .reasoning_tokens > 0 then " +\(.reasoning_tokens) reason" else "" end)
-                 + "  [" + .provider_name + "]"
-              )
-          '
+            | ( "  \(.[0].date[:10])  $" + ($day_total | tostring) ),
+              ( sort_by(-.usage)[]
+                | "    \(.model)  $" + (.usage | tostring)
+                  + "  \(.requests) reqs  \(.prompt_tokens)→\(.completion_tokens) tok"
+                  + (if .reasoning_tokens > 0 then " +\(.reasoning_tokens) reason" else "" end)
+                  + "  [" + .provider_name + "]"
+              )'
           set_color brblack
           echo "  (current partial UTC day excluded)"
           set_color normal

@@ -7,7 +7,7 @@ tmux new-window 'btop'
 tmux rename-window 'btop'
 
 sleep 0.1
-tmux new-window 'while true; steam; read; end'
+tmux new-window 'while true; steam; end'
 tmux rename-window 'steam'
 
 sleep 0.1

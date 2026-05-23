@@ -70,6 +70,11 @@
     ];
   };
 
-  networking.firewall.allowedTCPPorts = [53 8081];
-  networking.firewall.allowedUDPPorts = [53];
+  networking.firewall.allowedTCPPorts = [
+    53   # DNS (PowerDNS) — hetzner-powerdns.nix:73
+    8081 # PowerDNS webserver API/metrics — hetzner-powerdns.nix:41
+  ];
+  networking.firewall.allowedUDPPorts = [
+    53 # DNS (PowerDNS) — hetzner-powerdns.nix:74
+  ];
 }

@@ -532,16 +532,23 @@
     enable = true;
     allowedTCPPorts = [
 
-      2049 # nfsv4 (Longhorn backup target)
-      2283 # immich
-      25565 # minecraft
-      8280 # attic nix cache
-      10250 # kubelet
+
+      111 # rpcbind (NFS)
+      2049 # nfsv4 (NFS) — Longhorn backup target
+      2283 # immich (immich-server)
+      25565 # minecraft (paperMC)
+      8280 # attic nix cache — nas-configuration.nix:557
+      10250 # kubelet (k3s agent)
+
+      20048 # rpc.mountd (NFS)
     ];
     allowedTCPPortRanges = [
       { from = 30000; to = 32767; } # Kubernetes NodePort range
     ];
     allowedUDPPorts = [
+
+      111 # rpcbind (NFS)
+      20048 # rpc.mountd (NFS)
       8472 # flannel VXLAN
     ];
   };

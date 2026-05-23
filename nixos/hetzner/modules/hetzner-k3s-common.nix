@@ -177,8 +177,20 @@
   #   ...
   # };
 
-  networking.firewall.allowedTCPPorts = [22 6443 80 443 53 30432 4567 4568];
-  networking.firewall.allowedUDPPorts = [53 8472];
+  networking.firewall.allowedTCPPorts = [
+    22    # SSH
+    6443  # k3s API server
+    80    # HTTP (k3s ingress)
+    443   # HTTPS (k3s ingress)
+    53    # DNS (PowerDNS) — hetzner-powerdns.nix:73
+    30432 # PostgreSQL NodePort (PowerDNS) — hetzner-powerdns.nix:24, hetzner-postgres-schema.nix:8
+    4567  # Galera cluster (MariaDB)
+    4568  # Galera IST — incremental state transfer (MariaDB)
+  ];
+  networking.firewall.allowedUDPPorts = [
+    53   # DNS (PowerDNS) — hetzner-powerdns.nix:74
+    8472 # flannel VXLAN (k3s)
+  ];
 
   environment.systemPackages = with pkgs; [
     k3s

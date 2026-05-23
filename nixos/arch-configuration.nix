@@ -300,8 +300,14 @@ in
     path = [pkgs.hyprland];
   };
 
-  networking.firewall.allowedTCPPorts = [50051 10250];
-  networking.firewall.allowedUDPPorts = [8472];
+  networking.firewall.allowedTCPPorts = [
+    50051 # screen-control REST API (arch-configuration.nix:290, screen-control/src/main.rs:129)
+    10250 # kubelet (k3s agent)
+    18080 # monero p2p (monerod)
+  ];
+  networking.firewall.allowedUDPPorts = [
+    8472 # flannel VXLAN (k3s)
+  ];
   networking.firewall.allowedTCPPortRanges = [
     { from = 30000; to = 32767; } # Kubernetes NodePort range
   ];

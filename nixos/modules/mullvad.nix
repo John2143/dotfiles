@@ -444,7 +444,9 @@ in {
     networking.firewall = {
       enable = lib.mkForce true;
       trustedInterfaces = ["tailscale0"];
-      allowedUDPPorts = [config.services.tailscale.port];
+      allowedUDPPorts = [
+        config.services.tailscale.port # Tailscale (default 41641)
+      ];
       extraCommands = ''
         iptables -t nat -A POSTROUTING -s 100.64.0.0/10 ! -o tailscale0 -j MASQUERADE
       '';
