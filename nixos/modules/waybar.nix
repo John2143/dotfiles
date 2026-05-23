@@ -214,6 +214,7 @@
       ExecStart = "${pkgs.waybar}/bin/waybar";
       ExecReload = "${pkgs.coreutils}/bin/kill -SIGUSR2 $MAINPID";
       Restart = "on-failure";
+      TimeoutStopSec = 10;
     };
     Install = {
       WantedBy = [ "graphical-session.target" ];
