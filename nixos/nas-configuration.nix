@@ -529,5 +529,11 @@
     ];
   };
 
+  # Use loopback for attic cache — NAS hosts atticd itself, no reason
+  # to go over the network stack. Other machines use http://nas:8280.
+  nix.settings.substituters = lib.mkForce [
+    "http://localhost:8280/2143nix"
+  ];
+
   system.stateVersion = "26.05";
 }
