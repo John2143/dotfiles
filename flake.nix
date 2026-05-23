@@ -134,6 +134,8 @@
           ./nixos/tailscale.nix
 
           ./nixos/modules/attic.nix
+
+          ./nixos/modules/remote-builders.nix
         ];
       }) //
       (mkHost {
@@ -150,6 +152,8 @@
           ./nixos/tailscale.nix
 
           ./nixos/modules/attic.nix
+
+          ./nixos/modules/remote-builders.nix
         ];
       }) //
       (mkHost {
@@ -163,6 +167,8 @@
           ./nixos/tailscale.nix
 
           ./nixos/modules/attic.nix
+
+          ./nixos/modules/remote-builders.nix
         ];
       }) //
       (mkHost {
@@ -235,6 +241,8 @@
           ./nixos/modules/secu-post-install.nix
 
           ./nixos/modules/attic.nix
+
+          ./nixos/modules/remote-builders.nix
         ];
       }) //
       (mkHost {
@@ -248,6 +256,8 @@
           ./nixos/tailscale.nix
 
           ./nixos/modules/attic.nix
+
+          ./nixos/modules/remote-builders.nix
         ];
       }) //
       {

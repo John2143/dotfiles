@@ -126,4 +126,15 @@ in {
   #     | agenix -e secrets/mikrotik-credentials.age -i ~/.ssh/age
   #   rm /tmp/mikrotik-key /tmp/mikrotik-key.pub
   "mikrotik-credentials.age".publicKeys = [office arch];
+
+
+  # Remote build cluster SSH key — shared across all x86_64 machines.
+  # Each client machine uses this key to SSH into builders as nixbuild.
+  # Builders (office, arch, nas) have the public key in nixbuild's
+  # authorized_keys so they can accept remote build jobs.
+  # Generate:
+  #   ssh-keygen -t ed25519 -f /tmp/build-cluster-key -N "" -C "build-cluster"
+  #   cat /tmp/build-cluster-key.pub  → paste into remote-builders.nix
+  #   agenix -e build-cluster-key.age -i ~/.ssh/age < /tmp/build-cluster-key
+  "build-cluster-key.age".publicKeys = [office arch closet secu nas];
 }
