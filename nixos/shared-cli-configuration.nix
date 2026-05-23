@@ -58,6 +58,7 @@
       # uv on PATH so my_claw (in fish-functions.nix) can `uvx litellm`
       # without needing a writeShellScriptBin nix-store substitution.
       pkgs.uv
+      pkgs.attic-client
       # omp wrapper: consumes the fork's own flake (John2143/oh-my-pi#omp).
       # Bump via `nix flake update oh-my-pi`. All build hashes (cargoHash,
       # bun.nix) live in the fork.
