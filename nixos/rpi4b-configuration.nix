@@ -120,12 +120,7 @@
     token = "K10c774bc9053c47bd55747f362531fb443f6ca1e4364143dbd74acdd4156eb6878::zrn5is.xofs0ptxviid21y8";
   };
 
-  # networking.firewall.allowedTCPPorts = [
-  #   5353 # avahi
-  #   7777 # games
-  # ];
-  # networking.firewall.allowedUDPPorts = [  ];
-  networking.firewall.enable = false;
+  # Firewall enabled via shared-cli-configuration.nix.
 
   # Do NOT change this value unless you have manually inspected all the changes it would make to your configuration,
   # and migrated your data accordingly.

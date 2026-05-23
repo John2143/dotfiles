@@ -137,15 +137,14 @@
   # drones
   services.upower.enable = true;
 
-  # # Open ports in the firewall.
-  # networking.firewall.allowedTCPPorts = [
-  #   5353 # avahi
-  #   7777 # games
-  # ];
-  # networking.firewall.allowedUDPPorts = [  ];
-  # Or disable the firewall altogether.
-  networking.firewall.enable = false;
+  # Firewall enabled via shared-cli-configuration.nix.
   networking.firewall.allowPing = true;
+
+  networking.firewall.allowedTCPPorts = [11435 10250];
+  networking.firewall.allowedUDPPorts = [8472];
+  networking.firewall.allowedTCPPortRanges = [
+    { from = 30000; to = 32767; } # Kubernetes NodePort range
+  ];
 
   # Allow windows to see the samba share
   #services.samba-wsdd = {

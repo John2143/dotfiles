@@ -69,6 +69,7 @@ in {
   # Format:
   #   ANTHROPIC_ADMIN_KEY=sk-ant-admin-...  (console.anthropic.com/settings/admin-keys)
   #   OPENAI_ADMIN_KEY=sk-admin-...
+  #   OPENROUTER_ADMIN_KEY=sk-or-mgmt-...  (https://openrouter.ai/settings/management-keys)
   "llm-admin-keys.age".publicKeys = [office arch mac];
 
   # Bait runtime keys for the pite canary. Same env-var names as the real
