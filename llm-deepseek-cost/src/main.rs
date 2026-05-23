@@ -69,6 +69,40 @@ fn humanize_tokens(n: i64) -> String {
     }
 }
 
+fn print_model_lines(models: &[(String, &ModelStats)], user_total: f64) {
+    for (model, stats) in models {
+        let pct = if user_total > 0.0 {
+            (stats.cost / user_total) * 100.0
+        } else {
+            0.0
+        };
+
+        let hit = humanize_tokens(stats.hit_tokens);
+        let miss = humanize_tokens(stats.miss_tokens);
+        let out = humanize_tokens(stats.out_tokens);
+
+        let mut token_parts: Vec<String> = Vec::new();
+        if stats.hit_tokens > 0 {
+            token_parts.push(format!("{} cache", hit));
+        }
+        if stats.miss_tokens > 0 {
+            token_parts.push(format!("{} in", miss));
+        }
+        if token_parts.is_empty() {
+            token_parts.push("0 in".to_string());
+        }
+
+        let token_str = format!("{} -> {} out", token_parts.join(" + "), out);
+
+        println!(
+            "     {} {} {} {}",
+            format!("{:<20}", model).dimmed(),
+            format!("${:>7.2}", stats.cost).dimmed(),
+            format!("({:>5.1}%)", pct).dimmed(),
+            token_str.dimmed(),
+        );
+    }
+}
 fn main() {
     let cli = Cli::parse();
 
@@ -149,19 +183,26 @@ fn main() {
         let month_name = parsed.format("%B");
         let day = parsed.format("%d").to_string().trim_start_matches('0').to_string();
 
-        // Compute daily total
-        let daily_total: f64 = data
-            .iter()
-            .filter(|((d, _, _), _)| d == date)
-            .map(|(_, s)| s.cost)
-            .sum();
+        // Compute daily totals
+        let mut daily_total: f64 = 0.0;
+        let mut daily_hit: i64 = 0;
+        let mut daily_miss: i64 = 0;
+        let mut daily_out: i64 = 0;
+
+        for ((d, _, _), stats) in &data {
+            if d == date {
+                daily_total += stats.cost;
+                daily_hit += stats.hit_tokens;
+                daily_miss += stats.miss_tokens;
+                daily_out += stats.out_tokens;
+            }
+        }
         grand_total += daily_total;
 
-        // Date header with daily total
+        // Date header
         println!(
-            "{}  {}",
-            format!("{} {}", month_name, day).bold().bright_cyan(),
-            format!("${:.2}", daily_total).bold().bright_cyan()
+            "{:>29}",
+            format!("{} {}", month_name, day).bold().bright_cyan()
         );
 
         // Collect users for this date
@@ -183,10 +224,9 @@ fn main() {
                 continue;
             }
             println!(
-                " {} {} {}",
-                "-".dimmed(),
-                user.bold().white(),
-                format!("${:.2}", user_total).bold().green()
+                "{:>25} {}",
+                user.white(),
+                format!("${:>7.2}", user_total).yellow(),
             );
 
             let mut models: Vec<(String, &ModelStats)> = data
@@ -197,47 +237,96 @@ fn main() {
 
             models.sort_by(|a, b| b.1.cost.partial_cmp(&a.1.cost).unwrap_or(std::cmp::Ordering::Equal));
 
-            for (model, stats) in &models {
-                let pct = if *user_total > 0.0 {
-                    (stats.cost / user_total) * 100.0
-                } else {
-                    0.0
-                };
-
-                let hit = humanize_tokens(stats.hit_tokens);
-                let miss = humanize_tokens(stats.miss_tokens);
-                let out = humanize_tokens(stats.out_tokens);
-
-                let mut token_parts: Vec<String> = Vec::new();
-                if stats.hit_tokens > 0 {
-                    token_parts.push(format!("{} cache", hit));
-                }
-                if stats.miss_tokens > 0 {
-                    token_parts.push(format!("{} in", miss));
-                }
-                if token_parts.is_empty() {
-                    token_parts.push("0 in".to_string());
-                }
-
-                let token_str = format!("{} -> {} out", token_parts.join(" + "), out);
-
-                println!(
-                    "   {} {} {} {} {}",
-                    "-".dimmed(),
-                    format!("{:<20}", model),
-                    format!("${:>7.2}", stats.cost).bright_yellow(),
-                    format!("({:>5.1}%)", pct).dimmed(),
-                    token_str.dimmed(),
-                );
-            }
+            print_model_lines(&models, *user_total);
         }
+
+        // Daily summary row
+        let daily_label = format!("Total {} {}", month_name, day);
+        let mut daily_parts: Vec<String> = Vec::new();
+        if daily_hit > 0 {
+            daily_parts.push(format!("{} cache", humanize_tokens(daily_hit)));
+        }
+        if daily_miss > 0 {
+            daily_parts.push(format!("{} in", humanize_tokens(daily_miss)));
+        }
+        if daily_parts.is_empty() {
+            daily_parts.push("0 in".to_string());
+        }
+        let daily_token_str = format!("{} -> {} out", daily_parts.join(" + "), humanize_tokens(daily_out));
+
+        println!(
+            "{:>25} {} {} {}",
+            daily_label.bold(),
+            format!("${:>7.2}", daily_total).yellow().bold(),
+            format!("({:>5.1}%)", 100.0).dimmed(),
+            daily_token_str.dimmed(),
+        );
+
+        println!();
     }
 
-    // Grand total
+    // Grand total — per-user breakdown
+    let mut user_totals: HashMap<String, (f64, HashMap<String, ModelStats>)> = HashMap::new();
+    for ((_date, user, model), stats) in &data {
+        let entry = user_totals.entry(user.clone()).or_insert_with(|| (0.0, HashMap::new()));
+        entry.0 += stats.cost;
+        let model_entry = entry.1.entry(model.clone()).or_insert(ModelStats {
+            cost: 0.0,
+            hit_tokens: 0,
+            miss_tokens: 0,
+            out_tokens: 0,
+        });
+        model_entry.cost += stats.cost;
+        model_entry.hit_tokens += stats.hit_tokens;
+        model_entry.miss_tokens += stats.miss_tokens;
+        model_entry.out_tokens += stats.out_tokens;
+    }
+
+    let mut user_list: Vec<(String, f64, Vec<(String, &ModelStats)>)> = user_totals
+        .iter()
+        .map(|(u, (total, models))| {
+            let mut m: Vec<(String, &ModelStats)> = models.iter().map(|(n, s)| (n.clone(), s)).collect();
+            m.sort_by(|a, b| b.1.cost.partial_cmp(&a.1.cost).unwrap_or(std::cmp::Ordering::Equal));
+            (u.clone(), *total, m)
+        })
+        .collect();
+
+    user_list.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+
+    // Compute date range
+    let first_date = dates.first().map(|d| {
+        let p = NaiveDate::parse_from_str(d, "%Y-%m-%d").unwrap();
+        format!("{} {}", p.format("%B"), p.format("%d").to_string().trim_start_matches('0'))
+    }).unwrap_or_default();
+    let last_date = dates.last().map(|d| {
+        let p = NaiveDate::parse_from_str(d, "%Y-%m-%d").unwrap();
+        format!("{} {}", p.format("%B"), p.format("%d").to_string().trim_start_matches('0'))
+    }).unwrap_or_default();
+
     println!("{}", "---".dimmed());
     println!(
-        "{}  {}",
-        "Total".bold().white(),
-        format!("${:.2}", grand_total).bold().bright_green()
+        "{:>29}",
+        "Totals".bold().bright_cyan()
+    );
+
+    for (user, user_total, models) in &user_list {
+        if *user_total < 0.005 {
+            continue;
+        }
+        println!(
+            "{:>25} {}",
+                user.white(),
+                format!("${:>7.2}", user_total).yellow(),
+        );
+        print_model_lines(models, *user_total);
+    }
+
+    // Underlined separator
+    println!("{}", " ".repeat(70).underline());
+    println!(
+        "{:>25} {}   {}",
+        "Grand Total".bold(),
+        format!("${:>7.2}", grand_total).yellow().bold(),
+        format!("{} - {}", first_date, last_date).dimmed(),
     );
 }

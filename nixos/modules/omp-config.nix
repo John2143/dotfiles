@@ -226,27 +226,6 @@ in
               cost: { input: 1.00, output: 5.00, cacheRead: 0.08, cacheWrite: 1.00 }
               contextWindow: 200000
               maxTokens: 65536
-
-            # DeepSeek V4 Flash via OpenRouter — actually CHEAPER than direct
-            # ($0.10/$0.20 vs $0.14/$0.28). Text-only, 1M context. Use as
-            # primary DeepSeek fallback when the direct API is down.
-            - id: deepseek/deepseek-v4-flash
-              name: DeepSeek V4 Flash (OpenRouter)
-              reasoning: true
-              input: [text]
-              cost: { input: 0.10, output: 0.20, cacheRead: 0, cacheWrite: 0 }
-              contextWindow: 1000000
-              maxTokens: 65536
-
-            # DeepSeek V4 Pro via OpenRouter. $0.435/$0.87 per 1M (same as
-            # direct). Fallback when direct DeepSeek Pro is down.
-            - id: deepseek/deepseek-v4-pro
-              name: DeepSeek V4 Pro (OpenRouter)
-              reasoning: true
-              input: [text]
-              cost: { input: 0.435, output: 0.87, cacheRead: 0, cacheWrite: 0 }
-              contextWindow: 1000000
-              maxTokens: 65536
     '';
 
     ".omp/agent/config.yml".text = ''
@@ -284,13 +263,10 @@ in
         fallbackChains:
           default:
             - "deepseek/deepseek-v4-pro"
-            - "openrouter/deepseek/deepseek-v4-pro"
-            - "openrouter/deepseek/deepseek-v4-flash"
             - "openrouter/anthropic/claude-sonnet-4-6"
             - "anthropic/claude-sonnet-4-6"
             - "office-ollama/qwen3.6:27b"
           smol:
-            - "openrouter/deepseek/deepseek-v4-flash"
             - "openrouter/google/gemini-2.5-flash-lite"
             - "anthropic/claude-haiku-4-5"
 
