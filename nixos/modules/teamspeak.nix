@@ -40,20 +40,35 @@ let
         os.path.expandvars("$HOME/.ts3client/clientquery.ini"),
     ]
 
-    DISCONNECTED_JSON = json.dumps({
-        "text": "\uf130  \u2b1c",
-        "class": "disconnected", "alt": "disconnected",
-        "tooltip": "TeamSpeak not connected to a server",
-    })
-    MUTED_JSON = json.dumps({
-        "text": "\uf130  \U0001f534",
+    # Input (mic) status -- icon only, CSS class handles color
+    MIC_MUTED_JSON = json.dumps({
+        "text": "\uf130",
         "class": "muted", "alt": "muted",
         "tooltip": "Mic Muted (click to unmute)",
     })
-    UNMUTED_JSON = json.dumps({
-        "text": "\uf130  \U0001f7e2",
+    MIC_UNMUTED_JSON = json.dumps({
+        "text": "\uf130",
         "class": "unmuted", "alt": "unmuted",
         "tooltip": "Mic Active (click to mute)",
+    })
+
+    # Output (sound) status -- icon only, CSS class handles color
+    SOUND_MUTED_JSON = json.dumps({
+        "text": "\uf028",
+        "class": "muted", "alt": "muted",
+        "tooltip": "Sound Muted (click to unmute)",
+    })
+    SOUND_UNMUTED_JSON = json.dumps({
+        "text": "\uf028",
+        "class": "unmuted", "alt": "unmuted",
+        "tooltip": "Sound Active (click to mute)",
+    })
+
+    # Disconnected -- empty text so CSS collapse hides the module
+    DISCONNECTED_JSON = json.dumps({
+        "text": "",
+        "class": "disconnected", "alt": "disconnected",
+        "tooltip": "TeamSpeak not connected",
     })
 
 
@@ -189,8 +204,36 @@ let
             m = re.search(r"client_input_muted=(\d+)", resp)
             muted = m.group(1) if m else "0"
             if muted == "1":
-                return MUTED_JSON, True
-            return UNMUTED_JSON, True
+                return MIC_MUTED_JSON, True
+            return MIC_UNMUTED_JSON, True
+        elif cmd == "status-input":
+            if clid is None:
+                return DISCONNECTED_JSON, True
+            resp = ts3_cmd(
+                sock,
+                f"clientvariable clid={clid} client_input_muted",
+            )
+            if "connection_lost" in resp:
+                return DISCONNECTED_JSON, False
+            m = re.search(r"client_input_muted=(\d+)", resp)
+            muted = m.group(1) if m else "0"
+            if muted == "1":
+                return MIC_MUTED_JSON, True
+            return MIC_UNMUTED_JSON, True
+        elif cmd == "status-output":
+            if clid is None:
+                return DISCONNECTED_JSON, True
+            resp = ts3_cmd(
+                sock,
+                f"clientvariable clid={clid} client_output_muted",
+            )
+            if "connection_lost" in resp:
+                return DISCONNECTED_JSON, False
+            m = re.search(r"client_output_muted=(\d+)", resp)
+            muted = m.group(1) if m else "0"
+            if muted == "1":
+                return SOUND_MUTED_JSON, True
+            return SOUND_UNMUTED_JSON, True
         elif cmd == "toggle":
             if clid is None:
                 return "", True
@@ -327,12 +370,26 @@ let
         printf '%s\n' "toggle" | nc -UN -w 2 "$SOCK" > /dev/null 2>&1 || true
       elif [ "''${1:-}" = "--toggle-output" ]; then
         printf '%s\n' "toggle-output" | nc -UN -w 2 "$SOCK" > /dev/null 2>&1 || true
+      elif [ "''${1:-}" = "--mic" ]; then
+        RESULT=$(printf '%s\n' "status-input" | nc -UN -w 2 "$SOCK" 2>/dev/null)
+        if [ -n "$RESULT" ]; then
+          printf '%s\n' "$RESULT"
+        else
+          echo '{"text": "", "class": "disconnected", "alt": "disconnected", "tooltip": "TeamSpeak not connected"}'
+        fi
+      elif [ "''${1:-}" = "--sound" ]; then
+        RESULT=$(printf '%s\n' "status-output" | nc -UN -w 2 "$SOCK" 2>/dev/null)
+        if [ -n "$RESULT" ]; then
+          printf '%s\n' "$RESULT"
+        else
+          echo '{"text": "", "class": "disconnected", "alt": "disconnected", "tooltip": "TeamSpeak not connected"}'
+        fi
       else
         RESULT=$(printf '%s\n' "status" | nc -UN -w 2 "$SOCK" 2>/dev/null)
         if [ -n "$RESULT" ]; then
           printf '%s\n' "$RESULT"
         else
-          echo '{"text": "  ⬜", "class": "disconnected", "alt": "disconnected", "tooltip": "TeamSpeak not connected to a server"}'
+          echo '{"text": "", "class": "disconnected", "alt": "disconnected", "tooltip": "TeamSpeak not connected"}'
         fi
       fi
     '';

@@ -21,7 +21,8 @@
           "temperature"
         ] ++ (lib.optionals (compName == "arch") [
           "custom/thermostat"
-          "custom/teamspeak"
+          "custom/teamspeak-mic"
+          "custom/teamspeak-sound"
         ]) ++ [
           "custom/vast"
           "custom/weather"
@@ -169,13 +170,21 @@
           tooltip = true;
         };
 
-        "custom/teamspeak" = {
-          exec = "teamspeak-mute-status";
+        "custom/teamspeak-mic" = {
+          exec = "teamspeak-mute-status --mic";
           return-type = "json";
           interval = 2;
           format = "{}";
           tooltip = true;
           on-click = "teamspeak-mute-status --toggle";
+        };
+        "custom/teamspeak-sound" = {
+          exec = "teamspeak-mute-status --sound";
+          return-type = "json";
+          interval = 2;
+          format = "{}";
+          tooltip = true;
+          on-click = "teamspeak-mute-status --toggle-output";
         };
       }) // {
         "custom/vast" = {
