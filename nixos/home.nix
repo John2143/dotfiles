@@ -437,8 +437,8 @@ in {
         { _args = ["CTRL + F20" (mkLua ''hl.dsp.dpms({ action = "disable" })'')]; }
 
         # TeamSpeak mute: Prior mutes mic, Next mutes sound
-        { _args = ["Prior" (mkLua ''hl.dsp.exec_cmd("teamspeak-mute-status --toggle")'')]; }
-        { _args = ["Next" (mkLua ''hl.dsp.exec_cmd("teamspeak-mute-status --toggle-output")'')]; }
+        { _args = ["Prior" (mkLua ''hl.dsp.exec_cmd("teamspeak-mute-status --toggle && pkill -RTMIN+10 waybar")'')]; }
+        { _args = ["Next" (mkLua ''hl.dsp.exec_cmd("teamspeak-mute-status --toggle-output && pkill -RTMIN+11 waybar")'')]; }
         { _args = ["KP_Subtract" (mkLua ''hl.dsp.pass({ window = "class:^(discord)$" })'')]; }
         { _args = ["XF86AudioPrev" (mkLua ''hl.dsp.pass({ window = "class:^(discord)$" })'')]; }
 

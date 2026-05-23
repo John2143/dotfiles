@@ -71,6 +71,10 @@ let
         "tooltip": "TeamSpeak not connected",
     })
 
+    # Cached mute state: avoids query round-trip on toggle.
+    # Reset to None on disconnect so next op re-queries TS3.
+    state_cache = {"input_muted": None, "output_muted": None}
+
 
     def read_apikey():
         for path in INIFILE_CANDIDATES:
@@ -203,6 +207,7 @@ let
                 return DISCONNECTED_JSON, False
             m = re.search(r"client_input_muted=(\d+)", resp)
             muted = m.group(1) if m else "0"
+            state_cache["input_muted"] = muted
             if muted == "1":
                 return MIC_MUTED_JSON, True
             return MIC_UNMUTED_JSON, True
@@ -217,6 +222,7 @@ let
                 return DISCONNECTED_JSON, False
             m = re.search(r"client_input_muted=(\d+)", resp)
             muted = m.group(1) if m else "0"
+            state_cache["input_muted"] = muted
             if muted == "1":
                 return MIC_MUTED_JSON, True
             return MIC_UNMUTED_JSON, True
@@ -231,36 +237,47 @@ let
                 return DISCONNECTED_JSON, False
             m = re.search(r"client_output_muted=(\d+)", resp)
             muted = m.group(1) if m else "0"
+            state_cache["output_muted"] = muted
             if muted == "1":
                 return SOUND_MUTED_JSON, True
             return SOUND_UNMUTED_JSON, True
         elif cmd == "toggle":
             if clid is None:
                 return "", True
-            resp = ts3_cmd(
-                sock,
-                f"clientvariable clid={clid} client_input_muted",
-            )
-            if "connection_lost" in resp:
-                return "", False
-            m = re.search(r"client_input_muted=(\d+)", resp)
-            cur = m.group(1) if m else "0"
+            if state_cache.get("input_muted") is not None:
+                cur = state_cache["input_muted"]
+            else:
+                resp = ts3_cmd(
+                    sock,
+                    f"clientvariable clid={clid} client_input_muted",
+                )
+                if "connection_lost" in resp:
+                    return "", False
+                m = re.search(r"client_input_muted=(\d+)", resp)
+                cur = m.group(1) if m else "0"
             new = "0" if cur == "1" else "1"
-            ts3_cmd(sock, f"clientupdate client_input_muted={new}")
+            resp = ts3_cmd(sock, f"clientupdate client_input_muted={new}")
+            if "error id=0" in resp:
+                state_cache["input_muted"] = new
             return "", True
         elif cmd == "toggle-output":
             if clid is None:
                 return "", True
-            resp = ts3_cmd(
-                sock,
-                f"clientvariable clid={clid} client_output_muted",
-            )
-            if "connection_lost" in resp:
-                return "", False
-            m = re.search(r"client_output_muted=(\d+)", resp)
-            cur = m.group(1) if m else "0"
+            if state_cache.get("output_muted") is not None:
+                cur = state_cache["output_muted"]
+            else:
+                resp = ts3_cmd(
+                    sock,
+                    f"clientvariable clid={clid} client_output_muted",
+                )
+                if "connection_lost" in resp:
+                    return "", False
+                m = re.search(r"client_output_muted=(\d+)", resp)
+                cur = m.group(1) if m else "0"
             new = "0" if cur == "1" else "1"
-            ts3_cmd(sock, f"clientupdate client_output_muted={new}")
+            resp = ts3_cmd(sock, f"clientupdate client_output_muted={new}")
+            if "error id=0" in resp:
+                state_cache["output_muted"] = new
             return "", True
         else:
             return "", True
@@ -320,6 +337,8 @@ let
                                 pass
                             ts3_sock = None
                             clid = None
+                            state_cache["input_muted"] = None
+                            state_cache["output_muted"] = None
                         if result:
                             client.sendall(result.encode())
                     client.close()
@@ -352,6 +371,8 @@ let
                         pass
                     ts3_sock = None
                     clid = None
+                    state_cache["input_muted"] = None
+                    state_cache["output_muted"] = None
                 finally:
                     ts3_sock and ts3_sock.setblocking(True)
                     ts3_sock and ts3_sock.settimeout(5)
