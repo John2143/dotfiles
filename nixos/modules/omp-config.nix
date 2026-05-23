@@ -226,6 +226,41 @@ in
               cost: { input: 1.00, output: 5.00, cacheRead: 0.08, cacheWrite: 1.00 }
               contextWindow: 200000
               maxTokens: 65536
+
+        # Google Gemini direct API. Cheaper than OpenRouter (no $0.005/req
+        # surcharge) and one less hop. Same models, same pricing.
+        # Requires GEMINI_API_KEY in /run/agenix/llm-runtime-keys.
+        # Get one: https://aistudio.google.com/apikey
+        google:
+          api: google-generative-ai
+          apiKey: GEMINI_API_KEY
+          models:
+            # Flash Lite — Google's cheapest. $0.10/$0.40 per 1M, 1M context.
+            - id: gemini-2.5-flash-lite
+              name: Gemini 2.5 Flash Lite (Google)
+              reasoning: true
+              input: [text]
+              cost: { input: 0.10, output: 0.40, cacheRead: 0, cacheWrite: 0 }
+              contextWindow: 1048576
+              maxTokens: 65536
+
+            # Flash — workhorse multimodal. $0.30/$2.50 per 1M, 1M context.
+            - id: gemini-2.5-flash
+              name: Gemini 2.5 Flash (Google)
+              reasoning: true
+              input: [text, image]
+              cost: { input: 0.30, output: 2.50, cacheRead: 0.03, cacheWrite: 0.08333 }
+              contextWindow: 1048576
+              maxTokens: 65536
+
+            # Pro — heavy reasoning. $1.25/$10 per 1M, 1M context.
+            - id: gemini-2.5-pro
+              name: Gemini 2.5 Pro (Google)
+              reasoning: true
+              input: [text]
+              cost: { input: 1.25, output: 10.00, cacheRead: 0.03125, cacheWrite: 0 }
+              contextWindow: 1048576
+              maxTokens: 65536
     '';
 
     ".omp/agent/config.yml".text = ''
@@ -233,7 +268,7 @@ in
         #default: vast-vllm/deepseek-v4-flash
         default: deepseek/deepseek-v4-pro
         #smol: office-ollama-cpu/gemma4
-        smol: deepseek/deepseek-v4-flash
+        smol: google/gemini-2.5-flash
         slow: anthropic/claude-opus-4-7
 
       modelProviderOrder:
@@ -245,6 +280,7 @@ in
         - office-ollama-cpu
         - anthropic
         - openai
+        - google
 
       enabledModels:
         - "vast-vllm/*"
@@ -255,6 +291,7 @@ in
         - "anthropic/*"
         - "openrouter/*"
         - "openai/*"
+        - "google/*"
 
       retry:
         enabled: true
@@ -267,7 +304,7 @@ in
             - "anthropic/claude-sonnet-4-6"
             - "office-ollama/qwen3.6:27b"
           smol:
-            - "openrouter/google/gemini-2.5-flash-lite"
+            - "google/gemini-2.5-flash-lite"
             - "anthropic/claude-haiku-4-5"
 
       # Tools — enable setting-gated tools that ship disabled by default.

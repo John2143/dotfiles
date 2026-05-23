@@ -309,7 +309,7 @@
       group = "users";
     };
 
-  # Admin key (ANTHROPIC_ADMIN_KEY) — sourced by `llm-load-keys` for interactive
+  # Admin key (ANTHROPIC_ADMIN_KEY) — sourced by `llm-unsafe-load-admin-keys` for interactive
   # `llm-costs` and `llm-topup-anthropic` use. Never mounted on pite.
   age.secrets.llm-admin-keys =
     lib.mkIf

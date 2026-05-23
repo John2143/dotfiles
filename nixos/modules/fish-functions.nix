@@ -143,7 +143,7 @@
     try-check-prompt.description = "Verify the approval hook works — triggers the approve/deny confirm dialog with a safe echo'd rm -rf command";
 
 
-    llm-load-keys.body = ''
+    llm-unsafe-load-admin-keys.body = ''
       # Loads the admin LLM keys (ANTHROPIC_ADMIN_KEY, OPENROUTER_ADMIN_KEY)
       # for use by llm-costs, llm-topup-anthropic, and openrouter-costs. The
       # runtime key is mounted at /run/agenix/llm-runtime-keys but only the
@@ -155,7 +155,7 @@
       end
       envsource $creds_file
     '';
-    llm-load-keys.description = "Load Anthropic + OpenRouter admin API keys into current shell (on-demand)";
+    llm-unsafe-load-admin-keys.description = "Load admin-scoped LLM API keys into current shell (unsafe: exports secrets to env). Call before llm-costs, llm-topup-anthropic, openrouter-costs.";
     argocd.body = ''
       set -l creds_file /run/agenix/argo-admin-password
       if not test -f $creds_file
@@ -179,7 +179,7 @@
 
     llm-costs.body = ''
       set -l _pre_vars (set --names -x)
-      llm-load-keys &>/dev/null
+      llm-unsafe-load-admin-keys &>/dev/null
 
       set -l debug 0
       set -l no_open 0
@@ -253,7 +253,7 @@
 
     llm-topup-anthropic.body = ''
       set -l _pre_vars (set --names -x)
-      llm-load-keys &>/dev/null
+      llm-unsafe-load-admin-keys &>/dev/null
 
       set -l usage_str "Usage: llm-topup-anthropic <dollar-amount>"
 
@@ -389,7 +389,7 @@
     llm-deepseek-costs.description = "Show DeepSeek per-key cost breakdown from usage CSV exports";
     openrouter-costs.body = ''
       set -l _pre_vars (set --names -x)
-      llm-load-keys &>/dev/null
+      llm-unsafe-load-admin-keys &>/dev/null
 
       set -l debug 0
       for arg in $argv
