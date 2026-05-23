@@ -8,7 +8,7 @@
   endpoint = "http://nas:8280";
 in {
   # ── Nix substituter ────────────────────────────────────────────────
-  nix.settings.substituters = [
+  nix.settings.substituters = lib.mkBefore [
     "${endpoint}/${cacheName}"
   ];
   nix.settings.trusted-public-keys = [
@@ -44,8 +44,9 @@ in {
   system.activationScripts.atticNetrc = {
     deps = [ "agenix" ];
     text = ''
-      printf 'machine %s password %s\n' \
+      printf 'machine %s password %s\nmachine localhost password %s\n' \
         ${lib.escapeShellArg server} \
+        "$(cat /run/agenix/attic-admin-token)" \
         "$(cat /run/agenix/attic-admin-token)" \
         > /run/agenix/attic-netrc
       chmod 0444 /run/agenix/attic-netrc
