@@ -35,7 +35,7 @@
   };
 
   # Every builder EXCEPT self — don't SSH into yourself.
-  isNotSelf = hostName: hostName != "${config.networking.hostName}.local";
+  isNotSelf = m: m.hostName != "${config.networking.hostName}.local";
 
   buildMachines = builtins.filter isNotSelf
     (lib.mapAttrsToList mkMachine builderDefs);
