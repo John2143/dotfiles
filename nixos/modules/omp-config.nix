@@ -155,20 +155,6 @@ in
               contextWindow: 128000
               maxTokens: 8192
 
-        # arch GPU has <8GB VRAM -- only gemma4 fits, no vLLM.
-        arch-ollama:
-          baseUrl: http://arch:11434/v1
-          api: openai-completions
-          auth: none
-          models:
-            - id: gemma4
-              name: Gemma 4 (Arch CUDA)
-              reasoning: false
-              input: [text]
-              cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }
-              contextWindow: 128000
-              maxTokens: 8192
-
         # OpenRouter — unified API gateway for 300+ models. Used for:
         #   - Gemini Flash/Pro (cheap, fast, 1M context — excellent smol)
         #   - Web search via :online suffix ($0.005/req Exa search)
@@ -278,7 +264,6 @@ in
         - office-vllm
         - office-ollama
         - office-ollama-cpu
-        - arch-ollama
         - anthropic
         - openai
 
@@ -288,7 +273,6 @@ in
         - "office-vllm/*"
         - "office-ollama/*"
         - "office-ollama-cpu/*"
-        - "arch-ollama/*"
         - "anthropic/*"
         - "openrouter/*"
         - "openai/*"

@@ -154,7 +154,6 @@ in
   imports = [
     ./arch-hardware-configuration.nix
     ./modules/user-john.nix
-    ./modules/ollama.nix
     ./modules/vllm.nix
     ./modules/teamspeak.nix
     # inputs.home-manager.nixosModules.default
@@ -287,13 +286,15 @@ in
 
   # NAS CIFS mounts live in ./modules/nas-mounts.nix (shared across workstations).
 
-  services.ollama = {
-    package = pkgs.ollama-cuda;
-    # Disk-constrained host: only gemma4 is auto-pulled. Don't run ollama-sync
-    # here — it would mirror every model from the NAS and fill the SSD.
-    modelNames = ["gemma4"];
-  };
 
+  # ollama disabled: CUDA build broken upstream (GCC ICE in ggml-cuda),
+  # and arch GPU has <8GB VRAM — only gemma4 fits, never used in practice.
+  # services.ollama = {
+  #   package = pkgs.ollama-cuda;
+  #   # Disk-constrained host: only gemma4 is auto-pulled. Don't run ollama-sync
+  #   # here — it would mirror every model from the NAS and fill the SSD.
+  #   modelNames = ["gemma4"];
+  # };
   # vLLM disabled: GPU VRAM too small for the models we'd want to serve here.
 
   # # Open ports in the firewall.
