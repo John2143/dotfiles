@@ -5,3 +5,4 @@ omp --resume 019e572f-5e44-7000-bfc6-d07693624a06
 
 4 connecting wifi
  omp --resume 019e572f-5e44-7000-bfc6-d07693624a06
+ make surre to  hide cam  wifi name

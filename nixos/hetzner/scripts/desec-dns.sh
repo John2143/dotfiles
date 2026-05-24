@@ -18,7 +18,7 @@ API="https://desec.io/api/v1/domains/${DOMAIN}/rrsets"
 if [ -z "${DESEC_TOKEN:-}" ]; then
   SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
   if [ -f "${SCRIPT_DIR}/../secrets/hetzner/desec-token.age" ]; then
-    DESEC_TOKEN=$(agenix -d "${SCRIPT_DIR}/../secrets/hetzner/desec-token.age" -i ~/.ssh/age 2>/dev/null | tr -d '\n')
+    DESEC_TOKEN=$(cd "${SCRIPT_DIR}/../secrets" && agenix -d "hetzner/desec-token.age" -i ~/.ssh/age 2>/dev/null | tr -d '\n')
   fi
 fi
 

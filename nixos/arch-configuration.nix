@@ -159,22 +159,6 @@ in
     # inputs.home-manager.nixosModules.default
   ];
   home-manager.users."john" = import ./home.nix;
-# FIXME(2026-05-23): Waybar Lua dispatch patch — backports upstream PR #5013
-# to fix workspace button clicks on Hyprland >= 0.55. Remove this overlay
-# (and nixos/modules/waybar-lua-dispatch.patch) once nixpkgs ships a Waybar
-# release > v0.15.0 that includes the upstream fix.
-# Track: https://github.com/Alexays/Waybar/pull/5013
-# Check: https://github.com/Alexays/Waybar/releases
-
-  nixpkgs.overlays = [
-    (final: prev: {
-      waybar = prev.waybar.overrideAttrs (old: {
-        patches = (old.patches or []) ++ [
-          ./modules/waybar-lua-dispatch.patch
-        ];
-      });
-    })
-  ];
 
 
 

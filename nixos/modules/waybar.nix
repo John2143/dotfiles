@@ -21,9 +21,9 @@
           "temperature"
         ] ++ (lib.optionals (compName == "arch") [
           "custom/thermostat"
+        ]) ++ [
           "custom/teamspeak-mic"
           "custom/teamspeak-sound"
-        ]) ++ [
           "custom/vast"
           "custom/weather"
           "battery"
@@ -177,7 +177,7 @@
           on-click-middle = "hass-macro thermostat-toggle";
           tooltip = true;
         };
-
+      }) // {
         "custom/teamspeak-mic" = {
           exec = "teamspeak-mute-status --mic";
           return-type = "json";
@@ -196,7 +196,6 @@
           tooltip = true;
           on-click = "teamspeak-mute-status --toggle-output && pkill -RTMIN+11 waybar";
         };
-      }) // {
         "custom/vast" = {
           exec = "vast-waybar-status";
           return-type = "json";
