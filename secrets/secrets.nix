@@ -139,4 +139,6 @@ in {
   #   cat /tmp/build-cluster-key.pub  → paste into remote-builders.nix
   #   agenix -e build-cluster-key.age -i ~/.ssh/age < /tmp/build-cluster-key
   "build-cluster-key.age".publicKeys = [office arch closet secu nas pite vpin];
+
+  "unifi-credentials.age".publicKeys = [office arch];
 }
