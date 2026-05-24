@@ -1,8 +1,0 @@
-5a hetzner stack startup
-omp --resume 019e56b4-c99b-7000-b301-a88cf4998cd2
-5b old login test
-omp --resume 019e572f-5e44-7000-bfc6-d07693624a06
-
-4 connecting wifi
- omp --resume 019e572f-5e44-7000-bfc6-d07693624a06
- make surre to  hide cam  wifi name
