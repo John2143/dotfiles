@@ -384,7 +384,7 @@
     deepseek-costs.description = "Open DeepSeek usage page and show current balance. Pass --no-open to suppress browser, --debug for raw API responses.";
 
     llm-deepseek-costs.body = ''
-      nix run ~/dotfiles/llm-deepseek-cost -- $argv
+      nix run ~/dotfiles/projects/llm-deepseek-cost -- $argv
     '';
     llm-deepseek-costs.description = "Show DeepSeek per-key cost breakdown from usage CSV exports";
     openrouter-costs.body = ''

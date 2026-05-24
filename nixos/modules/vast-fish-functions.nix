@@ -75,7 +75,7 @@
     '';
     my_claw.description = "Run Claude Code routed through a per-invocation LiteLLM proxy to the local DeepSeek (assumes vast-tunnel is up).";
 
-    # Full workflow + troubleshooting + market context: ../Vast.md
+    # Full workflow + troubleshooting + market context: ../../docs/Vast.md
     #
     # Credential model (intentionally lightweight):
     #   - One long-lived secret (rare rotation):

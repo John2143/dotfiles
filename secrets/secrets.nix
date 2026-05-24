@@ -62,6 +62,8 @@ in {
   #   DEEPSEEK_API_KEY=sk-...      (https://platform.deepseek.com/api_keys)
   #   OPENROUTER_API_KEY=sk-or-v1-... (https://openrouter.ai/settings/keys)
   #   GEMINI_API_KEY=...            (https://aistudio.google.com/apikey)
+  #   BRAVE_API_KEY=BSA...          (https://brave.com/search/api/)
+  #   TAVILY_API_KEY=tvly-...       (https://tavily.com/)
   # pite is included so the canary host can decrypt a same-named bait file
   # (overridden via mkForce in nixos/pite-canary.nix to point at the bait .age).
   "llm-runtime-keys.age".publicKeys = [office arch pite mac];

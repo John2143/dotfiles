@@ -313,8 +313,8 @@ in
       calc.enabled: true
       render_mermaid.enabled: true
       checkpoint.enabled: true
-      # Search provider for web_search tool. Tavily's free tier covers
-      # agentic search loads well; API key lives in llm-runtime-keys.
+      # Search provider for web_search tool. Brave is primary (free tier
+      # with API key), Tavily is fallback. Keys in llm-runtime-keys.
       providers.webSearch: brave
     '';
 

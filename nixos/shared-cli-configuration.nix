@@ -180,7 +180,7 @@
       # consumed by the _vast-load fish helper) and runs the upstream PyPI
       # CLI via uvx — cached at ~/.cache/uv after first invocation, ~5s warm-up.
       #
-      # Full workflow lives in ../Vast.md. Common tasks have fish helpers
+      # Full workflow lives in ../docs/Vast.md. Common tasks have fish helpers
       # in home-cli.nix:
       #   vast-search    — list verified B200 offers
       #   vast-create    — launch with our minimal CUDA image, 300GB disk

@@ -275,7 +275,7 @@ in
     after = ["network.target"];
     wantedBy = ["multi-user.target"];
     serviceConfig = {
-      ExecStart = "${pkgs.nix}/bin/nix run /home/john/dotfiles/screen-control";
+      ExecStart = "${pkgs.nix}/bin/nix run /home/john/dotfiles/projects/screen-control";
       Restart = "always";
       RestartSec = 5;
       User = "john";
@@ -285,7 +285,7 @@ in
   };
 
   networking.firewall.allowedTCPPorts = [
-    50051 # screen-control REST API (arch-configuration.nix:290, screen-control/src/main.rs:129)
+    50051 # screen-control REST API (projects/screen-control/src/main.rs:129)
     10250 # kubelet (k3s agent)
     18080 # monero p2p (monerod)
   ];
