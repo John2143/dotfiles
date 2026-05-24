@@ -49,7 +49,7 @@ SERVER_ID=$(hcloud server create \
   --image ubuntu-24.04 \
   --type "${PLAN}" \
   --location "${LOCATION}" \
-  --ssh-key john@arch \
+  --ssh-key john@office \
   -o json \
   | jq -r '.server.id')
 
@@ -110,15 +110,14 @@ echo "    age identity copied"
 nixos-rebuild switch --flake "${FLAKE}" --target-host "root@${IP}" --use-remote-sudo 2>/dev/null || true
 echo "    agenix secrets decrypted"
   # Delete stale headscale nodes with same hostname (ensures fresh DNS)
-  ssh john@home-pi "sudo headscale nodes list -o json 2>/dev/null" | \
+  ssh john@192.168.0.154 "sudo headscale nodes list -o json 2>/dev/null" | \
     python3 -c "
 import json, sys
 data = json.load(sys.stdin)
 for n in data:
     if n['given_name'] == '${HOSTNAME}':
         print(f\"Cleaning stale headscale node: {n['given_name']} ({n['ip_addresses'][0] if n.get('ip_addresses') else 'no ip'})\")
-        import subprocess
-        subprocess.run(['ssh', 'john@home-pi', 'sudo', 'headscale', 'nodes', 'delete', '--identifier', str(n['id']), '--force'])
+        subprocess.run(['ssh', 'john@192.168.0.154', 'sudo', 'headscale', 'nodes', 'delete', '--identifier', str(n['id']), '--force'])
 " 2>/dev/null || true
   echo "    stale headscale nodes cleaned"
 

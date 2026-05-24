@@ -69,8 +69,8 @@
   # agenix secret: pdns PostgreSQL user password
   age.secrets."hetzner/postgres-pdns-password" = {
     file = ../secrets/hetzner/postgres-pdns-password.age;
-    owner = "root";
-    group = "root";
+    owner = "pdns";
+    group = "pdns";
   };
 
   # State directory

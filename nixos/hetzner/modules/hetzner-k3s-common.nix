@@ -82,6 +82,10 @@
       kubectl apply --server-side --force-conflicts \
         -f https://raw.githubusercontent.com/cloudnative-pg/cloudnative-pg/release-1.25/releases/cnpg-1.25.1.yaml
       kubectl wait --for=condition=available deployment/cnpg-controller-manager -n cnpg-system --timeout=120s || true
+      # Install cert-manager operator (required for cert-manager CRDs in wave 0)
+      kubectl apply --server-side --force-conflicts \
+        -f https://github.com/cert-manager/cert-manager/releases/download/v1.17.1/cert-manager.yaml
+      kubectl wait --for=condition=available deployment/cert-manager -n cert-manager --timeout=120s || true
     '';
   };
 
@@ -108,6 +112,11 @@
       for i in $(seq 1 30); do
         kubectl get nodes &>/dev/null && break
         sleep 2
+      done
+
+      # Create namespaces (needed for secrets, ArgoCD wave -2 creates them later)
+      for ns in external-dns crowdsec seaweedfs backup monitoring; do
+        kubectl create namespace $ns --dry-run=client -o yaml | kubectl apply -f -
       done
 
       # RFC2136 TSIG key for ExternalDNS

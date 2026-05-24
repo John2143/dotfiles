@@ -41,38 +41,39 @@
         exit 0
       fi
 
+      PDNSUTIL="pdnsutil --config-dir=/run/pdns"
       # Wait for pdns to be fully ready
       for i in $(seq 1 30); do
-        pdnsutil list-all-zones &>/dev/null && break
+        $PDNSUTIL list-all-zones &>/dev/null && break
         sleep 2
       done
 
       # Check if zone already exists
-      if pdnsutil list-all-zones | grep -q "9s.pics"; then
+      if $PDNSUTIL list-all-zones | grep -q "9s.pics"; then
         echo "Zone 9s.pics already exists, skipping creation."
         touch "$STATE_FILE"
         exit 0
       fi
 
       # Create zone (pdns 5.0.x: zone create replaces create-zone)
-      pdnsutil zone create 9s.pics
-      pdnsutil zone set-kind 9s.pics master
+      $PDNSUTIL zone create 9s.pics
+      $PDNSUTIL zone set-kind 9s.pics master
       # Set SOA via rrset replace (set-soa removed in 5.0.x)
-      pdnsutil rrset replace 9s.pics 9s.pics SOA 60 "ns1.9s.pics. hostmaster.9s.pics. 1 10800 3600 604800 60"
+      $PDNSUTIL rrset replace 9s.pics 9s.pics SOA 60 "ns1.9s.pics. hostmaster.9s.pics. 1 10800 3600 604800 60"
 
       # Create TSIG key for ExternalDNS RFC2136 updates
       TSIG_KEY=$(tr -d '\n' < "${config.age.secrets."hetzner/powerdns-tsig-key".path}")
-      pdnsutil tsigkey generate externaldns hmac-sha256 2>/dev/null || true
-      pdnsutil tsigkey import externaldns hmac-sha256 "$TSIG_KEY"
+      $PDNSUTIL tsigkey generate externaldns hmac-sha256 2>/dev/null || true
+      $PDNSUTIL tsigkey import externaldns hmac-sha256 "$TSIG_KEY"
 
       # Set NS records
-      pdnsutil rrset add 9s.pics 9s.pics NS 60 ns1.9s.pics
-      pdnsutil rrset add 9s.pics 9s.pics NS 60 ns2.9s.pics
-      pdnsutil rrset add 9s.pics 9s.pics NS 60 ns3.9s.pics
+      $PDNSUTIL rrset add 9s.pics 9s.pics NS 60 ns1.9s.pics
+      $PDNSUTIL rrset add 9s.pics 9s.pics NS 60 ns2.9s.pics
+      $PDNSUTIL rrset add 9s.pics 9s.pics NS 60 ns3.9s.pics
 
       # Allow TSIG key to update the zone
-      pdnsutil metadata set 9s.pics TSIG-ALLOW-DNSUPDATE externaldns
-      pdnsutil metadata set 9s.pics ALLOW-DNSUPDATE-FROM 127.0.0.0/8
+      $PDNSUTIL metadata set 9s.pics TSIG-ALLOW-DNSUPDATE externaldns
+      $PDNSUTIL metadata set 9s.pics ALLOW-DNSUPDATE-FROM 127.0.0.0/8
 
       touch "$STATE_FILE"
       echo "Zone 9s.pics bootstrapped successfully."
