@@ -1,6 +1,6 @@
 # Hardware Specs: closet
 
-**Generated:** 2026-05-06T05:59:01Z
+**Generated:** 2026-05-24T02:16:59Z
 
 ## System Overview
 
@@ -8,8 +8,8 @@
 |---|---|
 | Hostname | closet |
 | OS | NixOS 26.05 (Yarara) |
-| Kernel | 6.18.24 x86_64 |
-| Motherboard | ASUS PRIME A320M-K |
+| Kernel | 6.18.31 x86_64 |
+| Motherboard | ASUSTeK COMPUTER INC. PRIME A320M-K (Rev X.0x) |
 | Chassis | Desktop |
 | BIOS | American Megatrends Inc. 4207 (12/07/2018) |
 
@@ -28,53 +28,131 @@
 | L2 Cache | 3 MiB (6 instances) |
 | L3 Cache | 16 MiB (2 instances) |
 | Microcode | 0x8001137 |
-| Flags | fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush mmx fxsr sse sse2 ht syscall nx mmxext fxsr_opt pdpe1gb rdtscp lm constant_tsc rep_good nopl nonstop_tsc cpuid extd_apicid aperfmperf rapl pni pclmulqdq monitor ssse3 fma cx16 sse4_1 sse4_2 movbe popcnt aes xsave avx f16c rdrand lahf_lm cmp_legacy extapic cr8_legacy abm sse4a misalignsse 3dnowprefetch osvw skinit wdt tce topoext perfctr_core perfctr_nb bpext perfctr_llc mwaitx cpb hw_pstate ssbd ibpb vmmcall fsgsbase bmi1 avx2 smep bmi2 rdseed adx smap clflushopt sha_ni xsaveopt xsavec xgetbv1 clzero xsaveerptr arat npt lbrv svm_lock nrip_save tsc_scale vmcb_clean flushbyasid decodeassists pausefilter pfthreshold avic v_vmsave_vmload vgif overflow_recov succor smca sev |
+| Flags | fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush mmx fxsr sse sse2 ht syscall nx mmxext fxsr_opt pdpe1gb rdtscp lm constant_tsc rep_good nopl nonstop_tsc cpuid extd_apicid aperfmperf rapl pni pclmulqdq monitor ssse3 fma cx16 sse4_1 sse4_2 movbe popcnt aes xsave avx f16… |
 
 ## Memory
 
+### Summary
+
 | Type | Size |
 |---|---|
-| RAM | 7.7 GiB |
-| Swap | None |
+| RAM | 7.7Gi |
+| Swap | 8.0Gi |
+
+_No DIMM details available (requires root/dmidecode on x86)_
 
 ## Storage
 
-| Device | Size | Type | Model | Filesystem | Mount |
-|---|---|---|---|---|---|
-| nvme0n1 | 238.5 GB | NVMe | Phison E12 NVMe (PCIe SSD) | | |
-| nvme0n1p1 | 2 GB | partition | | vfat | /boot |
-| nvme0n1p2 | 236.5 GB | partition | | ext4 | / |
-| sda | 3.6 TB | USB | Micron CT4000X9SSD9 (Crucial X9 4TB) | | |
-| sda1 | 3.6 TB | partition | | ext4 | /mnt |
-
-**K3s volumes** (virtual disks):
-- sdb (4.7G), sdc (9.3G), sde (9.3G) — ext4, mounted as kubelet PVC volumes
-
-## GPU
-
-**None detected.** (No discrete or integrated GPU visible on PCI bus; system likely uses basic framebuffer.)
+```
+sda           3.6T disk                                                                                                                                            CT4000X9SSD9    1
+└─sda1        3.6T part ext4   /mnt                                                                                                                                                1
+sdb           4.7G disk ext4   /var/lib/kubelet/pods/436891aa-55b4-4463-8caa-e0db2e286731/volumes/kubernetes.io~csi/pvc-a71a966d-8ce7-4b3a-9341-5fe0467f2e6d/mount VIRTUAL-DISK    1
+sdc           9.3G disk ext4   /var/lib/kubelet/pods/28039af6-0b2d-44c8-b576-e348049adea8/volumes/kubernetes.io~csi/pvc-f06012f1-ffff-4279-9905-144359eb15cc/mount VIRTUAL-DISK    1
+sdd           9.3G disk ext4   /var/lib/kubelet/pods/f062bfb4-d701-4cc2-aaac-537acd524bd4/volumes/kubernetes.io~csi/pvc-374214a1-74f2-4143-8c88-3bedafa66f0b/mount VIRTUAL-DISK    1
+sde             1G disk ext4   /var/lib/kubelet/pods/a2826809-4995-46a8-a11a-1887a135ea40/volumes/kubernetes.io~csi/pvc-d6926bd9-5fd6-4100-a601-85f675f90e23/mount VIRTUAL-DISK    1
+sdf           4.7G disk ext4   /var/lib/kubelet/pods/a357a035-8536-43fa-8642-91fc3cc56976/volumes/kubernetes.io~csi/pvc-de6e9470-2911-4b8a-8ce4-6657967e6bb1/mount VIRTUAL-DISK    1
+sdg           4.7G disk ext4   /var/lib/kubelet/pods/9980fedc-d75b-485e-b204-bdb92215ae9c/volumes/kubernetes.io~csi/pvc-2c60403d-3084-4ed4-b6bf-e4a72b3ea5e4/mount VIRTUAL-DISK    1
+nvme0n1     238.5G disk                                                                                                                                            PCIe SSD        0
+├─nvme0n1p1     2G part vfat   /boot                                                                                                                                               0
+└─nvme0n1p2 236.5G part ext4   /                                                                                                                                                   0
+```
 
 ## Network
 
 | Device | Interface | Description |
 |---|---|---|
-| 06:00.0 | (Realtek) | Realtek RTL8111/8168/8211/8411 PCIe Gigabit Ethernet [10ec:8168] rev 15 |
+| 06:00.0 | enp6s0 | Realtek Semiconductor Co., Ltd. RTL8111/8168/8211/8411 PCI Express Gigabit Ethernet Controller [10ec:8168] rev 15 |
 
 ## PCI Devices
 
-- `00:00.0` AMD Family 17h Root Complex
-- `00:01.1` PCIe GPP Bridge
-- `00:14.0` AMD FCH SMBus
-- `00:14.3` AMD FCH LPC Bridge
-- `01:00.0` Phison E12 NVMe Controller (boot drive)
-- `02:00.0` AMD A320 USB 3.1 XHCI Host Controller
-- `02:00.1` AMD A320 SATA Controller
-- `06:00.0` Realtek RTL8111 Gigabit Ethernet
-- `08:00.2` AMD Platform Security Processor (PSP) 3.0
-- `09:00.3` AMD Family 17h HD Audio Controller
+- `00:00.0` Advanced Micro Devices, Inc. [AMD] Family 17h (Models 00h-0fh) Root Complex [1022:1450]
+- `00:00.2` Advanced Micro Devices, Inc. [AMD] Family 17h (Models 00h-0fh) I/O Memory Management Unit [1022:1451]
+- `00:01.0` Advanced Micro Devices, Inc. [AMD] Family 17h (Models 00h-1fh) PCIe Dummy Host Bridge [1022:1452]
+- `00:01.1` Advanced Micro Devices, Inc. [AMD] Family 17h (Models 00h-0fh) PCIe GPP Bridge [1022:1453]
+- `00:01.3` Advanced Micro Devices, Inc. [AMD] Family 17h (Models 00h-0fh) PCIe GPP Bridge [1022:1453]
+- `00:02.0` Advanced Micro Devices, Inc. [AMD] Family 17h (Models 00h-1fh) PCIe Dummy Host Bridge [1022:1452]
+- `00:03.0` Advanced Micro Devices, Inc. [AMD] Family 17h (Models 00h-1fh) PCIe Dummy Host Bridge [1022:1452]
+- `00:04.0` Advanced Micro Devices, Inc. [AMD] Family 17h (Models 00h-1fh) PCIe Dummy Host Bridge [1022:1452]
+- `00:07.0` Advanced Micro Devices, Inc. [AMD] Family 17h (Models 00h-1fh) PCIe Dummy Host Bridge [1022:1452]
+- `00:07.1` Advanced Micro Devices, Inc. [AMD] Family 17h (Models 00h-0fh) Internal PCIe GPP Bridge 0 to Bus B [1022:1454]
+- `00:08.0` Advanced Micro Devices, Inc. [AMD] Family 17h (Models 00h-1fh) PCIe Dummy Host Bridge [1022:1452]
+- `00:08.1` Advanced Micro Devices, Inc. [AMD] Family 17h (Models 00h-0fh) Internal PCIe GPP Bridge 0 to Bus B [1022:1454]
+- `00:14.0` Advanced Micro Devices, Inc. [AMD] FCH SMBus Controller [1022:790b] rev 59
+- `00:14.3` Advanced Micro Devices, Inc. [AMD] FCH LPC Bridge [1022:790e] rev 51
+- `00:18.0` Advanced Micro Devices, Inc. [AMD] Family 17h (Models 00h-0fh) Data Fabric: Device 18h; Function 0 [1022:1460]
+- `00:18.1` Advanced Micro Devices, Inc. [AMD] Family 17h (Models 00h-0fh) Data Fabric: Device 18h; Function 1 [1022:1461]
+- `00:18.2` Advanced Micro Devices, Inc. [AMD] Family 17h (Models 00h-0fh) Data Fabric: Device 18h; Function 2 [1022:1462]
+- `00:18.3` Advanced Micro Devices, Inc. [AMD] Family 17h (Models 00h-0fh) Data Fabric: Device 18h; Function 3 [1022:1463]
+- `00:18.4` Advanced Micro Devices, Inc. [AMD] Family 17h (Models 00h-0fh) Data Fabric: Device 18h; Function 4 [1022:1464]
+- `00:18.5` Advanced Micro Devices, Inc. [AMD] Family 17h (Models 00h-0fh) Data Fabric: Device 18h; Function 5 [1022:1465]
+- `00:18.6` Advanced Micro Devices, Inc. [AMD] Family 17h (Models 00h-0fh) Data Fabric: Device 18h; Function 6 [1022:1466]
+- `00:18.7` Advanced Micro Devices, Inc. [AMD] Family 17h (Models 00h-0fh) Data Fabric: Device 18h; Function 7 [1022:1467]
+- `01:00.0` Phison Electronics Corporation E12 NVMe Controller [1987:5012] rev 01
+- `02:00.0` Advanced Micro Devices, Inc. [AMD] A320 USB 3.1 XHCI Host Controller [1022:43bc] rev 02
+- `02:00.1` Advanced Micro Devices, Inc. [AMD] A320 Chipset SATA Controller [AHCI mode] [1022:43b8] rev 02
+- `02:00.2` Advanced Micro Devices, Inc. [AMD] Device [1022:43b3] rev 02
+- `03:04.0` Advanced Micro Devices, Inc. [AMD] 300 Series Chipset PCIe Port [1022:43b4] rev 02
+- `03:05.0` Advanced Micro Devices, Inc. [AMD] 300 Series Chipset PCIe Port [1022:43b4] rev 02
+- `03:06.0` Advanced Micro Devices, Inc. [AMD] 300 Series Chipset PCIe Port [1022:43b4] rev 02
+- `03:07.0` Advanced Micro Devices, Inc. [AMD] 300 Series Chipset PCIe Port [1022:43b4] rev 02
+- `06:00.0` Realtek Semiconductor Co., Ltd. RTL8111/8168/8211/8411 PCI Express Gigabit Ethernet Controller [10ec:8168] rev 15
+- `08:00.0` Advanced Micro Devices, Inc. [AMD] Zeppelin/Raven/Raven2 PCIe Dummy Function [1022:145a]
+- `08:00.2` Advanced Micro Devices, Inc. [AMD] Family 17h (Models 00h-0fh) Platform Security Processor (PSP) 3.0 Device [1022:1456]
+- `08:00.3` Advanced Micro Devices, Inc. [AMD] Family 17h (Models 00h-0fh) USB 3.0 Host Controller [1022:145c]
+- `09:00.0` Advanced Micro Devices, Inc. [AMD] Zeppelin/Renoir PCIe Dummy Function [1022:1455]
+- `09:00.2` Advanced Micro Devices, Inc. [AMD] FCH SATA Controller [AHCI mode] [1022:7901] rev 51
+- `09:00.3` Advanced Micro Devices, Inc. [AMD] Family 17h (Models 00h-0fh) HD Audio Controller [1022:1457]
+
+## USB Devices
+
+- `1d6b:0002` Linux Foundation 2.0 root hub
+- `10c4:ea60` Silicon Labs CP210x UART Bridge
+- `1d6b:0003` Linux Foundation 3.0 root hub
+- `1d6b:0002` Linux Foundation 2.0 root hub
+- `0a12:0001` Cambridge Silicon Radio, Ltd Bluetooth Dongle (HCI mode)
+- `051d:0002` American Power Conversion Uninterruptible Power Supply
+- `1d6b:0003` Linux Foundation 3.0 root hub
+- `0634:5605` Micron Technology, Inc. CT4000X9SSD9
+
+## Disk Identifiers
+
+```
+nvme-nvme.1987-3139303831343235363033313134-5043496520535344-00000001
+nvme-nvme.1987-3139303831343235363033313134-5043496520535344-00000001-part1
+nvme-nvme.1987-3139303831343235363033313134-5043496520535344-00000001-part2
+nvme-PCIe_SSD_19081425603114
+nvme-PCIe_SSD_19081425603114_1
+nvme-PCIe_SSD_19081425603114_1-part1
+nvme-PCIe_SSD_19081425603114_1-part2
+nvme-PCIe_SSD_19081425603114-part1
+nvme-PCIe_SSD_19081425603114-part2
+scsi-360000000000000000e00000000010001
+scsi-360000000000000000e00000000020001
+scsi-360000000000000000e00000000030001
+scsi-360000000000000000e00000000040001
+scsi-360000000000000000e00000000050001
+scsi-360000000000000000e00000000060001
+usb-Micron_CT4000X9SSD9_2428E8DB8E58-0:0
+usb-Micron_CT4000X9SSD9_2428E8DB8E58-0:0-part1
+wwn-0x60000000000000000e00000000010001
+wwn-0x60000000000000000e00000000020001
+wwn-0x60000000000000000e00000000030001
+wwn-0x60000000000000000e00000000040001
+wwn-0x60000000000000000e00000000050001
+wwn-0x60000000000000000e00000000060001
+```
+
+## Temperature Sensors
+
+- nvme-pci-0100: Composite — temp1 alarm: 0°C, temp1 crit: 90°C, temp1: 43°C, temp1 max: 70°C
+- k10temp-pci-00c3: Tctl — temp1: 37°C
 
 ## Notes
+
+
+
 
 - This machine is a K3s node (longhorn host)
 - The 4TB storage is an external USB Crucial X9 SSD
 - No swap configured
+

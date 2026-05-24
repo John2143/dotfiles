@@ -233,7 +233,7 @@ in
         # Get one: https://aistudio.google.com/apikey
         google:
           api: google-generative-ai
-          baseUrl: https://generativelanguage.googleapis.com
+          baseUrl: https://generativelanguage.googleapis.com/v1beta
           apiKey: GEMINI_API_KEY
           models:
             # Flash Lite — Google's cheapest. $0.10/$0.40 per 1M, 1M context.
@@ -417,6 +417,14 @@ in
       - For PDF: `pandoc input.md -t typst | sed 's/#horizontalrule/---/' > temp.typ && typst compile temp.typ output.pdf && rm temp.typ` (the sed is a pandoc-typst compatibility fix for horizontal rules).
       - Typst is a modern LaTeX replacement with native font handling and fast compilation. Use it when you need programmatic document generation beyond simple markdown conversion.
       </document-output>
+
+      <image-description>
+      - When the user asks you to describe an image and your current model lacks vision support (e.g., DeepSeek, text-only models), spawn a Task subagent with a vision-capable model.
+      - Use `google/gemini-2.5-flash` (direct Google API, cheapest) or `openrouter/google/gemini-2.5-flash` (OpenRouter fallback) as the subagent's model.
+      - Pass the image path via the subagent's assignment. The subagent uses `read` to load the image and returns a text description.
+      - Subagents for image description are read-only: instruct them never to modify files.
+      - The `describe-image` skill automates this workflow — invoke it with the image path.
+      </image-description>
 
       <stakes>
       Your work has real consequences. Mistakes can waste time, money, or break systems.

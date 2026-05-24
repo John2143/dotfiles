@@ -18,6 +18,8 @@ Each host was enumerated remotely from the `office` machine over SSH via Tailsca
 | `cat /sys/class/dmi/id/*` | kernel sysfs | Direct read | Motherboard vendor, model, BIOS version (x86 only) |
 | `nix run nixpkgs#lshw -- -short` | lshw | `nix run` | Hardware tree summary |
 | `sensors -j` | lm_sensors | `nix run nixpkgs#lm_sensors` | Temperature sensors (when available) |
+| `hostname` | coreutils | System PATH | Verify hostname matches expected target |
+| `for d in /sys/class/net/*/device; do iface=$(echo $d | cut -d/ -f5); pci=$(readlink $d 2>/dev/null | grep -oP '0000:[0-9a-f:.]+'); [ -n "$pci" ] && echo "$iface $pci"; done` | kernel sysfs | Direct read | Network interface to PCI address mapping |
 | `ls /dev/disk/by-id/` | udev | Direct read | Disk serial numbers and identifiers |
 | `uname -a` | coreutils | System PATH | Kernel version |
 | `cat /etc/os-release` | system | Direct read | OS version |
@@ -45,16 +47,30 @@ Each host was enumerated remotely from the `office` machine over SSH via Tailsca
 To re-gather specs for any host:
 
 ```bash
-ssh <host> "nix shell nixpkgs#pciutils nixpkgs#usbutils -c sh -c '
+ssh <host> "nix shell nixpkgs#pciutils nixpkgs#usbutils nixpkgs#dmidecode nixpkgs#lm_sensors -c sh -c '
+  echo \"=== HOSTNAME ===\" && hostname
   echo \"=== CPU ===\" && lscpu
   echo \"=== MEMORY ===\" && free -h
-  echo "=== RAM DETAILS ===" && sudo dmidecode -t memory
-  echo \"=== BLOCK DEVICES ===\" && lsblk -o NAME,SIZE,TYPE,FSTYPE,MOUNTPOINT,MODEL,ROTA
+  echo \"=== RAM_DETAILS ===\" && sudo dmidecode -t memory
+  echo \"=== BLOCK_DEVICES ===\" && lsblk -o NAME,SIZE,TYPE,FSTYPE,MOUNTPOINT,MODEL,ROTA
   echo \"=== PCI ===\" && lspci -nn
   echo \"=== USB ===\" && lsusb
   echo \"=== DMI ===\" && for f in /sys/class/dmi/id/*\; do echo \"\$(basename \$f): \$(cat \$f 2>/dev/null)\"; done
-  echo \"=== DISK ID ===\" && ls /dev/disk/by-id/
+  echo \"=== NET_IFACES ===\" && for d in /sys/class/net/*/device\; do iface=\$(echo \$d | cut -d/ -f5)\; pci=\$(readlink \$d 2>/dev/null | grep -oP \"'\"'0000:[0-9a-f:]+'\"'\")\; [ -n \"\$pci\" ] && echo \"\$iface \$pci\"\; done
+  echo \"=== DISK_ID ===\" && ls /dev/disk/by-id/
   echo \"=== KERNEL ===\" && uname -a
   echo \"=== OS ===\" && cat /etc/os-release
+  echo \"=== SENSORS ===\" && sensors -j 2>/dev/null || echo \"{}\"
 '"
 ```
+
+### Processing
+
+Pipe the raw output through `scripts/generate-hardware-spec.py` to produce the formatted markdown:
+
+```bash
+ssh <host> "…" > /tmp/<host>-raw.txt
+./scripts/generate-hardware-spec.py <host> /tmp/<host>-raw.txt
+```
+
+The script preserves any existing `## Notes` section from the current spec file, so hand-curated notes survive regeneration.

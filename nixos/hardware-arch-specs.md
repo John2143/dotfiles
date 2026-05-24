@@ -1,6 +1,6 @@
 # Hardware Specs: arch
 
-**Generated:** 2026-05-06T05:59:01Z
+**Generated:** 2026-05-24T02:16:59Z
 
 ## System Overview
 
@@ -8,8 +8,8 @@
 |---|---|
 | Hostname | arch |
 | OS | NixOS 26.05 (Yarara) |
-| Kernel | 6.18.24 x86_64 |
-| Motherboard | ASRock Z390 Taichi |
+| Kernel | 6.18.32 x86_64 |
+| Motherboard | ASRock Z390 Taichi () |
 | Chassis | Desktop |
 | BIOS | American Megatrends Inc. P1.20 (08/22/2018) |
 
@@ -29,78 +29,177 @@
 | L3 Cache | 16 MiB (1 instance) |
 | Microcode | 0xf8 |
 | Virtualization | VT-x |
-| Flags | fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush dts acpi mmx fxsr sse sse2 ss ht tm pbe syscall nx pdpe1gb rdtscp lm constant_tsc art arch_perfmon pebs bts rep_good nopl xtopology nonstop_tsc cpuid aperfmperf pni pclmulqdq dtes64 monitor ds_cpl vmx smx est tm2 ssse3 sdbg fma cx16 xtpr pdcm pcid sse4_1 sse4_2 x2apic movbe popcnt tsc_deadline_timer aes xsave avx f16c rdrand lahf_lm abm 3dnowprefetch cpuid_fault epb ssbd ibrs ibpb stibp tpr_shadow flexpriority ept vpid ept_ad fsgsbase tsc_adjust bmi1 avx2 smep bmi2 erms invpcid mpx rdseed adx smap clflushopt intel_pt xsaveopt xsavec xgetbv1 xsaves dtherm ida arat pln pts hwp hwp_notify hwp_act_window hwp_epp vnmi md_clear flush_l1d arch_capabilities |
+| Flags | fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush dts acpi mmx fxsr sse sse2 ss ht tm pbe syscall nx pdpe1gb rdtscp lm constant_tsc art arch_perfmon pebs bts rep_good nopl xtopology nonstop_tsc cpuid aperfmperf pni pclmulqdq dtes64 monitor ds_cpl vmx smx est tm2 ssse3 s… |
 
 ## Memory
 
+### Summary
+
 | Type | Size |
 |---|---|
-| RAM | 31 GiB |
-| Swap | 32 GiB (LVM pool1b-swap on nvme0n1) |
+| RAM | 31Gi |
+| Swap | 31Gi |
+
+_No DIMM details available (requires root/dmidecode on x86)_
 
 ## Storage
 
-| Device | Size | Type | Model | Filesystem | Mount |
-|---|---|---|---|---|---|
-| nvme0n1 | 953.9 GB | NVMe | Intel SSDPEKNW010T8 (660p 1TB) | LVM | |
-| nvme0n1p1 | 953.9 GB | partition | | LVM2_member | |
-| pool1b-monero (LVM) | 350 GB | lvm | | ext4 | /mnt/monero |
-| pool1b-swap (LVM) | 32 GB | lvm | | swap | [SWAP] |
-| nvme1n1 | 953.9 GB | NVMe | Intel SSDPEKNW010T8 (660p 1TB) | | |
-| nvme1n1p1 | 500 GB | partition | | LVM2_member | |
-| pool1a-john_home (LVM) | 300 GB | lvm | | ext4 | /home/john |
-| pool1a-games_a (LVM) | 199 GB | lvm | | ext4 | /mnt/games_a |
-| nvme1n1p2 | 3 GB | partition | | vfat | /boot |
-| nvme1n1p3 | 450.5 GB | partition | | ext4 | / |
-| sda | 1.8 TB | SATA | WDC WD20EZRZ-00Z5HB0 | | |
-| sda1 | 1.8 TB | partition | | ntfs | /mnt/d |
-| sdb | 1.8 TB | USB | Samsung PSSD T7 | crypto_LUKS | (external) |
+```
+sda                                             1.8T disk                            WDC WD20EZRZ-00Z5HB0    1
+└─sda1                                          1.8T part  ntfs        /mnt/d                                1
+sdb                                             1.8T disk                            PSSD T7                 0
+└─sdb1                                          1.8T part  crypto_LUKS                                       0
+  └─luks-9340760b-a19d-4392-9021-8f4b14c794f8   1.8T crypt LVM2_member                                       0
+    ├─pool1-bfdl                               1000G lvm   crypto_LUKS                                       0
+    └─pool1-longhorn                            700G lvm   ext4        /mnt/longhorn                         0
+sdc                                               0B disk                            USB3.0 CRW -SD          0
+sdd                                               0B disk                            USB3.0 CRW -SD          0
+nvme0n1                                       953.9G disk                            INTEL SSDPEKNW010T8     0
+├─nvme0n1p1                                     500G part  LVM2_member                                       0
+│ ├─pool1a-john_home                            300G lvm   ext4        /home/john                            0
+│ └─pool1a-games_a                              199G lvm   ext4        /mnt/games_a                          0
+├─nvme0n1p2                                       3G part  vfat        /boot                                 0
+└─nvme0n1p3                                   450.5G part  ext4        /                                     0
+nvme1n1                                       953.9G disk                            INTEL SSDPEKNW010T8     0
+└─nvme1n1p1                                   953.9G part  LVM2_member                                       0
+  ├─pool1b-monero                               350G lvm   ext4        /mnt/monero                           0
+  └─pool1b-swap                                  32G lvm   swap        [SWAP]                                0
+```
 
 ## GPU
 
-| Device | Description |
-|---|---|
-| 01:00.0 | NVIDIA GP102 [GeForce GTX 1080 Ti] [10de:1b06] rev a1 |
+- `01:00.0` NVIDIA Corporation GP102 [GeForce GTX 1080 Ti] [10de:1b06] rev a1
 
 ## Network
 
 | Device | Interface | Description |
 |---|---|---|
-| 00:1f.6 | eno1 | Intel I219-V Ethernet Connection (7) [8086:15bc] rev 10 |
-| 06:00.0 | enp6s0 | Intel I211 Gigabit Network Connection [8086:1539] rev 03 |
-| 05:00.0 | wlp5s0 | Intel Dual Band Wireless-AC 3168NGW [8086:24fb] rev 10 |
+| 00:1f.6 | eno1 | Intel Corporation Ethernet Connection (7) I219-V [8086:15bc] rev 10 |
+| 05:00.0 | wlp5s0 | Intel Corporation Dual Band Wireless-AC 3168NGW [Stone Peak] [8086:24fb] rev 10 |
+| 06:00.0 | enp6s0 | Intel Corporation I211 Gigabit Network Connection [8086:1539] rev 03 |
 
 ## PCI Devices
 
-- `00:00.0` Intel 8th/9th Gen Core Host Bridge/DRAM
-- `00:01.0` PCIe Controller (x16)
-- `00:14.0` Intel Cannon Lake PCH USB 3.1 xHCI
-- `00:17.0` Intel Cannon Lake PCH SATA AHCI
-- `00:1b.0` PCIe Root Port #17
-- `00:1f.0` Intel Z390 LPC/eSPI
-- `00:1f.3` Intel Cannon Lake PCH cAVS Audio
-- `00:1f.6` Intel I219-V Ethernet
-- `01:00.0` NVIDIA GP102 GeForce GTX 1080 Ti
-- `02:00.0` Intel SSD 660P (NVMe, on board)
-- `03:00.0` ASMedia ASM1184e PCIe Packet Switch
-- `05:00.0` Intel Wireless-AC 3168NGW
-- `06:00.0` Intel I211 Gigabit Ethernet
-- `08:00.0` ASMedia ASM1061 SATA Controller
-- `09:00.0` Intel SSD 660P (NVMe, slot)
+- `00:00.0` Intel Corporation 8th/9th Gen Core 8-core Desktop Processor Host Bridge/DRAM Registers [Coffee Lake S] [8086:3e30] rev 0a
+- `00:01.0` Intel Corporation 6th-10th Gen Core Processor PCIe Controller (x16) [8086:1901] rev 0a
+- `00:12.0` Intel Corporation Cannon Lake PCH Thermal Controller [8086:a379] rev 10
+- `00:14.0` Intel Corporation Cannon Lake PCH USB 3.1 xHCI Host Controller [8086:a36d] rev 10
+- `00:14.2` Intel Corporation Cannon Lake PCH Shared SRAM [8086:a36f] rev 10
+- `00:16.0` Intel Corporation Cannon Lake PCH HECI Controller [8086:a360] rev 10
+- `00:17.0` Intel Corporation Cannon Lake PCH SATA AHCI Controller [8086:a352] rev 10
+- `00:1b.0` Intel Corporation Cannon Lake PCH PCI Express Root Port #17 [8086:a340] rev f0
+- `00:1c.0` Intel Corporation Cannon Lake PCH PCI Express Root Port #7 [8086:a33e] rev f0
+- `00:1d.0` Intel Corporation Cannon Lake PCH PCI Express Root Port #9 [8086:a330] rev f0
+- `00:1f.0` Intel Corporation Z390 Chipset LPC/eSPI Controller [8086:a305] rev 10
+- `00:1f.3` Intel Corporation Cannon Lake PCH cAVS [8086:a348] rev 10
+- `00:1f.4` Intel Corporation Cannon Lake PCH SMBus Controller [8086:a323] rev 10
+- `00:1f.5` Intel Corporation Cannon Lake PCH SPI Controller [8086:a324] rev 10
+- `00:1f.6` Intel Corporation Ethernet Connection (7) I219-V [8086:15bc] rev 10
+- `01:00.0` NVIDIA Corporation GP102 [GeForce GTX 1080 Ti] [10de:1b06] rev a1
+- `01:00.1` NVIDIA Corporation GP102 HDMI Audio Controller [10de:10ef] rev a1
+- `02:00.0` Intel Corporation SSD 660P Series [8086:f1a8] rev 03
+- `03:00.0` ASMedia Technology Inc. ASM1184e 4-Port PCIe x1 Gen2 Packet Switch [1b21:1184]
+- `04:01.0` ASMedia Technology Inc. ASM1184e 4-Port PCIe x1 Gen2 Packet Switch [1b21:1184]
+- `04:03.0` ASMedia Technology Inc. ASM1184e 4-Port PCIe x1 Gen2 Packet Switch [1b21:1184]
+- `04:05.0` ASMedia Technology Inc. ASM1184e 4-Port PCIe x1 Gen2 Packet Switch [1b21:1184]
+- `04:07.0` ASMedia Technology Inc. ASM1184e 4-Port PCIe x1 Gen2 Packet Switch [1b21:1184]
+- `05:00.0` Intel Corporation Dual Band Wireless-AC 3168NGW [Stone Peak] [8086:24fb] rev 10
+- `06:00.0` Intel Corporation I211 Gigabit Network Connection [8086:1539] rev 03
+- `08:00.0` ASMedia Technology Inc. ASM1061/ASM1062 Serial ATA Controller [1b21:0612] rev 02
+- `09:00.0` Intel Corporation SSD 660P Series [8086:f1a8] rev 03
 
 ## USB Devices
 
-- Samsung PSSD T7 (external backup drive)
-- FiiO DigiHug USB Audio
-- Logitech G502 HERO Gaming Mouse
-- Burr-Brown from TI USB Audio CODEC
-- HOLDCHIP USB Gaming Keyboard
-- winkeyless.kr ps2avrGB (custom keyboard)
-- DAREU USB DEVICE (mouse/input)
-- Valve Software Steam Controller
-- CIDOO QK61 (keyboard)
+- `1d6b:0002` Linux Foundation 2.0 root hub
+- `05e3:0608` Genesys Logic, Inc. Hub
+- `05e3:0608` Genesys Logic, Inc. Hub
+- `1b1c:0c12` Corsair H150i Platinum
+- `174c:2074` ASMedia Technology Inc. ASM1074 High-Speed hub
+- `1b1c:0c0b` Corsair Lighting Node Pro
+- `1b1c:1c06` Corsair
+- `30be:100c` Schiit Audio Schiit Modi+
+- `046d:c08b` Logitech, Inc. G502 SE HERO Gaming Mouse
+- `05e3:0608` Genesys Logic, Inc. Hub
+- `08bb:2902` Texas Instruments PCM2902 Audio Codec
+- `04d9:a0f8` Holtek Semiconductor, Inc. USB Gaming Keyboard
+- `04e8:4001` Samsung Electronics Co., Ltd PSSD T7
+- `05e3:0610` Genesys Logic, Inc. Hub
+- `0b05:190e` ASUSTek Computer, Inc. ASUS USB-BT500
+- `20a0:422d` Clay Logic ps2avrGB
+- `045b:0209` Hitachi, Ltd
+- `28de:1142` Valve Software Wireless Steam Controller
+- `8087:0aa7` Intel Corp. Wireless-AC 3168 Bluetooth
+- `045b:0209` Hitachi, Ltd
+- `36b0:3035` RDMCTMZT CIDOO QK61
+- `05ac:024f` Apple, Inc. Aluminium Keyboard (ANSI)
+- `0bda:0306` Realtek Semiconductor Corp. USB3.0 Card Reader
+- `05e3:0610` Genesys Logic, Inc. Hub
+- `1d6b:0003` Linux Foundation 3.0 root hub
+- `05e3:0625` Genesys Logic, Inc. USB3.2 Hub
+- `174c:3074` ASMedia Technology Inc. ASM1074 SuperSpeed hub
+
+## Disk Identifiers
+
+```
+ata-WDC_WD20EZRZ-00Z5HB0_WD-WCC4M2YS41RZ
+ata-WDC_WD20EZRZ-00Z5HB0_WD-WCC4M2YS41RZ-part1
+dm-name-luks-9340760b-a19d-4392-9021-8f4b14c794f8
+dm-name-pool1a-games_a
+dm-name-pool1a-john_home
+dm-name-pool1-bfdl
+dm-name-pool1b-monero
+dm-name-pool1b-swap
+dm-name-pool1-longhorn
+dm-uuid-CRYPT-LUKS2-9340760ba19d439290218f4b14c794f8-luks-9340760b-a19d-4392-9021-8f4b14c794f8
+dm-uuid-LVM-dNxSc19lfU7LhZDs3YIIzxXcPijvyqD04RsuuGRR3jZsn8GBfEqSJXiWXAQ1s0dA
+dm-uuid-LVM-dNxSc19lfU7LhZDs3YIIzxXcPijvyqD0IfnQdpkFgp8alt3MFnj8cFiRdqtgm8ay
+dm-uuid-LVM-udpgOyVkPRr5pheziAPyvVTxd4L9ML6dFTuvqJSKxWkGmQm1pEEY2R23dkPmMHJ5
+dm-uuid-LVM-udpgOyVkPRr5pheziAPyvVTxd4L9ML6dvrMO8JN1mv6fBewHYRLyDoJeiE0rF3HG
+dm-uuid-LVM-XKhWWVWdGUy315MdhGUMhe00uY10NL4yu7azXOxRSInFCdcOS7ACV7kdS14Qj4iq
+dm-uuid-LVM-XKhWWVWdGUy315MdhGUMhe00uY10NL4yvWer6M1adFET3E84IJiOv6jpYnW6nXsp
+lvm-pv-uuid-QGeK59-3zOU-Ygze-USrw-Eerl-cgCv-CCjLJB
+lvm-pv-uuid-rAaEGZ-KjRA-uEdx-KRes-Ka6j-B4Df-IMvo6z
+lvm-pv-uuid-TtovES-Ajnz-AbhC-LywS-1JTN-zfOi-vOGSA6
+nvme-eui.0000000001000000e4d25c9a846a5001
+nvme-eui.0000000001000000e4d25c9a846a5001-part1
+nvme-eui.0000000001000000e4d25c9a846a5001-part2
+nvme-eui.0000000001000000e4d25c9a846a5001-part3
+nvme-eui.0000000001000000e4d25cc756935001
+nvme-eui.0000000001000000e4d25cc756935001-part1
+nvme-INTEL_SSDPEKNW010T8_BTNH91210JCU1P0B
+nvme-INTEL_SSDPEKNW010T8_BTNH91210JCU1P0B_1
+nvme-INTEL_SSDPEKNW010T8_BTNH91210JCU1P0B_1-part1
+nvme-INTEL_SSDPEKNW010T8_BTNH91210JCU1P0B-part1
+nvme-INTEL_SSDPEKNW010T8_PHNH852200T11P0B
+nvme-INTEL_SSDPEKNW010T8_PHNH852200T11P0B_1
+nvme-INTEL_SSDPEKNW010T8_PHNH852200T11P0B_1-part1
+nvme-INTEL_SSDPEKNW010T8_PHNH852200T11P0B_1-part2
+nvme-INTEL_SSDPEKNW010T8_PHNH852200T11P0B_1-part3
+nvme-INTEL_SSDPEKNW010T8_PHNH852200T11P0B-part1
+nvme-INTEL_SSDPEKNW010T8_PHNH852200T11P0B-part2
+nvme-INTEL_SSDPEKNW010T8_PHNH852200T11P0B-part3
+usb-Generic-_USB3.0_CRW_-SD_201506301013-0:0
+usb-Generic-_USB3.0_CRW_-SD_201506301013-0:1
+usb-Samsung_PSSD_T7_S7MPNS0X402503Y-0:0
+usb-Samsung_PSSD_T7_S7MPNS0X402503Y-0:0-part1
+wwn-0x50014ee21032fb24
+wwn-0x50014ee21032fb24-part1
+```
+
+## Temperature Sensors
+
+- iwlwifi_1-virtual-0: temp1 — temp1: 40°C
+- pch_cannonlake-virtual-0: temp1 — temp1: 55°C
+- nvme-pci-0200: Composite — temp1 alarm: 0°C, temp1 crit: 80°C, temp1: 36°C, temp1 max: 77°C
+- corsairpsu-hid-3-2: v_in — in0: 115.0; v_out +12v — in1 crit: 15.6, in1: 12.2, in1 lcrit: 8.4; v_out +5v — in2 crit: 6.5, in2: 5.0, in2 lcrit: 3.5
+- coretemp-isa-0000: Package id 0 — temp1 crit: 115°C, temp1 crit alarm: 0°C, temp1: 64°C, temp1 max: 101°C; Core 0 — temp2 crit: 115°C, temp2 crit alarm: 0°C, temp2: 51°C, temp2 max: 101°C; Core 1 — temp3 crit: 115°C, temp3 crit alarm: 0°C, temp3: 50°C, temp3 max: 101°C
+- nvme-pci-0900: Composite — temp1 alarm: 0°C, temp1 crit: 80°C, temp1: 41°C, temp1 max: 77°C
 
 ## Notes
 
+
+
+
 - LVM2 volume groups: `pool1a` (on nvme1n1p1), `pool1b` (on nvme0n1p1)
 - External storage encrypted with LUKS (Samsung T7)
+
