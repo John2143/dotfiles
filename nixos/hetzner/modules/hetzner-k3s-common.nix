@@ -82,10 +82,7 @@
       kubectl apply --server-side --force-conflicts \
         -f https://raw.githubusercontent.com/cloudnative-pg/cloudnative-pg/release-1.25/releases/cnpg-1.25.1.yaml
       kubectl wait --for=condition=available deployment/cnpg-controller-manager -n cnpg-system --timeout=120s || true
-      # Install cert-manager operator (required for cert-manager CRDs in wave 0)
-      kubectl apply --server-side --force-conflicts \
-        -f https://github.com/cert-manager/cert-manager/releases/download/v1.17.1/cert-manager.yaml
-      kubectl wait --for=condition=available deployment/cert-manager -n cert-manager --timeout=120s || true
+      # cert-manager is now deployed by ArgoCD (Helm chart in wave 0)
     '';
   };
 
