@@ -1,4 +1,4 @@
-# Hetzner k3s Common — shared k3s + Cilium + ArgoCD + firewall config
+# Hetzner k3s Common — shared k3s + Flannel + ArgoCD + firewall config
 #
 # Imported by hetzner-k3s-server.nix (adds PowerDNS + PostgreSQL schema on top).
 # All 3 server nodes are identical — drop-in replaceable.
@@ -78,6 +78,10 @@
       kubectl wait --for=condition=available deployment/argocd-server -n argocd --timeout=60s || true
       # Apply root Application — wires ArgoCD to the GitOps repo
       kubectl apply -f https://raw.githubusercontent.com/2143-Labs/2143-59s/master/argocd/root-app.yaml
+      # Install CloudNativePG operator (required for CNPG Cluster CR in wave 5)
+      kubectl apply --server-side --force-conflicts \
+        -f https://raw.githubusercontent.com/cloudnative-pg/cloudnative-pg/release-1.25/releases/cnpg-1.25.1.yaml
+      kubectl wait --for=condition=available deployment/cnpg-controller-manager -n cnpg-system --timeout=120s || true
     '';
   };
 
@@ -149,6 +153,10 @@
       kubectl create secret generic pdns-postgres-password -n default \
         --from-literal=password="$(cat ${config.age.secrets."hetzner/postgres-pdns-password".path})" \
         --dry-run=client -o yaml | kubectl apply -f -
+      # Temporal PostgreSQL password (generated, used by CNPG Cluster CR)
+      kubectl create secret generic temporal-postgres-password -n default \
+        --from-literal=password="$(head -c 32 /dev/urandom | base64 | tr -d '\n')" \
+        --dry-run=client -o yaml | kubectl apply -f -
     '';
   };
 
@@ -184,8 +192,6 @@
     443   # HTTPS (k3s ingress)
     53    # DNS (PowerDNS) — hetzner-powerdns.nix:73
     30432 # PostgreSQL NodePort (PowerDNS) — hetzner-powerdns.nix:24, hetzner-postgres-schema.nix:8
-    4567  # Galera cluster (MariaDB)
-    4568  # Galera IST — incremental state transfer (MariaDB)
   ];
   networking.firewall.allowedUDPPorts = [
     53   # DNS (PowerDNS) — hetzner-powerdns.nix:74
