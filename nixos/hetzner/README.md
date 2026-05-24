@@ -98,37 +98,52 @@ echo -n "$(head -c 32 /dev/urandom | base64)" | agenix -e hetzner/powerdns-tsig-
 ### Headscale preauth key (generate once on home-pi)
 
 ```bash
-ssh home-pi "sudo headscale users create hetzner-nodes"
-ssh home-pi "sudo headscale preauthkeys create --user 1 --reusable --expiration 87600h"
+ssh 192.168.0.154 "sudo headscale users create hetzner-nodes"
+ssh 192.168.0.154 "sudo headscale preauthkeys create --user 1 --reusable --expiration 87600h"
 # Encrypt the output key on arch:
 echo -n "hskey-auth-..." | agenix -e nixos/hetzner/secrets/hetzner/headscale-preauth-key.age -i ~/.ssh/age
 ```
 
-## CloudNativePG setup
+## deSEC DNS Management
 
-PostgreSQL runs inside k3s via CloudNativePG. The operator must be pre-installed:
+The `desec-dns.sh` script manages DNS records for `9s.pics` via the deSEC API.
 
 ```bash
-kubectl apply --server-side -f \
-  https://raw.githubusercontent.com/cloudnative-pg/cloudnative-pg/release-1.25/releases/cnpg-1.25.1.yaml
+# Encrypt the deSEC API token (one-time):
+cd nixos/hetzner/secrets
+echo -n "YOUR_DESEC_TOKEN" | agenix -e hetzner/desec-token.age -i ~/.ssh/age
+
+# Usage:
+cd nixos/hetzner/scripts
+./desec-dns.sh list                          # List all records
+./desec-dns.sh set-a headscale 1.2.3.4       # Set A record
+./desec-dns.sh update-headscale              # Auto-detect public IP and update
+./desec-dns.sh update-all-nodes              # Update all node + headscale records
 ```
 
-After provisioning, the CNPG Cluster CR (deployed by ArgoCD wave 5) creates the
-`temporal-postgres` cluster with `pdns` and `temporal` databases. The
-`hetzner-postgres-schema` systemd oneshot waits for PostgreSQL to be reachable
-(via NodePort 30432) and imports the PowerDNS schema.
+## CloudNativePG setup
+
+PostgreSQL runs inside k3s via CloudNativePG (installed automatically by `argocd-bootstrap`). On first boot, the CNPG Cluster CR creates a PostgreSQL instance with `pdns` database and user via `bootstrap.initdb`.
+
+**Important**: CNPG 1.25 generates a random password. The `hetzner-postgres-schema` oneshot waits for PostgreSQL then imports the schema and resets the pdns password to match the agenix secret.
 
 ```bash
-# Verify PostgreSQL is accessible
+# Verify PostgreSQL
 ssh root@<IP> "pg_isready -h 127.0.0.1 -p 30432 -U pdns -d pdns"
-
-# Verify PowerDNS can connect
+# Verify PowerDNS
 ssh root@<IP> "systemctl status pdns"
 ```
 
-The single PostgreSQL cluster serves all services (PowerDNS, Temporal, future).
-Backup is handled by CNPG's barman-cloud to Backblaze B2 (30-day retention).
+## Known Issues
 
+### CNPG 1.25 — `bootstrap.initdb` not `spec.managed`
+`spec.managed` was introduced in CNPG 1.26+. The pdns user password must be reset after cluster creation.
+
+### `pdnsutil` needs `--config-dir=/run/pdns`
+Runtime config with decrypted secrets lives at `/run/pdns/pdns.conf`. Always use `pdnsutil --config-dir=/run/pdns`.
+
+### `postgres-pdns-password` must be owned by `pdns`
+If pdns fails to start: `chown pdns:pdns /run/agenix/hetzner/postgres-pdns-password`
 ## Provisioning lessons (from attempts #1 and #2)
 
 ### NixOS boot on Hetzner Cloud
@@ -139,7 +154,7 @@ Backup is handled by CNPG's barman-cloud to Backblaze B2 (30-day retention).
 
 ### agenix identity
 - Hetzner VMs have no age identity at first boot. The host SSH key (`/etc/ssh/ssh_host_ed25519_key`) doesn't match agenix encryption keys.
-- **Fix**: The provision script copies `~/.ssh/age` (arch's age key) to `/etc/ssh/age-identity`. This pre-seeds the identity so the post-deploy `nixos-rebuild` can decrypt all secrets.
+- **Fix**: The provision script copies `~/.ssh/age` (the age identity key) to `/etc/ssh/age-identity` so the post-deploy `nixos-rebuild` can decrypt all secrets.
 
 ### tailscale connectivity
 - `tailscale up` needs `--reset` flag to override existing config (left from initial deploy).
