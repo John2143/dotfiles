@@ -1,44 +1,94 @@
-# Music stack — Spotify replacement with Navidrome + Lidarr + slskd + explo + aurral.
+# =============================================================================
+# Music stack — full Spotify replacement (self-hosted)
+# =============================================================================
 #
-# Services (all reachable on localhost):
-#   Navidrome   → http://localhost:4533   (music streaming, Subsonic API)
-#   Lidarr      → http://localhost:8686   (music collection manager)
-#   slskd       → http://localhost:5030   (Soulseek P2P downloader)
-#   explo       → http://localhost:7288   (auto-playlists: daily/weekly/monthly)
-#   aurral      → http://localhost:5000   (music requests, like Overseerr)
+# Components:
+#   Navidrome   → http://localhost:4533   music streaming (Subsonic API)
+#   Lidarr      → http://localhost:8686   music collection manager
+#   slskd       → http://localhost:5030   Soulseek P2P downloader
+#   explo       → http://localhost:7288   auto-playlists (daily/weekly/monthly)
+#   aurral      → http://localhost:5000   music requests (like Overseerr)
+#   Tubifarry   → Lidarr plugin           wires slskd + lyrics into Lidarr
 #
-# === BEFORE REBUILDING ===
+# Music data lives under /var/lib/music/:
+#   downloads/    lidarr incomplete downloads
+#   library/      finished imports → navidrome scans this
+#   explo/        explo playlists (mounted as /data in the container)
 #
-# 1. Create a Soulseek account: download a client from https://www.slsknet.org
-#    and register a username/password on first launch. You can uninstall after.
+# =============================================================================
+# INSTALL INSTRUCTIONS
+# =============================================================================
 #
-# 2. Create the slskd credentials file:
-#      sudo mkdir -p /var/lib/slskd
-#      echo 'SLSKD_SLSK_USERNAME=your-username' | sudo tee /var/lib/slskd/slskd.env
-#      echo 'SLSKD_SLSK_PASSWORD=your-password' | sudo tee -a /var/lib/slskd/slskd.env
-#      sudo chmod 600 /var/lib/slskd/slskd.env
+# --- Step 1: enable the module ---
 #
-# 3. Create accounts on MusicBrainz (https://musicbrainz.org) and
-#    ListenBrainz (https://listenbrainz.org — sign in with MusicBrainz).
+#   In jim-nixos/configuration.nix, uncomment this line:
+#     imports = [ ./music-stack.nix ];
 #
-# === POST-INSTALL ===
+# --- Step 2: create a Soulseek account ---
 #
-# 4. Open Lidarr → Settings → Plugins → Tubifarry should be loaded.
-#    Configure Soulseek, Lyrics Enhancer, and Search Sniper in Tubifarry settings.
+#   Download a client from https://www.slsknet.org, launch it, and register
+#   a username + password. You can uninstall the client afterwards.
 #
-# 5. Open Navidrome → Profile → enable "Scrobble to ListenBrainz".
+# --- Step 3: create the slskd credentials file ---
 #
-# 6. Open aurral → follow setup wizard to connect Lidarr and Navidrome.
-#    Click "Apply Davo's Recommended Settings".
+#     sudo mkdir -p /var/lib/slskd
+#     echo 'SLSKD_SLSK_USERNAME=your-username' | sudo tee /var/lib/slskd/slskd.env
+#     echo 'SLSKD_SLSK_PASSWORD=your-password' | sudo tee -a /var/lib/slskd/slskd.env
+#     sudo chmod 600 /var/lib/slskd/slskd.env
 #
-# 7. Start adding artists in Lidarr or request them through aurral.
-#    explo will generate playlists after you've listened for a bit.
+# --- Step 4: sign up for MusicBrainz + ListenBrainz ---
 #
-# Music data layout:
-#   /var/lib/music/
-#   ├── downloads/    # lidarr incomplete downloads
-#   ├── library/      # lidarr imports → navidrome scans this
-#   └── explo/        # explo playlists (mounted as /data in container)
+#   https://musicbrainz.org/         (metadata)
+#   https://listenbrainz.org/        (sign in with MusicBrainz — recommendations)
+#
+#   Do this on a Thursday/Friday so ListenBrainz has time to build your first
+#   weekly recommendation playlist by Monday.
+#
+# --- Step 5: fix the Tubifarry hash ---
+#
+#   The fetchFromGitHub call below uses lib.fakeHash. On first build, Nix will
+#   print the correct hash. Copy it into the `hash =` field and rebuild.
+#
+# --- Step 6: rebuild ---
+#
+#     sudo nixos-rebuild switch --flake .#jim
+#
+#   If this is a fresh install from the live ISO:
+#     sudo nixos-install --flake .#jim && reboot
+#     # then after reboot, run step 6 again to pick up the fixed hash
+#
+# --- Step 7: post-install setup ---
+#
+#   7a. Open Lidarr (http://localhost:8686) → Settings → Plugins.
+#       Tubifarry should appear. Configure:
+#         • Soulseek (point at http://localhost:5030 with your creds)
+#         • Lyrics Enhancer
+#         • Search Sniper
+#
+#   7b. Open Navidrome (http://localhost:4533) → Profile (top-right avatar).
+#       Enable "Scrobble to ListenBrainz" so your listens feed recommendations.
+#
+#   7c. Open aurral (http://localhost:5000) → follow the setup wizard.
+#       Connect it to Lidarr and Navidrome.
+#       Click "Apply Davo's Recommended Settings."
+#
+#   7d. (Optional) Set up a reverse proxy if you want these accessible from
+#       outside your LAN. Caddy example:
+#
+#         services.caddy.virtualHosts."music.example.com".extraConfig = ''
+#           reverse_proxy localhost:4533
+#         '';
+#
+# --- Daily use ---
+#
+#   • Add artists in Lidarr or request them through aurral.
+#   • Lidarr searches Soulseek via Tubifarry and downloads matching releases.
+#   • Stream from Navidrome directly, or use any Subsonic-compatible client:
+#       https://www.navidrome.org/apps/
+#   • explo generates daily/weekly/monthly playlists automatically.
+#   • ListenBrainz sends a fresh "Discover" playlist every Monday.
+#
+# =============================================================================
 {
   lib,
   pkgs,
