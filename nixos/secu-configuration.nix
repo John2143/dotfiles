@@ -1,6 +1,9 @@
-# Edit this configuration file to define what should be installed on
-# your system. Help is available in the configuration.nix(5) man page, on
-# https://search.nixos.org/options and in the NixOS manual (`nixos-help`).
+# secu — 24/7 security camera monitoring station.
+# This machine boots directly into Hyprland, opens the JetKVM web UI,
+# and displays a live grid of all Reolink RTSP camera feeds.
+#
+# Secrets needed (create with: agenix -e <file>.age -i ~/.ssh/age):
+#   secrets/camera-credentials.age  →  CAMERA_USER=admin\nCAMERA_PASSWORD=<pw>
 {
   config,
   lib,
@@ -33,6 +36,14 @@
 
   services.displayManager.lemurs = {
     enable = true;
+    # Auto-login directly to Hyprland (first available Wayland session).
+    settings = {
+      auto_login = {
+        enabled = true;
+        username = "john";
+        default_desktop = 0;
+      };
+    };
   };
   services.seatd.enable = true;
 
@@ -46,12 +57,12 @@
     keyMap = "us";
   };
 
-  # List packages installed in system profile. To search, run:
-  # $ nix search wget
+  # Camera monitoring packages (mpv is already in home.nix; these are system-level).
   environment.systemPackages = with pkgs; [
     git
     fish
     curl
+    socat          # for RTSP stream debugging
   ];
 
   programs.gnupg.agent = {
@@ -83,8 +94,18 @@
       workstation = true;
     };
   };
-
   security.rtkit.enable = true;
+
+  # Camera RTSP credentials (sourced by startup-secu.fish).
+  # Create with: cd ~/dotfiles/secrets && agenix -e camera-credentials.age -i ~/.ssh/age
+  # Format: CAMERA_USER=admin\nCAMERA_PASSWORD=<reolink-password>
+  age.secrets.camera-credentials = {
+    file = ../secrets/camera-credentials.age;
+    owner = "john";
+  };
+
+  # Disable console blanking for 24/7 monitoring.
+  boot.kernelParams = [ "consoleblank=0" ];
 
   # networking.firewall.allowedTCPPorts = [
   #   5353 # avahi
