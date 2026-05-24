@@ -4,31 +4,21 @@
 #   Protected IP (primary): Web apps, DNS, k3s API, CNPG NodePort — strict whitelist + SYN rate limiting
 #   Raw IP (floating):      Game servers, DERP, TeamSpeak — per-service port whitelist
 #
-# The raw IP is resolved from deSEC DNS at runtime: <region>-raw.9s.pics
-# Region is derived from compName: k3s-ashburn → ash-raw.9s.pics
-#
-# An attack on one IP cannot affect services on the other.
-# Floating IP can be rotated without touching the Protected IP — just update DNS.
+# The raw IP is passed from the flake (per-node). If rotated, update the flake and rebuild.
+# Protected IP is auto-detected from eth0 at runtime.
 {
   config,
   lib,
   pkgs,
-  compName ? "unknown",
+  rawIP ? null,
   ...
-}: let
-  # Derive raw DNS name from compName
-  # k3s-ashburn → ash, k3s-hillsboro → hil, k3s-nuremberg → nur
-  region = if builtins.stringLength compName > 4
-    then builtins.substring (builtins.stringLength compName - 3) 3 compName  # last 3 chars
-    else "---";
-  rawDNS = "${region}-raw.9s.pics";
-in {
+}: lib.mkIf (rawIP != null) {
   systemd.services.split-ip-firewall = {
     description = "Split-IP iptables firewall (Protected vs Raw IP)";
     after = ["network.target"];
     wants = ["network.target"];
     wantedBy = ["multi-user.target"];
-    path = [pkgs.iptables pkgs.bind];  # bind for 'host' command
+    path = [pkgs.iptables pkgs.iproute2];  # iptables + ip
     serviceConfig = {
       Type = "oneshot";
       RemainAfterExit = true;
@@ -36,16 +26,17 @@ in {
     script = ''
       set -euo pipefail
 
-      PROTECTED_IP=$(hostname -I | awk '{print $1}')
-      RAW_IP=$(host ${rawDNS} 2>/dev/null | awk '/has address/ {print $NF; exit}')
+      # Hetzner Cloud uses enp1s0 (predictable interface names)
+      PROTECTED_IP=$(ip -4 addr show enp1s0 2>/dev/null | grep -oP 'inet \K[\d.]+' | head -1)
+      RAW_IP="${rawIP}"
 
-      if [ -z "$RAW_IP" ]; then
-        echo "WARNING: Could not resolve ${rawDNS}, skipping raw IP firewall"
+      if [ -z "$PROTECTED_IP" ]; then
+        echo "WARNING: Could not detect protected IP from enp1s0, skipping firewall"
         exit 0
       fi
 
       echo "Protected IP: $PROTECTED_IP"
-      echo "Raw IP: $RAW_IP (${rawDNS})"
+      echo "Raw IP: $RAW_IP"
 
       # === Protected IP (per-destination) ===
       iptables -N PROTECTED_IN 2>/dev/null || iptables -F PROTECTED_IN
@@ -62,7 +53,6 @@ in {
       iptables -A PROTECTED_IN -p tcp --dport 6443 -j ACCEPT
       iptables -A PROTECTED_IN -p tcp --dport 30432 -j ACCEPT
 
-      # SYN rate limiting
       iptables -A PROTECTED_IN -p tcp --dport 80  --syn -m limit --limit 100/s --limit-burst 200 -j ACCEPT
       iptables -A PROTECTED_IN -p tcp --dport 443 --syn -m limit --limit 100/s --limit-burst 200 -j ACCEPT
 
