@@ -37,6 +37,7 @@
     cliphist # clipboard history
     wl-clipboard-x11 # clipboard compatibility for some apps
     libnotify # notifications cli
+    #swaynotificationcenter # DISABLED: gitlab.gnome.org 503 for blueprint-compiler — re-enable when upstream recovers
     fuzzel # dmenu replacement for dunst actions
     gammastep # redshift / f.lux / night light
     #spotifyd # play to spotify device if needed
@@ -105,7 +106,7 @@
     pkgs-stable.mpv # video player
     nicotine-plus # soulseek client
 
-    #mullvad-vpn # vpn
+    #mullvad-vpn # vpn  # DISABLED: gitlab.gnome.org 503 for gtk-doc dependency
     plex-desktop # plex
     #rustdesk
     #spotify # music
@@ -167,6 +168,7 @@ in {
   imports = [
     ./home-cli.nix
     ./modules/waybar.nix
+    #./modules/swaync.nix  # DISABLED: gitlab.gnome.org 503 — re-enable when upstream recovers
   ];
 
   home.pointerCursor = {
@@ -254,6 +256,10 @@ in {
           };
           layout = "dwindle";
           allow_tearing = true;
+          layerrule = [
+            "blur,waybar"
+            "ignorezero,waybar"
+          ];
         } // (if compName == "secu" then { gaps_in = 0; gaps_out = 0; } else {});
 
         decoration = {
