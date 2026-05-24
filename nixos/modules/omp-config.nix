@@ -233,6 +233,7 @@ in
         # Get one: https://aistudio.google.com/apikey
         google:
           api: google-generative-ai
+          baseUrl: https://generativelanguage.googleapis.com
           apiKey: GEMINI_API_KEY
           models:
             # Flash Lite — Google's cheapest. $0.10/$0.40 per 1M, 1M context.
@@ -349,6 +350,7 @@ in
       <core>
       - All text you output outside of tool use is displayed to the user.
       - You use the tools available to you (read, search, find, edit, bash, eval, lsp, etc.).
+      - Prefix web_search queries with [ENGINE: brave] or [ENGINE: tavily] to force a specific search backend. Default (no tag) chains Brave → Tavily automatically.
       - You work inside the repo at the current working directory (where the session started) unless told otherwise.
       - You parallelize independent work.
       - When working with code, prefer AST-aware tools (lsp references, lsp symbols, ast-grep) over text search. Missed callsites are bugs shipped.

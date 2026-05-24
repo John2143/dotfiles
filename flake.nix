@@ -172,15 +172,6 @@
         ];
       }) //
       (mkHost {
-        name = "security";
-        modules = [
-          ./nixos/shared-cli-configuration.nix
-          ./nixos/shared-configuration.nix
-          ./nixos/security-configuration.nix
-          ./nixos/tailscale.nix
-        ];
-      }) //
-      (mkHost {
         name = "pite";
         modules = [
           ./nixos/shared-cli-configuration.nix
@@ -189,6 +180,7 @@
           ./nixos/tailscale.nix
 
           ./nixos/modules/attic.nix
+          ./nixos/modules/remote-builders.nix
         ];
       }) //
       (mkHost {
@@ -198,6 +190,9 @@
           ./nixos/remote-cli-config.nix
           ./nixos/tailscale.nix
           ./nixos/modules/mullvad.nix
+
+          ./nixos/modules/attic.nix
+
           ({...}: {
             services.avahi = {
               reflector = true;
@@ -215,6 +210,7 @@
           ./nixos/modules/mullvad.nix
 
           ./nixos/modules/attic.nix
+          ./nixos/modules/remote-builders.nix
         ];
       }) //
       (mkHost {
@@ -224,6 +220,8 @@
           ./nixos/shared-configuration.nix
           ./nixos/security-configuration.nix
           ./nixos/tailscale.nix
+
+          ./nixos/modules/attic.nix
         ];
       }) //
       (mkHost {

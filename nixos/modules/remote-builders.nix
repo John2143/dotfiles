@@ -4,13 +4,16 @@
   pkgs,
   ...
 }: let
-  # All x86_64-linux builders in the cluster.
+  # All builders in the cluster.
+  # x86_64 builders: office (kvm + nixos-test), arch (cuda), nas (storage).
+  # aarch64 builders: pite (Pi 4, 1.8G), vpin (Pi 3/4, 3.7G).
   # Capabilities: kvm = can run VMs, nixos-test = can run NixOS tests,
   # cuda = has CUDA toolkit, big-parallel = can handle large builds.
   builderDefs = {
     office = {
       maxJobs = 6;
       system = "x86_64-linux";
+      systems = ["x86_64-linux" "aarch64-linux"];
       supportedFeatures = ["kvm" "nixos-test" "big-parallel"];
     };
     arch = {
@@ -23,6 +26,16 @@
       system = "x86_64-linux";
       supportedFeatures = [];
     };
+    pite = {
+      maxJobs = 1;
+      system = "aarch64-linux";
+      supportedFeatures = [];
+    };
+    vpin = {
+      maxJobs = 2;
+      system = "aarch64-linux";
+      supportedFeatures = [];
+    };
   };
 
   isBuilder = builtins.elem config.networking.hostName
@@ -33,6 +46,8 @@
     sshUser = "nixbuild";
     sshKey = config.age.secrets.build-cluster-key.path;
     inherit (def) maxJobs system supportedFeatures;
+  } // lib.optionalAttrs (def ? systems) {
+    inherit (def) systems;
   };
 
   # Every builder EXCEPT self — don't SSH into yourself.
@@ -51,7 +66,7 @@ in {
 
   # ── Shared cluster SSH key ───────────────────────────────────────
   # One keypair for all cluster SSH. Private key deployed via agenix
-  # to every x86_64 machine; public key in nixbuild's authorized_keys.
+  # to every builder; public key in nixbuild's authorized_keys.
   age.secrets.build-cluster-key = {
     file = ../../secrets/build-cluster-key.age;
     mode = "0400";

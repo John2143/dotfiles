@@ -212,6 +212,7 @@
     # RAs even when forwarding is enabled, restoring the IPv6 default route.
     "net.ipv6.conf.default.accept_ra" = 2;
   };
+  boot.binfmt.emulatedSystems = ["aarch64-linux"];
   # Do NOT change this value unless you have manually inspected all the changes it would make to your configuration,
   # and migrated your data accordingly.
   #
