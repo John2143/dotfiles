@@ -50,7 +50,7 @@
     after = ["k3s.service"];
     wants = ["k3s.service"];
     wantedBy = ["multi-user.target"];
-    path = [pkgs.k3s pkgs.curl pkgs.git];
+    path = [pkgs.k3s pkgs.curl pkgs.git pkgs.kubernetes-helm];
     serviceConfig = {
       Type = "oneshot";
       RemainAfterExit = true;
@@ -79,6 +79,34 @@
       # Apply root Application — wires ArgoCD to the GitOps repo
       kubectl apply -f https://raw.githubusercontent.com/2143-Labs/2143-59s/master/argocd/root-app.yaml
       # Install CloudNativePG operator (required for CNPG Cluster CR in wave 5)
+      kubectl apply --server-side --force-conflicts \
+      # Install Traefik (Helm) — ingress controller
+      helm repo add traefik https://helm.traefik.io/traefik 2>/dev/null || true
+      helm repo update 2>/dev/null || true
+      helm upgrade --install traefik traefik/traefik --namespace traefik --create-namespace \
+        --set providers.kubernetesIngress.enabled=true \
+        --set ports.web.hostPort=80 --set ports.websecure.hostPort=443 \
+        --set service.type=ClusterIP --set hostNetwork=true \
+        --wait --timeout 120s 2>&1 || true
+      # Install Longhorn (Helm) — distributed block storage
+      helm repo add longhorn https://charts.longhorn.io 2>/dev/null || true
+      helm repo update 2>/dev/null || true
+      helm upgrade --install longhorn longhorn/longhorn --namespace longhorn-system --create-namespace \
+        --set persistence.defaultClass=true \
+        --set defaultSettings.createDefaultDiskLabeledNodes=true \
+        --set defaultSettings.defaultDataPath=/var/lib/longhorn \
+        --wait --timeout 120s 2>&1 || true
+      # Install ExternalDNS (Helm) — DNS record sync via RFC2136
+      helm repo add external-dns https://kubernetes-sigs.github.io/external-dns/ 2>/dev/null || true
+      helm repo update 2>/dev/null || true
+      kubectl create namespace external-dns --dry-run=client -o yaml | kubectl apply -f -
+      helm upgrade --install external-dns external-dns/external-dns --namespace external-dns \
+        --set provider=rfc2136 \
+        --set rfc2136.host=k3s-ashburn.9s.pics \
+        --set rfc2136.port=53 --set rfc2136.zone=9s.pics \
+        --set rfc2136.tsigKeyname=externaldns --set rfc2136.tsigSecretAlg=hmac-sha256 \
+        --set rfc2136.tsigSecret="\$(kubectl get secret rfc2136-credentials -n external-dns -o jsonpath='{.data.rfc2136TsigSecret}' | base64 -d)" \
+        --wait --timeout 120s 2>&1 || true
       kubectl apply --server-side --force-conflicts \
         -f https://raw.githubusercontent.com/cloudnative-pg/cloudnative-pg/release-1.25/releases/cnpg-1.25.1.yaml
       kubectl wait --for=condition=available deployment/cnpg-controller-manager -n cnpg-system --timeout=120s || true

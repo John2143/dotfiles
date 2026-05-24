@@ -34,12 +34,14 @@
     dockerCompat = true;
   };
 
-  services.displayManager.lemurs = {
+  # Greetd auto-logs into Hyprland directly at boot (lemurs lacks auto_login in 0.4.0).
+  services.greetd = {
     enable = true;
-    # Auto-login "john" directly to Hyprland session.
     settings = {
-      auto_login = "john";
-      default_desktop = "Hyprland";
+      initial_session = {
+        command = "${pkgs.hyprland}/bin/Hyprland";
+        user = "john";
+      };
     };
   };
   services.seatd.enable = true;
