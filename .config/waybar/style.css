@@ -1,190 +1,322 @@
-/*@import "./mocha.css";*/
+/* Catppuccin Mocha palette */
+@define-color rosewater #f5e0dc;
+@define-color flamingo #f2cdcd;
+@define-color pink #f5c2e7;
+@define-color mauve #cba6f7;
+@define-color red #f38ba8;
+@define-color maroon #eba0ac;
+@define-color peach #fab387;
+@define-color yellow #f9e2af;
+@define-color green #a6e3a1;
+@define-color teal #94e2d5;
+@define-color sky #89dceb;
+@define-color sapphire #74c7ec;
+@define-color blue #89b4fa;
+@define-color lavender #b4befe;
+@define-color text #cdd6f4;
+@define-color subtext1 #bac2de;
+@define-color subtext0 #a6adc8;
+@define-color overlay2 #9399b2;
+@define-color overlay1 #7f849c;
+@define-color overlay0 #6c7086;
+@define-color surface2 #585b70;
+@define-color surface1 #45475a;
+@define-color surface0 #313244;
+@define-color base #1e1e2e;
+@define-color mantle #181825;
+@define-color crust #11111b;
 
-@define-color button_background_color #3B3355;
-@define-color colb #000505;
-@define-color button_text_color #BFCDE0;
-@define-color normal_text_color #FFF3B0;
-@define-color button_hover_color #11111B;
-@define-color col_urgent #D86127;
-
-@define-color right_background_color #1B2335;
-@define-color right_text_color #DFD3D0;
-
+/* ---- Base ---- */
 * {
-    /* Default text: creme color */
-    /*color: @normal_text_color;*/
     border: none;
-    border-radius: 0px;
-    /*font-family: scientifica;*/
-    font-family: scientifica, JetBrainsMono Nerd Font Mono;
-    font-size: 24px;
+    border-radius: 0;
+    font-family: JetBrainsMono Nerd Font Mono;
+    font-size: 13px;
     min-height: 0;
 }
 
+/* ---- Tooltips ---- */
 tooltip {
-    background: @right_background_color;
-    border: 1px solid @button_background_color;
+    background: @surface0;
+    border: 1px solid @surface1;
     border-radius: 8px;
 }
-
 tooltip label {
-    color: @right_text_color;
-    font-size: 22px;
+    color: @text;
+    font-size: 12px;
 }
 
+/* ---- Floating Bar ---- */
 window#waybar {
-    background: rgba(17,17,27,1);
-    color: @normal_text_color;
-    /*font-size: 18px;*/
+    background: transparent;
+    color: @text;
 }
 
+window#waybar > box {
+    background: rgba(30, 30, 46, 0.85);
+    border-radius: 12px;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+}
+
+/* ---- Workspaces ---- */
 #workspaces {
-    /*background: #132C37;*/
-    margin: 2px 5px;
-    padding: 2px 5px;
-    border-radius: 16px;
+    margin: 4px 4px;
+    padding: 0;
 }
 #workspaces button {
-    /*font-family: scientifica;*/
-    /*font-weight: normal;*/
-    background: @button_background_color;
-    /*color: #FEFCFD;*/
-    color: #FFFFFF;
-    font-size: 18px;
-    padding: 2px 8px;
-    margin: 0px 3px;
-    border-radius: 16px;
-    /*background: rgba(17,17,27,1);*/
-    /*transition: all 0.3s ease-in-out;*/
+    color: @subtext0;
+    background: @surface0;
+    font-size: 13px;
+    font-weight: 500;
+    padding: 2px 10px;
+    margin: 0 2px;
+    border-radius: 8px;
+    transition: all 0.2s ease;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+}
+#workspaces button.active {
+    color: @base;
+    background: @blue;
+}
+#workspaces button.urgent {
+    color: @base;
+    background: @red;
+}
+#workspaces button.empty {
+    color: @overlay0;
+}
+#workspaces button:hover {
+    background: @lavender;
+    color: @base;
 }
 
 #workspaces .workspace-label {
     padding-left: 3px;
-    border-top: 1px solid transparent;
+    border-bottom: 2px solid transparent;
+}
+#workspaces button.active .workspace-label {
+    border-color: @base;
 }
 
 #workspaces .taskbar-window {
-    border-top: 1px solid transparent;
-    font-weight: normal;
     padding-left: 4px;
     padding-right: 4px;
 }
-
 #workspaces button.visible .taskbar-window,
 #workspaces button.visible .workspace-label {
-    border-color: rgba(255, 255, 255, 0.6);
+    border-color: @text;
 }
-
 #workspaces .taskbar-window.active {
     background-color: rgba(255, 255, 255, 0.15);
+    border-radius: 4px;
 }
-
 #workspaces .taskbar-window image {
     margin-top: 1px;
 }
 
-#workspaces button.empty {
-    color: #888888;
+/* ---- Custom new-workspace button ---- */
+#custom-newworkspace {
+    color: @subtext0;
+    background: @surface0;
+    font-size: 14px;
+    font-weight: 600;
+    padding: 0 8px;
+    margin: 4px 2px;
+    border-radius: 8px;
+    transition: all 0.2s ease;
+}
+#custom-newworkspace:hover {
+    background: @green;
+    color: @base;
 }
 
-#workspaces button.focused {
-    color: #00FF00;
+/* ---- Window Title ---- */
+#window {
+    color: @subtext1;
+    font-size: 12px;
+    margin: 0 8px;
 }
 
-#workspaces button.urgent {
-    color: @colb;
-    background: @col_urgent;
+/* ---- Clock (center) ---- */
+#clock {
+    color: @text;
+    font-size: 14px;
+    font-weight: 600;
+    background: @surface0;
+    padding: 0 16px;
+    border-radius: 8px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
 }
 
-/*#workspaces button.persistent {*/
-    /*color: #00FFFF;*/
-/*}*/
-
-#workspaces button.active {
-    color: @colb;
-    /*border-radius: 16px;*/
-    background: @button_text_color;
+/* ---- Media Player (center) ---- */
+#custom-media {
+    background: @surface0;
+    color: @text;
+    padding: 0 12px;
+    margin: 4px 4px;
+    border-radius: 8px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+}
+#custom-media.playing {
+    color: @green;
+}
+#custom-media.paused {
+    color: @yellow;
+}
+#custom-media.stopped {
+    color: @overlay0;
 }
 
-#workspaces button:hover {
-    background-color: @normal_text_color;
-    color: @button_hover_color;
-}
-
-#tray, #pulseaudio, #network, #battery, #temperature, #memory, #cpu, #clock,
-#custom-vast, #custom-thermostat, #custom-weather, #custom-teamspeak-mic, #custom-teamspeak-sound,
-#custom-playerctl.backward, #custom-playerctl.play, #custom-playerctl.foward{
-    /*font-family: Jet Brains Mono Nerd Font;*/
-    /*font-weight: bold;*/
-    background: @right_background_color;
-    color: @right_text_color;
-    border-radius: 15px;
+/* ---- Module Pills (right zone) ---- */
+#tray,
+#pulseaudio,
+#network,
+#battery,
+#temperature,
+#memory,
+#cpu,
+#custom-mullvad,
+#custom-thermostat,
+#custom-weather,
+#custom-teamspeak-mic,
+#custom-teamspeak-sound,
+#custom-vast,
+#custom-updates,
+#custom-privacy,
+#group-hardware {
+    background: @surface0;
+    color: @text;
+    border-radius: 8px;
     padding: 0 10px;
-    margin-left: 7px;
+    margin: 4px 3px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+    transition: all 0.2s ease;
 }
+
+/* ---- Teamspeak adjacent pills ---- */
 #custom-teamspeak-sound {
     margin-left: 0;
-    padding-left: 2px;
-    border-radius: 0 15px 15px 0;
+    padding-left: 4px;
+    border-radius: 0 8px 8px 0;
 }
 #custom-teamspeak-mic {
-    padding-right: 2px;
-    border-radius: 15px 0 0 15px;
+    padding-right: 4px;
+    border-radius: 8px 0 0 8px;
 }
 
-#clock {
-    /*font-family: scientifica;*/
-    /*font-weight: bold;*/
-    /*font-size: 20px;*/
+/* ---- Pulseaudio ---- */
+#pulseaudio.muted {
+    color: @overlay0;
 }
 
-#window{
-    /*color: #f5f5f5;*/
-    /*font-weight: normal;*/
-    /*font-style: normal;*/
+/* ---- Battery ---- */
+#battery.warning {
+    color: @peach;
+}
+#battery.critical {
+    color: @red;
 }
 
+/* ---- CPU / Memory / Temperature ---- */
+#cpu.warning,
+#memory.warning,
+#temperature.warning {
+    color: @peach;
+}
+#cpu.critical,
+#memory.critical,
+#temperature.critical {
+    color: @red;
+}
 
+/* ---- Hardware Group Drawer ---- */
+#group-hardware {
+    padding: 0;
+    margin: 4px 3px;
+    background: transparent;
+    box-shadow: none;
+}
+#group-hardware > box {
+    background: @surface0;
+    border-radius: 8px;
+    padding: 0 10px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+}
+
+/* ---- Custom Module State Classes ---- */
 #custom-thermostat.heating {
-    color: #D86127;
+    color: @peach;
 }
-
 #custom-thermostat.cooling {
-    color: #33ccff;
+    color: @sky;
 }
-
 #custom-thermostat.off {
-    color: #FF8888;
+    color: @red;
 }
 
 #custom-vast.vast-ready {
-    color: #A0E080;
+    color: @green;
 }
-
 #custom-vast.vast-tunnel-up {
-    color: #FFD080;
+    color: @yellow;
 }
-
 #custom-vast.vast-tunnel-down {
-    color: #FF8888;
+    color: @red;
 }
 
 #custom-teamspeak-mic.muted {
-    color: #FF69B4; /* hot pink */
+    color: @pink;
 }
 #custom-teamspeak-sound.muted {
-    color: #FF4444; /* red */
+    color: @red;
 }
-
 #custom-teamspeak-mic.unmuted {
-    color: #44FF44; /* green */
+    color: @green;
 }
 #custom-teamspeak-sound.unmuted {
-    color: #888888; /* gray */
+    color: @overlay0;
 }
-
-#custom-teamspeak-mic.disconnected, #custom-teamspeak-sound.disconnected {
+#custom-teamspeak-mic.disconnected,
+#custom-teamspeak-sound.disconnected {
     padding: 0;
     margin: 0;
     font-size: 0;
+}
+
+#custom-updates.pending-updates {
+    color: @yellow;
+}
+#custom-updates.updated {
+    color: @green;
+}
+
+#custom-privacy.recording {
+    color: @red;
+    animation: pulse-red 1.5s ease-in-out infinite;
+}
+
+#custom-mullvad.connected {
+    color: @green;
+}
+#custom-mullvad.disconnected {
+    color: @overlay0;
+}
+
+/* ---- Tray ---- */
+#tray {
+    padding: 0 8px;
+}
+#tray > .passive {
+    -gtk-icon-effect: dim;
+}
+#tray > .needs-attention {
+    -gtk-icon-effect: highlight;
+    background: @red;
+    border-radius: 8px;
+}
+
+/* ---- Animations ---- */
+@keyframes pulse-red {
+    0%, 100% { color: @red; }
+    50% { color: @maroon; }
 }

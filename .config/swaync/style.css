@@ -1,0 +1,163 @@
+/*
+ * SwayNC — Catppuccin Mocha Theme
+ * Matches the Waybar Catppuccin Mocha palette.
+ */
+
+/* ---- Base ---- */
+* {
+    font-family: "JetBrainsMono Nerd Font Mono", sans-serif;
+    font-size: 13px;
+}
+
+/* ---- Notification center window ---- */
+.control-center {
+    background: rgba(30, 30, 46, 0.95);
+    border-radius: 12px;
+    box-shadow: 0 4px 24px rgba(0, 0, 0, 0.5);
+    border: 1px solid #313244;
+}
+
+/* ---- Notification popups ---- */
+.notification-row {
+    outline: none;
+    margin: 0 8px 4px 8px;
+}
+
+.notification {
+    background: #313244;
+    border-radius: 8px;
+    border: 1px solid #45475a;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+    margin: 0 4px 4px 4px;
+}
+
+.notification-content {
+    background: transparent;
+    padding: 8px;
+}
+
+/* ---- Notification: close button ---- */
+.close-button {
+    background: transparent;
+    color: #a6adc8;
+    border-radius: 6px;
+    padding: 4px;
+}
+.close-button:hover {
+    background: #45475a;
+    color: #cdd6f4;
+}
+
+/* ---- Notification: app icon ---- */
+.notification-default-action,
+.notification-action {
+    background: transparent;
+    border-radius: 8px;
+    color: #cdd6f4;
+}
+.notification-default-action:hover,
+.notification-action:hover {
+    background: #45475a;
+}
+
+/* ---- Notification: summary (title) ---- */
+.summary {
+    font-size: 14px;
+    font-weight: 600;
+    color: #cdd6f4;
+}
+.body {
+    font-size: 12px;
+    color: #bac2de;
+}
+
+/* ---- Notification: timestamp ---- */
+.time {
+    font-size: 11px;
+    color: #6c7086;
+}
+
+/* ---- Notification: image ---- */
+.image {
+    border-radius: 6px;
+}
+
+/* ---- Control center: title widget ---- */
+.widget-title {
+    padding: 12px 16px 8px 16px;
+}
+.widget-title > button {
+    font-size: 13px;
+    font-weight: 600;
+    background: #313244;
+    color: #cdd6f4;
+    border-radius: 8px;
+    padding: 6px 12px;
+    border: 1px solid #45475a;
+}
+.widget-title > button:hover {
+    background: #45475a;
+}
+
+/* ---- Control center: DND widget ---- */
+.widget-dnd {
+    padding: 4px 16px;
+    color: #a6adc8;
+    font-size: 13px;
+}
+.widget-dnd > switch {
+    font-size: 0;
+    background: #45475a;
+    border-radius: 10px;
+    padding: 2px;
+}
+.widget-dnd > switch:checked {
+    background: #cba6f7;
+}
+.widget-dnd > switch slider {
+    background: #cdd6f4;
+    border-radius: 8px;
+}
+
+/* ---- Control center: MPRIS widget ---- */
+.widget-mpris {
+    padding: 8px 16px;
+    background: transparent;
+}
+.widget-mpris-player {
+    background: #313244;
+    border-radius: 10px;
+    padding: 10px 14px;
+    border: 1px solid #45475a;
+    margin: 4px 0;
+}
+.widget-mpris-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: #cdd6f4;
+}
+.widget-mpris-subtitle {
+    font-size: 12px;
+    color: #a6adc8;
+}
+
+/* ---- Buttons inside control center ---- */
+.widget-buttons-grid {
+    padding: 8px 16px;
+    background: transparent;
+}
+.widget-buttons-grid > flowbox > flowboxchild > button {
+    background: #313244;
+    border-radius: 8px;
+    color: #cdd6f4;
+    border: 1px solid #45475a;
+    padding: 8px;
+}
+.widget-buttons-grid > flowbox > flowboxchild > button:hover {
+    background: #45475a;
+}
+
+/* ---- Blanket (backdrop) ---- */
+.blank-window {
+    background: rgba(0, 0, 0, 0.3);
+}

@@ -1,24 +1,109 @@
-{pkgs, compName, lib, ...}: {
+{pkgs, compName, lib, ...}:
+let
+  media-player-status = pkgs.writeShellApplication {
+    name = "media-player-status";
+    runtimeInputs = with pkgs; [ playerctl jq ];
+    text = ''
+      status=$(playerctl status 2>/dev/null)
+      if [ -z "$status" ] || [ "$status" = "Stopped" ]; then
+        echo '{"text": "", "class": "stopped"}'
+        exit 0
+      fi
+
+      artist=$(playerctl metadata artist 2>/dev/null | head -c 30)
+      title=$(playerctl metadata title 2>/dev/null | head -c 50)
+
+      case "$status" in
+        Playing)  class="playing"; icon="" ;;
+        Paused)   class="paused";  icon="" ;;
+        *)        echo '{"text": "", "class": "stopped"}'; exit 0 ;;
+      esac
+
+      if [ -n "$artist" ] && [ -n "$title" ]; then
+        text="$icon  $artist — $title"
+        tooltip="$artist — $title"
+      elif [ -n "$title" ]; then
+        text="$icon  $title"
+        tooltip="$title"
+      else
+        text="$icon  $status"
+        tooltip=""
+      fi
+
+      jq -n --arg text "$text" --arg class "$class" --arg tooltip "$tooltip" \
+        '{text: $text, class: $class, tooltip: $tooltip}'
+    '';
+  };
+
+  nix-update-status = pkgs.writeShellApplication {
+    name = "nix-update-status";
+    runtimeInputs = with pkgs; [ coreutils ];
+    text = ''
+      LOCK_FILE="$HOME/dotfiles/flake.lock"
+      if [ -f "$LOCK_FILE" ]; then
+        AGE=$(( $(date +%s) - $(stat -c %Y "$LOCK_FILE" 2>/dev/null || echo 0) ))
+        if [ "$AGE" -gt 86400 ]; then
+          echo '{"text": "󰚰", "class": "pending-updates", "tooltip": "flake.lock >24h old — consider updating"}'
+        else
+          echo '{"text": "", "class": "updated", "tooltip": "flake.lock is current"}'
+        fi
+      else
+        echo '{"text": "", "class": ""}'
+      fi
+    '';
+  };
+
+  privacy-status = pkgs.writeShellApplication {
+    name = "privacy-status";
+    runtimeInputs = with pkgs; [ coreutils ];
+    text = ''
+      # Check for active audio capture sources via pactl
+      if pactl list sources 2>/dev/null | grep -q "State: RUNNING"; then
+        echo '{"text": "", "class": "recording", "tooltip": "Microphone active"}'
+      else
+        echo '{"text": "", "class": "", "tooltip": ""}'
+      fi
+    '';
+  };
+
+  # Workspace icon mappings — common Nerd Font v3 glyphs
+  ws-icons = {
+    "A1" = "󰮠"; "A2" = "󰈹"; "A3" = ""; "A4" = "󰈙"; "A5" = "";
+    "B1" = ""; "B2" = "󰈹"; "B3" = ""; "B4" = ""; "B5" = "";
+    "ts" = "󰍬"; "disc" = ""; "steam" = ""; "obsidian" = "󰠮"; "spotify" = "";
+  };
+in {
   programs.waybar = {
     enable = true;
     style = ../../.config/waybar/style.css;
     settings = {
       mainBar = {
-        # Global configuration
+        # ---- Global ----
         layer = "top";
         position = "top";
-        height = 30;
+        height = 38;
+        spacing = 4;
+        margin = "8 12 0 12";  # top right bottom left — floating bar
+        reload_style_on_change = true;
+
+        # ---- Left zone ----
         modules-left = [
           "hyprland/workspaces"
           "custom/newworkspace"
           "hyprland/window"
         ];
-        modules-center = [];
+
+        # ---- Center zone ----
+        modules-center = [
+          "clock"
+          "custom/media"
+        ];
+
+        # ---- Right zone ----
         modules-right = [
-          #"custom/mullvad"
-          "cpu"
-          "memory"
-          "temperature"
+          #"custom/mullvad"  # DISABLED: mullvad-vpn blocked by gitlab.gnome.org 503
+          "group/hardware"
+          "custom/updates"
         ] ++ (lib.optionals (compName == "arch") [
           "custom/thermostat"
         ]) ++ [
@@ -26,33 +111,155 @@
           "custom/teamspeak-sound"
           "custom/vast"
           "custom/weather"
+          "custom/privacy"
           "battery"
           "tray"
           "pulseaudio"
-          "clock#date"
-          "clock#time"
         ];
-        # Modules configuration
-        "hyprland/workspaces" = {
-          format = "{name} {windows}";
+
+        # ======== Module Configurations ========
+
+        # ---- Workspaces ----
+        "hyprland/workspaces" = let
+          left = if compName == "office" then "DP-2" else "DP-3";
+          right = if compName == "office" then "DP-1" else "HDMI-A-2";
+        in {
+          format = "{icon}";
+          format-icons = ws-icons;
           "workspace-taskbar" = {
             enable = true;
             "update-active-window" = true;
             "format" = "{icon}";
-            "icon-size" = 20;
+            "icon-size" = 18;
             "on-click-window" = "hyprctl dispatch focuswindow address:{address}";
             "ignore-list" = ["^xwaylandvideobridge$"];
           };
-          persistent_workspaces = let
-            left = if compName == "office" then "DP-2" else "DP-3";
-            right = if compName == "office" then "DP-1" else "HDMI-A-2";
-          in {
+          persistent_workspaces = {
             "A1" = [left]; "A2" = [left]; "A3" = [left]; "A4" = [left]; "A5" = [left];
             "B1" = [right]; "B2" = [right]; "B3" = [right]; "B4" = [right]; "B5" = [right];
             "ts" = [right]; "disc" = [right]; "steam" = [right]; "obsidian" = [right]; "spotify" = [right];
           };
         };
 
+        # ---- New Workspace ----
+        "custom/newworkspace" = {
+          format = "";
+          tooltip = true;
+          tooltip-format = "New temporary workspace";
+          on-click = "NAME=$(head -c 10 /dev/random | sha1sum | head -c 6) && hyprctl dispatch workspace name:$NAME";
+        };
+
+        # ---- Clock (center, consolidated) ----
+        clock = {
+          interval = 1;
+          format = "{:%H:%M}";
+          tooltip-format = "{:%A, %e %B %Y}";
+        };
+
+        # ---- Media Player (center) ----
+        "custom/media" = {
+          exec = "${media-player-status}/bin/media-player-status";
+          return-type = "json";
+          interval = "once";
+          signal = 12;
+          format = "{}";
+          on-click = "playerctl play-pause";
+          on-click-right = "playerctl next";
+          on-click-middle = "playerctl previous";
+          escape = true;
+        };
+
+        # ---- Mullvad VPN (DISABLED: mullvad-vpn blocked by gitlab.gnome.org 503) ----
+        #"custom/mullvad" = {
+        #  interval = 20;
+        #  exec = "${pkgs.writeShellScript "waybar-mullvad-status" ''
+        #    if ${pkgs.mullvad-vpn}/bin/mullvad status | grep -q "Connected"; then
+        #      echo '{"text": "", "class": "connected", "tooltip": "Mullvad connected"}'
+        #    else
+        #      echo '{"text": "", "class": "disconnected", "tooltip": "Mullvad disconnected"}'
+        #    fi
+        #  ''}";
+        #  return-type = "json";
+        #  on-click = "${pkgs.mullvad-vpn}/bin/mullvad connect; sleep 2; pkill -RTMIN+14 waybar";
+        #  on-click-right = "${pkgs.mullvad-vpn}/bin/mullvad disconnect; sleep 1; pkill -RTMIN+14 waybar";
+        #  on-click-middle = "${pkgs.mullvad-vpn}/bin/mullvad reconnect; sleep 2; pkill -RTMIN+14 waybar";
+        #  signal = 14;
+        #  format = "{}";
+        #};
+
+        # ---- Hardware Group (drawer) ----
+        "group/hardware" = {
+          orientation = "horizontal";
+          drawer = {
+            "transition-duration" = 300;
+            "children-class" = "hidden-hw";
+            "transition-left-to-right" = false;
+          };
+          modules = [
+            "cpu"
+            "memory"
+            "temperature"
+          ];
+        };
+
+        # ---- CPU ----
+        cpu = {
+          interval = 5;
+          format = "  {usage}%";
+          states = {
+            warning = 70;
+            critical = 90;
+          };
+        };
+
+        # ---- Memory ----
+        memory = {
+          interval = 5;
+          format = "  {used}G";
+          states = {
+            warning = 70;
+            critical = 90;
+          };
+        };
+
+        # ---- Temperature ----
+        temperature = {
+          criticalThreshold = 80;
+          interval = 1;
+          format = "  {temperatureC}°";
+          thermalZone = "thermal_zone2";
+          formatIcons = ["" "" "" "" ""];
+          tooltip = true;
+        };
+
+        # ---- Updates Indicator ----
+        "custom/updates" = {
+          exec = "${nix-update-status}/bin/nix-update-status";
+          return-type = "json";
+          interval = 3600;
+          format = "{}";
+          on-click = "${pkgs.alacritty}/bin/alacritty -e fish -c 'cd ~/dotfiles && nix flake update'";
+        };
+
+        # ---- Weather ----
+        "custom/weather" = {
+          exec = "weather-status";
+          return-type = "json";
+          interval = 900;
+          format = "{}";
+          tooltip = true;
+        };
+
+        # ---- Privacy Indicator ----
+        "custom/privacy" = {
+          exec = "${privacy-status}/bin/privacy-status";
+          return-type = "json";
+          interval = "once";
+          signal = 13;
+          format = "{}";
+        };
+
+        # ---- Battery ----
         battery = {
           interval = 10;
           states = {
@@ -61,108 +268,35 @@
           };
           format = "  {icon}  {capacity}%";
           format-discharging = "{icon}  {capacity}%";
-          format-icons = [
-            ""
-            ""
-            ""
-            ""
-            ""
-          ];
+          format-icons = ["" "" "" "" ""];
           tooltip = true;
         };
 
-        "custom/newworkspace" = {
-          format = "+";
-          tooltip = true;
-          tooltip-format = "Create new temporary workspace";
-          on-click = "NAME=$(cat /dev/random | head -c 10 | sha1sum | head -c 6) && hyprctl dispatch workspace name:$NAME";
-        };
-
-        #"custom/mullvad" = {
-        #interval = 20;
-        #exec = "~/.config/get_mullvad.fish";
-        #on-click = "${pkgs.mullvad-vpn}/bin/mullvad connect; sleep 2";
-        #on-click-right = "${pkgs.mullvad-vpn}/bin/mullvad disconnect; sleep 1";
-        #on-click-middle = "${pkgs.mullvad-vpn}/bin/mullvad reconnect; sleep 2";
-        #exec-on-event = true;
-        #};
-
-        "clock#time" = {
-          interval = 1;
-          format = "{:%H:%M:%S}";
-          tooltip = false;
-        };
-
-        "clock#date" = {
-          interval = 10;
-          format = "{:%e %b %Y}";
-          tooltip-format = "{:%e %B %Y}";
-        };
-
-        cpu = {
-          interval = 5;
-          format = "cpu {usage}%";
-          states = {
-            warning = 70;
-            critical = 90;
-          };
-        };
-
-        memory = {
-          interval = 5;
-          format = "{used}Gb";
-          states = {
-            warning = 70;
-            critical = 90;
-          };
-        };
-
-        #network = {
-        #interval = 5;
-        #format-wifi = " {essid}";
-        #format-ethernet = "󰈀 {ifname}";
-        #format-disconnected = "󰈂 Disconnected";
-        #tooltip-format = "[{ifname}] - {ipaddr}/{cidr} - ({signalStrength}%)";
-        #};
-
+        # ---- PulseAudio ----
         pulseaudio = {
           interval = 5;
           scroll-step = 3;
-          format = "{icon} {volume}%";
-          format-bluetooth = "{icon} {volume}%";
-          #format-muted = "";
-          format-muted = "m";
+          format = "{icon}  {volume}%";
+          format-bluetooth = "{icon}    {volume}%";
+          format-muted = "";
           format-icons = {
-            headphones = "a"; # "";
-            handsfree = "a"; # "";
-            headset = "a"; # "";
-            phone = "a"; # "";
-            portable = "a"; # "";
-            car = "a"; # "";
-            default = [
-              "a"
-              "b"
-            ]; # ["" ""];
+            headphones = "";
+            handsfree = "";
+            headset = "󰋎";
+            phone = "";
+            portable = "";
+            car = "";
+            default = ["" ""];
           };
           onClickRight = "pavucontrol";
           onClickMiddle = "fish -c '/home/john/.config/polybar/scripts/sinks.fish bluetooth'";
           onClick = "fish -c '/home/john/.config/polybar/scripts/sinks.fish scarlett'";
         };
 
-        temperature = {
-          #rotate = 90;
-          criticalThreshold = 80;
-          interval = 1;
-          format = "{temperatureC}°";
-          thermalZone = "thermal_zone2";
-          formatIcons = [
-            "" # Icon: temperature-empty
-            "" # Icon: temperature-quarter
-            "" # Icon: temperature-half
-            "" # Icon: temperature-three-quarters
-            "" # Icon: temperature-full
-          ];
-          tooltip = true;
+        # ---- System Tray ----
+        tray = {
+          iconSize = 18;
+          spacing = 8;
         };
       } // (lib.optionalAttrs (compName == "arch") {
         "custom/thermostat" = {
@@ -205,17 +339,6 @@
           tooltip = true;
           on-click = "rm -f /tmp/vast-waybar-status.json && pkill -RTMIN+9 waybar";
         };
-        "custom/weather" = {
-          exec = "weather-status";
-          return-type = "json";
-          interval = 900;
-          format = "{}";
-          tooltip = true;
-        };
-        tray = {
-          iconSize = 21;
-          spacing = 10;
-        };
       };
     };
   };
@@ -238,6 +361,4 @@
       WantedBy = [ "graphical-session.target" ];
     };
   };
-
 }
-
