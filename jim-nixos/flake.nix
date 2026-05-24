@@ -13,8 +13,7 @@
     nixosConfigurations.jim = nixpkgs.lib.nixosSystem {
       system = "x86_64-linux";
       modules = [
-        disko.nixosModules.default
-        (import ./disko_jim.nix)
+        ./hardware-configuration.nix
         ./configuration.nix
       ];
     };
