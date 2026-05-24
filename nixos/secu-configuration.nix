@@ -1,6 +1,6 @@
 # secu — 24/7 security camera monitoring station.
-# This machine boots directly into Hyprland, opens the JetKVM web UI,
-# and displays a live grid of all Reolink RTSP camera feeds.
+# Boots directly into Hyprland and displays a live RTSP grid
+# of all 6 Reolink camera channels from the NVR (192.168.1.67).
 #
 # Secrets needed (create with: agenix -e <file>.age -i ~/.ssh/age):
 #   secrets/camera-credentials.age  →  CAMERA_USER=admin\nCAMERA_PASSWORD=<pw>
@@ -57,12 +57,11 @@
     keyMap = "us";
   };
 
-  # Camera monitoring packages (mpv is already in home.nix; these are system-level).
+  # Camera monitoring (mpv is already in home.nix).
   environment.systemPackages = with pkgs; [
     git
     fish
     curl
-    socat          # for RTSP stream debugging
   ];
 
   programs.gnupg.agent = {

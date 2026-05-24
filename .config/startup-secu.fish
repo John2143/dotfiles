@@ -30,9 +30,9 @@ sleep 2
 hyprctl keyword windowrulev2 "noborder,title:^cam-.*$" 2>/dev/null || true
 hyprctl keyword windowrulev2 "norounding,title:^cam-.*$" 2>/dev/null || true
 
-# ── Launch camera grid on workspace A2 ─────────────────────────────
+# ── Launch camera grid on default workspace A1 ─────────────────────
 # Hyprland tiles them automatically (dwindle, gaps=0).
-set -l cam_workspace "name:A2"
+set -l cam_workspace "name:A1"
 for ch in $channels
     set -l ch_padded (printf "%02d" $ch)
     set -l title "cam-CH$ch_padded"
@@ -58,6 +58,3 @@ for ch in $channels
     sleep 0.5
 end
 
-# ── Focus camera grid ──────────────────────────────────────────────
-sleep 2
-hyprctl dispatch workspace name:A2

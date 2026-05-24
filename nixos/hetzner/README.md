@@ -2,7 +2,7 @@
 
 3-node + Home Pi Kubernetes platform on Hetzner Cloud.
 
-**Stack**: NixOS / k3s / Cilium / ArgoCD / PowerDNS / ExternalDNS (RFC2136) / SeaweedFS / B2 / Longhorn / MongoDB / CloudNativePG (PostgreSQL) / Temporal
+**Stack**: NixOS / k3s / Flannel / ArgoCD / PowerDNS / ExternalDNS (RFC2136) / SeaweedFS / B2 / Longhorn / MongoDB / CloudNativePG (PostgreSQL) / Temporal
 
 **Modes**: LA (3 server nodes, ~$75/mo) or HA (6 nodes, ~$140/mo).
 
@@ -38,7 +38,7 @@ nixos/hetzner/
 ├── modules/
 │   ├── hetzner-disko.nix         # Disk layout (EF02 + EFI + ext4)
 │   ├── hetzner-ssh.nix           # SSH + agenix identity
-│   ├── hetzner-k3s-common.nix    # k3s + Cilium + ArgoCD + split-IP firewall
+│   ├── hetzner-k3s-common.nix    # k3s + Flannel + ArgoCD + CNPG + cert-manager bootstrap
 │   ├── hetzner-k3s-server.nix    # Adds PowerDNS + PostgreSQL schema import
 │   ├── hetzner-k3s-agent.nix     # Agent node (k3s agent only)
 │   ├── hetzner-powerdns.nix      # PowerDNS authoritative server
@@ -55,11 +55,10 @@ nixos/hetzner/
 │   └── hetzner/*.age             # Encrypted secrets
 └── scripts/
     ├── provision.sh              # VM create + nixos-anywhere + post-deploy
+    ├── desec-dns.sh              # deSEC DNS record management
     ├── toggle-ha.sh
     ├── toggle-la.sh
     └── demo.sh
-```
-
 ## Quick Start
 
 ```bash
@@ -77,7 +76,7 @@ The provision script automates the full pipeline: VM creation, nixos-anywhere de
 
 - Hetzner Cloud account + API token (in `secrets/hetzner/hcloud-token.age`)
 - `hcloud` CLI, `jq`, `nixos-anywhere` available via flake
-- SSH key `john@arch` uploaded to Hetzner (`hcloud ssh-key create`)
+- SSH key `john@office` uploaded to Hetzner (`hcloud ssh-key create`)
 - Home-pi running Headscale (see `hosts/home-pi.nix`)
 - Port forward `6767 → home-pi:6767` on home router
 - DNS `headscale.9s.pics` → home public IP
