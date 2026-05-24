@@ -42,7 +42,7 @@ FLAKE=".#${HOSTNAME}"
 echo "=== Provisioning ${HOSTNAME} (${PLAN}, ${LOCATION}) ==="
 
 # ── Step 1: Create Hetzner VM ──
-echo "  [1/6] Creating VM..."
+echo "  [1/7] Creating VM..."
 SERVER_ID=$(hcloud server create \
   --name "${HOSTNAME}" \
   --image ubuntu-24.04 \
@@ -60,15 +60,26 @@ sleep 5
 IP=$(hcloud server ip "${SERVER_ID}")
 echo "  IP: ${IP}"
 
-# ── Step 2: Deploy NixOS via nixos-anywhere ──
-echo "  [2/6] Deploying NixOS..."
+# ── Step 2: Allocate floating IP for raw services ──
+echo "  [2/7] Allocating raw IP..."
+RAW_IP_ID=$(hcloud floating-ip create \
+  --description "${HOSTNAME}-raw" \
+  --home-location "${LOCATION}" \
+  --type ipv4 \
+  -o json | jq -r '.floating_ip.id')
+hcloud floating-ip assign "${RAW_IP_ID}" "${SERVER_ID}"
+RAW_IP=$(hcloud floating-ip describe "${RAW_IP_ID}" -o json 2>/dev/null | jq -r '.floating_ip.ip // .ip // "unknown"')
+echo "  Raw IP: ${RAW_IP}"
+
+# ── Step 3: Deploy NixOS via nixos-anywhere ──
+echo "  [3/7] Deploying NixOS..."
 nix run github:nix-community/nixos-anywhere -- \
   --flake "${FLAKE}" \
   --target-host "root@${IP}" \
   --build-on-remote
 
-# ── Step 3: Wait for NixOS to boot ──
-echo "  [3/6] Waiting for NixOS boot..."
+# ── Step 4: Wait for NixOS to boot ──
+echo "  [4/7] Waiting for NixOS boot..."
 ssh-keygen -R "${IP}" 2>/dev/null || true
 for i in $(seq 1 20); do
   ssh -o ConnectTimeout=5 -o StrictHostKeyChecking=accept-new "root@${IP}" "hostname" 2>/dev/null && break
@@ -77,8 +88,8 @@ for i in $(seq 1 20); do
 done
 echo "  NixOS booted: $(ssh -o StrictHostKeyChecking=accept-new "root@${IP}" hostname 2>/dev/null || echo unknown)"
 
-# ── Step 4: Post-deploy setup ──
-echo "  [4/6] Post-deploy setup..."
+# ── Step 5: Post-deploy setup ──
+echo "  [5/7] Post-deploy setup..."
 # Copy age identity so agenix can decrypt secrets
 scp ~/.ssh/age "root@${IP}:/etc/ssh/age-identity"
 ssh "root@${IP}" "chmod 600 /etc/ssh/age-identity"
@@ -101,8 +112,8 @@ for n in data:
 " 2>/dev/null || true
 echo "    stale headscale nodes cleaned"
 
-# ── Step 5: Connect tailscale ──
-echo "  [5/6] Connecting tailscale..."
+# ── Step 6: Connect tailscale ──
+echo "  [6/7] Connecting tailscale..."
 AUTHKEY=$(ssh "root@${IP}" "cat /run/agenix/hetzner/headscale-preauth-key 2>/dev/null" || echo "")
 if [ -n "$AUTHKEY" ]; then
   ssh "root@${IP}" "systemctl restart tailscaled 2>/dev/null || true; sleep 3; tailscale up --reset --login-server=http://headscale.9s.pics:6767 --authkey=${AUTHKEY} --accept-routes 2>&1 || true"
@@ -111,8 +122,8 @@ else
   echo "    WARNING: no preauth key found, tailscale not connected"
 fi
 
-# ── Step 6: Restart services and verify ──
-echo "  [6/6] Restarting services..."
+# ── Step 7: Restart services and verify ──
+echo "  [7/7] Restarting services..."
 if [[ "$ROLE" == "server" ]]; then
   ssh "root@${IP}" "systemctl restart pdns 2>/dev/null || true"
   sleep 3
@@ -132,5 +143,5 @@ fi
 
 echo ""
 echo "=== ${HOSTNAME} provisioned successfully ==="
-echo "  IP: ${IP}"
+echo "  IP: ${IP}  |  Raw IP: ${RAW_IP}"
 echo "  SSH: ssh root@${IP}"
