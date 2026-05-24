@@ -14,8 +14,8 @@ let
   pite = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAh9fgjUMvSfYUYteUHeI/JkjxUJLwVAnoLyluU1Uknd john@pite";
   vpin = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAII4YCIowmPxLCTuH2fVxCtK/sKj7Sefr1s+itj0dtVED john@vpin";
   secu = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIN4vMixKG/e9b3ttJy9Xb5ymavp7Gny6dxKrViQl8AUl john@secu";
-  aman = "TODO: cat ~/.ssh/age.pub on aman and paste here";
-  term = "TODO: cat ~/.ssh/age.pub on term and paste here";
+  #aman = "TODO: cat ~/.ssh/age.pub on aman and paste here";
+  #term = "TODO: cat ~/.ssh/age.pub on term and paste here";
   nas = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIPzgxUuaZUG9Dr5ZTZImKqt3SUSPVD/FLO2wKQfwz98A john@nas";
   # NOTE: mac is a work computer. Only grant it keys that are work-appropriate
   # (LLM API keys, admin tools). Do NOT grant: hass-credentials, ntfy-topic-url,
@@ -111,7 +111,7 @@ in {
   # Attic admin token — lets each machine authenticate to atticd for
   # push/pull. Generated once on the NAS with atticd-atticadm make-token.
   # Encrypt to all NixOS hosts that import shared-cli-configuration.nix.
-  "attic-admin-token.age".publicKeys = [office arch closet secu nas pite vpin aman term];
+  "attic-admin-token.age".publicKeys = [office arch closet secu nas pite vpin ]; # aman term];
   # ntfy.sh topic URL for OMP agent notifications. Topic name is not a
   # cryptographic secret (public server, anyone with the name can publish),
   # but keeping it out of the Nix store avoids accidental exposure.
