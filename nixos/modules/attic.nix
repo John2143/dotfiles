@@ -8,7 +8,7 @@
   endpoint = "http://nas:8280";
 in {
   # ── Nix substituter ────────────────────────────────────────────────
-  nix.settings.substituters = lib.mkBefore [
+  nix.settings.substituters = lib.mkForce [
     "${endpoint}/${cacheName}"
   ];
   nix.settings.trusted-public-keys = [

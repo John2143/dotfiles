@@ -553,10 +553,9 @@
     ];
   };
 
-  # Attic cache first (loopback for speed), cache.nixos.org as fallback.
+  # Attic cache via loopback — no external cache dependency.
   nix.settings.substituters = lib.mkForce [
     "http://localhost:8280/2143nix"
-    "https://cache.nixos.org"
   ];
 
   system.stateVersion = "26.05";

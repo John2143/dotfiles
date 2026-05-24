@@ -63,9 +63,13 @@ RouterOS syntax: `/path command arg=value`. Common patterns:
 ```
 Internet
   └─ Verizon router (192.168.0.1)
-       ├─ Port 80/443 → DMZ to 192.168.0.2 (MikroTik)
-       └─ DMZ host: 192.168.0.2
-            └─ MikroTik router (WAN: 192.168.0.2, LAN: 192.168.1.1 + 192.168.5.1)
+       ├─ DMZ → 192.168.0.2 (MikroTik, static WAN)
+       ├─ Port 6767 → 192.168.0.154 (home-pi Headscale)
+       └─ DHCP: 192.168.0.152 (MikroTik secondary WAN), .154 (home-pi)
+            │
+            ├─ home-pi (192.168.0.154) — on WAN subnet, not behind MikroTik
+            │
+            └─ MikroTik router (WAN: 192.168.0.2 + .152, LAN: 192.168.1.1 + 192.168.5.1)
                  ├─ dst-nat rules → internal services
                  └─ LAN subnets (1.0/24, 5.0/24)
 ```
@@ -91,10 +95,11 @@ Baseline (captured 2026-05-22, live-confirmed 2026-05-23):
 | 25565 | TCP | nas:32565 | minecraft-game:32565 | 32565 | Minecraft (k8s) |
 | 32565 | TCP | nas:32565 | minecraft-game:32565 | 32565 | Minecraft alternate |
 | 11753 | TCP | closet:31753 | openrct2-game:31753 | 31753 | OpenRCT2 |
-| 6767 | Both | hetzner:6767 | home-pi Headscale | (direct) | Headscale control |
+| 6767 | Both | Verizon→home-pi:6767 | home-pi Headscale | (direct) | Headscale control |
 | 30478 | UDP | closet:30478 | headscale-stun:30478 | 30478 | Headscale STUN |
 | — | — | 192.168.0.0/16 → public IP | Hairpin NAT | — | LAN→WAN→LAN loopback |
 
+**Note:** The Headscale port 6767 forward lives on the Verizon router (192.168.0.1), not the MikroTik. home-pi (192.168.0.154) sits on the WAN subnet (192.168.0.0/24) directly behind the Verizon router. The MikroTik has a secondary DHCP WAN IP at 192.168.0.152 (not to be confused with home-pi).
 ## Subnet Layout
 
 ```
@@ -116,13 +121,13 @@ All hosts run NixOS (except mac which is nix-darwin). Managed from `~/dotfiles` 
 |----------|----|------|----------|
 | **office** | 192.168.5.209 (DHCP) | Primary admin workstation, k3s agent, GPU compute (vLLM) | i9-14900K, 64GB, RX 7900 XT, RTL8125 2.5GbE |
 | **arch** | 192.168.5.226 (DHCP) | GenAI workstation, k3s, GPU compute (ollama/vllm) | i9-9900K, 31GB, GTX 1080 Ti |
-| **closet** | 192.168.5.35 (static) | k3s server, Longhorn storage, UniFi controller | Ryzen 5 1600, 7.7GB, 4TB USB SSD |
+| **closet** | 192.168.5.35 (static, permanent ARP) + .202 (DHCP secondary) | k3s server, Longhorn storage, UniFi controller | Ryzen 5 1600, 7.7GB, 4TB USB SSD |
 | **nas** | 192.168.5.175-176 (DHCP, dual NIC) | ZFS file server, atticd cache, k3s + Longhorn | i7-3770K, 15GB, 4×8TB HDD ZFS RAIDZ1, 10GbE SFP+ |
 | **secu** | 192.168.5.140 (DHCP) | Security camera NVR (FDE) | HP EliteDesk 800 G3, i5-6500T, 7.6GB |
 | **pite** | 192.168.5.213 (DHCP) | k3s agent, canary (honeytoken bait) | Raspberry Pi 4B, 1.8GB, 238GB SD |
 | **vpin** | 192.168.5.252 (DHCP) | Mullvad exit node | Raspberry Pi (3?), 3.7GB, 59.5GB SD |
+| **home-pi** | 192.168.0.154 (DHCP, WAN subnet) | Headscale server, PowerDNS | Raspberry Pi (aarch64) |
 | **aman** | DHCP (Tailscale) | Mullvad exit node, Avahi reflector | Raspberry Pi 4B, 3.7GB, 238GB SD |
-| **home-pi** | DHCP (Tailscale) | Headscale server, PowerDNS | Raspberry Pi (aarch64) |
 
 ### Hetzner Cloud (Tailscale only, `ts.9s.pics`)
 
@@ -174,7 +179,7 @@ mikrotik-connect r '/ip dhcp-server lease make-static [find host-name=Side]'
 | Front Driveway | 192.168.1.66 | 1.0/24 | Wired, DHCP resv | EC:71:DB:3E:2F:21 | Front |
 | Reolink NVR | 192.168.1.67 | 1.0/24 | Wired, DHCP resv | EC:71:DB:8B:92:93 | NVR |
 
-**Note:** Side yard was previously at 192.168.5.169 (5.0/24) and Front Driveway at 192.168.5.174 (5.0/24) — both now migrated to 1.0/24. Back yard camera (.60) may be intermittently offline (DHCP often shows status `offered` rather than `bound`).
+**Note:** Side yard was previously at 192.168.5.169 (5.0/24) and Front Driveway at 192.168.5.174 (5.0/24) — both now migrated to 1.0/24. Back yard camera (.60) is back online (ARP reachable as of 2026-05-23).
 
 ## IoT / Smart Home Devices
 
@@ -189,7 +194,7 @@ Discovered via live DHCP (2026-05-23):
 | JetKVM | 192.168.5.187 | 30:52:53:09:E1:72 | Server KVM over IP (hostname: serverkvm) |
 | K3B-US-PGA0539A | 192.168.5.127 | C8:FF:77:57:E0:3D | Permanent ARP entry at .219 — ARP entry needs cleanup |
 | Linux ARM device | 192.168.5.147 | B0:FC:0D:DE:FB:50 | Linux 3.18.19 on armv7l (dhcpcd) |
-| Unknown | 192.168.5.172 | 00:07:A6:40:E7:4B | No hostname or client-id |
+| Unknown | 192.168.5.172 | 00:07:A6:40:E7:4B | No hostname or client-id — OUI: Eutron S.p.A. (Italian industrial/security) |
 | Unknown (ARP only) | 192.168.5.8 | 94:83:C4:C4:9C:4D | In ARP reachable but not in DHCP — static IP? |
 
 **Transient devices** (phones/laptops with rotating MACs):
@@ -198,6 +203,7 @@ Discovered via live DHCP (2026-05-23):
 | Android phone | 192.168.5.146 | 54:49:DF:12:BF:49 |
 | iPhones (×3) | 192.168.5.128, .135, .136 | Private MACs |
 | Mac laptop | 192.168.5.130 | AE:03:7C:11:A5:00 |
+| Pop!_OS laptop | 192.168.5.221 | D4:D8:53:A7:6A:B1 | System76 laptop (hostname: pop-os) |
 
 ## UniFi (APs + Controller)
 
