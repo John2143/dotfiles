@@ -119,7 +119,6 @@
 
   # Enable the OpenSSH daemon.
   services.openssh.enable = true;
-  services.dbus.implementation = "dbus";
 
   # Open ports in the firewall.
   # networking.firewall.allowedTCPPorts = [ ... ];
