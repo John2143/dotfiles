@@ -36,13 +36,10 @@
 
   services.displayManager.lemurs = {
     enable = true;
-    # Auto-login directly to Hyprland (first available Wayland session).
+    # Auto-login "john" directly to Hyprland session.
     settings = {
-      auto_login = {
-        enabled = true;
-        username = "john";
-        default_desktop = 0;
-      };
+      auto_login = "john";
+      default_desktop = "Hyprland";
     };
   };
   services.seatd.enable = true;
