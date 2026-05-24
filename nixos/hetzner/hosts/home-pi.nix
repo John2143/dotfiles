@@ -76,9 +76,13 @@
   '';
   security.sudo.wheelNeedsPassword = false;
 
-  # systemd ordering: wait for Tailscale DNS before starting PowerDNS
+  # systemd: do NOT auto-start pdns or hetzner-postgres-schema on boot.
+  # These depend on k3s-ashburn being provisioned and PostgreSQL reachable.
+  # Start them manually in Phase 3 after ashburn is up.
   systemd.services.pdns = {
+    wantedBy = lib.mkForce [];
     after = ["hetzner-postgres-schema.service" "tailscaled.service"];
     wants = ["hetzner-postgres-schema.service" "tailscaled.service"];
   };
+  systemd.services.hetzner-postgres-schema.wantedBy = lib.mkForce [];
 }

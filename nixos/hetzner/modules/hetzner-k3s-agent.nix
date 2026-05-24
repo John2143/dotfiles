@@ -32,7 +32,6 @@
     tokenFile = config.age.secrets."hetzner/k3s-token".path;
     serverAddr = "https://${lib.removeSuffix "-agent" compName}:6443";
     extraFlags = toString [
-      "--flannel-backend=none"
     ];
   };
 
