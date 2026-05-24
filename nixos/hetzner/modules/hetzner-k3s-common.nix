@@ -78,8 +78,6 @@
       kubectl wait --for=condition=available deployment/argocd-server -n argocd --timeout=60s || true
       # Apply root Application — wires ArgoCD to the GitOps repo
       kubectl apply -f https://raw.githubusercontent.com/2143-Labs/2143-59s/master/argocd/root-app.yaml
-      # Install CloudNativePG operator (required for CNPG Cluster CR in wave 5)
-      kubectl apply --server-side --force-conflicts \
       # Install Traefik (Helm) — ingress controller
       helm repo add traefik https://helm.traefik.io/traefik 2>/dev/null || true
       helm repo update 2>/dev/null || true
@@ -107,8 +105,7 @@
         --set rfc2136.tsigKeyname=externaldns --set rfc2136.tsigSecretAlg=hmac-sha256 \
         --set rfc2136.tsigSecret="\$(kubectl get secret rfc2136-credentials -n external-dns -o jsonpath='{.data.rfc2136TsigSecret}' | base64 -d)" \
         --wait --timeout 120s 2>&1 || true
-      kubectl apply --server-side --force-conflicts \
-        -f https://raw.githubusercontent.com/cloudnative-pg/cloudnative-pg/release-1.25/releases/cnpg-1.25.1.yaml
+      kubectl apply --server-side --force-conflicts -f https://raw.githubusercontent.com/cloudnative-pg/cloudnative-pg/release-1.25/releases/cnpg-1.25.1.yaml
       kubectl wait --for=condition=available deployment/cnpg-controller-manager -n cnpg-system --timeout=120s || true
       # cert-manager is now deployed by ArgoCD (Helm chart in wave 0)
     '';

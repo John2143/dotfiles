@@ -26,4 +26,8 @@
   ];
 
   system.stateVersion = "25.11";
+  # --- Music stack (Spotify replacement) ---
+  # Uncomment to enable: navidrome + lidarr + slskd + explo + aurral.
+  # Read ./music-stack.nix for setup instructions before enabling.
+  # imports = [ ./music-stack.nix ];
 }
