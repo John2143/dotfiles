@@ -119,6 +119,7 @@
 
   # Enable the OpenSSH daemon.
   services.openssh.enable = true;
+  systemd.services.dbus-broker.serviceConfig.TimeoutStopSec = 10;
 
   # Open ports in the firewall.
   # networking.firewall.allowedTCPPorts = [ ... ];
