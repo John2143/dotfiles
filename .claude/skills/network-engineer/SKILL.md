@@ -34,8 +34,38 @@ mikrotik-connect r '/ip firewall nat print terse where chain=dstnat'
 mikrotik-connect u '/interface print terse where running'
 mikrotik-connect d '/interface print terse where running'
 ```
+**UniFi wireless snapshot (credentials from agenix):**
+```
+python3 << 'PYEOF'
+import urllib.request, ssl, json, http.cookiejar
+with open('/run/agenix/unifi-credentials') as f:
+    creds = {}
+    for line in f:
+        if '=' in line:
+            k, v = line.strip().split('=', 1)
+            creds[k] = v.strip('"')
+ctx = ssl.create_default_context(); ctx.check_hostname = False; ctx.verify_mode = ssl.CERT_NONE
+base = 'https://192.168.5.35:30443'
+cj = http.cookiejar.CookieJar()
+opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(cj), urllib.request.HTTPSHandler(context=ctx))
+data = json.dumps({'username': creds['UNIFI_USERNAME'], 'password': creds['UNIFI_PASSWORD'], 'remember': True}).encode()
+opener.open(urllib.request.Request(f'{base}/api/login', data=data, headers={'Content-Type': 'application/json'}))
+resp = opener.open(urllib.request.Request(f'{base}/api/s/default/stat/device'))
+aps = [d for d in json.loads(resp.read())['data'] if d.get('type') == 'uap']
+print(f"APs: {len(aps)}")
+for ap in aps:
+    print(f"  {ap.get('name','?'):25s} {ap.get('model','?'):10s} state={ap.get('state')} clients={ap.get('num_sta',0)} uptime={ap.get('uptime',0)}s ip={ap.get('ip','?')}")
+resp = opener.open(urllib.request.Request(f'{base}/api/s/default/stat/sta'))
+clients = json.loads(resp.read())['data']
+print(f"Wireless clients: {len(clients)}")
+for c in sorted(clients, key=lambda c: c.get('signal', -100)):
+    h = c.get('hostname') or c.get('name') or '?'
+    print(f"  {h:30s} {c.get('ip','?'):15s} {str(c.get('signal','?')):4s} dBm  {c.get('radio_proto','?'):6s} ch{c.get('channel','?')}  {c.get('essid','?')}")
+PYEOF
+```
 
-After running, summarize: how many hosts are online (bound DHCP + reachable ARP), what services are exposed (dst-nat), and which switch ports are live. Then proceed with the user's actual request.
+After running, summarize: how many hosts are online (bound DHCP + reachable ARP), what services are exposed (dst-nat), which switch ports are live, and the UniFi wireless snapshot (AP status + client count + any weak-signal clients below -80 dBm). Then proceed with the user's actual request.
+
 ## How to Connect to MikroTik Devices
 
 ```
@@ -194,13 +224,13 @@ Discovered via live DHCP (2026-05-23):
 | JetKVM | 192.168.5.187 | 30:52:53:09:E1:72 | Server KVM over IP (hostname: serverkvm) |
 | K3B-US-PGA0539A | 192.168.5.127 | C8:FF:77:57:E0:3D | Permanent ARP entry at .219 — ARP entry needs cleanup |
 | Linux ARM device | 192.168.5.147 | B0:FC:0D:DE:FB:50 | Linux 3.18.19 on armv7l (dhcpcd) |
-| Unknown | 192.168.5.172 | 00:07:A6:40:E7:4B | No hostname or client-id — OUI: Eutron S.p.A. (Italian industrial/security) |
+| John Bedroom Lightswitch | 192.168.5.172 | 00:07:A6:40:E7:4B | Identified via UniFi controller (hostname: John Bedroom Lightswitch, on iot-2707 SSID) |
 | Unknown (ARP only) | 192.168.5.8 | 94:83:C4:C4:9C:4D | In ARP reachable but not in DHCP — static IP? |
 
 **Transient devices** (phones/laptops with rotating MACs):
 | Device | Typical IPs | MAC fingerprint |
 |--------|------------|----------------|
-| Android phone | 192.168.5.146 | 54:49:DF:12:BF:49 |
+| Peloton | 192.168.5.146 | 54:49:DF:12:BF:49 | Identified via UniFi controller (on main SSID, previously labeled "Android phone") |
 | iPhones (×3) | 192.168.5.128, .135, .136 | Private MACs |
 | Mac laptop | 192.168.5.130 | AE:03:7C:11:A5:00 |
 | Pop!_OS laptop | 192.168.5.221 | D4:D8:53:A7:6A:B1 | System76 laptop (hostname: pop-os) |
@@ -258,26 +288,61 @@ curl -sk https://192.168.5.35:30443/status
 ```
 
 **API (programmatic access):**
-The UniFi REST API lives at `/api/`. Authenticate first, then use session cookie for subsequent calls.
+The UniFi REST API lives at `/api/`. The correct login endpoint for this self-hosted (k3s) controller is **`/api/login`** (NOT `/api/auth/login` — that's for UniFi OS consoles). Credentials are stored in agenix at `/run/agenix/unifi-credentials`.
 
+**Python (recommended — handles special characters in passwords):**
+```python
+import urllib.request, ssl, json, http.cookiejar
+
+# Load credentials from agenix
+with open('/run/agenix/unifi-credentials') as f:
+    creds = {}
+    for line in f:
+        if '=' in line:
+            k, v = line.strip().split('=', 1)
+            creds[k] = v.strip('"')
+
+ctx = ssl.create_default_context()
+ctx.check_hostname = False
+ctx.verify_mode = ssl.CERT_NONE
+base = 'https://192.168.5.35:30443'
+
+# Login
+cj = http.cookiejar.CookieJar()
+opener = urllib.request.build_opener(
+    urllib.request.HTTPCookieProcessor(cj),
+    urllib.request.HTTPSHandler(context=ctx)
+)
+data = json.dumps({'username': creds['UNIFI_USERNAME'], 'password': creds['UNIFI_PASSWORD'], 'remember': True}).encode()
+opener.open(urllib.request.Request(f'{base}/api/login', data=data,
+    headers={'Content-Type': 'application/json'}))
+
+# Query APs
+resp = opener.open(urllib.request.Request(f'{base}/api/s/default/stat/device'))
+aps = [d for d in json.loads(resp.read())['data'] if d.get('type') == 'uap']
+for ap in aps:
+    print(f"{ap.get('name')} | {ap.get('model')} | state={ap.get('state')} | clients={ap.get('num_sta',0)} | {ap.get('ip')}")
+
+# Query wireless clients with signal
+resp = opener.open(urllib.request.Request(f'{base}/api/s/default/stat/sta'))
+for c in json.loads(resp.read())['data']:
+    print(f"{c.get('hostname') or c.get('name') or '?'} | {c.get('ip')} | {c.get('signal')} dBm | {c.get('radio_proto')} | ch{c.get('channel')} | {c.get('essid')}")
+```
+
+**curl (for passwords without $ * ^ characters):**
 ```bash
-# Login — get session cookie
-curl -sk -X POST https://192.168.5.35:30443/api/auth/login \
+source /run/agenix/unifi-credentials
+curl -sk -c /tmp/unifi-jar -X POST "https://192.168.5.35:30443/api/login" \
   -H "Content-Type: application/json" \
-  -d '{"username":"<user>","password":"<pass>"}' \
-  -c /tmp/unifi-cookies
+  -d "{\"username\":\"$UNIFI_USERNAME\",\"password\":\"$UNIFI_PASSWORD\"}"
 
-# List wireless clients with signal strength and AP association
-curl -sk https://192.168.5.35:30443/api/s/default/stat/sta \
-  -b /tmp/unifi-cookies | jq '.data[] | {hostname,ip,mac,ap_name: .ap_mac,channel,signal,tx_rate,rx_rate,uptime}'
+# List APs
+curl -sk -b /tmp/unifi-jar "https://192.168.5.35:30443/api/s/default/stat/device" | \
+  jq '[.data[] | select(.type=="uap")] | .[] | {name,model,state,num_sta,ip}'
 
-# List all clients (wired + wireless)
-curl -sk https://192.168.5.35:30443/api/s/default/stat/user \
-  -b /tmp/unifi-cookies | jq '.data[] | {hostname,name,ip,mac,oui,is_wired}'
-
-# List APs (device status, client counts)
-curl -sk https://192.168.5.35:30443/api/s/default/stat/device \
-  -b /tmp/unifi-cookies | jq '.data[] | {name,model,ip,state,uptime,num_sta}'
+# List wireless clients with signal
+curl -sk -b /tmp/unifi-jar "https://192.168.5.35:30443/api/s/default/stat/sta" | \
+  jq '.data[] | {hostname,ip,signal,radio_proto,channel,essid}'
 ```
 
 Key API endpoints under `/api/s/default/`:
@@ -370,4 +435,4 @@ When answering a question or diagnosing a problem:
 - **NEVER** run `nixos-rebuild switch` or `home-manager switch` without explicit user approval.
 - When in doubt whether a command is read-only, show it to the user and ask.
 - `export file=...` writes to device flash — it IS mutating.
-- UniFi API writes (POST/PUT/DELETE beyond `/api/auth/login`) mutate controller state. Only use read-only GET endpoints unless the user explicitly asks for configuration changes.
+- UniFi API writes (POST/PUT/DELETE beyond `/api/login`) mutate controller state. Only use read-only GET endpoints unless the user explicitly asks for configuration changes.

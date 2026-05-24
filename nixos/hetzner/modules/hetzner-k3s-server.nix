@@ -17,6 +17,7 @@
     ./hetzner-powerdns-bootstrap.nix
     ./hetzner-powerdns.nix
     ./hetzner-postgres-schema.nix
+    ./hetzner-split-ip-firewall.nix
   ];
 
   networking.hostName = compName;

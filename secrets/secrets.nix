@@ -141,4 +141,13 @@ in {
   "build-cluster-key.age".publicKeys = [office arch closet secu nas pite vpin];
 
   "unifi-credentials.age".publicKeys = [office arch];
+  # Reolink camera RTSP credentials — used by secu for 24/7 monitoring grid.
+  # All cameras share the same admin password (set in Reolink app).
+  # Format:
+  #   CAMERA_USER=admin
+  #   CAMERA_PASSWORD=<reolink-camera-password>
+  # Create:
+  #   echo -e "CAMERA_USER=admin\nCAMERA_PASSWORD=yourpassword" | \
+  #     agenix -e camera-credentials.age -i ~/.ssh/age
+  "camera-credentials.age".publicKeys = [secu office arch];
 }

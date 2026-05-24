@@ -1,6 +1,9 @@
-# Edit this configuration file to define what should be installed on
-# your system. Help is available in the configuration.nix(5) man page, on
-# https://search.nixos.org/options and in the NixOS manual (`nixos-help`).
+# secu — 24/7 security camera monitoring station.
+# Boots directly into Hyprland and displays a live RTSP grid
+# of all 6 Reolink camera channels from the NVR (192.168.1.67).
+#
+# Secrets needed (create with: agenix -e <file>.age -i ~/.ssh/age):
+#   secrets/camera-credentials.age  →  CAMERA_USER=admin\nCAMERA_PASSWORD=<pw>
 {
   config,
   lib,
@@ -33,6 +36,11 @@
 
   services.displayManager.lemurs = {
     enable = true;
+    # Auto-login "john" directly to Hyprland session.
+    settings = {
+      auto_login = "john";
+      default_desktop = "Hyprland";
+    };
   };
   services.seatd.enable = true;
 
@@ -46,8 +54,7 @@
     keyMap = "us";
   };
 
-  # List packages installed in system profile. To search, run:
-  # $ nix search wget
+  # Camera monitoring (mpv is already in home.nix).
   environment.systemPackages = with pkgs; [
     git
     fish
@@ -83,8 +90,18 @@
       workstation = true;
     };
   };
-
   security.rtkit.enable = true;
+
+  # Camera RTSP credentials (sourced by startup-secu.fish).
+  # Create with: cd ~/dotfiles/secrets && agenix -e camera-credentials.age -i ~/.ssh/age
+  # Format: CAMERA_USER=admin\nCAMERA_PASSWORD=<reolink-password>
+  age.secrets.camera-credentials = {
+    file = ../secrets/camera-credentials.age;
+    owner = "john";
+  };
+
+  # Disable console blanking for 24/7 monitoring.
+  boot.kernelParams = [ "consoleblank=0" ];
 
   # networking.firewall.allowedTCPPorts = [
   #   5353 # avahi

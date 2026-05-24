@@ -349,6 +349,18 @@
       owner = "john";
       group = "users";
     };
+  # UniFi controller credentials — username + password for API access.
+  # Format: UNIFI_USERNAME=... UNIFI_PASSWORD=... UNIFI_CONTROLLER=https://192.168.5.35:30443
+  # Used by fish functions unifi-status, unifi-clients, unifi-ap.
+  age.secrets.unifi-credentials =
+    lib.mkIf
+    (builtins.elem config.networking.hostName ["office" "arch"])
+    {
+      file = ../secrets/unifi-credentials.age;
+      mode = "0400";
+      owner = "john";
+      group = "users";
+    };
 
   security.rtkit.enable = true;
   services.udisks2.enable = true;

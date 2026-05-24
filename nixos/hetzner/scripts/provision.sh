@@ -10,7 +10,6 @@
 # Example:
 #   export HCLOUD_TOKEN="your-token"
 #   ./provision.sh ashburn server   # Deploy ashburn server node
-#   ./provision.sh hillsboro agent  # HA toggle — deploy agent
 
 set -euo pipefail
 
@@ -33,7 +32,7 @@ esac
 # ── Region + Role → Plan mapping ──
 PLAN=""
 case "${REGION}-${ROLE}" in
-  ashburn-server|hillsboro-server|nuremberg-server) PLAN="cpx31" ;;  # All cpx31 (cpx32 boot issue)
+  ashburn-server|hillsboro-server|nuremberg-server) PLAN="cpx31" ;;
   ashburn-agent|hillsboro-agent|nuremberg-agent)   PLAN="cpx31" ;;
   *) echo "Unknown region/role: ${REGION}-${ROLE}"; exit 1 ;;
 esac
@@ -61,26 +60,16 @@ sleep 5
 IP=$(hcloud server ip "${SERVER_ID}")
 echo "  IP: ${IP}"
 
-# ── Step 2: Get additional IPs for split-IP architecture ──
-PROTECTED_IP="${IP}"
-echo "  Protected IP: ${PROTECTED_IP}"
-
-# Allocate a second floating IP for raw game/TS/DERP traffic
-RAW_IP=""
-if hcloud floating-ip list | grep -q "${HOSTNAME}" ; then
-  RAW_IP_ID=$(hcloud floating-ip list -o json | jq -r '.[] | select(.description=="'"${HOSTNAME}-raw"'") | .id')
-  echo "  Reusing existing raw IP ID: ${RAW_IP_ID}"
-else
-  RAW_IP_ID=$(hcloud floating-ip create \
-    --description "${HOSTNAME}-raw" \
-    --home-location "${LOCATION}" \
-    --type ipv4 \
-    -o json | jq -r '.floating_ip.id')
-  hcloud floating-ip assign "${RAW_IP_ID}" "${SERVER_ID}"
-  echo "  Raw IP created and assigned"
-fi
-# Get the actual raw IP for display
+# ── Step 2: Allocate floating IP for raw services ──
+echo "  [2/7] Allocating raw IP..."
+RAW_IP_ID=$(hcloud floating-ip create \
+  --description "${HOSTNAME}-raw" \
+  --home-location "${LOCATION}" \
+  --type ipv4 \
+  -o json | jq -r '.floating_ip.id')
+hcloud floating-ip assign "${RAW_IP_ID}" "${SERVER_ID}"
 RAW_IP=$(hcloud floating-ip describe "${RAW_IP_ID}" -o json 2>/dev/null | jq -r '.floating_ip.ip // .ip // "unknown"')
+echo "  Raw IP: ${RAW_IP}"
 
 # ── Step 3: Deploy NixOS via nixos-anywhere ──
 echo "  [3/7] Deploying NixOS..."
@@ -109,19 +98,19 @@ echo "    age identity copied"
 # Rebuild to decrypt agenix secrets
 nixos-rebuild switch --flake "${FLAKE}" --target-host "root@${IP}" --use-remote-sudo 2>/dev/null || true
 echo "    agenix secrets decrypted"
-  # Delete stale headscale nodes with same hostname (ensures fresh DNS)
-  ssh john@192.168.0.154 "sudo headscale nodes list -o json 2>/dev/null" | \
-    python3 -c "
+
+# Delete stale headscale nodes with same hostname (ensures fresh DNS)
+ssh john@192.168.0.154 "sudo headscale nodes list -o json 2>/dev/null" | \
+  python3 -c "
 import json, sys
 data = json.load(sys.stdin)
 for n in data:
     if n['given_name'] == '${HOSTNAME}':
         print(f\"Cleaning stale headscale node: {n['given_name']} ({n['ip_addresses'][0] if n.get('ip_addresses') else 'no ip'})\")
+        import subprocess
         subprocess.run(['ssh', 'john@192.168.0.154', 'sudo', 'headscale', 'nodes', 'delete', '--identifier', str(n['id']), '--force'])
 " 2>/dev/null || true
-  echo "    stale headscale nodes cleaned"
-
-
+echo "    stale headscale nodes cleaned"
 
 # ── Step 6: Connect tailscale ──
 echo "  [6/7] Connecting tailscale..."
@@ -141,9 +130,9 @@ if [[ "$ROLE" == "server" ]]; then
   echo "  --- Service Status ---"
   ssh "root@${IP}" "echo 'k3s:' \$(systemctl is-active k3s); echo 'pdns:' \$(systemctl is-active pdns); echo 'tailscaled:' \$(systemctl is-active tailscaled)"
   ssh "root@${IP}" "kubectl get nodes 2>/dev/null" || echo "    (k3s not ready yet)"
-  # Remove stale Cilium taint if present (from previous Cilium installation)
+  # Remove stale Cilium taint if present
   ssh "root@${IP}" "kubectl taint node --all node.cilium.io/agent-not-ready:NoSchedule- 2>/dev/null || true"
-  # If k3s shows flannel.1 conflict on restart, clean up stale kernel interfaces
+  # Clean up stale kernel interfaces on restart
   if ! ssh "root@${IP}" "kubectl get nodes &>/dev/null"; then
     ssh "root@${IP}" "ip link delete flannel.1 2>/dev/null || true; ip link delete cilium_vxlan 2>/dev/null || true; ip link delete cilium_host 2>/dev/null || true; ip link delete cilium_net 2>/dev/null || true; systemctl restart k3s; sleep 15" 2>/dev/null || true
   fi
@@ -154,5 +143,5 @@ fi
 
 echo ""
 echo "=== ${HOSTNAME} provisioned successfully ==="
-echo "  IP: ${IP} | Raw IP: ${RAW_IP}"
+echo "  IP: ${IP}  |  Raw IP: ${RAW_IP}"
 echo "  SSH: ssh root@${IP}"

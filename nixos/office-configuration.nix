@@ -12,6 +12,7 @@
     ./office-hardware-configuration.nix
     ./modules/user-john.nix
     ./modules/ollama.nix
+    ./modules/teamspeak.nix
     #./waybar.nix
     # inputs.home-manager.nixosModules.default
   ];

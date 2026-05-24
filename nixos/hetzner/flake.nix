@@ -31,9 +31,9 @@
 
     # All 3 server nodes are fully identical — drop-in replaceable.
     # Each runs k3s + PowerDNS. PostgreSQL runs inside k3s via CloudNativePG.
-    mkServer = { compName }: nixpkgs.lib.nixosSystem {
+    mkServer = { compName, rawIP ? null }: nixpkgs.lib.nixosSystem {
       inherit system;
-      specialArgs = { inherit inputs compName; sshKeys = my-keys; postgresHost = "127.0.0.1"; };
+      specialArgs = { inherit inputs compName rawIP; sshKeys = my-keys; postgresHost = "127.0.0.1"; };
       modules = [
         disko.nixosModules.default
         agenix.nixosModules.default
@@ -60,9 +60,9 @@
   in {
     nixosConfigurations = {
       # ── Server nodes (LA mode, 24/7) ──
-      k3s-ashburn   = mkServer { compName = "k3s-ashburn";   };
-      k3s-hillsboro = mkServer { compName = "k3s-hillsboro"; };
-      k3s-nuremberg = mkServer { compName = "k3s-nuremberg"; };
+      k3s-ashburn   = mkServer { compName = "k3s-ashburn";   rawIP = "5.161.17.173";  };
+      k3s-hillsboro = mkServer { compName = "k3s-hillsboro"; rawIP = "5.78.29.145";   };
+      k3s-nuremberg = mkServer { compName = "k3s-nuremberg"; rawIP = "5.161.26.226";  };
 
       # ── Agent nodes (HA toggle, provisioned/destroyed via scripts) ──
       k3s-ashburn-agent   = mkAgent { compName = "k3s-ashburn-agent";   };

@@ -254,7 +254,7 @@ in {
           };
           layout = "dwindle";
           allow_tearing = true;
-        };
+        } // (if compName == "secu" then { gaps_in = 0; gaps_out = 0; } else {});
 
         decoration = {
           rounding = 3;
@@ -467,21 +467,25 @@ in {
 
       # ---- Startup hook (runs after compositor is ready) ----
       on = [
-        { _args = ["hyprland.start" (mkLua ''
+        { _args = ["hyprland.start" (mkLua (''
           function()
             hl.exec_cmd("tmux setenv -g HYPRLAND_INSTANCE_SIGNATURE " .. os.getenv("HYPRLAND_INSTANCE_SIGNATURE"))
             hl.exec_cmd("lxqt-policykit-agent")
+        '' + (if compName == "secu" then ''
+            hl.exec_cmd("fish ~/dotfiles/.config/startup-secu.fish")
+        '' else ''
             hl.exec_cmd("fish -c \"tmux new-session -d ; sleep 1; fish ~/dotfiles/.config/startup.fish\"")
+        '') + ''
             hl.exec_cmd("fish ~/.xprofile.fish")
             hl.exec_cmd("wl-paste --type text --watch cliphist store")
             hl.exec_cmd("wl-paste --type image --watch cliphist store")
           end
-        '')]; }
+        ''))]; }
       ];
     };
   };
 
-  services.gammastep = {
+  services.gammastep = lib.mkIf (compName != "secu") {
     enable = true;
     # New york
     longitude = -74.0060;
@@ -528,6 +532,5 @@ in {
   # Aggressive stop timeouts for user services that block home-manager
   # activation (sd-switch hangs waiting for them to stop).
   systemd.user.services.dunst.Service.TimeoutStopSec = 10;
-  systemd.user.services.gammastep.Service.TimeoutStopSec = 10;
   systemd.user.services.udiskie.Service.TimeoutStopSec = 10;
 }
