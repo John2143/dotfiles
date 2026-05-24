@@ -44,35 +44,28 @@
 #   Do this on a Thursday/Friday so ListenBrainz has time to build your first
 #   weekly recommendation playlist by Monday.
 #
-# --- Step 5: fix the Tubifarry hash ---
+# --- Step 5: rebuild ---
 #
-#   The fetchFromGitHub call below uses lib.fakeHash. On first build, Nix will
-#   print the correct hash. Copy it into the `hash =` field and rebuild.
+#     nh os switch
 #
-# --- Step 6: rebuild ---
+# --- Step 6: post-install setup ---
 #
-#     sudo nixos-rebuild switch --flake .#jim
-#
-#   If this is a fresh install from the live ISO:
-#     sudo nixos-install --flake .#jim && reboot
-#     # then after reboot, run step 6 again to pick up the fixed hash
-#
-# --- Step 7: post-install setup ---
-#
-#   7a. Open Lidarr (http://localhost:8686) → Settings → Plugins.
-#       Tubifarry should appear. Configure:
+#   6a. Open Lidarr (http://localhost:8686) → Settings → Plugins.
+#       Install Tubifarry by pasting this URL:
+#         https://github.com/TypNull/Tubifarry/releases/latest/download/Tubifarry.zip
+#       Then configure:
 #         • Soulseek (point at http://localhost:5030 with your creds)
 #         • Lyrics Enhancer
 #         • Search Sniper
 #
-#   7b. Open Navidrome (http://localhost:4533) → Profile (top-right avatar).
-#       Enable "Scrobble to ListenBrainz" so your listens feed recommendations.
+#   6b. Open Navidrome (http://localhost:4533) → Profile (top-right avatar).
+#       Enable "Scrobble to ListenBrainz."
 #
-#   7c. Open aurral (http://localhost:5000) → follow the setup wizard.
+#   6c. Open aurral (http://localhost:5000) → follow the setup wizard.
 #       Connect it to Lidarr and Navidrome.
 #       Click "Apply Davo's Recommended Settings."
 #
-#   7d. (Optional) Set up a reverse proxy if you want these accessible from
+#   6d. (Optional) Set up a reverse proxy if you want these accessible from
 #       outside your LAN. Caddy example:
 #
 #         services.caddy.virtualHosts."music.example.com".extraConfig = ''
@@ -90,8 +83,8 @@
 #
 # =============================================================================
 {
-  lib,
   pkgs,
+
   ...
 }: let
   musicRoot = "/var/lib/music";
@@ -147,18 +140,8 @@ in {
     dataDir = "/var/lib/lidarr";
     settings.update.automatically = false; # Nix manages the version
 
-    extraPlugins = [
-      {
-        name = "Tubifarry";
-        src = pkgs.fetchFromGitHub {
-          owner = "TypNull";
-          repo = "Tubifarry";
-          rev = "v2.1.0";
-          # Replace with the hash Nix prints on first build failure:
-          hash = lib.fakeHash;
-        };
-      }
-    ];
+    # Tubifarry plugin — install via Lidarr web UI:
+    #   Settings → Plugins → paste: https://github.com/TypNull/Tubifarry/releases/latest/download/Tubifarry.zip
   };
 
   # --- slskd — Soulseek P2P downloader ---
