@@ -40,16 +40,21 @@ cmd_set_a() {
   local subname="$1" ip="$2"
   local full="${subname}.${DOMAIN}"
   echo "Setting A record: ${full} → ${ip}"
-  curl -sf -X PATCH -H "$AUTH" -H "$CT" \
-    "$API/${subname}/A/" \
-    -d "{\"records\":[\"${ip}\"]}" | python3 -m json.tool
+  # Try PATCH (update existing), fall back to POST (create new)
+  local http_code
+  http_code=$(curl -s -o /dev/null -w '%{http_code}' -X PATCH -H "$AUTH" -H "$CT" "$API/${subname}/A/" -d "{\"records\":[\"${ip}\"]}")
+  if [ "$http_code" = "200" ] || [ "$http_code" = "204" ]; then
+    curl -sf -X PATCH -H "$AUTH" -H "$CT" "$API/${subname}/A/" -d "{\"records\":[\"${ip}\"]}" | python3 -m json.tool
+  else
+    curl -sf -X POST -H "$AUTH" -H "$CT" "$API/" -d "{\"subname\":\"${subname}\",\"type\":\"A\",\"ttl\":3600,\"records\":[\"${ip}\"]}" | python3 -m json.tool
+  fi
 }
 
 cmd_set_ns() {
   local subname="$1" nameserver="$2"
   local full="${subname}.${DOMAIN}"
   echo "Setting NS record: ${subname}.${DOMAIN} → ${nameserver}"
-  curl -sf -X PATCH -H "$AUTH" -H "$CT" \
+  curl -sf -X PUT -H "$AUTH" -H "$CT" \
     "$API/${subname}/NS/" \
     -d "{\"records\":[\"${nameserver}.\"]}" | python3 -m json.tool
 }
