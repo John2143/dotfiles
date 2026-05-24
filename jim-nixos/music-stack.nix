@@ -161,18 +161,20 @@ in {
     };
   };
 
-  # --- Shared music directories ---
+  # --- Shared music directories (group: music) ---
+  users.groups.music = {};
+
   systemd.tmpfiles.rules = [
-    "d ${musicRoot}             0755 lidarr navidrome - -"
-    "d ${musicRoot}/downloads   0755 lidarr navidrome - -"
-    "d ${musicRoot}/library     0755 lidarr navidrome - -"
-    "d ${musicRoot}/explo       0755 lidarr navidrome - -"
+    "d ${musicRoot}             0775 root music - -"
+    "d ${musicRoot}/downloads   0775 root music - -"
+    "d ${musicRoot}/library     0775 root music - -"
+    "d ${musicRoot}/downloads/.incomplete 0775 root music - -"
+    "d ${musicRoot}/explo       0775 root music - -"
   ];
 
-  # --- Permissions ---
-  # lidarr needs to write to the music root
-  users.users.lidarr.extraGroups = ["navidrome"];
-  users.users.navidrome.extraGroups = ["lidarr"];
+  users.users.lidarr.extraGroups = ["music"];
+  users.users.navidrome.extraGroups = ["music"];
+  users.users.slskd.extraGroups = ["music"];
 
   # --- Open firewall for web UIs ---
   networking.firewall.allowedTCPPorts = [
