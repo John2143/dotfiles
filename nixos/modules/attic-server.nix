@@ -24,6 +24,7 @@
 
     [chunking]
     chunk-size = 65536
+    nar-size-threshold = 65536
   '';
 in {
   # ── Admin token (same token used by clients for login) ──
