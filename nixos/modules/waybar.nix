@@ -4,31 +4,80 @@ let
     name = "media-player-status";
     runtimeInputs = with pkgs; [ playerctl jq ];
     text = ''
-      status=$(playerctl status 2>/dev/null)
-      if [ -z "$status" ] || [ "$status" = "Stopped" ]; then
+      # Get all active players
+      players=$(playerctl --list-all 2>/dev/null)
+      if [ -z "$players" ]; then
         echo '{"text": "", "class": "stopped"}'
         exit 0
       fi
 
-      artist=$(playerctl metadata artist 2>/dev/null | head -c 30)
-      title=$(playerctl metadata title 2>/dev/null | head -c 50)
+      # Find best player: prefer Playing (non-browser first), then Paused
+      best=""
+      best_status=""
+      for p in $players; do
+        s=$(playerctl --player="$p" status 2>/dev/null)
+        # Skip browser players unless they are the only ones
+        case "$p" in
+          firefox*|chromium*|chrome*|Floorp*)
+            [ "$s" = "Playing" ] && browser_playing="$p"
+            continue
+            ;;
+        esac
+        case "$s" in
+          Playing) best="$p"; best_status="$s"; break ;;
+          Paused)  [ -z "$best" ] && { best="$p"; best_status="$s"; };;
+        esac
+      done
 
-      case "$status" in
+      # Fall back to browser if nothing else is playing
+      if [ -z "$best" ] && [ -n "$browser_playing" ]; then
+        best="$browser_playing"
+        best_status="Playing"
+      fi
+
+      # Fall back to any player
+      if [ -z "$best" ]; then
+        best=$(echo "$players" | head -1)
+        best_status=$(playerctl --player="$best" status 2>/dev/null)
+      fi
+
+      artist=$(playerctl --player="$best" metadata artist 2>/dev/null | head -c 30)
+      title=$(playerctl --player="$best" metadata title 2>/dev/null | head -c 50)
+      player_name="$best"
+
+      case "$best_status" in
         Playing)  class="playing"; icon="" ;;
         Paused)   class="paused";  icon="" ;;
         *)        echo '{"text": "", "class": "stopped"}'; exit 0 ;;
       esac
 
-      if [ -n "$artist" ] && [ -n "$title" ]; then
-        text="$icon  $artist — $title"
-        tooltip="$artist — $title"
-      elif [ -n "$title" ]; then
-        text="$icon  $title"
-        tooltip="$title"
+      if [ -n "$title" ]; then
+        if [ -n "$artist" ]; then
+          text="$icon  $artist — $title"
+        else
+          text="$icon  $title"
+        fi
       else
-        text="$icon  $status"
-        tooltip=""
+        text="$icon  $player_name"
       fi
+
+      # Build tooltip with all active players
+      tooltip=""
+      for p in $players; do
+        s=$(playerctl --player="$p" status 2>/dev/null)
+        a=$(playerctl --player="$p" metadata artist 2>/dev/null)
+        t=$(playerctl --player="$p" metadata title 2>/dev/null)
+        icon_t=""
+        case "$s" in
+          Playing) icon_t="" ;;
+          Paused)  icon_t="" ;;
+          *)       icon_t="" ;;
+        esac
+        if [ -n "$t" ]; then
+          tooltip="$tooltip$icon_t $p: $a — $t\n"
+        fi
+      done
+      tooltip=$(echo -e "$tooltip" | head -c 500)  # convert \n, truncate
 
       jq -n --arg text "$text" --arg class "$class" --arg tooltip "$tooltip" \
         '{text: $text, class: $class, tooltip: $tooltip}'
@@ -83,7 +132,7 @@ in {
         position = "top";
         height = 38;
         spacing = 4;
-        margin = "8 12 0 12";  # top right bottom left — floating bar
+        margin = "0 12 0 12";  # top right bottom left — flush to top edge
         reload_style_on_change = true;
 
         # ---- Left zone ----
@@ -126,11 +175,13 @@ in {
         in {
           format = "{icon}";
           format-icons = ws-icons;
+          tooltip = true;
+          tooltip-format = "{windows}";
           "workspace-taskbar" = {
             enable = true;
             "update-active-window" = true;
             "format" = "{icon}";
-            "icon-size" = 18;
+            "icon-size" = 24;
             "on-click-window" = "hyprctl dispatch focuswindow address:{address}";
             "ignore-list" = ["^xwaylandvideobridge$"];
           };
@@ -146,7 +197,7 @@ in {
           format = "";
           tooltip = true;
           tooltip-format = "New temporary workspace";
-          on-click = "NAME=$(head -c 10 /dev/random | sha1sum | head -c 6) && hyprctl dispatch workspace name:$NAME";
+          on-click = "fish -c 'set NAME (date +%s | tail -c 5); hyprctl dispatch workspace name:$NAME'";
         };
 
         # ---- Clock (center, consolidated) ----
@@ -154,6 +205,8 @@ in {
           interval = 1;
           format = "{:%H:%M}";
           tooltip-format = "{:%A, %e %B %Y}";
+          tooltip = true;
+          on-click-right = "fish -c 'date +\"%A, %e %B %Y — %H:%M\" | wl-copy; notify-send \"Copied\" (wl-paste)'";
         };
 
         # ---- Media Player (center) ----
@@ -163,9 +216,9 @@ in {
           interval = "once";
           signal = 12;
           format = "{}";
-          on-click = "playerctl play-pause";
-          on-click-right = "playerctl next";
-          on-click-middle = "playerctl previous";
+          on-click = "playerctl --all-players --ignore-player=firefox,chromium,chrome play-pause";
+          on-click-right = "playerctl --all-players --ignore-player=firefox,chromium,chrome next";
+          on-click-middle = "playerctl --all-players --ignore-player=firefox,chromium,chrome previous";
           escape = true;
         };
 
@@ -353,6 +406,7 @@ in {
     };
     Service = {
       ExecStart = "${pkgs.waybar}/bin/waybar";
+      Environment = "GTK_TOOLTIP_TIMEOUT=0";
       ExecReload = "${pkgs.coreutils}/bin/kill -SIGUSR2 $MAINPID";
       Restart = "on-failure";
       TimeoutStopSec = 10;

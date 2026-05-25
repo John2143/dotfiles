@@ -31,7 +31,7 @@
     border: none;
     border-radius: 0;
     font-family: JetBrainsMono Nerd Font Mono;
-    font-size: 13px;
+    font-size: 14px;
     min-height: 0;
 }
 
@@ -66,7 +66,7 @@ window#waybar > box {
 #workspaces button {
     color: @subtext0;
     background: @surface0;
-    font-size: 13px;
+    font-size: 15px;
     font-weight: 500;
     padding: 2px 10px;
     margin: 0 2px;
@@ -212,9 +212,11 @@ window#waybar > box {
 /* ---- Battery ---- */
 #battery.warning {
     color: @peach;
+    font-weight: bold;
 }
 #battery.critical {
     color: @red;
+    font-weight: bold;
 }
 
 /* ---- CPU / Memory / Temperature ---- */
@@ -222,11 +224,13 @@ window#waybar > box {
 #memory.warning,
 #temperature.warning {
     color: @peach;
+    font-weight: bold;
 }
 #cpu.critical,
 #memory.critical,
 #temperature.critical {
     color: @red;
+    font-weight: bold;
 }
 
 /* ---- Hardware Group Drawer ---- */
@@ -292,7 +296,7 @@ window#waybar > box {
 
 #custom-privacy.recording {
     color: @red;
-    animation: pulse-red 1.5s ease-in-out infinite;
+    font-weight: bold;
 }
 
 #custom-mullvad.connected {
@@ -313,10 +317,4 @@ window#waybar > box {
     -gtk-icon-effect: highlight;
     background: @red;
     border-radius: 8px;
-}
-
-/* ---- Animations ---- */
-@keyframes pulse-red {
-    0%, 100% { color: @red; }
-    50% { color: @maroon; }
 }
