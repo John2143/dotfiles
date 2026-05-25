@@ -12,6 +12,16 @@ tool-hints: |
   Research files live inside ai_research/{topic-slug}/ — never write research content outside this directory.
 ---
 
+## Usage
+
+**Invocation:** `/skill:web-researcher "[primary research question]" [additional context]`
+
+The primary research question must be quoted. Everything after the closing quote is treated as additional context (constraints, focus areas, preferences) and passed verbatim to every research sub-agent.
+
+**Examples:**
+- `/skill:web-researcher "how effective are four-day work weeks in tech companies?"` — Research with no additional context
+- `/skill:web-researcher "find me a variety of cake recipes" focus on medium difficulty, at-home cakes. I can do decorating well. exclude fondant.` — Research with context shaping the scope and direction
+
 Parse `$ARGUMENTS` by running the deterministic parser script — do NOT manually reason about quote positions:
 
 ```bash

@@ -12,6 +12,19 @@ tool-hints: |
   This skill creates other skills; you will write a SKILL.md file and may need to invoke prompt-engineer.
 ---
 
+## Usage
+
+**Invocation:** `/skill:create-skill [idea] [--name name] [--refine]`
+
+- `idea` — A description of what the skill should do (e.g., "a skill that checks logs and fixes issues in a loop"). If omitted, you will be prompted for it.
+- `--name name` — Explicit skill directory name (kebab-case). If omitted, the name is derived automatically from the idea.
+- `--refine` — Automatically run prompt-engineer on the resulting SKILL.md after writing it, skipping the Phase 5 offer.
+
+**Examples:**
+- `/skill:create-skill "a skill to monitor k8s pods and alert on crashes"` — Create a skill with auto-derived name
+- `/skill:create-skill "monitor pods" --name k8s-watchdog` — Create a skill with an explicit directory name
+- `/skill:create-skill "monitor pods" --refine` — Create a skill and automatically refine it with prompt-engineer
+
 Parse `$ARGUMENTS`:
 - First positional argument is the `$IDEA` — a description of what the skill should do (e.g., "I want a skill which helps me check logs, diagnose, plan, and fix issues automatically in a loop"). If omitted, ask the user for the idea before proceeding.
 - If `--name $SKILL_NAME` is provided, use it as the skill directory name and kebab-case identifier. If omitted, derive it from `$IDEA` by running this exact bash snippet with the idea in `$IDEA`:

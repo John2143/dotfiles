@@ -4,6 +4,21 @@ argument-hint: [scope] [--type (feat|fix|refactor|chore|docs|test|perf)]
 allowed-tools: Bash
 ---
 
+
+## Usage
+
+**Invocation:** `/skill:commit-writer [scope] [--type TYPE]`
+
+The skill analyzes staged git changes and generates a conventional commit message.
+
+- `scope` — the subsystem or module the commit targets (e.g., `auth`, `cli`, `nix`). When omitted, the scope is auto-detected from changed file paths.
+- `--type TYPE` — the commit type. Valid values: `feat`, `fix`, `refactor`, `chore`, `docs`, `test`, `perf`. When omitted, the type is derived from the diff.
+
+**Examples:**
+- `/skill:commit-writer` — Auto-detect scope and type from staged changes
+- `/skill:commit-writer nix` — Set scope to `nix`, auto-detect type
+- `/skill:commit-writer --type fix` — Set type to `fix`, auto-detect scope
+- `/skill:commit-writer auth --type feat` — Scope `auth`, type `feat`
 Parse `$ARGUMENTS`:
 - If a positional argument is provided, treat it as `$SCOPE` — the commit scope (e.g., `auth`, `cli`, `nix`).
 - If `--type TYPE` is provided, use it as the commit type. Valid values: `feat`, `fix`, `refactor`, `chore`, `docs`, `test`, `perf`.

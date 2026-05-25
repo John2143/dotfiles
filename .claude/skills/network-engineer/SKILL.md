@@ -10,6 +10,15 @@ tool-hints: |
   kubectl is available via `ssh closet 'kubectl ...'` for local cluster queries.
 ---
 
+## Usage
+
+**Invocation:** `/skill:network-engineer`
+
+This skill takes no arguments. It injects network context (device inventory, subnets, port forwarding, wireless state) into the current session. On first invocation in a session, it captures live snapshots from the router, switches, and UniFi controller.
+
+**Examples:**
+- `/skill:network-engineer` — Inject network context and capture live state
+
 When this skill is loaded, immediately inject the following context into the conversation.
 You are now operating on John's home network. Use this knowledge to answer questions,
 diagnose issues, and navigate the infrastructure.

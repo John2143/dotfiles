@@ -9,6 +9,19 @@ tool-hints: |
   Write `AGENTS.md` to the repo root. Never modify source files.
 ---
 
+
+## Usage
+
+**Invocation:** `/skill:gh-context [--update]`
+
+Generates or updates an `AGENTS.md` file documenting project architecture, conventions, testing workflow, and patterns for autonomous coding agents.
+
+- (no flags) — Generate a new `AGENTS.md` from scratch by discovering build files, source directories, and conventions.
+- `--update` — Read the existing `AGENTS.md` and update only stale sections (changed commands, renamed directories, new gotchas) while preserving all human-written content.
+
+**Examples:**
+- `/skill:gh-context` — Generate a fresh AGENTS.md for the repo
+- `/skill:gh-context --update` — Refresh stale sections of an existing AGENTS.md
 Parse `$ARGUMENTS`:
 - If `--update` is provided, read existing `AGENTS.md` and update stale sections rather than regenerating.
 - If no arguments, generate a new `AGENTS.md` from scratch.

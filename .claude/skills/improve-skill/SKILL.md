@@ -13,6 +13,17 @@ tool-hints: |
   Use `Task` subagents to cross-reference other skills for conventions in parallel.
 ---
 
+## Usage
+
+**Invocation:** `/skill:improve-skill <skill-path> "<improvement>" ["<improvement>" ...]`
+
+- `<skill-path>` — Reference to an existing skill. Can be a full path (`.claude/skills/web-researcher/SKILL.md`), a directory path (`.claude/skills/web-researcher/`), or a bare skill name (`web-researcher`).
+- `"<improvement>"` — One or more quoted strings, each describing a specific change, addition, or removal to apply to the skill.
+
+**Examples:**
+- `/skill:improve-skill web-researcher "Add a step to ask clarifying questions before decomposing into subtopics"` — Improve a skill by bare name
+- `/skill:improve-skill .claude/skills/debugging/SKILL.md "Add Phase 0: capture environment info" "Remove the --verbose flag"` — Multiple improvements to a skill by full path
+
 Parse `$ARGUMENTS`:
 - The first positional argument is `$SKILL_REF` — a reference to an existing skill. It can be:
   - A full path to a SKILL.md file: `.claude/skills/web-researcher/SKILL.md`

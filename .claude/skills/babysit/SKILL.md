@@ -16,6 +16,16 @@ tool-hints: |
   Always check tool availability (e.g., `which gh`) before relying on a tool — do not assume any specific CLI is present.
 ---
 
+## Usage
+
+**Invocation:** `/skill:babysit <task description>`
+
+- `task description` — A free-form description of the DevOps task to autonomously orchestrate. If omitted, the skill checks the session context for a previously stated task; if still nothing, it exits.
+
+**Examples:**
+- `/skill:babysit "make sure PR #42 passes all checks and merge if clean"` — Monitors CI, fixes failures if possible, alerts if blocked.
+- `/skill:babysit "watch the production cluster for crash-looping pods"` — Polls Kubernetes events, investigates anomalies, escalates to human when needed.
+
 Parse `$ARGUMENTS`:
 - Single positional argument: a free-form task description string (e.g., "make sure this PR passes all checks", "fix build errors and commit", "watch this cluster for anything new").
 - If no argument provided, check session context for a previously stated task. If still nothing, call `exit_loop_mode` with `summary: "no task provided — nothing to babysit"`.

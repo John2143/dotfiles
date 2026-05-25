@@ -11,6 +11,20 @@ tool-hints: |
   Prefer the google provider (cheaper, no OR surcharge) unless it's unreachable.
 ---
 
+
+## Usage
+
+**Invocation:** `/skill:describe-image <image-path> [image-path...]`
+
+Describes an image using a vision-capable model. If the current model lacks vision support, the skill spawns a subagent with a vision model (`google/gemini-2.5-flash`).
+
+- `image-path` — a local file path or URL to an image. Supported formats: PNG, JPEG, GIF, WebP, SVG, BMP. When omitted, the skill asks for a path.
+- Multiple paths can be provided and each is described sequentially with its own label.
+
+**Examples:**
+- `/skill:describe-image screenshot.png` — Describe a local screenshot
+- `/skill:describe-image https://example.com/photo.jpg` — Describe an image from a URL
+- `/skill:describe-image img1.png img2.png` — Describe two images sequentially
 Parse `$ARGUMENTS`:
 - If a positional argument is provided, treat it as `$IMAGE_PATH` — the local file or URL to describe.
 - If no argument was given, ask the user to provide an image path or URL.

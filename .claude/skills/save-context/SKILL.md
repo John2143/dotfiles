@@ -11,6 +11,19 @@ tool-hints: |
 
 You are the agent whose session is being saved. You have access to your own conversation history (everything the user said and you did), the current workspace state (files, git history, open artifacts), and the tools listed above. Your job is to introspect this session and compress the essential parts into portable files so another agent can read them and pick up where you left off.
 
+## Usage
+
+**Invocation:** `/skill:save-context [--name <context-name>]`
+
+Compresses the current session context into portable files so another agent can resume where this session left off. Gathers git state, recent artifacts, open questions, decisions, and next steps via parallel subagents, then writes a structured `context-<name>.md` file to the repo root and a temp copy.
+
+- `--name <context-name>` — A short descriptive name for the context (e.g., `fix-nginx-config`). Slugified automatically: lowercase, hyphens, truncated to 48 chars.
+- If `--name` is omitted, the skill asks for a name.
+
+**Examples:**
+- `/skill:save-context --name fix-nginx-ssl` — Save context with an explicit name
+- `/skill:save-context` — Prompt for a context name, then save
+
 Parse `$ARGUMENTS`:
 - If `--name NAME` is provided, use it as the context name. Slugify: lowercase, hyphens for non-alphanumeric characters, collapse consecutive hyphens, strip leading/trailing hyphens, truncate to 48 chars.
 - If omitted, ask the user for a short descriptive name (e.g., "fix-nginx-config", "k3s-migration-plan"). Slugify the response.

@@ -12,6 +12,21 @@ tool-hints: |
 ---
 
 
+## Usage
+
+**Invocation:** `/skill:prompt-engineer [path/to/prompt.md | loop | "your prompt text"]`
+
+Three modes depending on the argument:
+
+- **File path** (e.g., `prompts/my-prompt.md`) — Improve an existing prompt file using the full 8-dimension analysis framework. Produces prioritized suggestions; only writes back if the user approves specific changes.
+- **`loop`** — Generate a loop prompt for the current repo. Explores the codebase, designs a state file layout, confirms with the user, then produces a self-contained loop prompt document.
+- **Inline text** (a quoted string) — Optimize a short prompt for AI consumption: fix spelling/grammar, improve clarity and structure, remove hedging. Outputs the improved prompt directly.
+
+**Examples:**
+- `/skill:prompt-engineer prompts/code-review.md` — Full analysis and improvement of an existing prompt file
+- `/skill:prompt-engineer loop` — Generate a loop prompt customized for this repository
+- `/skill:prompt-engineer "wrtie a prompt that tells the AI to make a good readme for my rust project"` — Inline optimization
+
 ### Parse `$ARGUMENTS`
 
 Run the deterministic parser script — do NOT manually reason about quote positions, `@` prefixes, path normalization, or file existence:

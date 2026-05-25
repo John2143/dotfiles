@@ -4,6 +4,20 @@ argument-hint: [symptom] [--file path]
 allowed-tools: Read, Bash, Debug, Search, LSP
 ---
 
+
+## Usage
+
+**Invocation:** `/skill:debugging [symptom] [--file FILE]`
+
+Conducts a structured debugging session: capture the symptom, formulate and test hypotheses, isolate root cause, and verify the fix.
+
+- `symptom` — a description of what is going wrong (error message, unexpected behavior, regression). When omitted, the skill asks for it.
+- `--file FILE` — scope the investigation to a specific file. The debugger reads the file and traces the code path that produces the symptom.
+
+**Examples:**
+- `/skill:debugging` — Ask for symptom interactively
+- `/skill:debugging "segfault on startup"` — Capture the symptom and begin hypothesis testing
+- `/skill:debugging "NPE in auth flow" --file src/auth/login.ts` — Narrow investigation to `login.ts`
 Parse `$ARGUMENTS`:
 - First positional argument is the `$SYMPTOM` — a description of what is going wrong.
 - If `--file FILE` is provided, scope the investigation to that file.

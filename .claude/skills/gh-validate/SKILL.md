@@ -8,6 +8,25 @@ tool-hints: |
   Report failures with the last 50 lines of error output. Never modify config to make validation pass.
 ---
 
+
+## Usage
+
+**Invocation:** `/skill:gh-validate [--build] [--test] [--lint] [--all]`
+
+Detects project-specific validation commands (from AGENTS.md, Makefile, package.json, flake.nix, etc.) and runs them, capturing results as pass/fail with actionable error output.
+
+- `--build` — run build only.
+- `--test` — run tests only.
+- `--lint` — run linter only.
+- `--all` — run build, test, and lint. This is the default when no flags are given.
+
+Flags can be combined to run multiple specific checks (e.g., `--build --test`). The skill skips any command whose build file or target does not exist.
+
+**Examples:**
+- `/skill:gh-validate` — Run build, test, and lint
+- `/skill:gh-validate --all` — Same as above (explicit)
+- `/skill:gh-validate --test` — Run tests only
+- `/skill:gh-validate --build --lint` — Run build and lint, skip tests
 Parse `$ARGUMENTS`:
 - `--build` — run build only.
 - `--test` — run tests only.

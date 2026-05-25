@@ -11,6 +11,19 @@ tool-hints: |
   Subagent assignments MUST include the full finding schema and severity criteria.
 ---
 
+## Usage
+
+**Invocation:** `/skill:security-engineer [commit-range]`
+
+- `[commit-range]` — A git commit range to scope the audit (e.g., `HEAD~10`, `main..feature`, `abc123..def456`). When provided, only files changed in that range are audited.
+- _(no argument)_ — Audits the entire repository (Full Audit mode).
+- `--help` — Print usage information and exit.
+
+**Examples:**
+- `/skill:security-engineer` — Full audit of the entire repository
+- `/skill:security-engineer HEAD~5` — Audit only files changed in the last 5 commits
+- `/skill:security-engineer main..feature` — Audit files changed between `main` and `feature`
+
 Parse `$ARGUMENTS`:
 - If a positional argument is provided, treat it as a commit range (e.g., `HEAD~10`, `main..feature`, `abc123..def456`). Enter Commit-Range Audit mode.
 - If no argument is provided, enter Full Audit mode.

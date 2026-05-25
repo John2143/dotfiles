@@ -6,6 +6,26 @@ tool-hints: |
   This skill may be invoked in loop mode (via `/loop` harness). When running in loop mode, call `exit_loop_mode(summary)` after producing the report to terminate the harness. When not in loop mode, just stop normally.
 ---
 
+
+## Usage
+
+**Invocation:** `/skill:nix-gardener [path] [--check CHECK]`
+
+Inspects Nix files for formatting, evaluation errors, common pitfalls, and outdated inputs. Runs checks in order, stopping early for blocking failures.
+
+- `path` — a Nix file or directory containing Nix files. Defaults to the repo root when omitted.
+- `--check CHECK` — run only a specific check. Valid values:
+  - `format` — check formatting with `nixpkgs-fmt` or `nixfmt`
+  - `eval` — evaluate the target (`nix flake check` for flakes, `nix eval` otherwise)
+  - `audit` — scan for common Nix pitfalls (missing system, hardcoded versions, deprecated `stdenv.lib`, etc.)
+  - `updates` — check whether nixpkgs inputs are behind upstream
+  - `all` — run all checks (default when `--check` is omitted)
+
+**Examples:**
+- `/skill:nix-gardener` — Run all checks on the repo root
+- `/skill:nix-gardener nixos/modules/` — Run all checks on the modules directory
+- `/skill:nix-gardener flake.nix --check eval` — Only evaluate `flake.nix`
+- `/skill:nix-gardener --check format` — Only check formatting across the repo root
 Parse `$ARGUMENTS`:
 - First positional argument is the target `$PATH` — a Nix file or directory containing Nix files.
 - If `--check CHECK` is provided, run only that check. Valid values: `eval`, `format`, `audit`, `updates`, `all` (default).

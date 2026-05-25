@@ -10,6 +10,15 @@ tool-hints: |
   Commit with descriptive messages referencing the issue. Push after every change.
 ---
 
+## Usage
+
+**Invocation:** `/skill:gh-implement-step [--fix finding-id]`
+
+- `--fix finding-id` — (optional) Prioritize fixing a specific review finding by ID instead of following the plan. If omitted, the next incomplete plan step or the highest-severity review finding is implemented.
+
+**Examples:**
+- `/skill:gh-implement-step` — Implement the next step from the plan or highest-severity review finding
+- `/skill:gh-implement-step --fix C1` — Fix review finding C1 before continuing with plan steps
 Parse `$ARGUMENTS`:
 - If `--fix finding-id` is provided, prioritize fixing that specific review finding over plan steps.
 - Otherwise, read state file and plan to determine the next step.

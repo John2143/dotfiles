@@ -8,6 +8,17 @@ tool-hints: |
   Output a filtered, deduplicated list with removal reasons.
 ---
 
+## Usage
+
+**Invocation:** `/skill:gh-triage [--pr number] [--input findings.json]`
+
+- `--pr number` — (optional) PR number to fetch review comments from for triage.
+- `--input findings.json` — (optional) Path to a JSON file of findings to triage (alternative to PR fetch). If neither is provided, reads `.gh-issue-state.json` for the PR number.
+
+**Examples:**
+- `/skill:gh-triage --pr 7` — Fetch review comments from PR #7 and triage them
+- `/skill:gh-triage --input review-findings.json` — Triage findings from a local JSON file
+- `/skill:gh-triage` — Triage findings for the PR in the state file
 Parse `$ARGUMENTS`:
 - `--pr number` — PR number to fetch review comments from.
 - `--input findings.json` — path to a JSON file of findings (alternative to PR fetch).

@@ -15,6 +15,24 @@ tool-hints: |
 
 Your job is to perform a structured, multi-persona code review on a git diff or single file, producing a severity-ranked findings report with a merge/no-merge verdict.
 
+## Usage
+
+**Invocation:** `/skill:code-reviewer [@path | --focus persona1,persona2]`
+
+Two modes:
+
+- **Diff Review** (default, no `@path`) — Reviews the current git diff. Infers the target automatically: staged+unstaged changes first, then branch-vs-master. All five personas run unless `--focus` restricts them.
+- **Single-File Review** (`@path`) — Deep review of a single file using LSP-powered call hierarchy tracing. All five personas run equally.
+
+The `--focus` flag accepts a comma-separated list of personas: `security`, `duplication`, `patterns`, `functionality`, `goals`. Only those personas run.
+
+**Examples:**
+- `/skill:code-reviewer` — Review all uncommitted changes (or branch diff vs master)
+- `/skill:code-reviewer @./src/handler.ts` — Deep single-file review with caller/callee tracing
+- `/skill:code-reviewer --focus security,duplication` — Diff review, only security and duplication personas
+- `/skill:code-reviewer @./src/auth.ts --focus security` — Single-file review, security persona only
+- `/skill:code-reviewer --help` — Print description and usage
+
 Parse `$ARGUMENTS`:
 - If `$ARGUMENTS` contains a path matching `@` followed by a file path (e.g., `@./src/handler.ts`), extract the path and enter **Single-File Review** mode. The `@` prefix is a harness convention for file attachments; treat the path as the single review target.
 - If `$ARGUMENTS` contains `--focus <comma-separated-list>`, store the list. Valid values: `security`, `duplication`, `patterns`, `functionality`, `goals`. If no `--focus` is given, all five personas run.

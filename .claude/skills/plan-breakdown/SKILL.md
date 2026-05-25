@@ -9,6 +9,20 @@ tool-hints: |
   This skill produces a plan file only; it does not execute the plan.
 ---
 
+## Usage
+
+**Invocation:** `/skill:plan-breakdown [path-to-plan | --text 'plan description'] [--output <path>] [--scope <area>]`
+
+- `path-to-plan` — Path to an existing plan file to decompose. Mutually exclusive with `--text`.
+- `--text 'plan description'` — Inline plan description to decompose. Mutually exclusive with a file path.
+- `--output <path>` — Where to write the decomposed plan. Defaults to `local://DELEGATEDPLAN.md`.
+- `--scope <area>` — Optional context narrowing (e.g., `"backend only"`, `"NixOS configs"`, `"auth subsystem"`).
+
+**Examples:**
+- `/skill:plan-breakdown ./ai-plan-myrepo-aB3x9/Index.md` — Decomposes a big-plan index into phased work items.
+- `/skill:plan-breakdown --text "Add a backup health-check endpoint" --scope "backend only"` — Decomposes an inline plan, scoped to the backend.
+- `/skill:plan-breakdown plan.md --output local://MYPLAN.md --scope "auth subsystem"` — Reads `plan.md`, scopes to auth, writes to `MYPLAN.md`.
+
 Parse `$ARGUMENTS`:
 - First positional argument is the plan source: a file path to an existing plan document, OR `--text "..."` for an inline plan description.
 - `--output <path>` — where to write the decomposed plan. Default: `local://DELEGATEDPLAN.md`.

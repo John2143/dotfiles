@@ -10,6 +10,15 @@ tool-hints: |
   Exit via `exit_plan_mode` to submit for approval — never ask for plan approval via text.
 ---
 
+## Usage
+
+**Invocation:** `/skill:gh-get-issue-and-plan [issue-number]`
+
+- `issue-number` — (optional) The GitHub issue number to plan. If omitted, auto-discovers the first open issue without an `in-progress` label (skipping `question` and `discussion` labels).
+
+**Examples:**
+- `/skill:gh-get-issue-and-plan 42` — Fetch issue #42, explore the codebase, and produce an implementation plan
+- `/skill:gh-get-issue-and-plan` — Auto-discover the next eligible issue and plan it
 Parse `$ARGUMENTS`:
 - First positional argument is an optional `$ISSUE_NUMBER`. If provided, fetch that issue. If omitted, auto-discover the first open issue without an `in-progress` label.
 - If the issue body is empty or underspecified: if invoked as part of a multi-phase workflow (not standalone), follow `do-gh-issue` stuck protocol — surface the ambiguity and set phase to stuck. If standalone: ask the user to clarify requirements before exploring code.

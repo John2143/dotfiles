@@ -8,6 +8,15 @@ tool-hints: |
   Skip if the issue fails the triviality checklist below. Suggest `do-gh-issue` instead.
 ---
 
+## Usage
+
+**Invocation:** `/skill:gh-sweep [issue-number]`
+
+- `issue-number` — (optional) The GitHub issue number to fix. If omitted, auto-discovers the first open issue without an `in-progress` label that passes the triviality checklist.
+
+**Examples:**
+- `/skill:gh-sweep 42` — Fix issue #42 if it passes the triviality checklist
+- `/skill:gh-sweep` — Auto-discover and fix the next eligible trivial issue
 Parse `$ARGUMENTS`:
 - First positional argument is an optional `$ISSUE_NUMBER`. If omitted, auto-discover the next eligible open issue without `in-progress` label.
 - If no eligible trivial issues exist, report and stop.

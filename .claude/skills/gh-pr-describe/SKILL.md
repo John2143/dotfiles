@@ -9,6 +9,15 @@ tool-hints: |
   Get commit log with `git log main..<branch> --oneline`.
 ---
 
+## Usage
+
+**Invocation:** `/skill:gh-pr-describe [--pr number]`
+
+- `--pr number` — (optional) The PR number to update with AI-attribution metadata. If omitted, reads `.gh-issue-state.json` for the PR number.
+
+**Examples:**
+- `/skill:gh-pr-describe --pr 7` — Update PR #7 with an AI-attribution section
+- `/skill:gh-pr-describe` — Update the PR recorded in the state file
 Parse `$ARGUMENTS`:
 - `--pr number` — PR number to update.
 - If omitted, read `.gh-issue-state.json` for `pr_number`.

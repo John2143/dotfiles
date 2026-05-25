@@ -8,6 +8,16 @@ tool-hints: |
   Each invocation executes exactly one phase, then stops. Do not chain phases. Sub-skills (`gh-get-issue-and-plan`, `gh-implement-step`, `gh-review`, `gh-triage`, `gh-pr-describe`) are standalone entry points for single-phase use; `do-gh-issue` is the recommended orchestrator for multi-phase workflows.
 ---
 
+## Usage
+
+**Invocation:** `/skill:do-gh-issue [issue-number]`
+
+- `issue-number` — Optional GitHub issue number to work on. If omitted, the skill auto-discovers the next eligible open issue (unlabeled `in-progress`, not `question` or `discussion`).
+
+**Examples:**
+- `/skill:do-gh-issue` — Auto-discovers and works on the next eligible open issue.
+- `/skill:do-gh-issue 42` — Works on issue #42 specifically, progressing through discover → plan → implement → review → ready phases across repeated invocations.
+
 Parse `$ARGUMENTS`:
 - First positional argument is an optional `$ISSUE_NUMBER`. If provided, work on that specific issue. If omitted, auto-discover the next eligible issue.
 - If no arguments, proceed with auto-discovery.

@@ -11,6 +11,26 @@ tool-hints: |
   Temperature 0–0.3 for style consistency; higher values produce caricature.
 ---
 
+## Usage
+
+**Invocation:** `/skill:humanizer [text] | --file <path> [--persona <name>|all] [--dry-run] [--evaluate] [--list-personas]`
+
+Provide text to rewrite either inline or via a file. By default, 3–5 literary personas are dynamically selected based on the input's register, purpose, and domain. Flags:
+
+- `--file <path>` — Read input from a file and overwrite it with the result (unless `--dry-run`).
+- `--persona <name>` — Use a single persona by slug (e.g., `hemingway`, `orwell`, `didion`). Use `--list-personas` to see all available.
+- `--persona all` — Explicitly select all 12 personas (same as default dynamic selection but broader).
+- `--dry-run` — Print output to chat without modifying any file.
+- `--evaluate` — After output, run a VERMILLION self-check and report the score.
+- `--list-personas` — Print the persona registry and stop.
+
+**Examples:**
+- `/skill:humanizer This email sounds robotic. Please fix it.` — Inline text, dynamic persona selection
+- `/skill:humanizer --file draft-post.md` — Rewrite a file in place, dynamic personas
+- `/skill:humanizer --file draft-post.md --persona hemingway --dry-run` — Preview Hemingway-style rewrite without saving
+- `/skill:humanizer --file draft-post.md --persona all --evaluate` — Full rewrite with all personas and quality scoring
+- `/skill:humanizer --list-personas` — List every available persona and their traits
+
 Parse `$ARGUMENTS`:
 - If `--list-personas` is present: read and print `.claude/skills/humanizer/personas/registry.md` and stop.
 - If `--file <path>` is present: read that file as input. The skill overwrites it on output (unless `--dry-run`).

@@ -10,6 +10,18 @@ tool-hints: |
   Read `AGENTS.md` if it exists for project-specific conventions.
 ---
 
+## Usage
+
+**Invocation:** `/skill:gh-review [branch] [--pr number] [--focus dimension]`
+
+- `branch` — (optional) The branch to review (diffed against `main`). If omitted, read from `.gh-issue-state.json`.
+- `--pr number` — (optional) The PR number to post the review comment on.
+- `--focus dimension` — (optional) Restrict review to one dimension: `correctness`, `security`, `error-handling`, `maintainability`, or `performance`. If omitted, all five dimensions are evaluated.
+
+**Examples:**
+- `/skill:gh-review fix-issue-42 --pr 7` — Full five-dimension review of `fix-issue-42`, posted to PR #7
+- `/skill:gh-review fix-issue-42 --pr 7 --focus security` — Security-only review
+- `/skill:gh-review` — Review the branch from the state file
 Parse `$ARGUMENTS`:
 - First positional argument is the branch name to review.
 - `--pr number` — the PR number to comment on.
