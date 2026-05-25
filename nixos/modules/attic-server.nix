@@ -23,8 +23,10 @@
     path = "/var/lib/attic/storage"
 
     [chunking]
-    chunk-size = 65536
     nar-size-threshold = 65536
+    min-size = 16384
+    avg-size = 65536
+    max-size = 262144
   '';
 in {
   # ── Admin token (same token used by clients for login) ──
