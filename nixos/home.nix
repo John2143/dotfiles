@@ -256,10 +256,6 @@ in {
           };
           layout = "dwindle";
           allow_tearing = true;
-          layerrule = [
-            "blur,waybar"
-            "ignorezero,waybar"
-          ];
         } // (if compName == "secu" then { gaps_in = 0; gaps_out = 0; } else {});
 
         decoration = {
@@ -293,6 +289,10 @@ in {
           sensitivity = -0.2;
           accel_profile = "flat";
         };
+        layerrule = [
+          "blur,waybar"
+          "ignorezero,waybar"
+        ];
       };
 
       # ---- Workspace rules ----
