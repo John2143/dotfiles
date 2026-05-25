@@ -280,6 +280,10 @@ window#waybar > box {
 #custom-teamspeak-sound.unmuted {
     color: @overlay0;
 }
+
+#custom-teamspeak-mic.talking {
+    color: @blue;
+}
 #custom-teamspeak-mic.disconnected,
 #custom-teamspeak-sound.disconnected {
     padding: 0;

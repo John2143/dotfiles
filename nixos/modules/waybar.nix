@@ -173,10 +173,10 @@ in {
           left = if compName == "office" then "DP-2" else "DP-3";
           right = if compName == "office" then "DP-1" else "HDMI-A-2";
         in {
-          format = "{icon}";
+          format = "{icon}  {windows}";
           format-icons = ws-icons;
           tooltip = true;
-          tooltip-format = "{windows}";
+          tooltip-format = "{name}";
           "workspace-taskbar" = {
             enable = true;
             "update-active-window" = true;

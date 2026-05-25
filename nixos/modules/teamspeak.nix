@@ -51,6 +51,11 @@ let
         "class": "unmuted", "alt": "unmuted",
         "tooltip": "Mic Active (click to mute)",
     })
+    TALKING_JSON = json.dumps({
+        "text": "\uf130",
+        "class": "talking", "alt": "talking",
+        "tooltip": "Talking",
+    })
 
     # Output (sound) status -- icon only, CSS class handles color
     SOUND_MUTED_JSON = json.dumps({
@@ -216,7 +221,7 @@ let
                 return DISCONNECTED_JSON, True
             resp = ts3_cmd(
                 sock,
-                f"clientvariable clid={clid} client_input_muted",
+                f"clientvariable clid={clid} client_input_muted client_is_talker",
             )
             if "connection_lost" in resp:
                 return DISCONNECTED_JSON, False
@@ -225,6 +230,10 @@ let
             state_cache["input_muted"] = muted
             if muted == "1":
                 return MIC_MUTED_JSON, True
+            t = re.search(r"client_is_talker=(\d+)", resp)
+            talking = t.group(1) if t else "0"
+            if talking == "1":
+                return TALKING_JSON, True
             return MIC_UNMUTED_JSON, True
         elif cmd == "status-output":
             if clid is None:
