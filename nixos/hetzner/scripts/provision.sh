@@ -1,6 +1,21 @@
 #!/usr/bin/env bash
 # provision.sh — Create Hetzner VM and deploy NixOS via nixos-anywhere
 #
+# End-to-end provisioning for a single Hetzner k3s node. Automates:
+#   1. VM creation (cpx31, ubuntu-24.04 base)
+#   2. Floating IP allocation + assignment (for IP masking / DDoS protection)
+#   3. deSEC DNS bootstrap (NS delegation + glue A records for PowerDNS)
+#   4. nixos-anywhere deploy (kexec → disko format → NixOS install)
+#   5. Post-deploy: age key copy, agenix decrypt, headscale cleanup
+#   6. deSEC node A record (k3s-<region>.9s.pics → floating IP)
+#   7. Tailscale connect (via Headscale preauth key)
+#   8. Service verification (k3s, pdns, tailscaled)
+#
+# Provisioning order matters:
+#   ashburn FIRST  → home-pi PowerDNS depends on ashburn PostgreSQL
+#   hillsboro NEXT → pulls cache from ashburn (when Attic cache is set up)
+#   nuremberg LAST → same cache benefits
+#
 # Usage: ./provision.sh <region> <role>
 #   region: ashburn | hillsboro | nuremberg
 #   role:   server  | agent
@@ -8,8 +23,8 @@
 # Requires: HCLOUD_TOKEN env var, hcloud CLI, nixos-anywhere, age key at ~/.ssh/age
 #
 # Example:
-#   export HCLOUD_TOKEN="your-token"
-#   ./provision.sh ashburn server   # Deploy ashburn server node
+#   export HCLOUD_TOKEN="$(agenix -d ../secrets/hetzner/hcloud-token.age -i ~/.ssh/age)"
+#   ./provision.sh ashburn server
 
 set -euo pipefail
 
