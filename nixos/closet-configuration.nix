@@ -176,7 +176,11 @@
   ];
 
   # ── APC UPS monitoring ────────────────────────────────────────────
-  # Connected via USB; gracefully shuts down when battery is critical.
+  # Gracefully shuts down at low battery. Fires HA webhooks on power events.
+  age.secrets.hass-webhooks = {
+    file = ../secrets/hass-webhooks.age;
+    owner = "root";
+  };
   services.apcupsd = {
     enable = true;
     configText = ''
@@ -186,15 +190,21 @@
       ONBATTERYDELAY 6
       BATTERYLEVEL 10
       MINUTES 5
-      NETSERVER on
-      NISIP 0.0.0.0
     '';
     hooks = {
-      onbattery = "${pkgs.util-linux}/bin/wall 'UPS on battery — system will shut down when battery is low'";
-      doshutdown = "${pkgs.util-linux}/bin/wall 'UPS battery critical — shutting down now'";
+      onbattery = ''
+        set -a; source /run/agenix/hass-webhooks; set +a
+        ${pkgs.curl}/bin/curl -s "$CLOSET_ONBATTERY_URL"
+        ${pkgs.util-linux}/bin/wall 'UPS on battery — shutting down when critical'
+      '';
+      offbattery = ''
+        set -a; source /run/agenix/hass-webhooks; set +a
+        ${pkgs.curl}/bin/curl -s "$CLOSET_OFFBATTERY_URL"
+        ${pkgs.util-linux}/bin/wall 'UPS power restored'
+      '';
+      doshutdown = "${pkgs.util-linux}/bin/wall 'UPS battery critical — shutting down NOW'";
     };
   };
-
   # Do NOT change this value unless you have manually inspected all the changes it would make to your configuration,
   # and migrated your data accordingly.
   #

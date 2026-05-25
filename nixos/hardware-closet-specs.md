@@ -147,6 +147,23 @@ wwn-0x60000000000000000e00000000060001
 - nvme-pci-0100: Composite — temp1 alarm: 0°C, temp1 crit: 90°C, temp1: 43°C, temp1 max: 70°C
 - k10temp-pci-00c3: Tctl — temp1: 37°C
 
+
+## UPS
+
+| Field | Value |
+|---|---|
+| Model | APC Back-UPS ES 600M1 |
+| Serial | 0B2604L25761 |
+| Firmware | 928.a11 .D USB FW:a |
+| Battery date | 2026-01-22 |
+| Nominal power | 330W |
+| Input voltage | 119V |
+| Load | 25% (~82W) |
+| Battery charge | 98% |
+| Runtime remaining | ~29 min |
+| Connection | USB (051d:0002) |
+| Software | apcupsd 3.14.14 (standalone) |
+| Shutdown thresholds | BATTERYLEVEL 10%, MINUTES 5 |
 ## Notes
 
 

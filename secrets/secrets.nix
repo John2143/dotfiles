@@ -150,4 +150,16 @@ in {
   #   echo -e "CAMERA_USER=admin\nCAMERA_PASSWORD=yourpassword" | \
   #     agenix -e camera-credentials.age -i ~/.ssh/age
   "camera-credentials.age".publicKeys = [secu office arch];
+  # Home Assistant webhook URLs — triggered by apcupsd on power-loss/return.
+  # HA webhooks are unauthenticated (the URL itself is the secret).
+  # Create 4 webhooks in HA (Settings → Automations → Webhooks), then:
+  #   echo -e "CLOSET_ONBATTERY_URL=http://HA_IP:8123/api/webhook/<id>\nCLOSET_OFFBATTERY_URL=..." | \
+  #     agenix -e hass-webhooks.age -i ~/.ssh/age
+  #
+  # Format (4 lines):
+  #   CLOSET_ONBATTERY_URL=http://192.168.5.XX:8123/api/webhook/ups_closet_lost_power
+  #   CLOSET_OFFBATTERY_URL=http://192.168.5.XX:8123/api/webhook/ups_closet_power_returned
+  #   NAS_ONBATTERY_URL=http://192.168.5.XX:8123/api/webhook/ups_nas_lost_power
+  #   NAS_OFFBATTERY_URL=http://192.168.5.XX:8123/api/webhook/ups_nas_power_returned
+  "hass-webhooks.age".publicKeys = [closet nas office arch];
 }

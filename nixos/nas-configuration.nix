@@ -460,7 +460,11 @@
   };
 
   # ── APC UPS monitoring ────────────────────────────────────────────
-  # NAS has its own dedicated UPS, connected via USB.
+  # Dedicated UPS via USB. Fires HA webhooks on power events.
+  age.secrets.hass-webhooks = {
+    file = ../secrets/hass-webhooks.age;
+    owner = "root";
+  };
   services.apcupsd = {
     enable = true;
     configText = ''
@@ -472,11 +476,19 @@
       MINUTES 5
     '';
     hooks = {
-      onbattery = "${pkgs.util-linux}/bin/wall 'UPS on battery — NAS shutting down when critical'";
-      doshutdown = "${pkgs.util-linux}/bin/wall 'UPS battery critical — shutting down NAS now'";
+      onbattery = ''
+        set -a; source /run/agenix/hass-webhooks; set +a
+        ${pkgs.curl}/bin/curl -s "$NAS_ONBATTERY_URL"
+        ${pkgs.util-linux}/bin/wall 'UPS on battery — NAS shutting down when critical'
+      '';
+      offbattery = ''
+        set -a; source /run/agenix/hass-webhooks; set +a
+        ${pkgs.curl}/bin/curl -s "$NAS_OFFBATTERY_URL"
+        ${pkgs.util-linux}/bin/wall 'UPS power restored on NAS'
+      '';
+      doshutdown = "${pkgs.util-linux}/bin/wall 'UPS battery critical — shutting down NAS NOW'";
     };
   };
-
   # ====================
   # === Attic Cache ===
   # ====================

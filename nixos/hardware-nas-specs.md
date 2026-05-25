@@ -184,6 +184,23 @@ wwn-0x60000000000000000e00000000030001
 - acpitz-acpi-0: temp1 — temp1: 28°C; temp2 — temp2: 30°C
 - coretemp-isa-0000: Package id 0 — temp1 crit: 105°C, temp1 crit alarm: 0°C, temp1: 53°C, temp1 max: 85°C; Core 0 — temp2 crit: 105°C, temp2 crit alarm: 0°C, temp2: 50°C, temp2 max: 85°C; Core 1 — temp3 crit: 105°C, temp3 crit alarm: 0°C, temp3: 53°C, temp3 max: 85°C
 
+
+## UPS
+
+| Field | Value |
+|---|---|
+| Model | APC Back-UPS NS 1500M2 |
+| Serial | 0B2508L03827 |
+| Firmware | 957.e5 .D USB FW:e5 |
+| Battery date | 2025-02-17 |
+| Nominal power | 900W |
+| Input voltage | 121V |
+| Load | 13% (~117W) |
+| Battery charge | 100% |
+| Runtime remaining | ~62 min |
+| Connection | USB (cable looks like RJ45 but is USB) |
+| Software | apcupsd 3.14.14 (standalone) |
+| Shutdown thresholds | BATTERYLEVEL 10%, MINUTES 5 |
 ## Notes
 
 
