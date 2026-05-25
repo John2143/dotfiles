@@ -285,7 +285,7 @@ CMEOF
       ExecStart = pkgs.writeShellScript "attic-netrc" ''
         mkdir -p /run
         printf 'machine headscale.9s.pics password %s\n' \
-          "$(cat /run/agenix.d/*/attic-admin-token /run/agenix/attic-admin-token 2>/dev/null | head -1)" \
+          "$(for f in /run/agenix.d/*/attic-admin-token /run/agenix/attic-admin-token; do [ -f \"\$f\" ] && cat \"\$f\" && break; done)" \
           > /run/attic-netrc
         chmod 0444 /run/attic-netrc
       '';
@@ -303,7 +303,7 @@ CMEOF
       Type = "oneshot";
       RemainAfterExit = true;
       ExecStart = pkgs.writeShellScript "attic-login" ''
-        attic login home-pi http://headscale.9s.pics:8280 "$(cat /run/agenix.d/*/attic-admin-token /run/agenix/attic-admin-token 2>/dev/null | head -1)"
+        attic login home-pi http://headscale.9s.pics:8280 "$(for f in /run/agenix.d/*/attic-admin-token /run/agenix/attic-admin-token; do [ -f \"\$f\" ] && cat \"\$f\" && break; done)"
       '';
     };
   };
