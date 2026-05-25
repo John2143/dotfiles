@@ -537,6 +537,7 @@ in {
 
   # Aggressive stop timeouts for user services that block home-manager
   # activation (sd-switch hangs waiting for them to stop).
-  systemd.user.services.dunst.Service.TimeoutStopSec = 10;
-  systemd.user.services.udiskie.Service.TimeoutStopSec = 10;
+  systemd.user.services.dunst.Service.TimeoutStopSec = 5;
+  systemd.user.services.udiskie.Service.TimeoutStopSec = 5;
+  systemd.user.services.gammastep.Service.TimeoutStopSec = 5;
 }

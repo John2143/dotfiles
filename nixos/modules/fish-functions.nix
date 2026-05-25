@@ -83,29 +83,64 @@
       env-cleanup $_pre_vars
     '';
     bigjuush.description = "Upload files to RustFS and get public share links";
-    omp-safe.body = ''
-      # Run omp with all hooks from ~/.omp/agent/hooks/ loaded. Default `omp`
-      # runs auto; `omp-safe` prompts before risky bash, force-pushes, etc.
-      # See `~/.omp/agent/hooks/approve.ts` for the approval rule list.
-      # Verify with: `try-check-prompt`
-      set -l hook_args
-      for hook in $HOME/.omp/agent/hooks/*.ts
-        set -a hook_args --hook=$hook
-      end
-      omp $hook_args $argv
-    '';
-    omp-safe.description = "Run omp with all hooks from ~/.omp/agent/hooks/";
+    openclaude.body = ''
+      # Wrapper for @gitlawb/openclaude. Loads API keys from agenix, reads the
+      # current permission mode from .claude/settings.local.json, sets env vars
+      # for the default provider (DeepSeek), and launches openclaude.
+      #
+      # Provider is selected via env vars:
+      #   OPENAI_BASE_URL + OPENAI_API_KEY + OPENAI_MODEL = any OpenAI-compatible API
+      #   DeepSeek uses https://api.deepseek.com/v1 with DEEPSEEK_API_KEY
+      #
+      # Default: deepseek/deepseek-v4-pro. Override with --provider and --model flags.
 
-    omp-approve-mode.body = ''
+      # Load API keys from agenix.
+      set -l creds_file /run/agenix/llm-runtime-keys
+      if test -f $creds_file
+        envsource $creds_file >/dev/null
+      end
+
+      # Load deepseek key if available.
+      if test -n "$DEEPSEEK_API_KEY"
+        set -gx OPENAI_API_KEY "$DEEPSEEK_API_KEY"
+        set -gx OPENAI_BASE_URL "https://api.deepseek.com/v1"
+      end
+      # Default model: deepseek-v4-pro.
+      if test -z "$OPENAI_MODEL"
+        set -gx OPENAI_MODEL "deepseek-v4-pro"
+      end
+
+      # Read current permission mode.
+      set -l perm_mode default
+      set -l settings_file .claude/settings.local.json
+      if test -f $settings_file
+        set perm_mode (jq -r '.permissions.defaultMode // "default"' $settings_file)
+      end
+
+      # Map Claude Code mode names to openclaude --permission-mode values.
+      # OMP's "normal" = "default", "edits" = "acceptEdits", "auto" = "auto"
+      set -l perm_flag "--permission-mode=$perm_mode"
+
+      # Launch openclaude.
+      set -l bin ~/.local/bin/openclaude
+      if not test -x $bin
+        echo "openclaude not found at $bin. Install: npm install -g --prefix=\$HOME/.local @gitlawb/openclaude" >&2
+        return 1
+      end
+      $bin $perm_flag $argv
+    '';
+    openclaude.description = "Wrapper for @gitlawb/openclaude with API keys loaded from agenix and permission mode from .claude/settings.local.json";
+
+    approve-mode.body = ''
       # Switch the approval mode for the current repo. Writes to .claude/settings.local.json.
       # Mode is stored as permissions.defaultMode following Claude Code settings schema.
-      # Usage: omp-approve-mode normal|edits|auto
+      # Usage: approve-mode normal|edits|auto
       # Normal:  prompt for each unlisted bash command
       # Edits:   auto-allow in-repo edits, prompt for bash
       # Auto:    LLM classifier verifies before running
       set -l mode $argv[1]
       if test "$mode" != "normal" -a "$mode" != "edits" -a "$mode" != "auto"
-        echo "Usage: omp-approve-mode normal|edits|auto" >&2
+        echo "Usage: approve-mode normal|edits|auto" >&2
         return 1
       end
       set -l dmode default
@@ -124,23 +159,27 @@
       end
       echo "Approval mode: $mode (stored in $file)" >&2
     '';
-    omp-approve-mode.description = "Switch OMP approval mode (normal|edits|auto) for current repo";
+    approve-mode.description = "Switch approval mode (normal|edits|auto) for current repo via .claude/settings.local.json";
+
+    omp-approve-mode.body = ''
+      # Backward-compatible alias for approve-mode.
+      approve-mode $argv
+    '';
+    omp-approve-mode.description = "Alias for approve-mode (backward compatibility)";
     try-check-prompt.body = ''
-      # Run omp with the approval hook and a safe prompt that exercises the
-      # approve/deny confirm dialog. The prompt instructs the model to run a command
-      # containing "rm -rf" (echo'd, not executed). Since the hook checks the
-      # command string for risky patterns, `echo rm -rf <dir>` triggers the
-      # confirm prompt even though the actual command is harmless.
+      # Run openclaude with the PreToolUse hook checking for a dangerous-looking
+      # command. The prompt asks the model to run a command containing "rm -rf"
+      # (echo'd, not actually destructive). The PreToolUse hook's regex should
+      # catch "rm -rf" patterns and exit 2, blocking the tool call.
       #
       # If the hook is working:
-      #   - The confirm dialog appears: "Approve tool call?"
-      #   - Approving runs: echo rm -rf /tmp/omp-hook-test
-      #   - Denying throws and the tool call is blocked.
+      #   - The tool call is blocked before execution
+      #   - OpenClaude reports the hook blocked the Bash call
       #
-      # If NO dialog appears, the hook may not be wired correctly.
-      omp --hook=$HOME/.omp/agent/hooks/approve.ts $argv "Run: echo rm -rf /tmp/omp-hook-test  # verify the approval hook"
+      # If NO blocking occurs, the hook is not wired correctly.
+      openclaude -p "Run: echo rm -rf /tmp/hook-test  # verify the PreToolUse approval hook"
     '';
-    try-check-prompt.description = "Verify the approval hook works — triggers the approve/deny confirm dialog with a safe echo'd rm -rf command";
+    try-check-prompt.description = "Verify the PreToolUse approval hook blocks dangerous-looking bash commands";
 
 
     llm-unsafe-load-admin-keys.body = ''

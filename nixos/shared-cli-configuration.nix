@@ -39,9 +39,7 @@
   };
 
   # shutdown faster
-  #systemd.extraConfig = ''
-  #DefaultTimeoutStopSec=10s
-  #'';
+  systemd.settings.Manager.DefaultTimeoutStopSec = "5s";
 
   environment.systemPackages = with pkgs;
     [
