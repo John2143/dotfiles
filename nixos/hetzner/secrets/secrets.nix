@@ -17,4 +17,5 @@ in {
   "hetzner/headscale-preauth-key.age".publicKeys = allKeys;
   "hetzner/desec-token.age".publicKeys = allKeys;
   "hetzner/attic-token.age".publicKeys = allKeys;
+  "hetzner/attic-server-secret.age".publicKeys = allKeys;
 }

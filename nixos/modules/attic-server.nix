@@ -29,9 +29,9 @@
     max-size = 262144
   '';
 in {
-  # ── Admin token (same token used by clients for login) ──
+  # ── HS256 server secret (base64-encoded, used by atticd for JWT signing) ──
   age.secrets.attic-admin-token = {
-    file = ../hetzner/secrets/hetzner/attic-token.age;
+    file = ../hetzner/secrets/hetzner/attic-server-secret.age;
     owner = "root";
     group = "root";
     mode = "0400";
@@ -55,7 +55,7 @@ in {
     serviceConfig = {
       Type = "simple";
       ExecStart = pkgs.writeShellScript "atticd-start" ''
-        export ATTIC_SERVER_TOKEN_HS256_SECRET="$(cat ${config.age.secrets.attic-admin-token.path})"
+        export ATTIC_SERVER_TOKEN_HS256_SECRET_BASE64="$(cat ${config.age.secrets.attic-admin-token.path})"
         exec atticd --config ${cfgFile}
       '';
       Restart = "on-failure";
