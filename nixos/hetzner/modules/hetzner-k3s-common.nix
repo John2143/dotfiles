@@ -149,10 +149,13 @@ CMEOF
   # ── agenix → Kubernetes Secrets injection ──
   # Decrypts agenix secrets and creates Kubernetes Secrets before ArgoCD syncs.
   # Runs after k3s is ready, before ArgoCD applies the root app.
-  # Secrets: rfc2136-credentials, crowdsec-bouncer-key, mongo-creds,
-  #   mongo-encryption-key, b2-credentials, seaweedfs-master-key,
-  #   rclone-config, healthchecks-url, pdns-postgres-password
-  systemd.services.k8s-secrets-bootstrap = {
+  # Secrets created: rfc2136-credentials, crowdsec-bouncer-key, mongo-creds,
+  #   b2-credentials, seaweedfs-master-key, rclone-config, healthchecks-url,
+  #   pdns-postgres-password, temporal-postgres-password
+  # NOTE: mongo-encryption-key removed — mongo:7 Community Edition doesn't support
+  #   encryption-at-rest (--enableEncryption is Enterprise-only) 
+  # NOTE: These secrets MUST NOT exist as placeholders in the GitOps repo.
+  #   ArgoCD selfHeal WILL overwrite injected values even with IgnoreExtraneous.
     description = "Inject agenix secrets into Kubernetes Secrets";
     after = ["k3s.service" "argocd-bootstrap.service"];
     wants = ["k3s.service"];
@@ -188,9 +191,7 @@ CMEOF
       kubectl create secret generic mongo-creds -n default \
         --from-literal=password="$(cat ${config.age.secrets."hetzner/mongodb-encryption-key".path} | head -c 32)" \
         --dry-run=client -o yaml | kubectl apply -f -
-      kubectl create secret generic mongo-encryption-key -n default \
-        --from-file=encryption.key=${config.age.secrets."hetzner/mongodb-encryption-key".path} \
-        --dry-run=client -o yaml | kubectl apply -f -
+
 
       # B2 credentials for CNPG and Longhorn backups
       kubectl create secret generic b2-credentials -n default \
@@ -209,7 +210,7 @@ CMEOF
         --dry-run=client -o yaml | kubectl apply -f -
 
       # Healthchecks.io URL (manual — set by user)
-      kubectl create secret generic healthchecks-url -n backup \
+      kubectl create secret generic healthchecks-url -n monitoring \
         --from-literal=HC_URL=https://hc-ping.com/PLACEHOLDER_UUID \
         --dry-run=client -o yaml | kubectl apply -f -
 
