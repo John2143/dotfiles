@@ -156,6 +156,7 @@ CMEOF
   #   encryption-at-rest (--enableEncryption is Enterprise-only) 
   # NOTE: These secrets MUST NOT exist as placeholders in the GitOps repo.
   #   ArgoCD selfHeal WILL overwrite injected values even with IgnoreExtraneous.
+  systemd.services.k8s-secrets-bootstrap = {
     description = "Inject agenix secrets into Kubernetes Secrets";
     after = ["k3s.service" "argocd-bootstrap.service"];
     wants = ["k3s.service"];
