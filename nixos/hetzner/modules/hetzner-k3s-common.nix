@@ -269,7 +269,7 @@ CMEOF
     "http://headscale.9s.pics:8280/2143nix"
   ];
   nix.settings.trusted-public-keys = lib.mkBefore [
-    "2143nix:Ysam0ozURtK+1tkP62M6lzbfoi8BVeL6s7ZWJlB6UxE="
+    "2143nix:LvE5APLbagyNODEJJ4BHKV4le1vcC6JgNklqdyMPUl8="
   ];
   nix.settings.netrc-file = "/run/attic-netrc";
 
@@ -284,7 +284,7 @@ CMEOF
       ExecStart = pkgs.writeShellScript "attic-netrc" ''
         mkdir -p /run
         printf 'machine headscale.9s.pics password %s\n' \
-          "$(cat ${config.age.secrets.attic-admin-token.path})" \
+          "$(cat /run/agenix.d/*/attic-admin-token /run/agenix/attic-admin-token 2>/dev/null | head -1)" \
           > /run/attic-netrc
         chmod 0444 /run/attic-netrc
       '';
@@ -302,7 +302,7 @@ CMEOF
       Type = "oneshot";
       RemainAfterExit = true;
       ExecStart = pkgs.writeShellScript "attic-login" ''
-        attic login home-pi http://headscale.9s.pics:8280 "$(cat ${config.age.secrets.attic-admin-token.path})"
+        attic login home-pi http://headscale.9s.pics:8280 "$(cat /run/agenix.d/*/attic-admin-token /run/agenix/attic-admin-token 2>/dev/null | head -1)"
       '';
     };
   };
