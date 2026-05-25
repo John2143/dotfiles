@@ -56,6 +56,7 @@ in {
       Type = "simple";
       ExecStart = pkgs.writeShellScript "atticd-start" ''
         export ATTIC_SERVER_TOKEN_HS256_SECRET_BASE64="$(cat ${config.age.secrets.attic-admin-token.path})"
+        touch /var/lib/attic/attic-server.db  # SQLite needs file to exist (aarch64 quirk)
         exec atticd --config ${cfgFile}
       '';
       Restart = "on-failure";
