@@ -20,6 +20,27 @@
         "type": "github"
       }
     },
+    "lidarr": {
+      "inputs": {
+        "nixpkgs": [
+          "nixpkgs"
+        ]
+      },
+      "locked": {
+        "lastModified": 1779669974,
+        "narHash": "sha256-hooXH8OumIOhFzVE/+xil3BVj4eu4qhM4ji/irD3sPI=",
+        "owner": "John2143",
+        "repo": "Lidarr",
+        "rev": "cf2c4eeca1c0314121b7ceacc66350c6749e0d5d",
+        "type": "github"
+      },
+      "original": {
+        "owner": "John2143",
+        "ref": "nix-flake",
+        "repo": "Lidarr",
+        "type": "github"
+      }
+    },
     "nixpkgs": {
       "locked": {
         "lastModified": 1779508470,
@@ -39,6 +60,7 @@
     "root": {
       "inputs": {
         "disko": "disko",
+        "lidarr": "lidarr",
         "nixpkgs": "nixpkgs"
       }
     }

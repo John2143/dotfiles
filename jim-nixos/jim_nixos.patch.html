@@ -1,0 +1,141 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+<!-- This file was created with the aha Ansi HTML Adapter. https://github.com/theZiz/aha -->
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+<meta http-equiv="Content-Type" content="application/xml+xhtml; charset=UTF-8"/>
+<title>stdin</title>
+</head>
+<body>
+<pre>
+<span style="font-weight:bold;">diff --git a/jim-nixos/configuration.nix b/jim-nixos/configuration.nix</span>
+<span style="font-weight:bold;">index 5e2afca..3e46cd0 100644</span>
+<span style="font-weight:bold;">--- a/jim-nixos/configuration.nix</span>
+<span style="font-weight:bold;">+++ b/jim-nixos/configuration.nix</span>
+<span style="color:teal;">@@ -2,7 +2,7 @@</span>
+ # your system.  Help is available in the configuration.nix(5) man page
+ # and in the NixOS manual (accessible by running ‘nixos-help’).
+ 
+<span style="color:red;">-{ config, pkgs, ... }:</span>
+<span style="color:green;">+</span><span style="color:green;">{ config, pkgs, lidarr, ... }:</span>
+ 
+ {
+   imports =
+<span style="font-weight:bold;">diff --git a/jim-nixos/flake.lock b/jim-nixos/flake.lock</span>
+<span style="font-weight:bold;">index ef771e9..03cb7ea 100644</span>
+<span style="font-weight:bold;">--- a/jim-nixos/flake.lock</span>
+<span style="font-weight:bold;">+++ b/jim-nixos/flake.lock</span>
+<span style="color:teal;">@@ -20,6 +20,27 @@</span>
+         &quot;type&quot;: &quot;github&quot;
+       }
+     },
+<span style="color:green;">+</span><span style="color:green;">    &quot;lidarr&quot;: {</span>
+<span style="color:green;">+</span><span style="color:green;">      &quot;inputs&quot;: {</span>
+<span style="color:green;">+</span><span style="color:green;">        &quot;nixpkgs&quot;: [</span>
+<span style="color:green;">+</span><span style="color:green;">          &quot;nixpkgs&quot;</span>
+<span style="color:green;">+</span><span style="color:green;">        ]</span>
+<span style="color:green;">+</span><span style="color:green;">      },</span>
+<span style="color:green;">+</span><span style="color:green;">      &quot;locked&quot;: {</span>
+<span style="color:green;">+</span><span style="color:green;">        &quot;lastModified&quot;: 1779669974,</span>
+<span style="color:green;">+</span><span style="color:green;">        &quot;narHash&quot;: &quot;sha256-hooXH8OumIOhFzVE/+xil3BVj4eu4qhM4ji/irD3sPI=&quot;,</span>
+<span style="color:green;">+</span><span style="color:green;">        &quot;owner&quot;: &quot;John2143&quot;,</span>
+<span style="color:green;">+</span><span style="color:green;">        &quot;repo&quot;: &quot;Lidarr&quot;,</span>
+<span style="color:green;">+</span><span style="color:green;">        &quot;rev&quot;: &quot;cf2c4eeca1c0314121b7ceacc66350c6749e0d5d&quot;,</span>
+<span style="color:green;">+</span><span style="color:green;">        &quot;type&quot;: &quot;github&quot;</span>
+<span style="color:green;">+</span><span style="color:green;">      },</span>
+<span style="color:green;">+</span><span style="color:green;">      &quot;original&quot;: {</span>
+<span style="color:green;">+</span><span style="color:green;">        &quot;owner&quot;: &quot;John2143&quot;,</span>
+<span style="color:green;">+</span><span style="color:green;">        &quot;ref&quot;: &quot;nix-flake&quot;,</span>
+<span style="color:green;">+</span><span style="color:green;">        &quot;repo&quot;: &quot;Lidarr&quot;,</span>
+<span style="color:green;">+</span><span style="color:green;">        &quot;type&quot;: &quot;github&quot;</span>
+<span style="color:green;">+</span><span style="color:green;">      }</span>
+<span style="color:green;">+</span><span style="color:green;">    },</span>
+     &quot;nixpkgs&quot;: {
+       &quot;locked&quot;: {
+         &quot;lastModified&quot;: 1779508470,
+<span style="color:teal;">@@ -39,6 +60,7 @@</span>
+     &quot;root&quot;: {
+       &quot;inputs&quot;: {
+         &quot;disko&quot;: &quot;disko&quot;,
+<span style="color:green;">+</span><span style="color:green;">        &quot;lidarr&quot;: &quot;lidarr&quot;,</span>
+         &quot;nixpkgs&quot;: &quot;nixpkgs&quot;
+       }
+     }
+<span style="font-weight:bold;">diff --git a/jim-nixos/flake.nix b/jim-nixos/flake.nix</span>
+<span style="font-weight:bold;">index cc47b4d..6c3e2f3 100644</span>
+<span style="font-weight:bold;">--- a/jim-nixos/flake.nix</span>
+<span style="font-weight:bold;">+++ b/jim-nixos/flake.nix</span>
+<span style="color:teal;">@@ -7,15 +7,20 @@</span>
+       url = &quot;github:nix-community/disko&quot;;
+       inputs.nixpkgs.follows = &quot;nixpkgs&quot;;
+     };
+<span style="color:green;">+</span><span style="color:green;">    lidarr = {</span>
+<span style="color:green;">+</span><span style="color:green;">      url = &quot;github:John2143/Lidarr/nix-flake&quot;;</span>
+<span style="color:green;">+</span><span style="color:green;">      inputs.nixpkgs.follows = &quot;nixpkgs&quot;;</span>
+<span style="color:green;">+</span><span style="color:green;">    };</span>
+   };
+ 
+<span style="color:red;">-  outputs = { nixpkgs, disko, ... }: {</span>
+<span style="color:green;">+</span><span style="color:green;">  outputs = { nixpkgs, disko, lidarr, ... }: {</span>
+     nixosConfigurations.jim = nixpkgs.lib.nixosSystem {
+       system = &quot;x86_64-linux&quot;;
+       modules = [
+         ./hardware-configuration.nix
+         ./configuration.nix
+       ];
+<span style="color:green;">+</span><span style="color:green;">      specialArgs = { inherit lidarr; };</span>
+     };
+   };
+ }
+<span style="font-weight:bold;">diff --git a/jim-nixos/music-stack.nix b/jim-nixos/music-stack.nix</span>
+<span style="font-weight:bold;">index 4a66467..da025c6 100644</span>
+<span style="font-weight:bold;">--- a/jim-nixos/music-stack.nix</span>
+<span style="font-weight:bold;">+++ b/jim-nixos/music-stack.nix</span>
+<span style="color:teal;">@@ -84,10 +84,12 @@</span>
+ # =============================================================================
+ {
+   pkgs,
+<span style="color:red;">-</span>
+<span style="color:green;">+</span><span style="color:green;">  lidarr,</span>
+<span style="color:green;">+</span><span style="color:green;">  config,</span>
+   ...
+ }: let
+   musicRoot = &quot;/var/lib/music&quot;;
+<span style="color:green;">+</span><span style="color:green;">  indexHtml = ./music.html;</span>
+ in {
+   # --- Podman (for explo + aurral containers) ---
+   virtualisation.podman.enable = true;
+<span style="color:teal;">@@ -138,6 +140,7 @@</span> in {
+   services.lidarr = {
+     enable = true;
+     dataDir = &quot;/var/lib/lidarr&quot;;
+<span style="color:green;">+</span><span style="color:green;">    package = lidarr.packages.x86_64-linux.lidarr;</span>
+     settings.update.automatically = false; # Nix manages the version
+ 
+     # Tubifarry plugin — install via Lidarr web UI:
+<span style="color:teal;">@@ -183,8 +186,22 @@</span> in {
+     8686  # lidarr
+     7288  # explo
+     5000  # aurral
+<span style="color:green;">+</span><span style="color:green;">    80    # music index</span>
+   ];
+ 
+<span style="color:green;">+</span><span style="color:green;">  # --- Index page (served on port 80) ---</span>
+<span style="color:green;">+</span><span style="color:green;">  services.nginx = {</span>
+<span style="color:green;">+</span><span style="color:green;">    enable = true;</span>
+<span style="color:green;">+</span><span style="color:green;">    virtualHosts.&quot;_&quot; = {</span>
+<span style="color:green;">+</span><span style="color:green;">      listen = [</span>
+<span style="color:green;">+</span><span style="color:green;">        { addr = &quot;0.0.0.0&quot;; port = 80; }</span>
+<span style="color:green;">+</span><span style="color:green;">      ];</span>
+<span style="color:green;">+</span><span style="color:green;">      locations.&quot;/&quot; = {</span>
+<span style="color:green;">+</span><span style="color:green;">        root = builtins.dirOf indexHtml;</span>
+<span style="color:green;">+</span><span style="color:green;">        index = builtins.baseNameOf indexHtml;</span>
+<span style="color:green;">+</span><span style="color:green;">      };</span>
+<span style="color:green;">+</span><span style="color:green;">    };</span>
+<span style="color:green;">+</span><span style="color:green;">  };</span>
+   # --- Optional: reverse proxy hint ---
+   # To expose these services via nginx/caddy, add virtualHost entries.
+   # Example with services.nginx:
+</pre>
+</body>
+</html>

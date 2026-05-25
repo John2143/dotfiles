@@ -1,0 +1,128 @@
+[1mdiff --git a/jim-nixos/configuration.nix b/jim-nixos/configuration.nix[m
+[1mindex 5e2afca..3e46cd0 100644[m
+[1m--- a/jim-nixos/configuration.nix[m
+[1m+++ b/jim-nixos/configuration.nix[m
+[36m@@ -2,7 +2,7 @@[m
+ # your system.  Help is available in the configuration.nix(5) man page[m
+ # and in the NixOS manual (accessible by running ‘nixos-help’).[m
+ [m
+[31m-{ config, pkgs, ... }:[m
+[32m+[m[32m{ config, pkgs, lidarr, ... }:[m
+ [m
+ {[m
+   imports =[m
+[1mdiff --git a/jim-nixos/flake.lock b/jim-nixos/flake.lock[m
+[1mindex ef771e9..03cb7ea 100644[m
+[1m--- a/jim-nixos/flake.lock[m
+[1m+++ b/jim-nixos/flake.lock[m
+[36m@@ -20,6 +20,27 @@[m
+         "type": "github"[m
+       }[m
+     },[m
+[32m+[m[32m    "lidarr": {[m
+[32m+[m[32m      "inputs": {[m
+[32m+[m[32m        "nixpkgs": [[m
+[32m+[m[32m          "nixpkgs"[m
+[32m+[m[32m        ][m
+[32m+[m[32m      },[m
+[32m+[m[32m      "locked": {[m
+[32m+[m[32m        "lastModified": 1779669974,[m
+[32m+[m[32m        "narHash": "sha256-hooXH8OumIOhFzVE/+xil3BVj4eu4qhM4ji/irD3sPI=",[m
+[32m+[m[32m        "owner": "John2143",[m
+[32m+[m[32m        "repo": "Lidarr",[m
+[32m+[m[32m        "rev": "cf2c4eeca1c0314121b7ceacc66350c6749e0d5d",[m
+[32m+[m[32m        "type": "github"[m
+[32m+[m[32m      },[m
+[32m+[m[32m      "original": {[m
+[32m+[m[32m        "owner": "John2143",[m
+[32m+[m[32m        "ref": "nix-flake",[m
+[32m+[m[32m        "repo": "Lidarr",[m
+[32m+[m[32m        "type": "github"[m
+[32m+[m[32m      }[m
+[32m+[m[32m    },[m
+     "nixpkgs": {[m
+       "locked": {[m
+         "lastModified": 1779508470,[m
+[36m@@ -39,6 +60,7 @@[m
+     "root": {[m
+       "inputs": {[m
+         "disko": "disko",[m
+[32m+[m[32m        "lidarr": "lidarr",[m
+         "nixpkgs": "nixpkgs"[m
+       }[m
+     }[m
+[1mdiff --git a/jim-nixos/flake.nix b/jim-nixos/flake.nix[m
+[1mindex cc47b4d..6c3e2f3 100644[m
+[1m--- a/jim-nixos/flake.nix[m
+[1m+++ b/jim-nixos/flake.nix[m
+[36m@@ -7,15 +7,20 @@[m
+       url = "github:nix-community/disko";[m
+       inputs.nixpkgs.follows = "nixpkgs";[m
+     };[m
+[32m+[m[32m    lidarr = {[m
+[32m+[m[32m      url = "github:John2143/Lidarr/nix-flake";[m
+[32m+[m[32m      inputs.nixpkgs.follows = "nixpkgs";[m
+[32m+[m[32m    };[m
+   };[m
+ [m
+[31m-  outputs = { nixpkgs, disko, ... }: {[m
+[32m+[m[32m  outputs = { nixpkgs, disko, lidarr, ... }: {[m
+     nixosConfigurations.jim = nixpkgs.lib.nixosSystem {[m
+       system = "x86_64-linux";[m
+       modules = [[m
+         ./hardware-configuration.nix[m
+         ./configuration.nix[m
+       ];[m
+[32m+[m[32m      specialArgs = { inherit lidarr; };[m
+     };[m
+   };[m
+ }[m
+[1mdiff --git a/jim-nixos/music-stack.nix b/jim-nixos/music-stack.nix[m
+[1mindex 4a66467..da025c6 100644[m
+[1m--- a/jim-nixos/music-stack.nix[m
+[1m+++ b/jim-nixos/music-stack.nix[m
+[36m@@ -84,10 +84,12 @@[m
+ # =============================================================================[m
+ {[m
+   pkgs,[m
+[31m-[m
+[32m+[m[32m  lidarr,[m
+[32m+[m[32m  config,[m
+   ...[m
+ }: let[m
+   musicRoot = "/var/lib/music";[m
+[32m+[m[32m  indexHtml = ./music.html;[m
+ in {[m
+   # --- Podman (for explo + aurral containers) ---[m
+   virtualisation.podman.enable = true;[m
+[36m@@ -138,6 +140,7 @@[m [min {[m
+   services.lidarr = {[m
+     enable = true;[m
+     dataDir = "/var/lib/lidarr";[m
+[32m+[m[32m    package = lidarr.packages.x86_64-linux.lidarr;[m
+     settings.update.automatically = false; # Nix manages the version[m
+ [m
+     # Tubifarry plugin — install via Lidarr web UI:[m
+[36m@@ -183,8 +186,22 @@[m [min {[m
+     8686  # lidarr[m
+     7288  # explo[m
+     5000  # aurral[m
+[32m+[m[32m    80    # music index[m
+   ];[m
+ [m
+[32m+[m[32m  # --- Index page (served on port 80) ---[m
+[32m+[m[32m  services.nginx = {[m
+[32m+[m[32m    enable = true;[m
+[32m+[m[32m    virtualHosts."_" = {[m
+[32m+[m[32m      listen = [[m
+[32m+[m[32m        { addr = "0.0.0.0"; port = 80; }[m
+[32m+[m[32m      ];[m
+[32m+[m[32m      locations."/" = {[m
+[32m+[m[32m        root = builtins.dirOf indexHtml;[m
+[32m+[m[32m        index = builtins.baseNameOf indexHtml;[m
+[32m+[m[32m      };[m
+[32m+[m[32m    };[m
+[32m+[m[32m  };[m
+   # --- Optional: reverse proxy hint ---[m
+   # To expose these services via nginx/caddy, add virtualHost entries.[m
+   # Example with services.nginx:[m

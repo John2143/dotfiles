@@ -7,15 +7,20 @@
       url = "github:nix-community/disko";
       inputs.nixpkgs.follows = "nixpkgs";
     };
+    lidarr = {
+      url = "github:John2143/Lidarr/nix-flake";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
   };
 
-  outputs = { nixpkgs, disko, ... }: {
+  outputs = { nixpkgs, disko, lidarr, ... }: {
     nixosConfigurations.jim = nixpkgs.lib.nixosSystem {
       system = "x86_64-linux";
       modules = [
         ./hardware-configuration.nix
         ./configuration.nix
       ];
+      specialArgs = { inherit lidarr; };
     };
   };
 }

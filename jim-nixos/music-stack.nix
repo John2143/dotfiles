@@ -84,10 +84,12 @@
 # =============================================================================
 {
   pkgs,
-
+  lidarr,
+  config,
   ...
 }: let
   musicRoot = "/var/lib/music";
+  wwwRoot = ./www;
 in {
   # --- Podman (for explo + aurral containers) ---
   virtualisation.podman.enable = true;
@@ -138,6 +140,7 @@ in {
   services.lidarr = {
     enable = true;
     dataDir = "/var/lib/lidarr";
+    package = lidarr.packages.x86_64-linux.lidarr;
     settings.update.automatically = false; # Nix manages the version
 
     # Tubifarry plugin — install via Lidarr web UI:
@@ -183,8 +186,22 @@ in {
     8686  # lidarr
     7288  # explo
     5000  # aurral
+    80    # music index
   ];
 
+  # --- Static site (served on port 80) ---
+  services.nginx = {
+    enable = true;
+    virtualHosts."_" = {
+      listen = [
+        { addr = "0.0.0.0"; port = 80; }
+      ];
+      locations."/" = {
+        root = wwwRoot;
+        index = "index.html";
+      };
+    };
+  };
   # --- Optional: reverse proxy hint ---
   # To expose these services via nginx/caddy, add virtualHost entries.
   # Example with services.nginx:
