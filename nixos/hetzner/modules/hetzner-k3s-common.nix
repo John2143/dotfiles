@@ -13,6 +13,7 @@
   imports = [
     ./longhorn-host.nix
     ./tailscale.nix
+    ./hetzner-split-ip-firewall.nix
   ];
 
   # agenix secret: k3s cluster token
@@ -242,23 +243,13 @@ CMEOF
     group = "root";
   };
 
-  # ── Split-IP firewall — DISABLED for initial deployment ──
-  # Must be re-enabled after agenix identity is working and floating IPs verified.
-  # systemd.services.split-ip-firewall = {
-  #   ...
-  # };
-
+  # ── Base firewall — split-IP firewall (imported above) handles per-IP rules ──
+  # Keep only SSH + VXLAN here as fallback; everything else via iptables chains.
   networking.firewall.allowedTCPPorts = [
     22    # SSH
-    6443  # k3s API server
-    80    # HTTP (k3s ingress)
-    443   # HTTPS (k3s ingress)
-    53    # DNS (PowerDNS) — hetzner-powerdns.nix:73
-    30432 # PostgreSQL NodePort (PowerDNS) — hetzner-powerdns.nix:24, hetzner-postgres-schema.nix:8
   ];
   networking.firewall.allowedUDPPorts = [
-    53   # DNS (PowerDNS) — hetzner-powerdns.nix:74
-    8472 # flannel VXLAN (k3s)
+    8472  # flannel VXLAN (k3s)
   ];
 
   environment.systemPackages = with pkgs; [

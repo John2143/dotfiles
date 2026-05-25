@@ -60,9 +60,9 @@
   in {
     nixosConfigurations = {
       # ── Server nodes (LA mode, 24/7) ──
-      k3s-ashburn   = mkServer { compName = "k3s-ashburn";   rawIP = "5.161.17.173";  };
-      k3s-hillsboro = mkServer { compName = "k3s-hillsboro"; rawIP = "5.78.29.145";   };
-      k3s-nuremberg = mkServer { compName = "k3s-nuremberg"; rawIP = "5.161.26.226";  };
+      k3s-ashburn   = mkServer { compName = "k3s-ashburn"; };
+      k3s-hillsboro = mkServer { compName = "k3s-hillsboro"; };
+      k3s-nuremberg = mkServer { compName = "k3s-nuremberg"; };
 
       # ── Agent nodes (HA toggle, provisioned/destroyed via scripts) ──
       k3s-ashburn-agent   = mkAgent { compName = "k3s-ashburn-agent";   };

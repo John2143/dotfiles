@@ -41,6 +41,8 @@ FLAKE=".#${HOSTNAME}"
 
 echo "=== Provisioning ${HOSTNAME} (${PLAN}, ${LOCATION}) ==="
 
+
+
 # ── Step 1: Create Hetzner VM ──
 echo "  [1/7] Creating VM..."
 SERVER_ID=$(hcloud server create \
@@ -70,6 +72,13 @@ RAW_IP_ID=$(hcloud floating-ip create \
 hcloud floating-ip assign "${RAW_IP_ID}" "${SERVER_ID}"
 RAW_IP=$(hcloud floating-ip describe "${RAW_IP_ID}" -o json 2>/dev/null | jq -r '.floating_ip.ip // .ip // "unknown"')
 echo "  Raw IP: ${RAW_IP}"
+# ── deSEC DNS bootstrap: NS + glue A records ──
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+echo "  deSEC DNS bootstrap..."
+"${SCRIPT_DIR}/desec-dns.sh" bootstrap-dns "${REGION}" "${RAW_IP}" 2>/dev/null || {
+  echo "    WARNING: deSEC DNS bootstrap failed — continuing (DNS may need manual setup)"
+}
+echo "    NS + glue records set on deSEC"
 
 # ── Step 3: Deploy NixOS via nixos-anywhere ──
 echo "  [3/7] Deploying NixOS..."
@@ -111,6 +120,20 @@ for n in data:
         subprocess.run(['ssh', 'john@192.168.0.154', 'sudo', 'headscale', 'nodes', 'delete', '--identifier', str(n['id']), '--force'])
 " 2>/dev/null || true
 echo "    stale headscale nodes cleaned"
+# ── deSEC node A record (k3s-<region>.9s.pics → floating IP) ──
+echo "  deSEC node A record..."
+"$(cd "$(dirname "$0")" && pwd)/desec-dns.sh" set-a "k3s-${REGION}" "${RAW_IP}" 2>/dev/null || {
+  echo "    WARNING: node A record failed — continuing"
+}
+echo "    k3s-${REGION}.9s.pics → ${RAW_IP}"
+# Save floating IP to config for update-all-nodes
+CONF_FILE="$(cd "$(dirname "$0")" && pwd)/desec-dns-floating-ips.conf"
+case "${REGION}" in
+  ashburn)   echo "FLOATING_ASHBURN=${RAW_IP}" > "$CONF_FILE" ;;   # truncate (first node)
+  hillsboro) echo "FLOATING_HILLSBORO=${RAW_IP}" >> "$CONF_FILE" ;;
+  nuremberg) echo "FLOATING_NUREMBERG=${RAW_IP}" >> "$CONF_FILE" ;;
+esac
+echo "    floating IP saved to desec-dns-floating-ips.conf"
 
 # ── Step 6: Connect tailscale ──
 echo "  [6/7] Connecting tailscale..."

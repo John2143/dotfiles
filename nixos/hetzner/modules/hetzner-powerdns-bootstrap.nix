@@ -19,6 +19,7 @@
 #   set-meta → metadata set
 {
   config,
+  lib,
   pkgs,
   ...
 }: {
@@ -71,6 +72,10 @@
       $PDNSUTIL rrset add 9s.pics 9s.pics NS 60 ns2.9s.pics
       $PDNSUTIL rrset add 9s.pics 9s.pics NS 60 ns3.9s.pics
 
+      # Local-network A record for home-pi (consistent SSH target from LAN)
+      # Update this if the home-pi DHCP lease changes.
+      $PDNSUTIL rrset add 9s.pics local-home-pi.9s.pics A 60 192.168.0.152
+
       # Allow TSIG key to update the zone
       $PDNSUTIL metadata set 9s.pics TSIG-ALLOW-DNSUPDATE externaldns
       $PDNSUTIL metadata set 9s.pics ALLOW-DNSUPDATE-FROM 127.0.0.0/8
@@ -80,6 +85,67 @@
     '';
 
     scriptArgs = "%S";
+  };
+
+  # ── PowerDNS NS A Records ──
+  # Sets ns1/ns2/ns3.9s.pics A records pointing to this node's floating IP.
+  # Detects floating IP at runtime (same logic as split-ip-firewall).
+  # Only runs if the ns A record doesn't already exist.
+  systemd.services.pdns-ns-records = {
+    description = "Set PowerDNS ns A records to floating IP";
+    after = ["pdns-zone-bootstrap.service" "network-online.target"];
+    wants = ["pdns-zone-bootstrap.service"];
+    wantedBy = ["multi-user.target"];
+    path = [pkgs.pdns pkgs.iproute2];
+    serviceConfig = {
+      Type = "oneshot";
+      RemainAfterExit = true;
+    };
+    script = ''
+      STATE_FILE=/var/lib/pdns-ns-records-done
+      if [ -f "$STATE_FILE" ]; then
+        echo "NS records already set, skipping."
+        exit 0
+      fi
+
+      PDNSUTIL="pdnsutil --config-dir=/run/pdns"
+
+      # Wait for pdns to be ready
+      for i in $(seq 1 30); do
+        $PDNSUTIL list-all-zones &>/dev/null && break
+        sleep 2
+      done
+
+      # Detect floating IP at runtime
+      HOSTNAME="''${HOSTNAME:-$(hostname)}"
+      PRIMARY_IP=$(ip -4 route get 8.8.8.8 2>/dev/null | grep -oP 'src \K[\d.]+' | head -1)
+      FLOATING_IP=$(ip -4 addr show enp1s0 2>/dev/null | grep -oP 'inet \K[\d.]+' | grep -v "$PRIMARY_IP" | head -1 || true)
+
+      if [ -z "$FLOATING_IP" ]; then
+        echo "No floating IP detected (single-IP node), skipping NS A records."
+        touch "$STATE_FILE"
+        exit 0
+      fi
+
+      # Map hostname → nsN
+      case "$HOSTNAME" in
+        k3s-ashburn)   NS_NAME="ns1" ;;
+        k3s-hillsboro) NS_NAME="ns2" ;;
+        k3s-nuremberg) NS_NAME="ns3" ;;
+        *) echo "Unknown hostname $HOSTNAME, skipping NS A records."; touch "$STATE_FILE"; exit 0 ;;
+      esac
+
+      echo "Setting ''${NS_NAME}.9s.pics A → ''${FLOATING_IP}"
+
+      # Set or replace A record
+      $PDNSUTIL rrset replace 9s.pics "''${NS_NAME}.9s.pics" A 60 "''${FLOATING_IP}" 2>/dev/null || {
+        # replace might fail if record doesn't exist yet; try add
+        $PDNSUTIL rrset add 9s.pics "''${NS_NAME}.9s.pics" A 60 "''${FLOATING_IP}" 2>/dev/null || true
+      }
+
+      touch "$STATE_FILE"
+      echo "NS A record set: ''${NS_NAME}.9s.pics → ''${FLOATING_IP}"
+    '';
   };
 
 
