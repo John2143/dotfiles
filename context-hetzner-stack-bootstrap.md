@@ -1,6 +1,6 @@
 # Context: hetzner-stack-bootstrap
 
-> Saved 2026-05-24 from branch `master` by `john@office`
+> Saved 2026-05-24, updated 2026-05-25 from branch `master` by `john@office`
 
 ## Goal
 
@@ -16,25 +16,30 @@ Bootstrap 3 Hetzner k3s clusters (ashburn, hillsboro, nuremberg) plus a home-pi 
 | hillsboro | 5.78.186.134 | 5.78.29.145 | active | healthy | active | active | 100.64.0.3 |
 | nuremberg | 178.156.133.181 | 5.161.26.226 | active | healthy | active | active | 100.64.0.4 |
 
-**Ashburn cluster state (operators + apps):**
-| Component | Status | Deployed via |
-|-----------|--------|-------------|
-| cert-manager | 3/3 Running | Systemd bootstrap |
-| Traefik | 1/1 Running | Helm (manual, simplified config) |
-| Longhorn | 13/13 Running (CSI + engine) | Helm (bootstrap) |
-| ExternalDNS | CrashLoopBackOff (148 restarts) | Raw kubectl manifest |
-| CNPG | 1/1 Running, cluster healthy | Systemd bootstrap |
-| ArgoCD | 7/7 Running | Systemd bootstrap |
-| Split-IP firewall | active | NixOS module |
+**All 3 clusters operational (2026-05-25):**
+| Component | Ashburn | Hillsboro | Nuremberg |
+|-----------|---------|-----------|-----------|
+| k3s | Ready | Ready | Ready |
+| ArgoCD | 7/7 Running | 7/7 Running | 7/7 Running |
+| cert-manager | 3/3 Running | 3/3 Running | 3/3 Running |
+| CNPG | 1/1 Running | 1/1 Running | 1/1 Running |
+| Traefik | 1/1 Running | 1/1 Running | 1/1 Running |
+| Longhorn | 13/13 Running | 13/13 Running | 13/13 Running |
+| ExternalDNS | 1/1 Running | 1/1 Running | 1/1 Running |
+| SeaweedFS | 3/3 Running | 3/3 Running | 3/3 Running |
+| Split-IP firewall | active | active | active |
+| crowdsec-firewall-bouncer | ImagePullBackOff | ImagePullBackOff | ImagePullBackOff |
+| mongo | ContainerCreating | ContainerCreating | ContainerCreating |
 
-**ArgoCD sync status** (stalled):
-- Wave -2 (namespaces): Synced, Healthy
-- Wave 0 (cert-manager): Synced, Progressing
-- Waves 1-8: Not created — root-app OutOfSync, `argocd-cm.yaml` blocks child Application creation
+**ArgoCD sync status (resolved 2026-05-25):**
+- 16 Applications across 8 waves created and syncing on ashburn
+- Root app: Synced (was OutOfSync — fixed by removing `argocd-cm.yaml` from repo, applying health check inline)
+- Known: cert-manager OutOfSync (DNS01 needs PowerDNS RFC2136 setup), k8gb/istio Missing (operators not installed)
 
-**Git state:**
-- **dotfiles**: branch `master`, clean working tree, 4 stashes
-- **2143-59s**: branch `master`, clean working tree, HEAD at revert commit `8db90ac` (restored pre-Helm-migration manifests)
+**Git state (2026-05-25):**
+- **dotfiles**: branch `master`, working tree dirty (bootstrap fixes pending commit)
+- **2143-59s**: branch `master`, HEAD at `edd4d48` (secret key rename, doc fixes, base-values cleanup)
+
 
 ## Key Decisions
 
@@ -65,32 +70,34 @@ Bootstrap 3 Hetzner k3s clusters (ashburn, hillsboro, nuremberg) plus a home-pi 
 | Hetzner `cpx32` in EU datacenters | NixOS fails to boot on cpx32 in nbg1/fsn1. Nuremberg provisioned in ashburn location. |
 | cert-manager operator via ArgoCD Helm | The existing systemd bootstrap install matches; ArgoCD detects it as synced. Keeping systemd for now. |
 
+## Resolved (2026-05-25)
+
+| # | Question | Resolution |
+|---|----------|------------|
+| 1 | ExternalDNS CrashLoopBackOff | **Two root causes**: (a) Secret key `rfc2136TsigSecret` vs Helm chart's expected `tsig-key` — file path mismatch in volume mount. (b) Helm chart v1.21.1 ignores rfc2136 values entirely — doesn't pass `--rfc2136-tsig-secret-alg` to deployment. Fixed by patching deployment args post-install in bootstrap. Secret key standardized to `tsig-key` everywhere. |
+| 2 | ArgoCD root-app OutOfSync | `argocd-cm.yaml` in `argocd/` path caused `last-applied-configuration` annotation drift vs live ConfigMap. Removed from repo; health check now applied inline via heredoc in bootstrap script. |
+| 4 | Wave ordering + cert-manager health | ArgoCD DOES gate waves on health. Lua health check defaulted to "Progressing", stalling on Certificate resources (no intrinsic health). Changed default to "Healthy", only "Degraded" blocks progression. Certificates/ClusterIssuers should be moved to wave 2+ (after DNS01 is working). |
+| 5 | ExternalDNS in ArgoCD repo | Deferred — bootstrap Helm + post-patch working reliably. base/externaldns/ has ConfigMap+Secret. Full migration when Helm chart stabilizes. |
+| 6 | Traefik hostPort/hostNetwork | Disabled — template errors in Traefik v34+ with hostPort. Can re-add when DDoS protection needed (hostPort on raw IP interface only). |
+
 ## Open Questions
 
-- [ ] How to fix ExternalDNS CrashLoopBackOff (148 restarts)? Logs show `is not supported TSIG algorithm` — TSIG args may have trailing whitespace or wrong format. Need to check raw deployment args.
-- [ ] Why is ArgoCD root-app OutOfSync? `argocd-cm.yaml` present in `argocd/` path — was removed then re-added in revert. Removing it from root's scope may fix child app creation.
 - [ ] Should k3s-nuremberg stay in ashburn location? cpx32 boot bug blocks EU datacenters. Need to test when Hetzner updates hypervisor/KVM.
 - [ ] How to handle CNPG pdns user password on rebuild? `bootstrap.initdb` generates random password. `hetzner-postgres-schema` needs a password reset step.
-- [ ] ArgoCD sync-wave ordering: cert-manager ClusterIssuer needs DNS01 (PowerDNS) before becoming Healthy. This blocks wave progression? Or does ArgoCD ignore health for wave ordering?
-- [ ] Should we move ExternalDNS back into the ArgoCD repo as a proper manifest? Currently deployed via raw kubectl on ashburn only.
-- [ ] Traefik is deployed without `hostPort`/`hostNetwork` (simplified for initial bootstrap). Should restore for split-IP DDoS when services go live.
+- [ ] Test cert-manager DNS01 challenge end-to-end (ClusterIssuer → PowerDNS via RFC2136)
+- [ ] Create deSEC NS glue records delegating `9s.pics` to ns1/ns2/ns3
 
 ## Recent Artifacts
 
 | Path | Description | Last Modified |
 |------|-------------|---------------|
-| `nixos/hetzner/modules/hetzner-k3s-common.nix` | Bootstrap: ArgoCD, CNPG, Helm operators, secrets | May 24 04:23 |
-| `nixos/hetzner/modules/hetzner-split-ip-firewall.nix` | Per-IP iptables DDoS firewall | May 24 02:42 |
-| `nixos/hetzner/flake.nix` | Node configs with rawIP per-node | May 24 02:40 |
-| `nixos/hetzner/modules/hetzner-k3s-server.nix` | Server imports (incl. split-ip-firewall) | May 24 02:23 |
-| `nixos/hetzner/scripts/provision.sh` | VM create + nixos-anywhere + floating IP | May 24 02:22 |
-| `nixos/hetzner/scripts/desec-dns.sh` | deSEC DNS management (PUT→POST fallback) | May 24 01:27 |
-| `nixos/hetzner/README.md` | Updated docs: deSEC, CNPG, known issues | May 24 01:26 |
-| `repos/2143-59s/argocd/argocd-cm.yaml` | ArgoCD ConfigMap (restored in revert) | May 24 04:21 |
-| `repos/2143-59s/argocd/wave-1/traefik.yaml` | Traefik Application (directory-type, reverted) | May 24 04:21 |
-| `repos/2143-59s/argocd/wave-1/longhorn.yaml` | Longhorn Application (directory-type, reverted) | May 24 04:21 |
-| `repos/2143-59s/base/cloudnativepg/cluster.yaml` | CNPG Cluster CR (bootstrap.initdb) | May 24 02:00 |
-| `repos/2143-59s/base/cloudnativepg/nodeport-service.yaml` | NodePort 30432 Service for CNPG | May 24 01:50 |
+| `nixos/hetzner/modules/hetzner-k3s-common.nix` | Bootstrap: ArgoCD, CNPG, operators, secrets (updated: inline argocd-cm, secret key, Traefik pin, ExternalDNS patch) | 2026-05-25 |
+| `nixos/hetzner/modules/hetzner-split-ip-firewall.nix` | Per-IP iptables DDoS firewall | May 24 |
+| `nixos/hetzner/flake.nix` | Node configs with rawIP per-node | May 24 |
+| `repos/2143-59s/argocd/root-app.yaml` | Root Application (directory.recurse) | May 24 |
+| `repos/2143-59s/base/externaldns/rfc2136-secret.yaml` | RFC2136 secret placeholder (key: tsig-key) | 2026-05-25 |
+| `repos/2143-59s/base/cert-manager/cluster-issuer-*.yaml` | DNS01 ClusterIssuers (key: tsig-key) | 2026-05-25 |
+| `repos/2143-59s/clusters/base-values.yaml` | Shared Helm defaults (hostPort disabled) | 2026-05-25 |
 
 ## Constraints
 
@@ -106,23 +113,27 @@ Bootstrap 3 Hetzner k3s clusters (ashburn, hillsboro, nuremberg) plus a home-pi 
 
 ## Next Steps
 
-1. [ ] **PICK UP HERE**: Fix ExternalDNS CrashLoopBackOff on ashburn — check `kubectl logs -n external-dns deploy/external-dns` and `kubectl get deploy external-dns -n external-dns -o yaml | grep -A5 tsig` for the exact TSIG config being passed
-2. [ ] Fix ArgoCD root-app sync — either remove `argocd-cm.yaml` from `argocd/` directory permanently, or add a sync window/ignore annotation. Once root syncs, child Applications (waves 1-8) will be created and can sync independently
-3. [ ] Deploy Traefik and ExternalDNS on hillsboro and nuremberg (currently only on ashburn)
-4. [ ] Rebuild hillsboro and nuremberg with updated bootstrap (helm PATH, operator installs, split-IP firewall)
-5. [ ] Install remaining operators: k8gb, Istio, CrowdSec, SeaweedFS (via systemd bootstrap or Helm)
-6. [ ] Deploy applications via ArgoCD waves 5-8: MongoDB, Temporal, apps, monitoring, backups
-7. [ ] CNPG password reset automation: add `ALTER USER pdns PASSWORD` step to `hetzner-postgres-schema` systemd oneshot
-8. [ ] Test cert-manager DNS01 challenge end-to-end (ClusterIssuer → PowerDNS via RFC2136)
-9. [ ] Create deSEC NS glue records delegating `9s.pics` to ns1/ns2/ns3
-10. [ ] Port forward 6767 → home-pi must remain active (currently confirmed permanent)
+- [x] Fix ExternalDNS CrashLoopBackOff (secret key name + missing TSIG args)
+- [x] Fix ArgoCD root-app sync (remove argocd-cm.yaml, health check default)
+- [x] Deploy Traefik and ExternalDNS on hillsboro and nuremberg
+- [x] Rebuild hillsboro and nuremberg with updated bootstrap
+- [x] Home-pi confirmed online (all services active, tailnet healthy)
 
-## Verification
+### Remaining
 
-- All 3 nodes: `kubectl get nodes` shows Ready, `tailscale status` shows all 4 peers
-- All 3 nodes: `systemctl is-active k3s pdns tailscaled split-ip-firewall` returns active
-- Ashburn: `kubectl get pods -n external-dns` shows 1/1 Running (not CrashLoopBackOff)
-- ArgoCD: `kubectl get apps -n argocd` shows all waves present and Synced
-- DNS: `dig @5.161.100.206 NS 9s.pics` returns ns1/ns2/ns3 records
-- CNPG: `kubectl get cluster temporal-postgres` shows healthy on all 3 nodes
-- Firewall: `iptables -L PROTECTED_IN -n` and `iptables -L RAW_IN -n` show populated chains
+- [ ] **crowdsec-firewall-bouncer**: ImagePullBackOff on all 3 nodes — check image registry/tag
+- [ ] **mongo**: ContainerCreating on all 3 nodes — investigate dependency
+- [ ] Install remaining operators: k8gb, Istio (currently Missing in ArgoCD)
+- [ ] Fix cert-manager OutOfSync: move Certificates/ClusterIssuers to wave 2+ (after DNS01 working)
+- [ ] CNPG password reset automation: add `ALTER USER pdns PASSWORD` step to `hetzner-postgres-schema`
+- [ ] Test cert-manager DNS01 challenge end-to-end (ClusterIssuer → PowerDNS via RFC2136)
+- [ ] Create deSEC NS glue records delegating `9s.pics` to ns1/ns2/ns3
+- [ ] Should k3s-nuremberg stay in ashburn location? (cpx32 NixOS boot bug)
+
+## Verification (2026-05-25)
+
+- [x] All 3 nodes: `kubectl get nodes` shows Ready
+- [x] All 3 nodes: `systemctl is-active k3s pdns tailscaled split-ip-firewall` returns active
+- [x] All 3 nodes: `kubectl get pods -n external-dns` shows 1/1 Running
+- [x] Ashburn ArgoCD: `kubectl get apps -n argocd` shows all 16 apps, root Synced
+- [x] Home-pi: pdns + headscale + tailscaled active, all 3 Hetzner peers visible

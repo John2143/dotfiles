@@ -127,11 +127,16 @@ CMEOF
       kubectl create namespace external-dns --dry-run=client -o yaml | kubectl apply -f -
       helm upgrade --install external-dns external-dns/external-dns --namespace external-dns \
         --set provider=rfc2136 \
-        --set rfc2136.host=k3s-ashburn.9s.pics \
-        --set rfc2136.port=53 --set rfc2136.zone=9s.pics \
-        --set rfc2136.tsigKeyname=externaldns --set rfc2136.tsigSecretAlg=hmac-sha256 \
-        --set rfc2136.tsigSecret="\$(kubectl get secret rfc2136-credentials -n external-dns -o jsonpath='{.data.rfc2136TsigSecret}' | base64 -d)" \
         --wait --timeout 120s 2>&1 || true
+      # Patch deployment with RFC2136 args — Helm chart may not pass them correctly
+      # (chart v1.21.1+ changed rfc2136 value keys; this ensures args are always set)
+      kubectl patch deploy external-dns -n external-dns --type=json -p "[
+        {\"op\":\"add\",\"path\":\"/spec/template/spec/containers/0/args/-\",\"value\":\"--rfc2136-host=$(hostname).9s.pics\"},
+        {\"op\":\"add\",\"path\":\"/spec/template/spec/containers/0/args/-\",\"value\":\"--rfc2136-port=53\"},
+        {\"op\":\"add\",\"path\":\"/spec/template/spec/containers/0/args/-\",\"value\":\"--rfc2136-zone=9s.pics\"},
+        {\"op\":\"add\",\"path\":\"/spec/template/spec/containers/0/args/-\",\"value\":\"--rfc2136-tsig-keyname=externaldns\"},
+        {\"op\":\"add\",\"path\":\"/spec/template/spec/containers/0/args/-\",\"value\":\"--rfc2136-tsig-secret-alg=hmac-sha256\"}
+      ]" 2>&1 || true
       kubectl apply --server-side --force-conflicts -f https://raw.githubusercontent.com/cloudnative-pg/cloudnative-pg/release-1.25/releases/cnpg-1.25.1.yaml
       kubectl wait --for=condition=available deployment/cnpg-controller-manager -n cnpg-system --timeout=120s || true
       # cert-manager is now deployed by ArgoCD (Helm chart in wave 0)

@@ -144,6 +144,19 @@ Runtime config with decrypted secrets lives at `/run/pdns/pdns.conf`. Always use
 
 ### `postgres-pdns-password` must be owned by `pdns`
 If pdns fails to start: `chown pdns:pdns /run/agenix/hetzner/postgres-pdns-password`
+
+### ExternalDNS TSIG secret key naming
+The Helm chart (v1.21.1+) expects the RFC2136 credentials secret to have key `tsig-key`, not `rfc2136TsigSecret`. The `k8s-secrets-bootstrap` oneshot now uses `tsig-key`. All ArgoCD manifests in 2143-59s reference `tsig-key`.
+
+### ExternalDNS Helm + TSIG args
+ExternalDNS Helm chart v1.21.1+ does not pass `--rfc2136-*` args to the deployment container. The `argocd-bootstrap` script patches the deployment post-install with the correct args. Do not remove the `kubectl patch` block after the `helm upgrade` for external-dns.
+
+### ArgoCD ConfigMap (argocd-cm)
+The ArgoCD ConfigMap with health checks is applied inline in the bootstrap script (not from a repo file). The health check Lua script uses a permissive default ("Healthy") to avoid stalling wave progression on resources that can't report health (e.g., cert-manager Certificates pending DNS01). Only "Degraded" blocks sync.
+
+### Traefik chart version pin
+Traefik chart v35+ has template errors with `hostPort` and `hostNetwork`. The bootstrap pins `--version 34.0.0` and omits hostPort/hostNetwork. These can be re-added when DDoS protection is needed (on raw IP interface only).
+
 ## Provisioning lessons (from attempts #1 and #2)
 
 ### NixOS boot on Hetzner Cloud
