@@ -29,7 +29,7 @@
 in {
   # ── Admin token (same token used by clients for login) ──
   age.secrets.attic-admin-token = {
-    file = ../../secrets/attic-admin-token.age;
+    file = ../hetzner/secrets/hetzner/attic-token.age;
     owner = "root";
     group = "root";
     mode = "0400";

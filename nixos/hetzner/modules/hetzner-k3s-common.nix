@@ -257,7 +257,7 @@ CMEOF
   # Cache: 2143nix (signing key below)
 
   age.secrets.attic-admin-token = {
-    file = ../../../secrets/attic-admin-token.age;
+    file = ../secrets/hetzner/attic-token.age;
     owner = "root";
     group = "root";
     mode = "0400";
