@@ -220,11 +220,18 @@ ssh root@<IP> "pg_isready -h 127.0.0.1 -p 30432 -U pdns -d pdns"
 ssh root@<IP> "systemctl status pdns"
 ```
 
-## Planned: Nix Binary Cache (Attic on home-pi)
+## Nix Binary Cache (Attic on home-pi)
 
-The home-pi has 188GB free on its SD card — enough for an Attic binary cache.
+Attic binary cache server runs on home-pi (`atticd` on port 8280/tailscale0). All Hetzner nodes
+push built paths and pull from cache for near-instant deploys after the first node is provisioned.
 
-Planned flow:
+- **Server**: `atticd` systemd service on home-pi, listening on `100.64.0.2:8280` (Tailscale only)
+- **Storage**: `/var/lib/attic` on home-pi SD card (188GB free)
+- **Clients**: All 3 k3s nodes run `attic watch-store` + configure nix substituter
+- **Cache name**: `2143nix`
+- **Module**: `nixos/modules/attic-server.nix` (server), inline in `hetzner-k3s-common.nix` (client)
+
+Flow:
 ```
 home-pi (atticd :8280)
   ↑ push (watch-store)        ↑ pull (substituter)
@@ -233,8 +240,7 @@ k3s-ashburn (first build)    k3s-hillsboro, k3s-nuremberg
 
 - Ashburn builds everything → `attic watch-store` pushes to Pi
 - Hillsboro/Nuremberg pull from cache → 90%+ cache hits → near-instant deploys
-- All nodes reach the Pi over Tailscale at `home-pi.ts.9s.pics:8280`
-- Existing `nixos/modules/attic.nix` module just needs endpoint reconfigured
+- All nodes reach the Pi over Tailscale at `100.64.0.2:8280`
 
 ## Known Issues
 

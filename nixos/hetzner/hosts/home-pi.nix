@@ -22,6 +22,7 @@
     ../modules/hetzner-postgres-schema.nix
     ../modules/hetzner-powerdns.nix
     ../modules/tailscale.nix
+    ../../modules/attic-server.nix
   ];
 
   networking.hostName = "home-pi";

@@ -252,11 +252,82 @@ CMEOF
     8472  # flannel VXLAN (k3s)
   ];
 
+  # ── Attic binary cache client (pushes to home-pi over Tailscale) ──
+  # Endpoint: home-pi Tailscale IP 100.64.0.2:8280
+  # Cache: 2143nix (signing key below)
+
+  age.secrets.attic-admin-token = {
+    file = ../../../secrets/attic-admin-token.age;
+    owner = "root";
+    group = "root";
+    mode = "0400";
+  };
+
+  # Add Attic as a substituter (higher priority than cache.nixos.org for our paths)
+  nix.settings.substituters = lib.mkBefore [
+    "http://100.64.0.2:8280/2143nix"
+  ];
+  nix.settings.trusted-public-keys = lib.mkBefore [
+    "2143nix:Ysam0ozURtK+1tkP62M6lzbfoi8BVeL6s7ZWJlB6UxE="
+  ];
+  nix.settings.netrc-file = "/run/attic-netrc";
+
+  # Write netrc for nix to authenticate with Attic
+  systemd.services.attic-netrc = {
+    description = "Generate Attic netrc for nix";
+    after = ["agenix.service"];
+    wants = ["agenix.service"];
+    serviceConfig = {
+      Type = "oneshot";
+      RemainAfterExit = true;
+      ExecStart = pkgs.writeShellScript "attic-netrc" ''
+        mkdir -p /run
+        printf 'machine 100.64.0.2 password %s\n' \
+          "$(cat ${config.age.secrets.attic-admin-token.path})" \
+          > /run/attic-netrc
+        chmod 0444 /run/attic-netrc
+      '';
+    };
+    wantedBy = ["multi-user.target"];
+  };
+
+  # Login to Attic server (oneshot, runs once after network is up)
+  systemd.services.attic-login = {
+    description = "Attic cache login";
+    after = ["network-online.target" "tailscaled.service" "attic-netrc.service"];
+    wants = ["network-online.target" "tailscaled.service" "attic-netrc.service"];
+    path = [pkgs.attic-client];
+    serviceConfig = {
+      Type = "oneshot";
+      RemainAfterExit = true;
+      ExecStart = pkgs.writeShellScript "attic-login" ''
+        attic login home-pi http://100.64.0.2:8280 "$(cat ${config.age.secrets.attic-admin-token.path})"
+      '';
+    };
+  };
+
+  # Watch store: push newly-built paths to Attic on home-pi
+  systemd.services.attic-watch-store = {
+    description = "Push built paths to Attic cache on home-pi";
+    requires = ["attic-login.service"];
+    after = ["attic-login.service" "network-online.target"];
+    wants = ["network-online.target"];
+    path = [pkgs.attic-client];
+    serviceConfig = {
+      Type = "simple";
+      ExecStart = "${pkgs.attic-client}/bin/attic watch-store 2143nix --ignore-upstream-cache-filter";
+      Restart = "on-failure";
+      RestartSec = 30;
+    };
+    wantedBy = ["multi-user.target"];
+  };
+
   environment.systemPackages = with pkgs; [
     k3s
     curl
     htop
     iotop
     tcpdump
+    attic-client
   ];
 }
