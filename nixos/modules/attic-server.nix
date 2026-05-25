@@ -1,11 +1,10 @@
 # Attic Server — Nix binary cache on Tailscale
 #
-# Runs atticd on home-pi, listening only on the Tailscale interface.
-# All Hetzner nodes push built paths here via attic watch-store.
-# Subsequent nodes pull from the cache for near-instant deploys.
-#
+# Runs atticd on home-pi, listening on 0.0.0.0:8280 (port-forwarded through home router).
+# All Hetzner nodes push/pull via http://headscale.9s.pics:8280.
+# Works both pre-Tailscale (via port forward) and post-Tailscale.
 # Cache name: 2143nix (signing key in nix.settings.trusted-public-keys)
-# Endpoint: http://100.64.0.2:8280 (static Tailscale IP)
+# Endpoint: http://headscale.9s.pics:8280 (port-forwarded)
 {
   config,
   pkgs,
@@ -13,7 +12,7 @@
   ...
 }: let
   cfgFile = pkgs.writeText "atticd.toml" ''
-    listen = "100.64.0.2:8280"
+    listen = "0.0.0.0:8280"
 
     [database]
     url = "sqlite:///var/lib/attic/attic-server.db"
@@ -66,9 +65,9 @@ in {
     };
   };
 
-  # ── Firewall: allow Tailscale peers to reach atticd ──
+  # ── Firewall: allow port-forwarded access to atticd ──
   networking.firewall.extraCommands = ''
-    iptables -A nixos-fw -i tailscale0 -p tcp --dport 8280 -j nixos-fw-accept
+    iptables -A nixos-fw -p tcp --dport 8280 -j nixos-fw-accept
   '';
 
   # ── Basic health check ──
@@ -79,7 +78,7 @@ in {
     serviceConfig.Type = "oneshot";
     script = ''
       for i in $(seq 1 30); do
-        if curl -sf http://100.64.0.2:8280/ >/dev/null 2>&1; then
+        if curl -sf http://localhost:8280/ >/dev/null 2>&1; then
           echo "atticd is healthy"
           exit 0
         fi

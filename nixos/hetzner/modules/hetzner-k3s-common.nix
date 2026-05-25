@@ -253,7 +253,7 @@ CMEOF
   ];
 
   # ── Attic binary cache client (pushes to home-pi over Tailscale) ──
-  # Endpoint: home-pi Tailscale IP 100.64.0.2:8280
+  # Endpoint: home-pi via headscale.9s.pics:8280 (port-forwarded, works pre-Tailscale)
   # Cache: 2143nix (signing key below)
 
   age.secrets.attic-admin-token = {
@@ -265,7 +265,7 @@ CMEOF
 
   # Add Attic as a substituter (higher priority than cache.nixos.org for our paths)
   nix.settings.substituters = lib.mkBefore [
-    "http://100.64.0.2:8280/2143nix"
+    "http://headscale.9s.pics:8280/2143nix"
   ];
   nix.settings.trusted-public-keys = lib.mkBefore [
     "2143nix:Ysam0ozURtK+1tkP62M6lzbfoi8BVeL6s7ZWJlB6UxE="
@@ -282,7 +282,7 @@ CMEOF
       RemainAfterExit = true;
       ExecStart = pkgs.writeShellScript "attic-netrc" ''
         mkdir -p /run
-        printf 'machine 100.64.0.2 password %s\n' \
+        printf 'machine headscale.9s.pics password %s\n' \
           "$(cat ${config.age.secrets.attic-admin-token.path})" \
           > /run/attic-netrc
         chmod 0444 /run/attic-netrc
@@ -301,7 +301,7 @@ CMEOF
       Type = "oneshot";
       RemainAfterExit = true;
       ExecStart = pkgs.writeShellScript "attic-login" ''
-        attic login home-pi http://100.64.0.2:8280 "$(cat ${config.age.secrets.attic-admin-token.path})"
+        attic login home-pi http://headscale.9s.pics:8280 "$(cat ${config.age.secrets.attic-admin-token.path})"
       '';
     };
   };
