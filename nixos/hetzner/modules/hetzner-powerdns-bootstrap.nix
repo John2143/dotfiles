@@ -72,9 +72,7 @@
       $PDNSUTIL rrset add 9s.pics 9s.pics NS 60 ns2.9s.pics
       $PDNSUTIL rrset add 9s.pics 9s.pics NS 60 ns3.9s.pics
 
-      # Local-network A record for home-pi (consistent SSH target from LAN)
-      # Update this if the home-pi DHCP lease changes.
-      $PDNSUTIL rrset add 9s.pics local-home-pi.9s.pics A 60 192.168.0.152
+
 
       # Allow TSIG key to update the zone
       $PDNSUTIL metadata set 9s.pics TSIG-ALLOW-DNSUPDATE externaldns

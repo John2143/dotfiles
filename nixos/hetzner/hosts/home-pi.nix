@@ -138,4 +138,43 @@
       Persistent = true;
     };
   };
+
+  # ── Local DDNS: update local-home-pi.9s.pics to current LAN IP ──
+  # Keeps the local A record accurate even if DHCP lease changes.
+  # Uses pdnsutil directly; tolerates pdns being down (skips).
+  systemd.services.local-home-pi-ddns = {
+    description = "Update local-home-pi.9s.pics A record to current LAN IP";
+    after = ["network-online.target"];
+    wants = ["pdns.service"];
+    path = [pkgs.pdns pkgs.iproute2];
+    serviceConfig = {
+      Type = "oneshot";
+    };
+    script = ''
+      set -euo pipefail
+      if ! systemctl is-active --quiet pdns 2>/dev/null; then
+        echo "pdns not running, skipping local IP update"
+        exit 0
+      fi
+      LOCAL_IP=$(ip -4 addr show | grep -oP 'inet \K192\.168\.\d+\.\d+' | head -1)
+      if [ -z "$LOCAL_IP" ]; then
+        echo "No 192.168.x.x IP found, skipping"
+        exit 0
+      fi
+      pdnsutil --config-dir=/run/pdns rrset replace 9s.pics local-home-pi.9s.pics A 60 "$LOCAL_IP" 2>/dev/null || {
+        # replace might fail if record doesn't exist yet; try add
+        pdnsutil --config-dir=/run/pdns rrset add 9s.pics local-home-pi.9s.pics A 60 "$LOCAL_IP" 2>/dev/null || true
+      }
+      echo "local-home-pi.9s.pics → $LOCAL_IP"
+    '';
+  };
+
+  systemd.timers.local-home-pi-ddns = {
+    description = "Update local-home-pi DNS record every 5 minutes";
+    wantedBy = ["timers.target"];
+    timerConfig = {
+      OnCalendar = "*:0/5";
+      Persistent = true;
+    };
+  };
 }
