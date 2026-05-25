@@ -175,6 +175,26 @@
     { from = 30000; to = 32767; } # Kubernetes NodePort range
   ];
 
+  # ── APC UPS monitoring ────────────────────────────────────────────
+  # Connected via USB; gracefully shuts down when battery is critical.
+  services.apcupsd = {
+    enable = true;
+    configText = ''
+      UPSCABLE usb
+      UPSTYPE usb
+      DEVICE
+      ONBATTERYDELAY 6
+      BATTERYLEVEL 10
+      MINUTES 5
+      NETSERVER on
+      NISIP 0.0.0.0
+    '';
+    hooks = {
+      onbattery = "${pkgs.util-linux}/bin/wall 'UPS on battery — system will shut down when battery is low'";
+      doshutdown = "${pkgs.util-linux}/bin/wall 'UPS battery critical — shutting down now'";
+    };
+  };
+
   # Do NOT change this value unless you have manually inspected all the changes it would make to your configuration,
   # and migrated your data accordingly.
   #

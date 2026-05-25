@@ -72,19 +72,46 @@
         --from-literal=auth="$REDIS_PASS" \
         --dry-run=client -o yaml | kubectl apply -f -
       kubectl wait --for=condition=available deployment/argocd-server -n argocd --timeout=120s || true
-      # Apply ArgoCD ConfigMap (health-check fix for sync-wave ordering + resource tracking)
-      kubectl apply -f https://raw.githubusercontent.com/2143-Labs/2143-59s/master/argocd/argocd-cm.yaml
+      # Apply ArgoCD ConfigMap — health check + resource tracking (inline, not from repo)
+      kubectl apply -f - <<'CMEOF'
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: argocd-cm
+  namespace: argocd
+  labels:
+    app.kubernetes.io/name: argocd-cm
+    app.kubernetes.io/part-of: argocd
+data:
+  application.resourceTrackingMethod: annotation+label
+  resource.customizations.health.argoproj.io_Application: |
+    hs = {}
+    hs.status = "Healthy"
+    hs.message = ""
+    if obj.status ~= nil then
+      if obj.status.health ~= nil then
+        local h = obj.status.health.status
+        if h == "Degraded" then
+          hs.status = "Degraded"
+          if obj.status.health.message ~= nil then
+            hs.message = obj.status.health.message
+          end
+        end
+      end
+    end
+    return hs
+CMEOF
       kubectl rollout restart deployment/argocd-server -n argocd || true
       kubectl wait --for=condition=available deployment/argocd-server -n argocd --timeout=60s || true
       # Apply root Application — wires ArgoCD to the GitOps repo
       kubectl apply -f https://raw.githubusercontent.com/2143-Labs/2143-59s/master/argocd/root-app.yaml
-      # Install Traefik (Helm) — ingress controller
+      # Install Traefik (Helm) — ingress controller, chart v34 (v35+ has template errors)
       helm repo add traefik https://helm.traefik.io/traefik 2>/dev/null || true
       helm repo update 2>/dev/null || true
       helm upgrade --install traefik traefik/traefik --namespace traefik --create-namespace \
+        --version 34.0.0 \
         --set providers.kubernetesIngress.enabled=true \
-        --set ports.web.hostPort=80 --set ports.websecure.hostPort=443 \
-        --set service.type=ClusterIP --set hostNetwork=true \
+        --set service.type=ClusterIP \
         --wait --timeout 120s 2>&1 || true
       # Install Longhorn (Helm) — distributed block storage
       helm repo add longhorn https://charts.longhorn.io 2>/dev/null || true
@@ -143,7 +170,7 @@
 
       # RFC2136 TSIG key for ExternalDNS
       kubectl create secret generic rfc2136-credentials -n external-dns \
-        --from-literal=rfc2136TsigSecret="$(cat ${config.age.secrets."hetzner/powerdns-tsig-key".path})" \
+        --from-literal=tsig-key="$(cat ${config.age.secrets."hetzner/powerdns-tsig-key".path})" \
         --dry-run=client -o yaml | kubectl apply -f -
 
       # CrowdSec bouncer key

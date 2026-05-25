@@ -459,6 +459,24 @@
     };
   };
 
+  # ── APC UPS monitoring ────────────────────────────────────────────
+  # NAS has its own dedicated UPS, connected via USB.
+  services.apcupsd = {
+    enable = true;
+    configText = ''
+      UPSCABLE usb
+      UPSTYPE usb
+      DEVICE
+      ONBATTERYDELAY 6
+      BATTERYLEVEL 10
+      MINUTES 5
+    '';
+    hooks = {
+      onbattery = "${pkgs.util-linux}/bin/wall 'UPS on battery — NAS shutting down when critical'";
+      doshutdown = "${pkgs.util-linux}/bin/wall 'UPS battery critical — shutting down NAS now'";
+    };
+  };
+
   # ====================
   # === Attic Cache ===
   # ====================
