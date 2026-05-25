@@ -194,12 +194,12 @@
     hooks = {
       onbattery = ''
         set -a; source /run/agenix/hass-webhooks; set +a
-        ${pkgs.curl}/bin/curl -s "$CLOSET_ONBATTERY_URL"
+        ${pkgs.curl}/bin/curl -s -X POST "$CLOSET_ONBATTERY_URL"
         ${pkgs.util-linux}/bin/wall 'UPS on battery — shutting down when critical'
       '';
       offbattery = ''
         set -a; source /run/agenix/hass-webhooks; set +a
-        ${pkgs.curl}/bin/curl -s "$CLOSET_OFFBATTERY_URL"
+        ${pkgs.curl}/bin/curl -s -X POST "$CLOSET_OFFBATTERY_URL"
         ${pkgs.util-linux}/bin/wall 'UPS power restored'
       '';
       doshutdown = "${pkgs.util-linux}/bin/wall 'UPS battery critical — shutting down NOW'";

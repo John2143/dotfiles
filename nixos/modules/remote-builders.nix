@@ -56,6 +56,18 @@
   buildMachines = builtins.filter isNotSelf
     (lib.mapAttrsToList mkMachine builderDefs);
 in {
+  # ── SSH: relax host key checking for builder connections ──────────
+  # Builders are local-network machines that may be reinstalled,
+  # causing host key rotations. Nix daemon connects as root via SSH;
+  # strict key checking breaks distributed builds after reinstall.
+  programs.ssh.extraConfig = let
+    builderHosts = builtins.concatStringsSep " "
+      (map (name: "${name}.local") (builtins.attrNames builderDefs));
+  in ''
+    Host ${builderHosts}
+      StrictHostKeyChecking no
+      UserKnownHostsFile /dev/null
+  '';
   nix.distributedBuilds = true;
   nix.buildMachines = buildMachines;
   nix.settings.builders-use-substitutes = true;
