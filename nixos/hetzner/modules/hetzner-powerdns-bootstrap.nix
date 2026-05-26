@@ -62,10 +62,14 @@
       # Set SOA via rrset replace (set-soa removed in 5.0.x)
       $PDNSUTIL rrset replace 9s.pics 9s.pics SOA 60 "ns1.9s.pics. hostmaster.9s.pics. 1 10800 3600 604800 60"
 
-      # Create TSIG key for ExternalDNS RFC2136 updates
+      # Create TSIG key for ExternalDNS RFC2136 updates (idempotent)
       TSIG_KEY=$(tr -d '\n' < "${config.age.secrets."hetzner/powerdns-tsig-key".path}")
-      $PDNSUTIL tsigkey generate externaldns hmac-sha256 2>/dev/null || true
-      $PDNSUTIL tsigkey import externaldns hmac-sha256 "$TSIG_KEY"
+      if ! $PDNSUTIL tsigkey list 2>/dev/null | grep -q externaldns; then
+        $PDNSUTIL tsigkey generate externaldns hmac-sha256
+        $PDNSUTIL tsigkey import externaldns hmac-sha256 "$TSIG_KEY"
+      else
+        echo "TSIG key externaldns already exists, skipping."
+      fi
 
       # Set NS records
       $PDNSUTIL rrset add 9s.pics 9s.pics NS 60 ns1.9s.pics
@@ -114,10 +118,13 @@
         sleep 2
       done
 
-      # Detect floating IP at runtime
+      # Detect floating IP from provision config (Hetzner Cloud routes FIPs, not local addrs)
       HOSTNAME="''${HOSTNAME:-$(hostname)}"
-      PRIMARY_IP=$(ip -4 route get 8.8.8.8 2>/dev/null | grep -oP 'src \K[\d.]+' | head -1)
-      FLOATING_IP=$(ip -4 addr show enp1s0 2>/dev/null | grep -oP 'inet \K[\d.]+' | grep -v "$PRIMARY_IP" | head -1 || true)
+      CONF_FILE=/etc/hetzner-floating-ip
+      FLOATING_IP=""
+      if [ -f "$CONF_FILE" ]; then
+        FLOATING_IP=$(grep "^''${HOSTNAME}=" "$CONF_FILE" 2>/dev/null | cut -d= -f2 || true)
+      fi
 
       if [ -z "$FLOATING_IP" ]; then
         echo "No floating IP detected (single-IP node), skipping NS A records."

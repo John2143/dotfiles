@@ -33,8 +33,12 @@
       "--disable=servicelb"
       "--cluster-cidr=10.42.0.0/16"
       "--service-cidr=10.43.0.0/16"
+      "--node-label=node.longhorn.io/create-default-disk=true"
     ];
   };
+  # k3s uses Type=notify but sometimes the startup takes too long and
+  # systemd kills it with "Failed with result 'protocol'". Override to simple.
+  systemd.services.k3s.serviceConfig.Type = lib.mkForce "simple";
 
 
   # ── DDoS kernel hardening ──
@@ -65,6 +69,8 @@
       # Install CRDs first (--server-side avoids annotation size limits)
       kubectl apply --server-side --force-conflicts \
         -k https://github.com/argoproj/argo-cd/manifests/crds?ref=stable
+      # Install cert-manager CRDs (needed before ArgoCD syncs wave 0)
+      kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.17.1/cert-manager.crds.yaml 2>&1 || true
       kubectl create namespace argocd --dry-run=client -o yaml | kubectl apply -f -
       kubectl apply --server-side --force-conflicts -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
       # Create redis secret with non-empty password (empty password breaks redis config parsing)
@@ -140,7 +146,12 @@ CMEOF
       ]" 2>&1 || true
       kubectl apply --server-side --force-conflicts -f https://raw.githubusercontent.com/cloudnative-pg/cloudnative-pg/release-1.25/releases/cnpg-1.25.1.yaml
       kubectl wait --for=condition=available deployment/cnpg-controller-manager -n cnpg-system --timeout=120s || true
-      # cert-manager is now deployed by ArgoCD (Helm chart in wave 0)
+      # Install cert-manager (Helm) — TLS certificate automation
+      helm repo add jetstack https://charts.jetstack.io 2>/dev/null || true
+      helm repo update 2>/dev/null || true
+      helm upgrade --install cert-manager jetstack/cert-manager --namespace cert-manager --create-namespace \
+        --set crds.enabled=false \
+        --wait --timeout 120s 2>&1 || true
     '';
   };
 
@@ -303,7 +314,7 @@ CMEOF
       Type = "oneshot";
       RemainAfterExit = true;
       ExecStart = pkgs.writeShellScript "attic-login" ''
-        attic login home-pi http://headscale.9s.pics:8280 "$(for f in /run/agenix.d/*/attic-admin-token /run/agenix/attic-admin-token; do [ -f \"\$f\" ] && cat \"\$f\" && break; done)"
+        attic login home-pi --set-default http://headscale.9s.pics:8280 "$(for f in /run/agenix.d/*/attic-admin-token /run/agenix/attic-admin-token; do [ -f \"\$f\" ] && cat \"\$f\" && break; done)"
       '';
     };
   };
