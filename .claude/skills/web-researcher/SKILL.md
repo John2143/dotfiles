@@ -1,7 +1,7 @@
 ---
 description: Conduct structured, multi-agent, multi-phase research with auditable markdown reports and APA citations
 argument-hint: '"[primary research question]" [additional context, constraints, or focus areas]'
-allowed-tools: Read, Write, Search, Find, Bash, Task, WebSearch, Browser
+allowed-tools: Read, Write, Search, Find, Bash, Task, WebSearch, Browser, exit_loop_mode
 tool-hints: |
   Use web_search for search engine queries returning structured results.
   Use read with URLs to fetch and extract full page content from specific links.
@@ -10,6 +10,7 @@ tool-hints: |
   Use Task(task) for parallel research on independent sub-topics — each writes its own report file.
   Use write for all report and state files — never heredocs or shell redirection.
   Research files live inside ai_research/{topic-slug}/ — never write research content outside this directory.
+  This skill may be invoked in loop mode (via /loop harness). When running in loop mode, call `exit_loop_mode(summary)` after producing results to terminate the harness. When not in loop mode, just stop normally.
 ---
 
 ## Usage

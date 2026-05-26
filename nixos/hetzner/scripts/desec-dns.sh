@@ -127,21 +127,23 @@ cmd_bootstrap_dns() {
 
 cmd_update_all_nodes() {
   # Update A records for k3s nodes and headscale.
-  # Accepts 3 optional floating IPs; falls back to desec-dns-floating-ips.conf file.
+  # Accepts 3 optional floating IPs; falls back to hcloud API query.
   local ashburn_ip="${1:-}"
   local hillsboro_ip="${2:-}"
   local nuremberg_ip="${3:-}"
 
-  # If no IPs provided on command line, try config file
+  # If no IPs provided on command line, query Hetzner API
   if [ -z "$ashburn_ip" ] || [ -z "$hillsboro_ip" ] || [ -z "$nuremberg_ip" ]; then
-    local conf_file="${SCRIPT_DIR:-.}/desec-dns-floating-ips.conf"
-    if [ -f "$conf_file" ]; then
-      echo "Reading floating IPs from $conf_file"
-      # shellcheck disable=SC1090
-      source "$conf_file"
-      ashburn_ip="${FLOATING_ASHBURN:-$ashburn_ip}"
-      hillsboro_ip="${FLOATING_HILLSBORO:-$hillsboro_ip}"
-      nuremberg_ip="${FLOATING_NUREMBERG:-$nuremberg_ip}"
+    if command -v hcloud &>/dev/null && [ -n "${HCLOUD_TOKEN:-}" ]; then
+      echo "Querying Hetzner API for floating IPs..."
+      while IFS== read -r desc ip; do
+        case "$desc" in
+          k3s-ashburn-raw)   ashburn_ip="${ashburn_ip:-$ip}" ;;
+          k3s-hillsboro-raw) hillsboro_ip="${hillsboro_ip:-$ip}" ;;
+          k3s-nuremberg-raw) nuremberg_ip="${nuremberg_ip:-$ip}" ;;
+        esac
+      done < <(hcloud floating-ip list -o json 2>/dev/null | \
+        python3 -c "import sys,json; [print(f'{f[\"description\"]}={f[\"ip\"]}') for f in json.load(sys.stdin) if 'k3s-' in f.get('description','')]")
     fi
   fi
 
