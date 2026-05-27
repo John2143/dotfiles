@@ -121,223 +121,9 @@
 
   autoclicker = "${pkgs.autoclicker}/bin/autoclicker";
 
-  # Shell scripts retained as fallback; Rust binary is primary
-  autoclicker-daemon = pkgs.writeShellApplication {
-    name = "autoclicker-daemon";
-    runtimeInputs = with pkgs; [ydotool coreutils gawk];
-    text = ''
-      CONF_FILE="/tmp/autoclicker.conf"
-      PID_FILE="/tmp/autoclicker.pid"
-      STATUS_FILE="/tmp/autoclicker.state"
-
-      # Defaults
-      INTERVAL="500"
-      BUTTON="left"
-      DEADMAN="true"
-      DEADMAN_THRESHOLD="10"
-      MAX_DURATION="300"
-      MAX_CLICKS=""
-
-      # Load config if present
-      if [ -f "$CONF_FILE" ]; then
-        # shellcheck source=/dev/null
-        . "$CONF_FILE"
-      fi
-
-      # Map button name to ydotool key code
-      case "$BUTTON" in
-        left)   BTN="0xC0" ;;
-        middle) BTN="0xC2" ;;
-        right)  BTN="0xC1" ;;
-        *)      BTN="0xC0" ;;
-      esac
-
-      # Validate ydotool daemon is reachable
-      if ! ydotool click 0xC0 2>/dev/null; then
-        notify-send "Autoclicker" "ydotool daemon not running. Start ydotoold first." -u critical
-        rm -f "$PID_FILE"
-        exit 1
-      fi
-
-      echo $$ > "$PID_FILE"
-
-      # Safety state
-      START_TIME=$(date +%s)
-      CLICK_COUNT=0
-      LAST_X=""
-      LAST_Y=""
-
-      while true; do
-        # Reload config each iteration
-        if [ -f "$CONF_FILE" ]; then
-          # shellcheck source=/dev/null
-          . "$CONF_FILE"
-          case "$BUTTON" in
-            left)   BTN="0xC0" ;;
-            middle) BTN="0xC2" ;;
-            right)  BTN="0xC1" ;;
-            *)      BTN="0xC0" ;;
-          esac
-        fi
-
-        # ---- Max duration check ----
-        if [ -n "$MAX_DURATION" ] && [ "$MAX_DURATION" -gt 0 ]; then
-          NOW=$(date +%s)
-          ELAPSED=$((NOW - START_TIME))
-          if [ "$ELAPSED" -ge "$MAX_DURATION" ]; then
-            notify-send "Autoclicker" "Auto-stopped: $MAX_DURATION s elapsed"
-            rm -f "$PID_FILE"
-            pkill -RTMIN+15 waybar 2>/dev/null
-            exit 0
-          fi
-        fi
-
-        # ---- Max click count check ----
-        if [ -n "$MAX_CLICKS" ] && [ "$MAX_CLICKS" -gt 0 ] && [ "$CLICK_COUNT" -ge "$MAX_CLICKS" ]; then
-          notify-send "Autoclicker" "Auto-stopped: $MAX_CLICKS clicks reached"
-          rm -f "$PID_FILE"
-          pkill -RTMIN+15 waybar 2>/dev/null
-          exit 0
-        fi
-
-        # ---- Dead-man switch ----
-        if [ "$DEADMAN" = "true" ]; then
-          CURSOR=$(hyprctl cursorpos 2>/dev/null || echo "")
-          if [ -n "$CURSOR" ]; then
-            CX=$(echo "$CURSOR" | cut -d, -f1 | tr -d ' ')
-            CY=$(echo "$CURSOR" | cut -d, -f2 | tr -d ' ')
-            if [ -n "$LAST_X" ] && [ -n "$LAST_Y" ]; then
-              DX=$((CX - LAST_X))
-              DY=$((CY - LAST_Y))
-              [ "$DX" -lt 0 ] && DX=$(( -DX ))
-              [ "$DY" -lt 0 ] && DY=$(( -DY ))
-              if [ "$((DX + DY))" -gt "$DEADMAN_THRESHOLD" ]; then
-                LAST_X="$CX"
-                LAST_Y="$CY"
-                SLEEP_S=$(awk "BEGIN {printf \"%.3f\", $INTERVAL/1000}")
-                sleep "$SLEEP_S"
-                continue
-              fi
-            fi
-            LAST_X="$CX"
-            LAST_Y="$CY"
-          fi
-        fi
-
-        # ---- Perform click ----
-        ydotool click "$BTN"
-        CLICK_COUNT=$((CLICK_COUNT + 1))
-
-        SLEEP_S=$(awk "BEGIN {printf \"%.3f\", $INTERVAL/1000}")
-        sleep "$SLEEP_S"
-      done
-    '';
-  };
-
-  autoclicker-timer = pkgs.writeShellApplication {
-    name = "autoclicker-timer";
-    runtimeInputs = with pkgs; [coreutils gawk];
-    text = ''
-      PID_FILE="/tmp/autoclicker.pid"
-      CONF_FILE="/tmp/autoclicker.conf"
-
-      # Defaults
-      INTERVAL="500"
-      BUTTON="left"
-      MAX_DURATION="300"
-      DEADMAN="true"
-
-      # USR1 handler: re-read config on demand
-      trap ":" USR1
-
-      emit_status() {
-        local text class pct tooltip
-
-        # Load latest config
-        INTERVAL="500"; BUTTON="left"; MAX_DURATION="300"; DEADMAN="true"
-        if [ -f "$CONF_FILE" ]; then
-          . "$CONF_FILE"
-        fi
-
-        if [ -f "$PID_FILE" ] && kill -0 "$(cat "$PID_FILE")" 2>/dev/null; then
-          # Daemon is running
-          class="autoclicker-active"
-
-          if [ -n "$MAX_DURATION" ] && [ "$MAX_DURATION" -gt 0 ]; then
-            # Timer mode — compute remaining
-            NOW=$(date +%s)
-            START_FILE="/tmp/autoclicker.start"
-            if [ -f "$START_FILE" ]; then
-              START_TS=$(cat "$START_FILE")
-            else
-              START_TS="$NOW"
-              echo "$NOW" > "$START_FILE"
-            fi
-            ELAPSED=$((NOW - START_TS))
-            REMAINING=$((MAX_DURATION - ELAPSED))
-            [ "$REMAINING" -lt 0 ] && REMAINING=0
-
-            PCT=100
-            if [ "$MAX_DURATION" -gt 0 ]; then
-              PCT=$(( ELAPSED * 100 / MAX_DURATION ))
-              [ "$PCT" -gt 100 ] && PCT=100
-            fi
-
-            MIN=$((REMAINING / 60))
-            SEC=$((REMAINING % 60))
-            text=$(printf "%d:%02d" "$MIN" "$SEC")
-
-            # Color transitions: green > 60s, yellow 60-10s, red < 10s
-            if [ "$REMAINING" -le 10 ]; then
-              class="autoclicker-warning"
-            elif [ "$REMAINING" -le 60 ]; then
-              class="autoclicker-expiring"
-            else
-              class="autoclicker-active"
-            fi
-
-            tooltip=$(printf "Autoclicker: ON\\nButton: %s\\nInterval: %sms\\nRemaining: %dm %ds" \
-              "$BUTTON" "$INTERVAL" "$MIN" "$SEC")
-          else
-            # No duration limit — simple active indicator
-            text="󰕰"
-            PCT=""
-            tooltip=$(printf "Autoclicker: ON\\nButton: %s\\nInterval: %sms" "$BUTTON" "$INTERVAL")
-          fi
-
-          if [ "$DEADMAN" = "true" ]; then
-            tooltip="$tooltip\\nSafety: dead-man ON"
-          fi
-
-          # Emit JSON with class early for reliable CSS application
-          if [ -n "$PCT" ]; then
-            printf '{"text": "%s", "class": "%s", "percentage": %d, "tooltip": "%s"}' \
-              "$text" "$class" "$PCT" "$tooltip"
-          else
-            printf '{"text": "%s", "class": "%s", "tooltip": "%s"}' \
-              "$text" "$class" "$tooltip"
-          fi
-        else
-          # Daemon not running
-          rm -f "$PID_FILE" /tmp/autoclicker.start
-          printf '{"text": "󰍺", "class": "autoclicker-inactive", "tooltip": "Autoclicker: OFF"}'
-        fi
-      }
-
-      # Initial emission
-      emit_status
-
-      # Continuous loop — update every 500ms
-      while true; do
-        sleep 0.5
-        emit_status
-      done
-    '';
-  };
-
   autoclicker-menu = pkgs.writeShellApplication {
     name = "autoclicker-menu";
-    runtimeInputs = with pkgs; [wofi coreutils ydotool autoclicker];
+    runtimeInputs = with pkgs; [wofi coreutils autoclicker];
     text = ''
       PID_FILE="/tmp/autoclicker.pid"
       CONF_FILE="/tmp/autoclicker.conf"
@@ -434,18 +220,44 @@
       pkill -RTMIN+15 waybar 2>/dev/null
     '';
   };
-  # Workspace icon mappings — common Nerd Font v3 glyphs
+  tailscale-status = pkgs.writeShellApplication {
+    name = "tailscale-status";
+    runtimeInputs = with pkgs; [tailscale jq coreutils];
+    text = ''
+      data=$(tailscale status --json 2>/dev/null) || {
+        jq -n '{text: "", class: "disconnected", tooltip: "Tailscale: not running"}'
+        exit 0
+      }
+
+      state=$(echo "$data" | jq -r '.BackendState // "Stopped"')
+      online=$(echo "$data" | jq -r '.Self.Online // false')
+
+      case "$state" in
+        Running)
+          if [ "$online" = "true" ]; then
+            ip=$(echo "$data" | jq -r '.TailscaleIPs[0] // "?"')
+            name=$(echo "$data" | jq -r '.Self.DNSName | rtrimstr(".") // "?"')
+            jq -n --arg ip "$ip" --arg name "$name" \
+              '{text: "", class: "connected", tooltip: "Tailscale: Connected (\($name))\nIP: \($ip)"}'
+          else
+            jq -n '{text: "", class: "disconnected", tooltip: "Tailscale: Connected but offline"}'
+          fi
+          ;;
+        Stopped)
+          jq -n '{text: "", class: "disconnected", tooltip: "Tailscale: Stopped"}'
+          ;;
+        NeedsLogin)
+          jq -n '{text: "", class: "needs-login", tooltip: "Tailscale: Needs login"}'
+          ;;
+        *)
+          jq -n --arg state "$state" \
+            '{text: "", class: "disconnected", tooltip: "Tailscale: \($state)"}'
+          ;;
+      esac
+    '';
+  };
+  # Named workspace icons
   ws-icons = {
-    "A1" = "󰮠";
-    "A2" = "󰈹";
-    "A3" = "";
-    "A4" = "󰈙";
-    "A5" = "";
-    "B1" = "";
-    "B2" = "󰈹";
-    "B3" = "";
-    "B4" = "";
-    "B5" = "";
     "ts" = "󰍬";
     "disc" = "";
     "steam" = "";
@@ -482,7 +294,7 @@ in {
           # ---- Right zone ----
           modules-right =
             [
-              #"custom/mullvad"  # DISABLED: mullvad-vpn blocked by gitlab.gnome.org 503
+              "custom/tailscale"
               "group/hardware"
               "group/clock"
               "custom/updates"
@@ -515,7 +327,7 @@ in {
               then "DP-1"
               else "HDMI-A-2";
           in {
-            format = "{icon}  {windows}";
+            format = "{icon}";
             format-icons = ws-icons;
             tooltip = true;
             tooltip-format = "{name}";
@@ -573,6 +385,7 @@ in {
             interval = 1;
             format = "{:%H:%M:%S}";
             on-click-right = "fish -c 'date +\"%A, %e %B %Y — %H:%M:%S\" | wl-copy; notify-send \"Copied\" (wl-paste)'";
+            on-click = "toggle-calendar";
           };
 
           # ---- Clock Date (hidden until hover) ----
@@ -603,23 +416,30 @@ in {
             on-click-middle = "playerctl --all-players --ignore-player=firefox,chromium,chrome previous; pkill -RTMIN+12 waybar";
           };
 
-          # ---- Mullvad VPN (DISABLED: mullvad-vpn blocked by gitlab.gnome.org 503) ----
-          #"custom/mullvad" = {
-          #  interval = 20;
-          #  exec = "${pkgs.writeShellScript "waybar-mullvad-status" ''
-          #    if ${pkgs.mullvad-vpn}/bin/mullvad status | grep -q "Connected"; then
-          #      echo '{"text": "", "class": "connected", "tooltip": "Mullvad connected"}'
-          #    else
-          #      echo '{"text": "", "class": "disconnected", "tooltip": "Mullvad disconnected"}'
-          #    fi
-          #  ''}";
-          #  return-type = "json";
-          #  on-click = "${pkgs.mullvad-vpn}/bin/mullvad connect; sleep 2; pkill -RTMIN+14 waybar";
-          #  on-click-right = "${pkgs.mullvad-vpn}/bin/mullvad disconnect; sleep 1; pkill -RTMIN+14 waybar";
-          #  on-click-middle = "${pkgs.mullvad-vpn}/bin/mullvad reconnect; sleep 2; pkill -RTMIN+14 waybar";
-          #  signal = 14;
-          #  format = "{}";
-          #};
+          # ---- Tailscale VPN ----
+          "custom/tailscale" = {
+            exec = "${tailscale-status}/bin/tailscale-status";
+            return-type = "json";
+            interval = 20;
+            signal = 14;
+            format = "{}";
+            on-click = "fish -c 'set s (tailscale status --json 2>/dev/null | jq -r .BackendState); if test \"$s\" = Running; tailscale down; else; tailscale up; end; sleep 2; pkill -RTMIN+14 waybar'";
+            on-click-right = "fish -c '
+              set nodes (tailscale status --json | jq -r \".Peer[] | select(.ExitNodeOption == true) | .DNSName | rtrimstr(\\\".\\\")\" 2>/dev/null | string collect)
+              if test -z \"$nodes\"
+                notify-send \"Tailscale\" \"No exit node candidates found\"
+                exit 0
+              end
+              set choice (printf \"None\n%s\" \"$nodes\" | wofi --dmenu -p \"Exit Node\" -i 2>/dev/null)
+              if test \"$choice\" = \"None\"
+                sudo tailscale set --exit-node=\"\"
+              else if test -n \"$choice\"
+                sudo tailscale set --exit-node=\"$choice\" --exit-node-allow-lan-access
+              end
+              pkill -RTMIN+14 waybar
+            '";
+            tooltip = true;
+          };
 
           # ---- Hardware Group (drawer) ----
           "group/hardware" = {
@@ -644,6 +464,7 @@ in {
               warning = 70;
               critical = 90;
             };
+            on-click = "toggle-btop";
           };
 
           # ---- Memory ----
@@ -681,6 +502,7 @@ in {
             return-type = "json";
             interval = 900;
             format = "{}";
+            on-click = "toggle-weather";
             tooltip = true;
           };
 
