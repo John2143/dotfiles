@@ -4,7 +4,7 @@ argument-hint: '<task description>'
 allowed-tools: Read, Search, Find, Write, Edit, Bash, Task, Ask
 tool-hints: |
   Use `mktemp` to create the state file; print its path on every update.
-  Use `sleep(duration, reason)` when waiting for external events (PR checks, deploys, timers).
+  Use Bash `sleep <seconds>` when waiting for external events (PR checks, deploys, timers). Include a comment: `sleep 120 # waiting for PR checks to complete`.
   Use `exit_loop_mode(reason)` to stop permanently when work is complete or unsafe to continue.
   Use `notify-send` to alert the human desktop for blocking questions (pauses forever).
   Use `ask` for non-blocking questions (auto-picks default after 30s).
@@ -50,9 +50,9 @@ Parse `$ARGUMENTS`:
 
 ### Phase 5 — Loop controller
 
-- If the next action is "wait for external event": call `sleep(duration, reason)`.
+- If the next action is "wait for external event": run `bash sleep <seconds>` with a comment explaining why.
 - If all work is complete: call `exit_loop_mode(summary)`.
-- If a human decision is required and it's non-trivial: use `notify-send` for desktop alert, then `sleep(30min, "awaiting human response")`.
+- If a human decision is required and it's non-trivial: use `notify-send` for desktop alert, then `bash sleep 1800 # awaiting human response`.`
 - If a human decision is minor: use `ask` with a 30s default timeout.
 - Otherwise: let the loop harness re-invoke (the next iteration starts at Phase 1).
 

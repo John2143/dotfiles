@@ -15,7 +15,13 @@
     "nix-command"
     "flakes"
   ];
-  #nix.gc.automatic = true;
+  nix.gc = {
+    automatic = true;
+    persistent = true;
+    dates = "daily";
+    options = "--delete-older-than 7d";
+  };
+  nix.optimise.automatic = true;
 
   # setup my two input channels
   nixpkgs.config = {

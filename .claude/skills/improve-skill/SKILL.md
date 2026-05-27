@@ -90,7 +90,7 @@ Your job is to read the target skill, understand its structure, interpret the us
      transition. Know which categories write which state files, and which state
      fields drive the routing.
    - For **loop prompts**: understand the gap-evaluation logic. Know what
-     conditions trigger `sleep()` vs `exit_loop_mode()`.
+     conditions trigger Bash `sleep` vs `exit_loop_mode()`.
    - If you cannot trace it end-to-end, you are not ready to edit — re-read the
      skill more carefully or cross-reference a similar skill.
 

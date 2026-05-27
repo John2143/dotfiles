@@ -5,7 +5,7 @@ allowed-tools: Read, Write, Edit, Bash, Task, Search, Find
 tool-hints: |
   Use `omp launch -p "$(cat plan-X.md)" --no-session` to dispatch sub-agents.
   Use the plan dir for the state file; print its path on every update.
-  Use `sleep(duration, reason)` to pause the loop harness between iterations. <!-- changed -->
+  Use Bash `sleep <seconds>` to pause between iterations; use `exit_loop_mode(summary)` to stop permanently. <!-- changed -->
   Use `exit_loop_mode(summary)` to stop permanently. Only available in /loop mode.
   Verify tool availability before dispatching: `which omp` — if missing, `exit_loop_mode("IMPOSSIBLE: omp CLI not found")`. <!-- changed -->
   Do not ask questions — unattended loop prompt.
@@ -178,7 +178,7 @@ The state machine definitions live in this SKILL.md — they are **not** stored 
 2. Verify `omp` is available: `which omp`. If missing, call `exit_loop_mode("IMPOSSIBLE: omp CLI not found — cannot dispatch sub-agents")`.
 3. Find the next pending plan whose dependencies are all `verified: true`. Scan `plans` for `status: "pending"` where every slug in `dependencies` has `status: "done"` AND `verified: true`.
 4. If no executable plan found but some are `pending` (blocked on dependencies):
-   - `sleep(30s, "waiting for dependencies to complete")` then **STOP**.
+   - `bash sleep 30 # waiting for dependencies to complete` then **STOP**.
 5. If no executable plan found and none are `pending` (all are `done` or `failed`):
    - If any `failed` with `retries < 3`: set those back to `pending`, increment `retries`, atomically rewrite state file, print STATEFILE path, **STOP.** (Next iteration picks them up.) <!-- changed -->
    - If all `done` and `verified: true`: call `exit_loop_mode("DONE: N plans completed successfully. Plan dir: $PLAN_DIR")`. Terminals are not states — do **not** write `terminal_done` (or any terminal name) as `current_state`. <!-- changed -->
@@ -209,10 +209,10 @@ The state machine definitions live in this SKILL.md — they are **not** stored 
    - Append `history` entry: `{state: "monitor_execution", slug, event: "output_observed", at: <ISO>, note: <output_file path>}`. <!-- changed -->
    - Atomically rewrite state file. Print STATEFILE path. **STOP.** <!-- changed -->
 4. **If the file does not exist:** evaluate elapsed time since `dispatched_at`: <!-- changed -->
-   - **< 5 minutes:** the sub-agent is likely still running. `sleep(60s, "sub-agent still running — {slug}")`, then **STOP**.
-   - **5–10 minutes:** still within tolerance but suspicious. `sleep(120s, "sub-agent slow — {slug}, elapsed {N}m")`, then **STOP**. <!-- changed -->
+   - **< 5 minutes:** the sub-agent is likely still running. `bash sleep 60 # sub-agent still running — {slug}`, then **STOP**.
+   - **5–10 minutes:** still within tolerance but suspicious. `bash sleep 120 # sub-agent slow — {slug}, elapsed {N}m`, then **STOP**. <!-- changed -->
    - **> 10 minutes:** the sub-agent likely crashed or stalled. Continue to step 5. <!-- changed -->
-5. Confirm the sub-agent is gone before declaring failure: `pgrep -f "omp launch.*{slug}"`. If a process is still found, `sleep(120s, "sub-agent process still alive past timeout — {slug}")`, then **STOP**. `pgrep` is a secondary heuristic only — the primary signal is the missing output file past 10 minutes. <!-- changed -->
+5. Confirm the sub-agent is gone before declaring failure: `pgrep -f "omp launch.*{slug}"`. If a process is still found, `bash sleep 120 # sub-agent process still alive past timeout — {slug}`, then **STOP**. `pgrep` is a secondary heuristic only — the primary signal is the missing output file past 10 minutes. <!-- changed -->
 6. Set `status: "failed"`, set `active_plan: null`, set `current_state: "handle_failure"`. <!-- changed -->
 7. Append `history` entry: `{state: "monitor_execution", slug, event: "no_output_after_timeout", at: <ISO>, note: "elapsed >10m, no output file"}`. <!-- changed -->
 8. Atomically rewrite state file. Print STATEFILE path. **STOP.** <!-- changed -->
@@ -302,7 +302,7 @@ Run these whenever the state machine is modified (`init`, `unknown`, `handle_fai
 
 ## Constraints
 
-- **Do not ask questions.** You run unattended in a loop. Use `sleep` to wait, `exit_loop_mode` to escalate.
+- **Do not ask questions.** You run unattended in a loop. Use Bash `sleep` to wait, `exit_loop_mode` to escalate.
 - **Never write files outside `$PLAN_DIR/results/`** except `orchestrate_state.json`.
 - **Never execute plan instructions directly.** Always delegate to `omp launch`. You are the orchestrator, not the worker.
 - **Never chain states.** Execute exactly one state per invocation. After a STOP line, your session is over.
@@ -316,7 +316,7 @@ Run these whenever the state machine is modified (`init`, `unknown`, `handle_fai
 - **Do not resolve git conflicts autonomously.** If a sub-agent's output causes merge conflicts, escalate via `exit_loop_mode("BLOCKED: merge conflict in <file> — needs human resolution")`. <!-- changed -->
 - **Do not delete or archive completed plan directories.** The state file is the authority. A `done` project stays done.
 - **Cap retries at 3 per plan.** After 3 failures, mark `failed_permanent` and move on. Do not retry indefinitely.
-- **Prefer `sleep()` over `exit_loop_mode()`** when uncertain whether work is truly done. A sleeping agent can be re-invoked; an exited agent cannot.
+- **Prefer Bash `sleep` over `exit_loop_mode()`** when uncertain whether work is truly done. A sleeping agent can be re-invoked; an exited agent cannot.
 - **OMP auto-compacts context.** Your context window may shrink between invocations. This is safe because you always re-read the state file fresh. Never rely on memory of prior invocations.
 
 ## TLDR
