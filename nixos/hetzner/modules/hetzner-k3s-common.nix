@@ -72,9 +72,9 @@
       # Install cert-manager CRDs (needed before ArgoCD syncs wave 0)
       kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.17.1/cert-manager.crds.yaml 2>&1 || true
       # Install istio CRDs (needed before ArgoCD syncs wave 3)
-      kubectl apply -f https://raw.githubusercontent.com/istio/istio/1.27.0/manifests/charts/base/crds/crd-all.gen.yaml 2>&1 || true
+      kubectl apply -f https://raw.githubusercontent.com/istio/istio/1.27.0/manifests/charts/base/files/crd-all.gen.yaml 2>&1 || true
       # Install k8gb CRDs (needed before ArgoCD syncs wave 2)
-      kubectl apply -f https://raw.githubusercontent.com/k8gb-io/k8gb/v0.14.0/chart/k8gb/templates/crds.yaml 2>&1 || true
+      kubectl apply -f https://raw.githubusercontent.com/k8gb-io/k8gb/v0.14.0/chart/k8gb/crd/k8gb.absa.oss_gslbs.yaml 2>&1 || true
       kubectl create namespace argocd --dry-run=client -o yaml | kubectl apply -f -
       kubectl apply --server-side --force-conflicts -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
       # Create redis secret with non-empty password (empty password breaks redis config parsing)
