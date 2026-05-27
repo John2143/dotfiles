@@ -156,7 +156,7 @@
       set -q VAST_REASONING_PARSER; or set -gx VAST_REASONING_PARSER ""
       set -q VAST_EXTRA_ARGS; or set -gx VAST_EXTRA_ARGS ""
       set -q VAST_TENSOR_PARALLEL; or set -gx VAST_TENSOR_PARALLEL ""
-      set -q VAST_ENGINE; or set -gx VAST_ENGINE "sglang"
+      set -q VAST_ENGINE; or set -gx VAST_ENGINE "vllm"
       set -q VAST_LOGGING_PROXY; or set -gx VAST_LOGGING_PROXY "1"
 
       # Fish quirk: `set -q VAR; or set -gx VAR ""` returns 1 even when the
@@ -366,7 +366,7 @@
       env-cleanup $_pre_vars
       return $rc
     '';
-    vast-bootstrap.description = "Bootstrap SGLang (default) or vLLM on a rented Vast.ai instance (vast-bootstrap [INSTANCE_ID] [--restart] [--no-fzf]; with ≥2 running instances opens an fzf picker unless --no-fzf or fzf is missing). Set ENGINE=sglang|vllm via VAST_ENGINE in ~/.config/vast/profile.";
+    vast-bootstrap.description = "Bootstrap vLLM (default) or SGLang on a rented Vast.ai instance (vast-bootstrap [INSTANCE_ID] [--restart] [--no-fzf]; with ≥2 running instances opens an fzf picker unless --no-fzf or fzf is missing). Set ENGINE=vllm|sglang via VAST_ENGINE in ~/.config/vast/profile.";
 
     vast-tunnel.body = ''
       set -l _pre_vars (set --names -x)

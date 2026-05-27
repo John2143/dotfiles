@@ -316,17 +316,17 @@ in {
       # ---- Window rules ----
       window_rule = [
         # steam
-        { match = { class = "steam"; }; workspace = "name:steam"; no_initial_focus = true; }
+        { match = { class = "^[Ss]team$"; }; workspace = "name:steam"; no_initial_focus = true; }
         # TeamSpeak + qpwgraph
         { match = { class = "TeamSpeak 3"; }; workspace = "name:ts"; }
         { match = { class = "org.rncbc.qpwgraph"; }; workspace = "name:ts"; }
         # discord / vesktop
-        { match = { class = "vesktop"; }; workspace = "name:disc"; no_initial_focus = true; }
-        { match = { class = "discord"; }; workspace = "name:disc"; no_initial_focus = true; }
+        { match = { class = "^[Vv]esktop$"; }; workspace = "name:disc"; no_initial_focus = true; }
+        { match = { class = "^[Dd]iscord$"; }; workspace = "name:disc"; no_initial_focus = true; }
         # obsidian
-        { match = { class = "obsidian"; }; workspace = "name:obsidian"; no_initial_focus = true; }
+        { match = { class = "^[Oo]bsidian$"; }; workspace = "name:obsidian"; no_initial_focus = true; }
         # spotify
-        { match = { class = "Spotify"; }; workspace = "name:spotify"; no_initial_focus = true; }
+        { match = { class = "^[Ss]potify$"; }; workspace = "name:spotify"; no_initial_focus = true; }
         # xwaylandvideobridge (hide)
         { match = { class = "^xwaylandvideobridge$"; }; opacity = "0.0 override 0.0 override"; no_anim = true; no_focus = true; no_initial_focus = true; }
         # awakened-poe-trade (hide)
@@ -456,6 +456,8 @@ in {
         { _args = [(mkLua ''mainMod .. " + Z"'') (mkLua ''hl.dsp.exec_cmd([[fish -c 'ydotool key 28:1 28:0; ydotool type "/hideout"; ydotool key 28:1 28:0;']])'')]; }
         { _args = [(mkLua ''mainMod .. " + X"'') (mkLua ''hl.dsp.exec_cmd([[fish -c 'ydotool key 28:1 28:0; ydotool type "/menagerie"; ydotool key 28:1 28:0;']])'')]; }
 
+        # Autoclicker stop hotkey
+        { _args = [(mkLua ''mainMod .. " + Escape"'') (mkLua ''hl.dsp.exec_cmd([[fish -c 'stop-autoclicker']])'')]; }
         # Notify slurp result
         { _args = [(mkLua ''mainMod .. " + N"'') (mkLua ''hl.dsp.exec_cmd([[fish -c "notify-send (slurp -p)"]])'')]; }
 

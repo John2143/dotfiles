@@ -9,126 +9,125 @@
   pkgs-stable,
   inputs,
   ...
-}:
-let
+}: let
   vast-waybar-status = pkgs.writeShellApplication {
     name = "vast-waybar-status";
-    runtimeInputs = with pkgs; [ jq coreutils curl systemd ];
+    runtimeInputs = with pkgs; [jq coreutils curl systemd];
     text = ''
-      CACHE=/tmp/vast-waybar-status.json
-      MAX_AGE=55
+            CACHE=/tmp/vast-waybar-status.json
+            MAX_AGE=55
 
-      if [ -f "$CACHE" ]; then
-          age=$(( $(date +%s) - $(stat -c %Y "$CACHE") ))
-          if [ "$age" -lt "$MAX_AGE" ]; then
-              content=$(cat "$CACHE")
-              if [ -n "$content" ]; then
-                  echo "$content"
-                  exit 0
-              else
-                  exit 1
-              fi
-          fi
-      fi
+            if [ -f "$CACHE" ]; then
+                age=$(( $(date +%s) - $(stat -c %Y "$CACHE") ))
+                if [ "$age" -lt "$MAX_AGE" ]; then
+                    content=$(cat "$CACHE")
+                    if [ -n "$content" ]; then
+                        echo "$content"
+                        exit 0
+                    else
+                        exit 1
+                    fi
+                fi
+            fi
 
-      # Non-secret config from the user profile (label, local port). The
-      # vastai wrapper handles its own VAST_API_KEY sourcing, so we don't
-      # need to touch /run/agenix/vast-credentials here.
-      LABEL=vllm-deepseek-v4
-      LOCAL_PORT=8001
-      PROFILE="$HOME/.config/vast/profile"
-      if [ -f "$PROFILE" ]; then
-          set -a
-          # shellcheck disable=SC1090
-          . "$PROFILE"
-          set +a
-          # If the profile uses fish syntax (set -gx ...) instead of bash-
-          # compatible KEY=value, sourcing silently sets nothing. Detect by
-          # checking whether key vars are empty despite a non-empty profile.
-          if [ -z "''${VAST_LABEL:-}" ] && [ -z "''${VAST_LOCAL_PORT:-}" ] && [ -s "$PROFILE" ]; then
-            echo "vast-waybar-status: $PROFILE sourced but no KEY=VALUE vars read (fish syntax?). Using defaults." >&2
-          fi
-          LABEL="''${VAST_LABEL:-$LABEL}"
-          LOCAL_PORT="''${VAST_LOCAL_PORT:-$LOCAL_PORT}"
-      fi
+            # Non-secret config from the user profile (label, local port). The
+            # vastai wrapper handles its own VAST_API_KEY sourcing, so we don't
+            # need to touch /run/agenix/vast-credentials here.
+            LABEL=vllm-deepseek-v4
+            LOCAL_PORT=8001
+            PROFILE="$HOME/.config/vast/profile"
+            if [ -f "$PROFILE" ]; then
+                set -a
+                # shellcheck disable=SC1090
+                . "$PROFILE"
+                set +a
+                # If the profile uses fish syntax (set -gx ...) instead of bash-
+                # compatible KEY=value, sourcing silently sets nothing. Detect by
+                # checking whether key vars are empty despite a non-empty profile.
+                if [ -z "''${VAST_LABEL:-}" ] && [ -z "''${VAST_LOCAL_PORT:-}" ] && [ -s "$PROFILE" ]; then
+                  echo "vast-waybar-status: $PROFILE sourced but no KEY=VALUE vars read (fish syntax?). Using defaults." >&2
+                fi
+                LABEL="''${VAST_LABEL:-$LABEL}"
+                LOCAL_PORT="''${VAST_LOCAL_PORT:-$LOCAL_PORT}"
+            fi
 
-      if ! raw=$(timeout 15 vastai show instances --raw 2>/dev/null); then
-          : > "$CACHE"
-          exit 1
-      fi
-      if ! credit_raw=$(timeout 15 vastai show user --raw 2>/dev/null); then
-          : > "$CACHE"
-          exit 1
-      fi
-      # Hide the widget when there are zero instances at all (any status).
-      # A sleeping/stopped instance still counts — only truly empty → hidden.
-      total=$(echo "$raw" | jq --arg label "$LABEL" \
-          '[.[] | select(.label == $label)] | length')
-      if [ "$total" = "0" ]; then
-          : > "$CACHE"
-          exit 0
-      fi
+            if ! raw=$(timeout 15 vastai show instances --raw 2>/dev/null); then
+                : > "$CACHE"
+                exit 1
+            fi
+            if ! credit_raw=$(timeout 15 vastai show user --raw 2>/dev/null); then
+                : > "$CACHE"
+                exit 1
+            fi
+            # Hide the widget when there are zero instances at all (any status).
+            # A sleeping/stopped instance still counts — only truly empty → hidden.
+            total=$(echo "$raw" | jq --arg label "$LABEL" \
+                '[.[] | select(.label == $label)] | length')
+            if [ "$total" = "0" ]; then
+                : > "$CACHE"
+                exit 0
+            fi
 
-      running=$(echo "$raw" | jq -c --arg label "$LABEL" \
-          '[.[] | select(.label == $label) | select(.actual_status == "running")]')
-      count=$(echo "$running" | jq 'length')
-      hourly=$(echo "$running" | jq '[.[].dph_total | tonumber] | add // 0')
-      credit=$(echo "$credit_raw" | jq -r '.credit // 0')
+            running=$(echo "$raw" | jq -c --arg label "$LABEL" \
+                '[.[] | select(.label == $label) | select(.actual_status == "running")]')
+            count=$(echo "$running" | jq 'length')
+            hourly=$(echo "$running" | jq '[.[].dph_total | tonumber] | add // 0')
+            credit=$(echo "$credit_raw" | jq -r '.credit // 0')
 
-      tunnel_up=0
-      systemctl --user is-active --quiet vast-tunnel.service && tunnel_up=1
-      vllm_ready=0
-      curl -fsS --max-time 3 "http://localhost:$LOCAL_PORT/v1/models" \
-          >/dev/null 2>&1 && vllm_ready=1
+            tunnel_up=0
+            systemctl --user is-active --quiet vast-tunnel.service && tunnel_up=1
+            vllm_ready=0
+            curl -fsS --max-time 3 "http://localhost:$LOCAL_PORT/v1/models" \
+                >/dev/null 2>&1 && vllm_ready=1
 
-      if [ "$tunnel_up" = 1 ] && [ "$vllm_ready" = 1 ]; then
-          class="vast-ready"; icons="▲●"; state="tunnel UP, vLLM READY"
-      elif [ "$tunnel_up" = 1 ]; then
-          class="vast-tunnel-up"; icons="▲○"; state="tunnel UP, vLLM not responding"
-      else
-          class="vast-tunnel-down"; icons="▼○"; state="tunnel DOWN"
-      fi
+            if [ "$tunnel_up" = 1 ] && [ "$vllm_ready" = 1 ]; then
+                class="vast-ready"; icons="▲●"; state="tunnel UP, vLLM READY"
+            elif [ "$tunnel_up" = 1 ]; then
+                class="vast-tunnel-up"; icons="▲○"; state="tunnel UP, vLLM not responding"
+            else
+                class="vast-tunnel-down"; icons="▼○"; state="tunnel DOWN"
+            fi
 
-      hrs_str=""
-      if [ "$(echo "$hourly" | jq '. > 0')" = "true" ]; then
-          hrs_str=$(jq -rn --arg b "$credit" --arg h "$hourly" '
-              ($b | tonumber) as $bal | ($h | tonumber) as $hr |
-              ($bal / $hr) as $total_hours |
-              ($total_hours | floor) as $hours |
-              (($total_hours - $hours) * 60 | round) as $minutes |
-              "\($hours):\($minutes | tostring | if length == 1 then "0" + . else . end)"
-          ')
-      fi
+            hrs_str=""
+            if [ "$(echo "$hourly" | jq '. > 0')" = "true" ]; then
+                hrs_str=$(jq -rn --arg b "$credit" --arg h "$hourly" '
+                    ($b | tonumber) as $bal | ($h | tonumber) as $hr |
+                    ($bal / $hr) as $total_hours |
+                    ($total_hours | floor) as $hours |
+                    (($total_hours - $hours) * 60 | round) as $minutes |
+                    "\($hours):\($minutes | tostring | if length == 1 then "0" + . else . end)"
+                ')
+            fi
 
-      count_suffix=""
-      [ "$count" -gt 1 ] && count_suffix="×$count"
+            count_suffix=""
+            [ "$count" -gt 1 ] && count_suffix="×$count"
 
-      balance_fmt=$(printf '%.2f' "$credit")
-      hourly_fmt=$(printf '%.2f' "$hourly")
+            balance_fmt=$(printf '%.2f' "$credit")
+            hourly_fmt=$(printf '%.2f' "$hourly")
 
-      text="''${LABEL}''${count_suffix} $icons \$$balance_fmt"
-      [ -n "$hrs_str" ] && text="$text $hrs_str"
+            text="''${LABEL}''${count_suffix} $icons \$$balance_fmt"
+            [ -n "$hrs_str" ] && text="$text $hrs_str"
 
-      if [ "$count" = "0" ]; then
-          per_instance="  (no running instances)"
-      else
-          per_instance=$(echo "$running" | jq -r '.[] |
-              "  inst \(.id): \(.gpu_name)×\(.num_gpus // 1) $\(.dph_total)/hr"')
-      fi
+            if [ "$count" = "0" ]; then
+                per_instance="  (no running instances)"
+            else
+                per_instance=$(echo "$running" | jq -r '.[] |
+                    "  inst \(.id): \(.gpu_name)×\(.num_gpus // 1) $\(.dph_total)/hr"')
+            fi
 
-      tooltip="Vast.ai (label: $LABEL)
-$per_instance
+            tooltip="Vast.ai (label: $LABEL)
+      $per_instance
 
-State:     $state
-Balance:   \$$balance_fmt
-Rate:      \$$hourly_fmt/hr (sum)"
-      [ -n "$hrs_str" ] && tooltip="$tooltip
-Remaining: ~$hrs_str"
+      State:     $state
+      Balance:   \$$balance_fmt
+      Rate:      \$$hourly_fmt/hr (sum)"
+            [ -n "$hrs_str" ] && tooltip="$tooltip
+      Remaining: ~$hrs_str"
 
-      result=$(jq -nc --arg t "$text" --arg tt "$tooltip" --arg c "$class" \
-          '{text: $t, tooltip: $tt, class: $c}')
-      printf '%s' "$result" > "$CACHE"
-      echo "$result"
+            result=$(jq -nc --arg t "$text" --arg tt "$tooltip" --arg c "$class" \
+                '{text: $t, tooltip: $tt, class: $c}')
+            printf '%s' "$result" > "$CACHE"
+            echo "$result"
 
     '';
   };
@@ -139,7 +138,7 @@ Remaining: ~$hrs_str"
   vast-render-metrics = pkgs.writeShellApplication {
     name = "vast-render-metrics";
     runtimeInputs = [
-      (pkgs.python3.withPackages (p: with p; [ pandas matplotlib numpy ]))
+      (pkgs.python3.withPackages (p: with p; [pandas matplotlib numpy]))
     ];
     text = ''
       exec python3 ${../.config/vast-render-metrics.py} "$@"
@@ -148,7 +147,7 @@ Remaining: ~$hrs_str"
 
   weather-status = pkgs.writeShellApplication {
     name = "weather-status";
-    runtimeInputs = [ pkgs.curl pkgs.jq ];
+    runtimeInputs = [pkgs.curl pkgs.jq];
     text = ''
       response=$(curl -sf "wttr.in/?format=j1") || {
         echo '{"text": "\u26a0", "class": "error", "tooltip": "Weather unavailable"}'
@@ -251,7 +250,7 @@ in {
     xdgOpenUsePortal = true;
     config = {
       Hyprland = {
-        default = [ "hyprland" "gtk" ];
+        default = ["hyprland" "gtk"];
       };
     };
   };
@@ -353,12 +352,17 @@ in {
 
   nixpkgs.overlays = [
     (final: prev: {
+      autoclicker = inputs.autoclicker.packages.${prev.system}.default;
+    })
+    (final: prev: {
       waybar = prev.waybar.overrideAttrs (old: {
-        patches = (old.patches or []) ++ [
-          ./modules/waybar-lua-dispatch.patch
-        ];
+        patches =
+          (old.patches or [])
+          ++ [
+            ./modules/waybar-lua-dispatch.patch
+          ];
       });
     })
   ];
-  environment.systemPackages = [ vast-waybar-status vast-render-metrics weather-status ];
+  environment.systemPackages = [vast-waybar-status vast-render-metrics weather-status];
 }

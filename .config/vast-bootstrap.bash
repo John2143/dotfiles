@@ -149,6 +149,12 @@ export HF_HUB_ENABLE_HF_TRANSFER=0
 export VLLM_CACHE_ROOT=/workspace/.vllm_cache
 export TRITON_CACHE_DIR=/workspace/.triton_cache
 export TORCHINDUCTOR_CACHE_DIR=/workspace/.inductor_cache
+# v0.21.0 enables CUDA graph memory profiling by default, which changes
+# the effective --gpu-memory-utilization by ~0.006 (e.g., passing 0.9000
+# acts like 0.8943). Disable it so the auto-tuning tier table's MEM_UTIL
+# values work as calibrated. Remove once the tiers are adjusted or
+# v0.21.1+ changes the default.
+export VLLM_MEMORY_PROFILER_ESTIMATE_CUDAGRAPHS=0
 
 # Clear /tmp on the overlay if it's >50% full so existing junk doesn't
 # bottleneck a fresh download.

@@ -8,10 +8,10 @@
       VAST_LABEL=vllm-deepseek-v4
 
       # ---------- Engine ----------
-      # "sglang" (default, recommended for DeepSeek V4) or "vllm".
-      # SGLang produces zero CJK bad tokens vs vLLM's 50-75% rate (vllm#41985).
-      # vLLM kept for A/B comparison and non-DS models.
-      # VAST_ENGINE=sglang
+      # "vllm" (default, recommended for DeepSeek V4) or "sglang".
+      # vllm#41985 (CJK token injection) fixed in v0.21.0 via PR #42287.
+      # SGLang kept for A/B comparison, AMD deployments, and non-DS models.
+      # VAST_ENGINE=vllm
 
       # ---------- Model + serving config ----------
       VAST_MODEL=deepseek-ai/DeepSeek-V4-Flash

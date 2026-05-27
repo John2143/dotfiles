@@ -44,6 +44,11 @@
       url = "github:John2143/node-rally-tools";
     };
 
+    autoclicker = {
+      url = "path:./autoclicker";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+
     nix-darwin = {
       url = "github:LnL7/nix-darwin";
       inputs.nixpkgs.follows = "nixpkgs";
@@ -78,46 +83,58 @@
     # mkHost name modules → { name = <config>; "vm-<name>" = <vm-config>; }
     # Every host defined this way automatically gets a runnable VM variant.
     # Usage: nix run .#nixosConfigurations.vm-<name>.config.system.build.vm
-    mkHost = { name, modules }:
-      let
-        base = {
-          inherit system;
-          specialArgs = {
-            inherit inputs;
-            compName = name;
-            sshKeys = my-keys;
-          };
-          modules = [
+    mkHost = {
+      name,
+      modules,
+    }: let
+      base = {
+        inherit system;
+        specialArgs = {
+          inherit inputs;
+          compName = name;
+          sshKeys = my-keys;
+        };
+        modules =
+          [
             inputs.home-manager.nixosModules.default
             agenix.nixosModules.default
-          ] ++ modules;
-        };
-        vmOverride = { config, lib, ... }: {
-          # Only override GPU drivers if X11/Wayland is enabled
-          services.xserver.videoDrivers = lib.mkIf config.services.xserver.enable
-            (lib.mkForce [ "modesetting" ]);
-          services.tailscale.enable = lib.mkForce false;
-          virtualisation.vmVariant = {
-            virtualisation = {
-              memorySize = 8192;
-              cores = 4;
-              graphics = true;
-              resolution = { x = 1920; y = 1080; };
-            };
-            users.users.john.initialPassword = "john";
-          };
-        };
-      in {
-        ${name} = nixpkgs.lib.nixosSystem base;
-        "vm-${name}" = nixpkgs.lib.nixosSystem (base // {
-          specialArgs = base.specialArgs // { compName = "vm-${name}"; };
-          modules = base.modules ++ [ vmOverride ];
-        });
+          ]
+          ++ modules;
       };
+      vmOverride = {
+        config,
+        lib,
+        ...
+      }: {
+        # Only override GPU drivers if X11/Wayland is enabled
+        services.xserver.videoDrivers =
+          lib.mkIf config.services.xserver.enable
+          (lib.mkForce ["modesetting"]);
+        services.tailscale.enable = lib.mkForce false;
+        virtualisation.vmVariant = {
+          virtualisation = {
+            memorySize = 8192;
+            cores = 4;
+            graphics = true;
+            resolution = {
+              x = 1920;
+              y = 1080;
+            };
+          };
+          users.users.john.initialPassword = "john";
+        };
+      };
+    in {
+      ${name} = nixpkgs.lib.nixosSystem base;
+      "vm-${name}" = nixpkgs.lib.nixosSystem (base
+        // {
+          specialArgs = base.specialArgs // {compName = "vm-${name}";};
+          modules = base.modules ++ [vmOverride];
+        });
+    };
   in rec {
     formatter.x86_64-linux = nixpkgs.legacyPackages.${system}.alejandra;
     formatter.aarch64-darwin = nixpkgs.legacyPackages.aarch64-darwin.alejandra;
-
 
     nixosConfigurations =
       (mkHost {
@@ -137,8 +154,8 @@
 
           ./nixos/modules/remote-builders.nix
         ];
-      }) //
-      (mkHost {
+      })
+      // (mkHost {
         name = "arch";
         modules = [
           ./nixos/shared-cli-configuration.nix
@@ -155,8 +172,8 @@
 
           ./nixos/modules/remote-builders.nix
         ];
-      }) //
-      (mkHost {
+      })
+      // (mkHost {
         name = "closet";
         modules = [
           ./nixos/shared-cli-configuration.nix
@@ -170,8 +187,8 @@
 
           ./nixos/modules/remote-builders.nix
         ];
-      }) //
-      (mkHost {
+      })
+      // (mkHost {
         name = "pite";
         modules = [
           ./nixos/shared-cli-configuration.nix
@@ -182,8 +199,8 @@
           ./nixos/modules/attic.nix
           ./nixos/modules/remote-builders.nix
         ];
-      }) //
-      (mkHost {
+      })
+      // (mkHost {
         name = "aman";
         modules = [
           ./nixos/shared-cli-configuration.nix
@@ -200,8 +217,8 @@
             };
           })
         ];
-      }) //
-      (mkHost {
+      })
+      // (mkHost {
         name = "vpin";
         modules = [
           ./nixos/shared-cli-configuration.nix
@@ -212,8 +229,8 @@
           ./nixos/modules/attic.nix
           ./nixos/modules/remote-builders.nix
         ];
-      }) //
-      (mkHost {
+      })
+      // (mkHost {
         name = "term";
         modules = [
           ./nixos/shared-cli-configuration.nix
@@ -223,8 +240,8 @@
 
           ./nixos/modules/attic.nix
         ];
-      }) //
-      (mkHost {
+      })
+      // (mkHost {
         name = "secu";
         modules = [
           inputs.disko.nixosModules.default
@@ -242,8 +259,8 @@
 
           ./nixos/modules/remote-builders.nix
         ];
-      }) //
-      (mkHost {
+      })
+      // (mkHost {
         name = "nas";
         modules = [
           inputs.disko.nixosModules.default
@@ -257,8 +274,8 @@
 
           ./nixos/modules/remote-builders.nix
         ];
-      }) //
-      {
+      })
+      // {
         installer = nixpkgs.lib.nixosSystem {
           inherit system;
           specialArgs = {

@@ -99,8 +99,22 @@ window#waybar > box {
 }
 
 #workspaces .taskbar-window {
-    padding-left: 4px;
-    padding-right: 4px;
+    padding: 0;
+    margin: 0;
+    min-width: 0;
+    min-height: 0;
+    opacity: 0;
+    font-size: 0;
+    transition: opacity 0.25s ease;
+}
+#workspaces .taskbar-window image {
+    min-width: 0;
+    min-height: 0;
+}
+#workspaces button:hover .taskbar-window {
+    opacity: 1;
+    padding: 2px 4px;
+    font-size: 13px;
 }
 #workspaces button.visible .taskbar-window,
 #workspaces button.visible .workspace-label {
@@ -137,15 +151,36 @@ window#waybar > box {
     margin: 0 8px;
 }
 
-/* ---- Clock (center) ---- */
+/* ---- Clock Group (drawer) ---- */
+#group-clock {
+    background: transparent;
+    padding: 0;
+    margin: 0 4px;
+    box-shadow: none;
+}
+#group-clock > box {
+    background: @surface0;
+    border-radius: 8px;
+    padding: 0 16px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+}
+
+/* ---- Clock (inside drawer) ---- */
 #clock {
     color: @text;
     font-size: 14px;
     font-weight: 600;
-    background: @surface0;
-    padding: 0 16px;
-    border-radius: 8px;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+    background: transparent;
+    border-radius: 0;
+    padding: 0;
+    box-shadow: none;
+}
+
+/* ---- Clock Date (hidden until hover) ---- */
+#custom-clock-date {
+    color: @subtext0;
+    font-size: 13px;
+    padding-left: 16px;
 }
 
 /* ---- Media Player (center) ---- */
@@ -182,6 +217,7 @@ window#waybar > box {
 #custom-teamspeak-sound,
 #custom-vast,
 #custom-updates,
+#custom-autoclicker,
 #custom-privacy,
 #group-hardware {
     background: @surface0;
@@ -321,4 +357,39 @@ window#waybar > box {
     -gtk-icon-effect: highlight;
     background: @red;
     border-radius: 8px;
+}
+
+/* ---- Urgent state animation (GTK3-compatible: from/to only) ---- */
+@keyframes urgent-blink {
+    from { color: @red; }
+    to   { color: @maroon; }
+}
+
+#battery.critical,
+#cpu.critical,
+#memory.critical,
+#temperature.critical,
+#custom-privacy.recording {
+    animation: urgent-blink 1s ease-in-out infinite alternate;
+}
+
+/* ---- Autoclicker ---- */
+#custom-autoclicker {
+    min-width: 30px;
+}
+
+#custom-autoclicker.autoclicker-active {
+    background: @red;
+    color: @base;
+    font-weight: bold;
+    animation: pulse-active 2s steps(8) infinite;
+}
+
+#custom-autoclicker.autoclicker-inactive {
+    color: @overlay0;
+}
+
+@keyframes pulse-active {
+    from { background-color: @red; }
+    to   { background-color: @maroon; }
 }
