@@ -155,7 +155,7 @@ For **multi-session skills** (user invokes the skill several times; each invocat
 5. **TLDR** — 2-3 sentence summary with "stop" instruction
 
 For **loop prompts** (designed for the `/loop` harness, which calls the same prompt repeatedly with no arguments), the body must additionally include:
-- A **gap-evaluation checklist** in "How to start each session" — the agent must decide whether there is work to do before acting. If no work exists, the harness provides two tool calls: **`sleep(duration, reason)`** to pause and retry later, or **`exit_loop_mode(reason)`** to stop permanently.
+- A **gap-evaluation checklist** in "How to start each session" — the agent must decide whether there is work to do before acting. If no work exists, the agent should use Bash `sleep <seconds>` to pause and retry later, or call **`exit_loop_mode(reason)`** to stop permanently.
 - "Do not ask questions" in constraints (the agent runs unattended).
 - See `.claude/skills/prompt-engineer/SKILL.md` Mode: Loop Prompt Generation for the full template.
 

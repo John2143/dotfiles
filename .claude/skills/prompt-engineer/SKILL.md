@@ -169,7 +169,7 @@ This mode generates a loop prompt: a self-contained instruction document designe
 
 **This is distinct from a multi-session skill** (user-invoked, user controls timing). A loop prompt must include a gap-evaluation step at the start of every session to decide whether work exists. If no work exists, the agent uses harness-provided tool calls to terminate:
 
-- **`sleep(duration, reason)`** — Work is expected to reappear later (e.g., waiting for a human PR merge, waiting for a timer). The harness pauses and re-invokes after `duration`.
+- **Bash `sleep <seconds>`** — Work is expected to reappear later (e.g., waiting for a human PR merge, waiting for a timer). The agent uses `bash sleep` and stops; the harness re-invokes after the duration.
 - **`exit_loop_mode(reason)`** — All work is definitively complete. The harness stops invoking permanently.
 
 ### Step 1 — Explore the repo
@@ -213,7 +213,7 @@ Numbered steps:
 3. If all items are marked done or the queue is empty: re-read the main deliverable and background file, perform a fresh gap evaluation.
    - If the gap evaluation finds new work: write new prioritized goals to the queue file, then stop. The next session will execute them.
    - If the gap evaluation finds nothing and no external events could create work: call **`exit_loop_mode("<summary of what was accomplished>")`**.
-   - If the gap evaluation finds nothing but external events could create work (e.g., PR awaiting human merge, timer-based triggers): call **`sleep(<duration>, "<reason>")`**.
+   - If the gap evaluation finds nothing but external events could create work (e.g., PR awaiting human merge, timer-based triggers): call **Bash `sleep <seconds>`** with a comment explaining why, then stop.
 
 Use this gap-evaluation checklist when producing new goals:
 - Missing documentation for any component visible in the directory tree.
@@ -230,15 +230,15 @@ Rules for execution. Must include:
 - Do not re-do goals already marked ✅.
 - Commit with a descriptive message. Do not ask for approval.
 - If no work exists, call the appropriate harness tool:
-  - **`sleep(duration, reason)`** when work is expected to reappear.
+  - **Bash `sleep <seconds>`** when work is expected to reappear (with a comment explaining why).
   - **`exit_loop_mode(reason)`** when all work is definitively done.
 
 #### 5. Constraints
 List what the agent may and may not do. Derive these from the repo's tooling and CLAUDE.md. Always include:
 - Tool/environment restrictions appropriate to this repo
 - "Do not ask questions." (the agent runs unattended)
-- "Prefer `sleep()` when uncertain whether work is truly done. A sleeping agent can be re-invoked; an exited agent cannot."
-- "When calling `sleep()`, always provide a duration and reason. Example: `sleep(5min, "waiting for PR #9 to be merged by human")`."
+- "Prefer Bash `sleep` when uncertain whether work is truly done. A sleeping agent can be re-invoked; an exited agent cannot."
+- "When using Bash `sleep`, always include a comment with the duration and reason. Example: `sleep 300 # waiting for PR #9 to be merged by human`."
 #### 6. TLDR
 2–3 sentence plain-English summary of the entire loop logic. Must include: read queue → work or evaluate → sleep or exit. Should be the last thing in the file so a human can read it first.
 

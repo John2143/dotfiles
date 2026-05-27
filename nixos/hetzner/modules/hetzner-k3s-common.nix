@@ -71,6 +71,10 @@
         -k https://github.com/argoproj/argo-cd/manifests/crds?ref=stable
       # Install cert-manager CRDs (needed before ArgoCD syncs wave 0)
       kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.17.1/cert-manager.crds.yaml 2>&1 || true
+      # Install istio CRDs (needed before ArgoCD syncs wave 3)
+      kubectl apply -f https://raw.githubusercontent.com/istio/istio/1.27.0/manifests/charts/base/crds/crd-all.gen.yaml 2>&1 || true
+      # Install k8gb CRDs (needed before ArgoCD syncs wave 2)
+      kubectl apply -f https://raw.githubusercontent.com/k8gb-io/k8gb/v0.14.0/chart/k8gb/templates/crds.yaml 2>&1 || true
       kubectl create namespace argocd --dry-run=client -o yaml | kubectl apply -f -
       kubectl apply --server-side --force-conflicts -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
       # Create redis secret with non-empty password (empty password breaks redis config parsing)
@@ -234,6 +238,51 @@ CMEOF
       kubectl create secret generic temporal-postgres-password -n default \
         --from-literal=password="$(head -c 32 /dev/urandom | base64 | tr -d '\n')" \
         --dry-run=client -o yaml | kubectl apply -f -
+    '';
+  };
+
+  # ── CNPG password sync ──
+  # CNPG initdb creates roles with random passwords. The agenix secrets
+  # (pdns-postgres-password) are injected as k8s Secrets by k8s-secrets-bootstrap,
+  # but never synced into PostgreSQL. This oneshot fixes the mismatch.
+  systemd.services.cnpg-password-fix = {
+    description = "Sync CNPG PostgreSQL role passwords with agenix secrets";
+    after = ["k8s-secrets-bootstrap.service"];
+    wants = ["k3s.service"];
+    wantedBy = ["multi-user.target"];
+    path = [pkgs.k3s];
+    serviceConfig = {
+      Type = "oneshot";
+      RemainAfterExit = true;
+    };
+    script = ''
+      export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
+
+      # Wait for CNPG pod to exist and be Running
+      CNPG_POD=""
+      for i in $(seq 1 60); do
+        CNPG_POD=$(kubectl get pod -n default -l cnpg.io/cluster=temporal-postgres \
+          -o jsonpath='{.items[0].metadata.name}' 2>/dev/null)
+        if [ -n "$CNPG_POD" ]; then
+          PHASE=$(kubectl get pod "$CNPG_POD" -n default \
+            -o jsonpath='{.status.phase}' 2>/dev/null)
+          if [ "$PHASE" = "Running" ]; then
+            echo "CNPG pod $CNPG_POD is Running"
+            break
+          fi
+        fi
+        echo "Waiting for CNPG pod... ($i/60)"
+        sleep 5
+      done
+
+      if [ -n "$CNPG_POD" ]; then
+        PDNS_PASS=$(tr -d '\n' < "${config.age.secrets."hetzner/postgres-pdns-password".path}")
+        kubectl exec -i "$CNPG_POD" -n default -- psql -U postgres \
+          -c "ALTER ROLE pdns PASSWORD '$PDNS_PASS';" 2>&1
+        echo "Synced pdns PostgreSQL role password with agenix secret"
+      else
+        echo "WARNING: CNPG pod not found after 300s, skipping password sync"
+      fi
     '';
   };
 
