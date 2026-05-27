@@ -33,8 +33,12 @@
       "--disable=servicelb"
       "--cluster-cidr=10.42.0.0/16"
       "--service-cidr=10.43.0.0/16"
+      "--node-label=node.longhorn.io/create-default-disk=true"
     ];
   };
+  # k3s uses Type=notify but sometimes the startup takes too long and
+  # systemd kills it with "Failed with result 'protocol'". Override to simple.
+  systemd.services.k3s.serviceConfig.Type = lib.mkForce "simple";
 
 
   # ── DDoS kernel hardening ──
@@ -65,6 +69,8 @@
       # Install CRDs first (--server-side avoids annotation size limits)
       kubectl apply --server-side --force-conflicts \
         -k https://github.com/argoproj/argo-cd/manifests/crds?ref=stable
+      # Install cert-manager CRDs (needed before ArgoCD syncs wave 0)
+      kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.17.1/cert-manager.crds.yaml 2>&1 || true
       kubectl create namespace argocd --dry-run=client -o yaml | kubectl apply -f -
       kubectl apply --server-side --force-conflicts -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
       # Create redis secret with non-empty password (empty password breaks redis config parsing)
@@ -140,7 +146,12 @@ CMEOF
       ]" 2>&1 || true
       kubectl apply --server-side --force-conflicts -f https://raw.githubusercontent.com/cloudnative-pg/cloudnative-pg/release-1.25/releases/cnpg-1.25.1.yaml
       kubectl wait --for=condition=available deployment/cnpg-controller-manager -n cnpg-system --timeout=120s || true
-      # cert-manager is now deployed by ArgoCD (Helm chart in wave 0)
+      # Install cert-manager (Helm) — TLS certificate automation
+      helm repo add jetstack https://charts.jetstack.io 2>/dev/null || true
+      helm repo update 2>/dev/null || true
+      helm upgrade --install cert-manager jetstack/cert-manager --namespace cert-manager --create-namespace \
+        --set crds.enabled=false \
+        --wait --timeout 120s 2>&1 || true
     '';
   };
 
@@ -149,9 +160,13 @@ CMEOF
   # ── agenix → Kubernetes Secrets injection ──
   # Decrypts agenix secrets and creates Kubernetes Secrets before ArgoCD syncs.
   # Runs after k3s is ready, before ArgoCD applies the root app.
-  # Secrets: rfc2136-credentials, crowdsec-bouncer-key, mongo-creds,
-  #   mongo-encryption-key, b2-credentials, seaweedfs-master-key,
-  #   rclone-config, healthchecks-url, pdns-postgres-password
+  # Secrets created: rfc2136-credentials, crowdsec-bouncer-key, mongo-creds,
+  #   b2-credentials, seaweedfs-master-key, rclone-config, healthchecks-url,
+  #   pdns-postgres-password, temporal-postgres-password
+  # NOTE: mongo-encryption-key removed — mongo:7 Community Edition doesn't support
+  #   encryption-at-rest (--enableEncryption is Enterprise-only) 
+  # NOTE: These secrets MUST NOT exist as placeholders in the GitOps repo.
+  #   ArgoCD selfHeal WILL overwrite injected values even with IgnoreExtraneous.
   systemd.services.k8s-secrets-bootstrap = {
     description = "Inject agenix secrets into Kubernetes Secrets";
     after = ["k3s.service" "argocd-bootstrap.service"];
@@ -188,9 +203,7 @@ CMEOF
       kubectl create secret generic mongo-creds -n default \
         --from-literal=password="$(cat ${config.age.secrets."hetzner/mongodb-encryption-key".path} | head -c 32)" \
         --dry-run=client -o yaml | kubectl apply -f -
-      kubectl create secret generic mongo-encryption-key -n default \
-        --from-file=encryption.key=${config.age.secrets."hetzner/mongodb-encryption-key".path} \
-        --dry-run=client -o yaml | kubectl apply -f -
+
 
       # B2 credentials for CNPG and Longhorn backups
       kubectl create secret generic b2-credentials -n default \
@@ -209,7 +222,7 @@ CMEOF
         --dry-run=client -o yaml | kubectl apply -f -
 
       # Healthchecks.io URL (manual — set by user)
-      kubectl create secret generic healthchecks-url -n backup \
+      kubectl create secret generic healthchecks-url -n monitoring \
         --from-literal=HC_URL=https://hc-ping.com/PLACEHOLDER_UUID \
         --dry-run=client -o yaml | kubectl apply -f -
 
@@ -268,7 +281,7 @@ CMEOF
     "http://headscale.9s.pics:8280/2143nix"
   ];
   nix.settings.trusted-public-keys = lib.mkBefore [
-    "2143nix:Ysam0ozURtK+1tkP62M6lzbfoi8BVeL6s7ZWJlB6UxE="
+    "2143nix:LvE5APLbagyNODEJJ4BHKV4le1vcC6JgNklqdyMPUl8="
   ];
   nix.settings.netrc-file = "/run/attic-netrc";
 
@@ -283,7 +296,7 @@ CMEOF
       ExecStart = pkgs.writeShellScript "attic-netrc" ''
         mkdir -p /run
         printf 'machine headscale.9s.pics password %s\n' \
-          "$(cat ${config.age.secrets.attic-admin-token.path})" \
+          "$(for f in /run/agenix.d/*/attic-admin-token /run/agenix/attic-admin-token; do [ -f \"\$f\" ] && cat \"\$f\" && break; done)" \
           > /run/attic-netrc
         chmod 0444 /run/attic-netrc
       '';
@@ -301,7 +314,7 @@ CMEOF
       Type = "oneshot";
       RemainAfterExit = true;
       ExecStart = pkgs.writeShellScript "attic-login" ''
-        attic login home-pi http://headscale.9s.pics:8280 "$(cat ${config.age.secrets.attic-admin-token.path})"
+        attic login home-pi --set-default http://headscale.9s.pics:8280 "$(for f in /run/agenix.d/*/attic-admin-token /run/agenix/attic-admin-token; do [ -f \"\$f\" ] && cat \"\$f\" && break; done)"
       '';
     };
   };

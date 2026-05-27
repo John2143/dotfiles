@@ -307,3 +307,97 @@ Traefik chart v35+ has template errors with `hostPort` and `hostNetwork`. The bo
 - `hcloud floating-ip assign` takes the floating IP **ID** (numeric), not the IP address.
 - Flake ref format for nixos-anywhere: `.#<hostname>` not `.#nixosConfigurations.<hostname>`.
 - `nixos-anywhere --build-on-remote` is deprecated: use `--build-on remote` instead.
+
+## Kubernetes Pod Troubleshooting (2026-05-25)
+
+This section documents pod startup failures encountered during the initial "all pods running" sweep,
+with root causes and permanent fixes applied to the GitOps repo.
+
+### crowdsec-firewall-bouncer: ImagePullBackOff
+
+**Symptom**: `crowdsecurity/firewall-bouncer:latest` fails to pull across all 3 nodes.
+
+**Root cause**: No official iptables firewall bouncer Docker image exists. CrowdSec publishes
+per-service bouncer images (cloudflare, fastly, aws-waf, stormshield, etc.) but the iptables
+firewall bouncer is a host binary, not a container. The image name `crowdsecurity/firewall-bouncer`
+and `crowdsecurity/crowdsec-firewall-bouncer` both 404 on Docker Hub.
+
+**Fix**: Removed the `crowdsec-firewall-bouncer` DaemonSet from GitOps entirely. The
+`hetzner-split-ip-firewall.nix` already applies iptables filtering at the NixOS level, making
+a CrowdSec bouncer redundant in this architecture.
+
+**File**: `base/crowdsec/firewall-bouncer-config.yaml` (deleted)
+
+### mongo: CreateContainerConfigError / ContainerCreating
+
+**Symptom**: MongoDB pods stuck in `CreateContainerConfigError` (missing `password` key in
+`mongo-creds` Secret) or `ContainerCreating` (missing `mongo-encryption-key` Secret).
+
+**Root cause — Phase 1 (secrets)**:
+The GitOps repo contained empty placeholder secrets (`mongo-creds` and `mongo-encryption-key`)
+with `argocd.argoproj.io/compare-options: IgnoreExtraneous`. When ArgoCD synced, these
+placeholders overwrote the real secrets injected by `k8s-secrets-bootstrap`. The `IgnoreExtraneous`
+annotation prevents drift detection but does NOT prevent selfHeal overwrite — the empty secret
+shell still takes precedence.
+
+**Fix — Phase 1**: Deleted `base/mongodb/encryption-secret.yaml` from GitOps. Secrets injected
+only at runtime via `k8s-secrets-bootstrap` must NOT exist in GitOps at all — even as empty shells.
+
+**Root cause — Phase 2 (encryption flags)**:
+After secrets were fixed, pods failed with `Error: unrecognised option '--enableEncryption'`.
+`mongo:7` is Community Edition. `--enableEncryption` and `--encryptionKeyFile` are
+Enterprise-only features. The deployment also mounted `mongo-encryption-key` as a volume,
+which referenced a secret no longer created.
+
+**Fix — Phase 2**: Removed `--enableEncryption` and `--encryptionKeyFile` from deployment args.
+Removed `mongo-encryption-key` volume mount and volume definition.
+
+**File**: `base/mongodb/deployment.yaml`
+
+### mongo-backup: ContainerCreating → Error (rclone)
+
+**Symptom**: MongoDB backup CronJob pods failing with `rclone: not found`, then after adding
+`apt-get install rclone`, failing with `didn't find section in config file`.
+
+**Root cause**: The `mongo:7` Docker image doesn't include `rclone`. Even if installed at runtime,
+the backup requires a full rclone configuration with:
+- B2 backend (application key ID + password)
+- Crypt overlay (crypt password + salt)
+- Properly named remotes matching the script (`b2-crypt:mongo-backups/`)
+
+The only available agenix secret is `rclone-b2-password` (the application key). The key ID,
+bucket name, and crypt credentials are not yet provisioned.
+
+**Fix**: Removed `base/mongodb/backup-cronjob.yaml` from GitOps. To re-enable:
+1. Create a custom Docker image with `mongo` + `rclone` pre-installed
+2. Provision agenix secrets for: B2 application key ID + crypt password
+3. Build a complete `rclone.conf` with `[b2]` backend + `[b2-crypt]` crypt overlay
+4. Mount the config at `/etc/rclone/rclone.conf` (or set `RCLONE_CONFIG` env var)
+
+### GitOps Placeholder Secrets — Anti-Pattern
+
+**Pattern identified**: Empty secrets in GitOps with `IgnoreExtraneous` annotation are an
+anti-pattern. Even without a `data:` field, ArgoCD selfHeal will reconcile these secrets
+and overwrite runtime-injected values.
+
+**Correct pattern**:
+- Secrets that vary per cluster or are runtime-generated MUST NOT exist in GitOps
+- All runtime secrets injected by `k8s-secrets-bootstrap` (oneshot Job or NixOS post-deploy)
+- The `k8s-secrets-bootstrap` script owns creation and refresh of these secrets
+
+**Previous instance of same bug**: `base/cloudnativepg/cluster.yaml` had placeholder
+`pdns-postgres-password` and `temporal-postgres-password` secrets (fixed prior to this sweep).
+
+### MongoDB Community Edition Restrictions
+
+- `--enableEncryption` — not available in Community Edition
+- `--encryptionKeyFile` — not available in Community Edition
+- Encryption-at-rest is Enterprise-only
+- The `mongo:7` Docker image is Community Edition
+
+### Longhorn Single-Node Volumes
+
+- Each node needs `node.longhorn.io/create-default-disk=true` label
+- Without this label, Longhorn refuses to schedule replicas on single-node clusters
+- PVCs stay in Pending state indefinitely
+- Applied by provision script or k8s-secrets-bootstrap post-deploy

@@ -100,7 +100,7 @@ echo "  [3/7] Deploying NixOS..."
 nix run github:nix-community/nixos-anywhere -- \
   --flake "${FLAKE}" \
   --target-host "root@${IP}" \
-  --build-on-remote
+  --build-on remote
 
 # ── Step 4: Wait for NixOS to boot ──
 echo "  [4/7] Waiting for NixOS boot..."
@@ -141,14 +141,11 @@ echo "  deSEC node A record..."
   echo "    WARNING: node A record failed — continuing"
 }
 echo "    k3s-${REGION}.9s.pics → ${RAW_IP}"
-# Save floating IP to config for update-all-nodes
-CONF_FILE="$(cd "$(dirname "$0")" && pwd)/desec-dns-floating-ips.conf"
-case "${REGION}" in
-  ashburn)   echo "FLOATING_ASHBURN=${RAW_IP}" > "$CONF_FILE" ;;   # truncate (first node)
-  hillsboro) echo "FLOATING_HILLSBORO=${RAW_IP}" >> "$CONF_FILE" ;;
-  nuremberg) echo "FLOATING_NUREMBERG=${RAW_IP}" >> "$CONF_FILE" ;;
-esac
-echo "    floating IP saved to desec-dns-floating-ips.conf"
+      # Copy floating IP config to node for ns-records (no local state, discoverable via hcloud API)
+      echo "${HOSTNAME}=${RAW_IP}" > /tmp/hetzner-floating-ip-${REGION}
+      scp /tmp/hetzner-floating-ip-${REGION} "root@${IP}:/etc/hetzner-floating-ip"
+      rm -f /tmp/hetzner-floating-ip-${REGION}
+      echo "    floating IP config copied to /etc/hetzner-floating-ip"
 
 # ── Step 6: Connect tailscale ──
 echo "  [6/7] Connecting tailscale..."

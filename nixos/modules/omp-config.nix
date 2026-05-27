@@ -313,7 +313,10 @@ in
       calc.enabled: true
       render_mermaid.enabled: true
       checkpoint.enabled: true
-      providers.webSearch: brave
+      providers:
+        webSearch:
+          - name: brave
+            apiKey: BRAVE_API_KEY
     '';
 
     ".omp/agent/keybindings.json".text = ''
