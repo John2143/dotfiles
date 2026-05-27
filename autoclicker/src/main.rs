@@ -138,14 +138,6 @@ fn button_to_evdev(button: &str) -> evdev::KeyCode {
     }
 }
 
-fn button_to_ydotool(button: &str) -> &str {
-    match button {
-        "right" => "0xC1",
-        "middle" => "0xC2",
-        _ => "0xC0",
-    }
-}
-
 // ─── Cursor position (dead-man switch) ──────────────────────
 
 fn get_cursor_pos() -> Option<(i32, i32)> {
@@ -164,31 +156,15 @@ fn get_cursor_pos() -> Option<(i32, i32)> {
 // ─── Click injection ────────────────────────────────────────
 
 struct Clicker {
-    dev: Option<evdev::uinput::VirtualDevice>,
-    use_ydotool: bool,
+    dev: evdev::uinput::VirtualDevice,
 }
 
 impl Clicker {
     fn new() -> Self {
-        match Self::create_uinput() {
-            Ok(dev) => {
-                eprintln!("Autoclicker: using uinput for click injection");
-                Clicker {
-                    dev: Some(dev),
-                    use_ydotool: false,
-                }
-            }
-            Err(e) => {
-                eprintln!(
-                    "Autoclicker: uinput unavailable ({}), falling back to ydotool",
-                    e
-                );
-                Clicker {
-                    dev: None,
-                    use_ydotool: true,
-                }
-            }
-        }
+        let dev = Self::create_uinput()
+            .expect("Failed to create uinput device — is the user in the 'uinput' group?");
+        eprintln!("Autoclicker: uinput device ready");
+        Clicker { dev }
     }
 
     fn create_uinput() -> Result<evdev::uinput::VirtualDevice, Box<dyn std::error::Error>> {
@@ -209,22 +185,13 @@ impl Clicker {
     }
 
     fn click(&mut self, button: &str) {
-        if self.use_ydotool {
-            let code = button_to_ydotool(button);
-            let _ = Command::new("ydotool")
-                .args(["click", code])
-                .stdout(std::process::Stdio::null())
-                .stderr(std::process::Stdio::null())
-                .status();
-        } else if let Some(ref mut dev) = self.dev {
-            use evdev::KeyEvent;
-            let key = button_to_evdev(button);
-            let code = key.code();
-            let down = *KeyEvent::new(evdev::KeyCode::new(code), 1);
-            let up = *KeyEvent::new(evdev::KeyCode::new(code), 0);
-            let _ = dev.emit(&[down]);
-            let _ = dev.emit(&[up]);
-        }
+        use evdev::KeyEvent;
+        let key = button_to_evdev(button);
+        let code = key.code();
+        let down = *KeyEvent::new(evdev::KeyCode::new(code), 1);
+        let up = *KeyEvent::new(evdev::KeyCode::new(code), 0);
+        let _ = self.dev.emit(&[down]);
+        let _ = self.dev.emit(&[up]);
     }
 }
 

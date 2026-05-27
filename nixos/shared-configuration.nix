@@ -364,5 +364,5 @@ in {
       });
     })
   ];
-  environment.systemPackages = [vast-waybar-status vast-render-metrics weather-status];
+  environment.systemPackages = [pkgs.autoclicker vast-waybar-status vast-render-metrics weather-status];
 }

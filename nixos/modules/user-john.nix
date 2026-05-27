@@ -17,6 +17,7 @@ in {
       "wheel" # to use sudo
       "networkmanager" # to manage network connections
       "input" # to access input devices
+      "uinput" # for creating virtual input devices (autoclicker)
       "dialout" # for serial devices like Arduino
       "docker" # to use docker without sudo
       "ydotool" # can act as a virtual keyboard and mouse
