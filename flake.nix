@@ -53,12 +53,18 @@
       url = "github:LnL7/nix-darwin";
       inputs.nixpkgs.follows = "nixpkgs";
     };
+
+    voxtype = {
+      url = "github:peteonrails/voxtype/dev";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
   };
 
   outputs = {
     nixpkgs,
     nix-cachyos-kernel,
     agenix,
+    voxtype,
     ...
   } @ inputs: let
     system = "x86_64-linux";

@@ -109,6 +109,8 @@
   environment.systemPackages = with pkgs; [
     rocmPackages.rocm-smi
     inputs.hyprcap.packages.x86_64-linux.default
+    inputs.voxtype.packages.x86_64-linux.default
+    inputs.voxtype.packages.x86_64-linux.vulkan
   ];
 
   services.ollama = {

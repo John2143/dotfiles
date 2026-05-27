@@ -471,6 +471,13 @@ in {
         # Mouse binds for move/resize
         { _args = [(mkLua ''mainMod .. " + mouse:272"'') (mkLua "hl.dsp.window.drag()") { mouse = true; }]; }
         { _args = [(mkLua ''mainMod .. " + mouse:273"'') (mkLua "hl.dsp.window.resize()") { mouse = true; }]; }
+
+        # Voxtype: press to record, release to transcribe + type
+        { _args = [(mkLua ''mainMod .. " + A"'') (mkLua ''hl.dsp.exec_cmd("voxtype record start")'')]; }
+      ];
+
+      bindr = [
+        { _args = [(mkLua ''mainMod .. " + A"'') (mkLua ''hl.dsp.exec_cmd("voxtype record stop")'')]; }
       ];
 
       # ---- Startup hook (runs after compositor is ready) ----

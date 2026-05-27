@@ -260,6 +260,8 @@ in
     hass-macro
     hass-thermostat-status
     inputs.hyprcap.packages.x86_64-linux.default
+    inputs.voxtype.packages.x86_64-linux.default
+    inputs.voxtype.packages.x86_64-linux.vulkan
   ];
 
   # openrgb flakes occasionally — keep the unit out of "failed" state so it
