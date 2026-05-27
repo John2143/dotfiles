@@ -36,7 +36,15 @@ mikrotik-connect r '/ip arp print terse where status=reachable'
 mikrotik-connect r '/ip arp print terse where status=permanent'
 mikrotik-connect r '/ip route print terse'
 mikrotik-connect r '/ip firewall nat print terse where chain=dstnat'
+
+fy|
+
+**IPv6 state:**
 ```
+mikrotik-connect r '/ipv6 address print terse'
+mikrotik-connect r '/ipv6 dhcp-client print'
+mikrotik-connect r '/ipv6 route print terse'
+fy|
 
 **Switch port status:**
 ```
@@ -115,6 +123,39 @@ Internet
 
 Inbound: Verizon DMZs everything to MikroTik. MikroTik dst-nat rules route specific ports to internal hosts.
 Domains `john2143.com` and `net.2143.me` resolve to the home public IP.
+
+## Verizon Router (Upstream CR1000B)
+
+The upstream gateway is a **Verizon CR1000B** (firmware 3.6.0.2_BD). It handles the ISP
+connection and DMZs all inbound traffic to the MikroTik. It also hosts the Headscale
+port forward (6767 → home-pi).
+
+| Property | Value |
+|----------|-------|
+| Model | CR1000B |
+| Firmware | 3.6.0.2_BD |
+| LAN | 192.168.0.1/24 |
+| DHCP pool | 192.168.0.100-169 |
+| DMZ target | 192.168.0.2 (MikroTik) |
+| WAN IPv4 | DHCP from ISP (108.56.153.x) |
+
+**IPv6** (from Verizon admin panel):
+- **WAN method**: DHCPv6-PD
+- **Delegated prefix**: `2600:4040:25fa:e400::/56` (expires ~100 min, renews automatically)
+- **Router IPv6 address**: `2600:4040:25fa:e4ff::1/56`
+- **Default gateway**: `fe80::a81:f4ff:fee0:4964` (link-local on the coax WAN interface)
+- **LAN method**: Stateless (SLAAC)
+- **LAN prefix**: `2600:4040:25fa:e400::/64` (advertised on 192.168.0.0/24 LAN subnet)
+
+The Verizon router does SLAAC on its LAN (192.168.0.0/24), handing out addresses
+from `2600:4040:25fa:e400::/64`. Devices directly on the Verizon LAN (like
+home-pi at 192.168.0.154) get working IPv6 this way.
+
+The MikroTik sits at 192.168.0.2 on this subnet and SHOULD accept a SLAAC address
+and request a prefix delegation (PD) via DHCPv6 for its own LAN. **Currently the
+MikroTik has stale static IPv6 addresses** (`2600:4040:2602::/48`) that don't match
+the Verizon's delegated prefix — this is why IPv6 doesn't work on the LAN side.
+See the `## IPv6` section for the fix.
 
 ## Port Forwarding (dst-nat)
 
@@ -424,6 +465,223 @@ mikrotik-connect d '/interface print terse where running'
 ```
 mikrotik-connect r /export
 ```
+
+## IPv6 (Known Broken — Prefix Mismatch)
+
+### The Problem
+
+The MikroTik has **stale static IPv6 addresses** that don't match the prefix the ISP
+delegates:
+
+| Source | Prefix | Status |
+|--------|--------|--------|
+| ISP delegates | `2600:4040:25fa:e400::/56` | Real |
+| Verizon CR1000B LAN | `2600:4040:25fa:e400::/64` (SLAAC on 192.168.0.0/24) | Real |
+| **MikroTik WAN (2GWAN)** | **`2600:4040:2602:f800::2/64`** | **Stale — doesn't exist** |
+| **MikroTik LAN (bridge)** | **`2600:4040:2602:f801::1/64`** | **Stale — doesn't exist** |
+| **Default route** | **`2600:4040:2602:f800::1`** | **Stale — unreachable** |
+
+The Verizon router hands out `2600:4040:25fa:e400::/64` via SLAAC on its own LAN
+(192.168.0.0/24). The MikroTik has statically configured `2600:4040:2602::/48`
+addresses — a completely different range the ISP never delegated. The Verizon's
+upstream gateway (`fe80::a81:f4ff:fee0:4964`) returns "Destination unreachable"
+for any outbound IPv6 packet because the source prefix is unknown.
+
+### Quick Check
+
+```bash
+# MikroTik side: what addresses are configured?
+mikrotik-connect r '/ipv6 address print terse'
+
+# MikroTik side: is a DHCPv6 client running?
+mikrotik-connect r '/ipv6 dhcp-client print'
+
+# Traceroute from a LAN host (e.g. arch) to see where IPv6 dies
+ping -6 -c 2 google.com
+# Expected: "From 2600:4040:2602:f800::2 Destination unreachable" — the
+# MikroTik's WAN address is the one returning the error
+```
+
+### The Fix (Applied 2026-05-27)
+
+**Root cause**: Two problems:
+1. `accept-router-advertisements=yes-if-forwarding-disabled` combined with `forward=yes`
+   meant the MikroTik ignored SLAAC on its WAN interface — it never picked up the real
+   prefix from the Verizon router.
+2. The Verizon CR1000B does not respond to DHCPv6-PD requests from downstream routers
+   (it uses DHCPv6-PD to get its own prefix from the ISP, but does not delegate sub-
+   prefixes). So a prefix delegation approach won't work.
+
+**Solution** — NAT66 with ULA on the LAN:
+
+The Verizon router sends RAs with a default route and link-local gateway, but without
+Prefix Information Options (no PIO). The MikroTik receives the default route via SLAAC
+but doesn't get a global address automatically. The fix:
+
+```
+# 1. Remove stale static addresses and routes (2600:4040:2602::/48)
+/ipv6 address remove [find address~"2600:4040:2602"]
+/ipv6 route remove [find dst-address="::/0"]
+
+# 2. Accept RAs from the Verizon router on the WAN interface
+/ipv6 settings set accept-router-advertisements=yes
+
+# 3. Assign a global address on 2GWAN from the Verizon's SLAAC prefix
+#    Use EUI-64 to avoid conflicts (MAC-based address)
+/ipv6 address add address=2600:4040:25fa:e400:06f4:1cff:fee3:7127/64 \
+    interface=2GWAN advertise=no
+
+# 4. Assign a ULA prefix on the bridge for LAN hosts
+/ipv6 address add address=fd00:1::1/64 interface=bridge advertise=yes
+
+# 5. NAT66: masquerade all LAN IPv6 traffic out through 2GWAN
+/ipv6 firewall nat add chain=srcnat action=masquerade out-interface=2GWAN
+```
+
+**How it works**:
+- 2GWAN gets a global IPv6 address in the Verizon's `2600:4040:25fa:e400::/64` range
+- The Verizon sends a default route via RA (`fe80::7690:bcff:fe79:aa4`), which the
+  MikroTik installs as a dynamic SLAAC default route
+- LAN hosts get ULA addresses (`fd00:1::/64`) via SLAAC from the MikroTik
+- NAT66 masquerade translates ULA traffic to the global WAN address on 2GWAN
+- Result: LAN hosts get working IPv6 (~5-8ms) without Verizon cooperation
+
+**Important**: The global address on 2GWAN is static-manual. If the Verizon's delegated
+prefix changes (ISP reassigns), this address must be updated. Check with:
+```
+mikrotik-connect r '/ipv6 address print'
+    # 2GWAN should have an address in 2600:4040:25fa:e400::/64
+    # bridge should have fd00:1::1/64
+```
+
+## Source NAT Rules
+
+```
+# Masquerade all outbound except to WAN subnet
+chain=srcnat action=masquerade out-interface=2GWAN dst-address=!192.168.0.0/24
+
+# Hairpin NAT for LAN→WAN→LAN loopback
+chain=srcnat action=masquerade out-interface=bridge src-address=192.168.0.0/16 dst-address=192.168.5.35
+```
+
+## k3s Cluster
+
+**Server:** closet (192.168.5.35) — control-plane, 5 nodes (all Ready, v1.35.x).
+Agents: arch (.226), nas (.175), office (.209), pite (.213).
+
+Pod network: `10.42.0.0/24` flannel VXLAN overlay. Key services:
+
+| Service | Type | External IP / NodePort | Notes |
+|---------|------|----------------------|-------|
+| traefik | LoadBalancer | 192.168.5.35, .226, .175, .209, .213 | HTTP:31316, HTTPS:30908 |
+| unifi-web | NodePort | :30443 | UniFi controller web UI |
+| unifi-inform | LB | :8080 (closet, arch, nas) | UniFi device adoption |
+| unifi-discovery | LB | :10001/UDP (closet, arch, nas) | UniFi L2 discovery |
+| ts-voice | NodePort | :30087/UDP | Teamspeak voice |
+| ts-files | NodePort | :30034/TCP | Teamspeak file transfer |
+| minecraft-game | NodePort | :32565/TCP | Minecraft |
+| openrct2-game | NodePort | :31753/TCP | OpenRCT2 |
+| headscale-stun | NodePort | :30478/UDP | STUN for Headscale DERP |
+
+Query live: `ssh closet 'kubectl get nodes,pods,svc -A'`
+
+## DNS
+
+| Role | Server | Zone |
+|------|--------|------|
+| Public DNS | External provider | john2143.com, net.2143.me → home public IP |
+| Tailnet DNS | home-pi (PowerDNS) | ts.9s.pics (authoritative) |
+| LAN DNS | MikroTik (static only) | router.lan → 192.168.5.1 |
+| mDNS/Avahi | aman (reflector) | .local across subnets |
+
+## Summary Metrics
+
+| Metric | Count |
+|--------|-------|
+| NixOS hosts | 9 (8 local + 1 WAN-side home-pi) |
+| k3s nodes | 5 (all Ready) |
+| Cameras online | 7 of 7 |
+| IoT/smart devices | 11 |
+| Switch ports active | 6 upstairs, 4 downstairs |
+| External services | 9 |
+
+## Notable Observations
+
+1. **closet dual IP (.35 + .202):** Static primary + DHCP secondary on same interface. Static .35 is the k3s node IP with permanent ARP. DHCP .202 is a dhcpcd/NetworkManager artifact — harmless.
+
+2. **MikroTik dual WAN IP (.2 + .152):** Static .2 is Verizon DMZ target. DHCP .152 is secondary — may be legacy.
+
+3. **home-pi on WAN subnet:** Connected directly to Verizon router (192.168.0.154), not behind MikroTik NAT. Headscale traffic bypasses the MikroTik entirely. home-pi cannot reach LAN devices unless via Tailscale routes.
+
+4. **Unknown device .172 (00:07:A6:40:E7:4B):** MAC prefix = Eutron S.p.A. (Italian security/industrial). No hostname or client-id.
+
+5. **No MikroTik dst-nat for 6767:** Headscale forward is solely on the Verizon router. MikroTik does not participate.
+
+6. **k3s pod network uses flannel VXLAN:** 10.42.0.0/24 overlay. Nodes communicate via bridge IPs.
+
+## Config Backup & Restore
+
+Full config exports are saved in the dotfiles repo (`~/dotfiles/network-configs/`) for
+disaster recovery. These are RouterOS script files (`.rsc`) — plain text, one command
+per line. When asked about "the last known-good config" or "what changed", check
+`network-configs/mikrotik-export-*.rsc` for the most recent backup.
+
+### Format
+
+The `.rsc` format is RouterOS's native export format. Every line is a valid RouterOS
+command that could be typed at the CLI. Example excerpt:
+
+```rsc
+# may/27/2026 00:06:06 by RouterOS 7.19.6
+# software id = ...
+#
+/interface bridge
+add name=bridge
+/interface vlan
+add interface=bridge name=vlan10 vlan-id=10
+/ip address
+add address=192.168.5.1/24 interface=bridge network=192.168.5.0
+```
+
+The first two lines are comments (date, version, software ID). Everything after is
+executable. **Do not hand-edit** the export for restore — the full dump is atomic and
+RouterOS expects to replay it in order.
+
+### Creating a Backup
+
+```bash
+# On the MikroTik flash:
+mikrotik-connect r '/export file=mikrotik-export-2026-05-27'
+# Download to local repo (this is what saves to network-configs/):
+ssh -i /run/user/$(id -u)/mikrotik-key admin@192.168.1.1 '/export' \
+  > network-configs/mikrotik-export-YYYY-MM-DD.rsc
+
+# Same for switches:
+ssh -i /run/user/$(id -u)/mikrotik-key admin@192.168.5.3 '/export' \
+  > network-configs/upstairs-switch-export-YYYY-MM-DD.rsc
+ssh -i /run/user/$(id -u)/mikrotik-key admin@192.168.5.2 '/export' \
+  > network-configs/downstairs-switch-export-YYYY-MM-DD.rsc
+```
+
+The `mikrotik-connect` wrapper's SSH key is auto-materialized from agenix to
+`/run/user/$UID/mikrotik-key`.
+
+### Restoring
+
+**⚠️ Destructive — overwrites the entire running config. Reboot recommended after.**
+
+```bash
+# Option A via RouterOS flash (file must already exist there):
+mikrotik-connect r '/import file=mikrotik-export-2026-05-27.rsc'
+mikrotik-connect r '/system reboot'
+
+# Option B via SSH pipe (streams commands directly):
+ssh -i /run/user/$(id -u)/mikrotik-key admin@192.168.1.1 \
+  < network-configs/mikrotik-export-2026-05-27.rsc
+```
+
+**Never import a switch config onto the router or vice versa** — the interface names
+and hardware topology are different.
 
 ## Intelligent Triage
 
