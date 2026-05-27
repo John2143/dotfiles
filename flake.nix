@@ -153,6 +153,8 @@
           ./nixos/modules/attic.nix
 
           ./nixos/modules/remote-builders.nix
+
+          ./nixos/modules/waybar-popup.nix
         ];
       })
       // (mkHost {
@@ -171,6 +173,7 @@
           ./nixos/modules/attic.nix
 
           ./nixos/modules/remote-builders.nix
+          ./nixos/modules/waybar-popup.nix
         ];
       })
       // (mkHost {

@@ -220,18 +220,44 @@
       pkill -RTMIN+15 waybar 2>/dev/null
     '';
   };
-  # Workspace icon mappings — common Nerd Font v3 glyphs
+  tailscale-status = pkgs.writeShellApplication {
+    name = "tailscale-status";
+    runtimeInputs = with pkgs; [tailscale jq coreutils];
+    text = ''
+      data=$(tailscale status --json 2>/dev/null) || {
+        jq -n '{text: "", class: "disconnected", tooltip: "Tailscale: not running"}'
+        exit 0
+      }
+
+      state=$(echo "$data" | jq -r '.BackendState // "Stopped"')
+      online=$(echo "$data" | jq -r '.Self.Online // false')
+
+      case "$state" in
+        Running)
+          if [ "$online" = "true" ]; then
+            ip=$(echo "$data" | jq -r '.TailscaleIPs[0] // "?"')
+            name=$(echo "$data" | jq -r '.Self.DNSName | rtrimstr(".") // "?"')
+            jq -n --arg ip "$ip" --arg name "$name" \
+              '{text: "", class: "connected", tooltip: "Tailscale: Connected (\($name))\nIP: \($ip)"}'
+          else
+            jq -n '{text: "", class: "disconnected", tooltip: "Tailscale: Connected but offline"}'
+          fi
+          ;;
+        Stopped)
+          jq -n '{text: "", class: "disconnected", tooltip: "Tailscale: Stopped"}'
+          ;;
+        NeedsLogin)
+          jq -n '{text: "", class: "needs-login", tooltip: "Tailscale: Needs login"}'
+          ;;
+        *)
+          jq -n --arg state "$state" \
+            '{text: "", class: "disconnected", tooltip: "Tailscale: \($state)"}'
+          ;;
+      esac
+    '';
+  };
+  # Named workspace icons
   ws-icons = {
-    "A1" = "󰮠";
-    "A2" = "󰈹";
-    "A3" = "";
-    "A4" = "󰈙";
-    "A5" = "";
-    "B1" = "";
-    "B2" = "󰈹";
-    "B3" = "";
-    "B4" = "";
-    "B5" = "";
     "ts" = "󰍬";
     "disc" = "";
     "steam" = "";
@@ -268,7 +294,7 @@ in {
           # ---- Right zone ----
           modules-right =
             [
-              #"custom/mullvad"  # DISABLED: mullvad-vpn blocked by gitlab.gnome.org 503
+              "custom/tailscale"
               "group/hardware"
               "group/clock"
               "custom/updates"
@@ -301,7 +327,7 @@ in {
               then "DP-1"
               else "HDMI-A-2";
           in {
-            format = "{icon}  {windows}";
+            format = "{icon}";
             format-icons = ws-icons;
             tooltip = true;
             tooltip-format = "{name}";
@@ -359,6 +385,7 @@ in {
             interval = 1;
             format = "{:%H:%M:%S}";
             on-click-right = "fish -c 'date +\"%A, %e %B %Y — %H:%M:%S\" | wl-copy; notify-send \"Copied\" (wl-paste)'";
+            on-click = "toggle-calendar";
           };
 
           # ---- Clock Date (hidden until hover) ----
@@ -389,23 +416,30 @@ in {
             on-click-middle = "playerctl --all-players --ignore-player=firefox,chromium,chrome previous; pkill -RTMIN+12 waybar";
           };
 
-          # ---- Mullvad VPN (DISABLED: mullvad-vpn blocked by gitlab.gnome.org 503) ----
-          #"custom/mullvad" = {
-          #  interval = 20;
-          #  exec = "${pkgs.writeShellScript "waybar-mullvad-status" ''
-          #    if ${pkgs.mullvad-vpn}/bin/mullvad status | grep -q "Connected"; then
-          #      echo '{"text": "", "class": "connected", "tooltip": "Mullvad connected"}'
-          #    else
-          #      echo '{"text": "", "class": "disconnected", "tooltip": "Mullvad disconnected"}'
-          #    fi
-          #  ''}";
-          #  return-type = "json";
-          #  on-click = "${pkgs.mullvad-vpn}/bin/mullvad connect; sleep 2; pkill -RTMIN+14 waybar";
-          #  on-click-right = "${pkgs.mullvad-vpn}/bin/mullvad disconnect; sleep 1; pkill -RTMIN+14 waybar";
-          #  on-click-middle = "${pkgs.mullvad-vpn}/bin/mullvad reconnect; sleep 2; pkill -RTMIN+14 waybar";
-          #  signal = 14;
-          #  format = "{}";
-          #};
+          # ---- Tailscale VPN ----
+          "custom/tailscale" = {
+            exec = "${tailscale-status}/bin/tailscale-status";
+            return-type = "json";
+            interval = 20;
+            signal = 14;
+            format = "{}";
+            on-click = "fish -c 'set s (tailscale status --json 2>/dev/null | jq -r .BackendState); if test \"$s\" = Running; tailscale down; else; tailscale up; end; sleep 2; pkill -RTMIN+14 waybar'";
+            on-click-right = "fish -c '
+              set nodes (tailscale status --json | jq -r \".Peer[] | select(.ExitNodeOption == true) | .DNSName | rtrimstr(\\\".\\\")\" 2>/dev/null | string collect)
+              if test -z \"$nodes\"
+                notify-send \"Tailscale\" \"No exit node candidates found\"
+                exit 0
+              end
+              set choice (printf \"None\n%s\" \"$nodes\" | wofi --dmenu -p \"Exit Node\" -i 2>/dev/null)
+              if test \"$choice\" = \"None\"
+                sudo tailscale set --exit-node=\"\"
+              else if test -n \"$choice\"
+                sudo tailscale set --exit-node=\"$choice\" --exit-node-allow-lan-access
+              end
+              pkill -RTMIN+14 waybar
+            '";
+            tooltip = true;
+          };
 
           # ---- Hardware Group (drawer) ----
           "group/hardware" = {
@@ -430,6 +464,7 @@ in {
               warning = 70;
               critical = 90;
             };
+            on-click = "toggle-btop";
           };
 
           # ---- Memory ----
@@ -467,6 +502,7 @@ in {
             return-type = "json";
             interval = 900;
             format = "{}";
+            on-click = "toggle-weather";
             tooltip = true;
           };
 

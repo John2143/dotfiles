@@ -1,6 +1,6 @@
 { ... }:
 let
-  # Skills -- source of truth in dotfiles/.claude/skills/. Enumerate all skill
+  # Skills — source of truth at ~/dotfiles/.claude/skills/. Enumerate all skill
   # directories and create symlinks for both Claude Code (~/.claude/skills/)
   # and OMP (~/.omp/agent/skills/, native provider at priority 100).
   skillsDir = ../../.claude/skills;
