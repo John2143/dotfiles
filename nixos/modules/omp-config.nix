@@ -267,10 +267,10 @@ in
     ".omp/agent/config.yml".text = ''
       modelRoles:
         #default: vast-vllm/deepseek-v4-flash
-        default: deepseek/deepseek-v4-pro
+        default: deepseek/deepseek-v4-flash
         #smol: office-ollama-cpu/gemma4
         smol: google/gemini-2.5-flash
-        slow: anthropic/claude-opus-4-7
+        slow: deepseek/deepseek-v4-pro
 
       modelProviderOrder:
         - vast-vllm
@@ -313,10 +313,9 @@ in
       calc.enabled: true
       render_mermaid.enabled: true
       checkpoint.enabled: true
-      providers:
-        webSearch:
-          - name: brave
-            apiKey: BRAVE_API_KEY
+      webSearch:
+        provider: brave
+        apiKey: BRAVE_API_KEY
     '';
 
     ".omp/agent/keybindings.json".text = ''
