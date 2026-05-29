@@ -119,6 +119,7 @@
       "--tls-san=closet.local"
       "--tls-san=arch.local"
       "--tls-san=nas.local"
+      "--tls-san=192.168.5.35"
       # Dual-stack pod and service networks (IPv4 + IPv6)
       "--cluster-init"
       "--cluster-cidr=10.42.0.0/16,fd42:42:42::/56"

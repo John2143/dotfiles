@@ -23,7 +23,7 @@
     services.k3s = {
       enable = true;
       role = "agent";
-      serverAddr = "https://closet.local:6443,https://arch.local:6443,https://nas.local:6443,https://closet.ts.2143.me:6443";
+      serverAddr = "https://192.168.5.35:6443,https://192.168.5.226:6443,https://192.168.5.175:6443";
       tokenFile = config.age.secrets.k3s-local-token.path;
     };
     # Agent needs avahi to resolve .local server hostnames
