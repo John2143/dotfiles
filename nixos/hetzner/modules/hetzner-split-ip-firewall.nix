@@ -66,9 +66,6 @@
         # SSH (management)
         iptables -A FLOATING_IN -p tcp --dport 22 -j ACCEPT
 
-        # DNS (PowerDNS authoritative + resolver)
-        iptables -A FLOATING_IN -p tcp --dport 53 -j ACCEPT
-        iptables -A FLOATING_IN -p udp --dport 53 -j ACCEPT
 
         # HTTP/HTTPS (k3s ingress via Traefik)
         iptables -A FLOATING_IN -p tcp --dport 80  -j ACCEPT
@@ -77,8 +74,6 @@
         # k3s API server
         iptables -A FLOATING_IN -p tcp --dport 6443 -j ACCEPT
 
-        # CNPG PostgreSQL NodePort
-        iptables -A FLOATING_IN -p tcp --dport 30432 -j ACCEPT
 
         # Game servers / DERP / TeamSpeak
         iptables -A FLOATING_IN -p udp --dport 3478  -j ACCEPT  # STUN/DERP

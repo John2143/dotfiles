@@ -81,7 +81,8 @@ cmd_update_headscale() {
 }
 
 cmd_bootstrap_dns() {
-  # Set NS + glue A records for deSEC → PowerDNS delegation.
+  # Set glue A record for this node.
+  #
   # Called once per node during provisioning.
   #   desec-dns.sh bootstrap-dns <region> <floating-ip>
   local region="$1" floating_ip="$2"
@@ -96,33 +97,6 @@ cmd_bootstrap_dns() {
   # ── Glue A record: nsN.9s.pics → floating IP ──
   cmd_set_a "$ns_hostname" "$floating_ip"
 
-  # ── NS records at zone apex: 9s.pics NS ns1/ns2/ns3.9s.pics ──
-  # Read current NS records, append ours, PUT the full set.
-  # Build the full list: ns1.9s.pics. ns2.9s.pics. ns3.9s.pics.
-  local ns_records=""
-  for ns in "${NS_HOSTNAMES[@]}"; do
-    if [ -n "$ns_records" ]; then
-      ns_records="${ns_records}, "
-    fi
-    ns_records="${ns_records}\"${ns}.${DOMAIN}.\""
-  done
-
-  echo "Setting NS records for ${DOMAIN} → ns1/ns2/ns3.${DOMAIN}"
-  local http_code
-  http_code=$(curl -s -o /dev/null -w '%{http_code}' -X PUT -H "$AUTH" -H "$CT" \
-    "$API/@/NS/" \
-    -d "{\"records\":[${ns_records}],\"ttl\":3600}")
-  if [ "$http_code" = "200" ] || [ "$http_code" = "204" ] || [ "$http_code" = "201" ]; then
-    echo "NS records set (HTTP $http_code)"
-  else
-    echo "WARNING: NS record update returned HTTP $http_code — may need manual check"
-    # Try PATCH as fallback
-    curl -sf -X PATCH -H "$AUTH" -H "$CT" \
-      "$API/@/NS/" \
-      -d "{\"records\":[${ns_records}]}" | python3 -m json.tool || true
-  fi
-
-  echo "=== deSEC bootstrap complete for $ns_hostname ==="
 }
 
 cmd_update_all_nodes() {
@@ -195,7 +169,7 @@ case "${1:-}" in
     echo "  list               List all DNS records for ${DOMAIN}"
     echo "  set-a NAME IP      Set A record (e.g. headscale → 108.56.153.222)"
     echo "  set-ns NAME NS     Set NS record"
-    echo "  bootstrap-dns REGION FLOATING-IP  Set NS + glue A for PowerDNS delegation"
+    echo "  bootstrap-dns REGION FLOATING-IP  Set NS + glue A for deSEC delegation"
     echo "  update-headscale   Auto-detect public IP and update headscale.${DOMAIN}"
     echo "  update-all-nodes [FLOATING_ASBURN FLOATING_HILLSBORO FLOATING_NUREMBERG]"
     echo "                     Update all node A records + headscale"

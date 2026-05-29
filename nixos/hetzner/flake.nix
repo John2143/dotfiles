@@ -30,10 +30,10 @@
     ];
 
     # All 3 server nodes are fully identical — drop-in replaceable.
-    # Each runs k3s + PowerDNS. PostgreSQL runs inside k3s via CloudNativePG.
+    # DNS via deSEC.io (NS delegation + A records). cert-manager uses deSEC webhook for DNS01.
     mkServer = { compName, rawIP ? null }: nixpkgs.lib.nixosSystem {
       inherit system;
-      specialArgs = { inherit inputs compName rawIP; sshKeys = my-keys; postgresHost = "127.0.0.1"; };
+      specialArgs = { inherit inputs compName rawIP; sshKeys = my-keys; };
       modules = [
         disko.nixosModules.default
         agenix.nixosModules.default
@@ -69,10 +69,10 @@
       k3s-hillsboro-agent = mkAgent { compName = "k3s-hillsboro-agent"; };
       k3s-nuremberg-agent = mkAgent { compName = "k3s-nuremberg-agent"; };
 
-      # ── Home Pi (Headscale + PowerDNS) ──
+      # ── Home Pi (Headscale) ──
       home-pi = nixpkgs.lib.nixosSystem {
         system = piSystem;
-        specialArgs = { inherit inputs; compName = "home-pi"; sshKeys = my-keys; postgresHost = "k3s-ashburn.ts.9s.pics"; };
+        specialArgs = { inherit inputs; compName = "home-pi"; sshKeys = my-keys; };
         modules = [
           agenix.nixosModules.default
           ./hosts/home-pi.nix

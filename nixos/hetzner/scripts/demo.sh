@@ -1,9 +1,7 @@
 #!/usr/bin/env bash
 # demo.sh — Full deploy, test failover, teardown demo (~$8-10 for 48 hours)
 #
-# 1. Provision 3 server nodes
-# 2. Verify k3s, PowerDNS, Galera
-# 3. Test k8gb failover
+
 # 4. Cleanup (optional — skip to keep nodes running)
 #
 # Usage: ./demo.sh [--keep]
@@ -47,24 +45,12 @@ echo "  Hillsboro:  ${HILLSBORO_IP}"
 echo "  Nuremberg:  ${NUREMBERG_IP}"
 
 echo ""
-echo "  --- PowerDNS check ---"
-ssh "root@${ASHBURN_IP}" "dig @127.0.0.1 john2143.com A +short" || echo "  (zone not configured yet — expected)"
-
-echo ""
 echo "  --- k3s nodes ---"
 ssh "root@${ASHBURN_IP}" "kubectl get nodes" || echo "  (k8s not yet deployed — expected)"
 ssh "root@${HILLSBORO_IP}" "kubectl get nodes" || echo "  (k8s not yet deployed — expected)"
 ssh "root@${NUREMBERG_IP}" "kubectl get nodes" || echo "  (k8s not yet deployed — expected)"
 
-# ── Phase 3: Test failover ──
-echo ""
-echo "=== Phase 3: Failover test (optional) ==="
-echo "  (Deploy k8gb + PowerDNS zone + ArgoCD first, then run:)"
-echo "  ssh root@${ASHBURN_IP} kubectl scale deployment --all --replicas=0"
-echo "  dig john2143.com  # should show Hillsboro + Nuremberg IPs only"
-echo "  (scale back up to restore)"
-
-# ── Phase 4: Cleanup ──
+# ── Phase 3: Cleanup ──
 if [[ "$KEEP" == "--keep" ]]; then
   echo ""
   echo "=== Nodes KEPT (--keep flag) ==="
@@ -78,7 +64,7 @@ if [[ "$KEEP" == "--keep" ]]; then
 fi
 
 echo ""
-echo "=== Phase 4: Teardown ==="
+echo "=== Phase 3: Teardown ==="
 echo "  Destroying all 3 server nodes..."
 hcloud server delete k3s-ashburn k3s-hillsboro k3s-nuremberg
 
