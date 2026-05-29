@@ -52,6 +52,8 @@
     networking.firewall.allowedTCPPorts = [
       6443   # k3s API server
       10250  # kubelet
+      2379   # etcd client (k3s server-to-server)
+      2380   # etcd peer (k3s server-to-server)
     ];
     networking.firewall.allowedUDPPorts = [
       8472   # k3s flannel VXLAN
