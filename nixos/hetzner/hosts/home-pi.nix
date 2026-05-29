@@ -53,6 +53,7 @@
 
 
   # ── deSEC DDNS: update headscale.9s.pics every 5 minutes ──
+  # Important: Only update if we have CHANGED. otherwise we get rate-limited by deSEC.
   systemd.services.desec-ddns = {
     description = "Update deSEC DNS A record for headscale.9s.pics";
     after = ["network-online.target"];
@@ -70,6 +71,15 @@
       if [ -z "$IP" ]; then
         echo "ERROR: Could not determine public IP"
         exit 1
+      fi
+
+      # Check if we have changed or not:
+      # do direct DNS query without caching to get current DNS record
+      # First try 1.1.1.1, then 1.0.0.1, then 8.8.8.8
+      CURRENT_IP=$(dig +short headscale.9s.pics @1.1.1.1 +noall +answer || dig +short headscale.9s.pics @1.0.0.1 +noall +answer || dig +short headscale.9s.pics @8.8.8.8)
+      if [ "$CURRENT_IP" = "$IP" ]; then
+        echo "OK: headscale.9s.pics already points to $IP, no update needed"
+        exit 0
       fi
 
       # Try PATCH (update existing), fall back to POST (create new)
@@ -92,10 +102,10 @@
   };
 
   systemd.timers.desec-ddns = {
-    description = "Update deSEC DNS every 5 minutes";
+    description = "Update deSEC DNS every 30 minutes";
     wantedBy = ["timers.target"];
     timerConfig = {
-      OnCalendar = "*:0/5";
+      OnCalendar = "*:0/30";
       Persistent = true;
     };
   };
