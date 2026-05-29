@@ -10,6 +10,10 @@
   inputs,
   ...
 }: let
+  cargoConfig = pkgs.writeText "cargo-config" ''
+    [http]
+    user-agent = "Mozilla/5.0 (X11; Linux x86_64; rv:137.0) Gecko/20100101 Firefox/137.0"
+  '';
   vast-waybar-status = pkgs.writeShellApplication {
     name = "vast-waybar-status";
     runtimeInputs = with pkgs; [jq coreutils curl systemd];
@@ -366,14 +370,12 @@ in {
   ];
 
   # crates.io blocks cargo's default User-Agent (returns 403 from this IP).
-  # Mount a system-wide cargo config into the Nix sandbox so buildRustPackage's
-  # cargo vendor can download crate tarballs with a browser User-Agent.
-  environment.etc."cargo/config.toml".text = ''
-    [http]
-    user-agent = "Mozilla/5.0 (X11; Linux x86_64; rv:137.0) Gecko/20100101 Firefox/137.0"
-  '';
+  # Mount a cargo config into the Nix sandbox so buildRustPackage's cargo
+  # vendor uses a browser UA to download crate tarballs. Uses a store path
+  # (pkgs.writeText) so the file exists before the build, unlike
+  # environment.etc which only appears after activation.
   nix.extraOptions = ''
-    extra-sandbox-paths = /etc/cargo/config.toml
+    extra-sandbox-paths = ${cargoConfig}:/etc/cargo/config.toml
   '';
   environment.systemPackages = [pkgs.autoclicker vast-waybar-status vast-render-metrics weather-status];
 }
