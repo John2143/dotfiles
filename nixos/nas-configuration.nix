@@ -306,7 +306,6 @@
     "--tls-san=nas.local"
     "--tls-san=closet.local"
     "--tls-san=192.168.5.175"
-    "--node-ip=192.168.5.175"
     "--flannel-ipv6-masq"
   ];
 

@@ -280,7 +280,6 @@ in
     "--tls-san=arch.local"
     "--tls-san=closet.local"
     "--tls-san=192.168.5.226"
-    "--node-ip=192.168.5.226"
     "--flannel-ipv6-masq"
   ];
   custom.backup.enable = true;
