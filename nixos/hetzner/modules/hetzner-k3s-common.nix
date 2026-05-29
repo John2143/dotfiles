@@ -142,6 +142,12 @@ subjects:
   name: default
   namespace: traefik
 ---
+apiVersion: networking.k8s.io/v1
+kind: IngressClass
+metadata:
+  name: traefik
+spec:
+  controller: traefik.io/ingress-controller
 apiVersion: apps/v1
 kind: Deployment
 metadata:
