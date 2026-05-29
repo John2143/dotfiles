@@ -277,6 +277,8 @@ in
   # Dual-stack cluster CIDRs mirror closet's init node config.
   services.k3s.extraFlags = lib.concatStringsSep " " [
     "--server=https://closet.local:6443"
+    "--tls-san=arch.local"
+    "--tls-san=closet.local"
     "--cluster-cidr=10.42.0.0/16,fd42:42:42::/56"
     "--service-cidr=10.43.0.0/16,fd42:42:43::/112"
     "--node-ip=192.168.5.226"
