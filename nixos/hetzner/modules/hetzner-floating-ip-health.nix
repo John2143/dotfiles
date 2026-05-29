@@ -127,6 +127,10 @@ PYEOF
         if [ -n "$MY_ID" ]; then
           hcloud floating-ip assign "$FIP_ID" "$MY_ID" 2>/dev/null || true
           echo "Floating IP $FIP_IP assigned to $MY_HOSTNAME"
+          # Restart firewall to pick up the new floating IP
+          systemctl restart split-ip-firewall 2>/dev/null || true
+          echo "Firewall restarted for floating IP \$FIP_IP"
+
         fi
         exit 0
 
@@ -169,6 +173,9 @@ PYEOF
         if [ -n "$MY_ID" ]; then
           hcloud floating-ip assign "$FIP_ID" "$MY_ID" 2>/dev/null || true
           echo "Floating IP $FIP_IP reassigned to $MY_HOSTNAME"
+          # Restart firewall to pick up the new floating IP
+          systemctl restart split-ip-firewall 2>/dev/null || true
+          echo "Firewall restarted for floating IP \$FIP_IP"
         fi
       fi
     '';

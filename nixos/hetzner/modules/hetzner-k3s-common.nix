@@ -109,15 +109,83 @@ CMEOF
       kubectl wait --for=condition=available deployment/argocd-server -n argocd --timeout=60s || true
       # Apply root Application — wires ArgoCD to the GitOps repo
       kubectl apply -f https://raw.githubusercontent.com/2143-Labs/2143-59s/master/argocd/root-app.yaml
-      # Install Traefik (Helm) — ingress controller, chart v34 (v35+ has template errors)
-      helm repo add traefik https://helm.traefik.io/traefik 2>/dev/null || true
-      helm repo update 2>/dev/null || true
-      helm upgrade --install traefik traefik/traefik --namespace traefik --create-namespace \
-        --version 34.0.0 \
-        --set providers.kubernetesIngress.enabled=true \
-        --set service.type=ClusterIP \
-        --set-json 'additionalArguments=["--certificatesresolvers.le.acme.email=john@9s.pics","--certificatesresolvers.le.acme.storage=/data/acme.json","--certificatesresolvers.le.acme.httpchallenge.entrypoint=web"]' \
-        --wait --timeout 120s 2>&1 || true
+      # Install Traefik — ingress controller with hostNetwork + ACME
+      # hostNetwork is required because hostPort doesn't work through Flannel CNI.
+      # Direct kubectl deploy (not Helm) — HelmChart controller is unreliable.
+      kubectl create namespace traefik --dry-run=client -o yaml | kubectl apply -f -
+      kubectl apply -f - <<'TRAEFIKEOF'
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: traefik-ingress-controller
+rules:
+- apiGroups: [""]
+  resources: [services, endpoints, secrets, nodes]
+  verbs: [get, list, watch]
+- apiGroups: ["extensions", "networking.k8s.io"]
+  resources: [ingresses, ingresses/status, ingressclasses]
+  verbs: [get, list, watch]
+- apiGroups: ["discovery.k8s.io"]
+  resources: [endpointslices]
+  verbs: [get, list, watch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: traefik-ingress-controller
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: traefik-ingress-controller
+subjects:
+- kind: ServiceAccount
+  name: default
+  namespace: traefik
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: traefik
+  namespace: traefik
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: traefik
+  template:
+    metadata:
+      labels:
+        app: traefik
+    spec:
+      hostNetwork: true
+      containers:
+      - name: traefik
+        image: docker.io/traefik:v3.3.1
+        args:
+        - --entrypoints.web.address=:80
+        - --entrypoints.websecure.address=:443
+        - --providers.kubernetesingress
+        - --certificatesresolvers.le.acme.email=john@9s.pics
+        - --certificatesresolvers.le.acme.storage=/data/acme.json
+        - --certificatesresolvers.le.acme.httpchallenge.entrypoint=web
+        - --log.level=INFO
+        ports:
+        - containerPort: 80
+          name: web
+        - containerPort: 443
+          name: websecure
+        volumeMounts:
+        - name: data
+          mountPath: /data
+        - name: tmp
+          mountPath: /tmp
+      volumes:
+      - name: data
+        emptyDir: {}
+      - name: tmp
+        emptyDir: {}
+TRAEFIKEOF
+      kubectl -n traefik wait --for=condition=available deployment/traefik --timeout=120s 2>&1 || true
       # Install Longhorn (Helm) — distributed block storage
       helm repo add longhorn https://charts.longhorn.io 2>/dev/null || true
       helm repo update 2>/dev/null || true
