@@ -122,6 +122,10 @@ Internet
 ```
 ## Physical Topology — Port-to-Port Mapping
 
+> **Snapshot from 2026-05-28 (physically verified).** Cables move, ports change.
+> Always re-query live state if the answer depends on what's connected *right now*.
+> The commands below are the canonical way to refresh this data.
+
 Query live:
 ```
 mikrotik-connect r '/interface bridge host print terse'
@@ -133,6 +137,28 @@ mikrotik-connect d '/interface print terse'
 mikrotik-connect r '/ip arp print terse'
 mikrotik-connect r '/ip dhcp-server lease print terse where status=bound'
 ```
+### Verifying Port Mappings
+
+**Neither bridge host tables nor MNDP are infallible.** Both can show devices on
+ports they aren't physically plugged into — the router's bridge can forward discovery
+packets onto unrelated ports. The only definitive method is physical inspection.
+
+Use these to narrow down the candidate port, then confirm physically:
+```
+mikrotik-connect r '/ip neighbor print'
+mikrotik-connect u '/ip neighbor print'
+mikrotik-connect d '/ip neighbor print'
+```
+
+To identify unknown devices by MAC → IP → hostname:
+```
+mikrotik-connect r '/ip arp print terse'
+mikrotik-connect r '/ip dhcp-server lease print terse where status=bound'
+```
+
+Example of misleading data: U7Lite is physically on **downstairs ether6**, but
+MNDP on the router shows it on **router ether6** because the router's bridge
+forwards discovery packets between bridged ports.
 
 ### Topology
 
@@ -140,13 +166,31 @@ mikrotik-connect r '/ip dhcp-server lease print terse where status=bound'
 Router ←→ Downstairs Switch ←→ Upstairs Switch
            (CRS326)     e7↔e8  (CRS310)
 ```
+### Live MNDP Baseline (2026-05-28)
 
-### Inter-Device Links
+```
+Router:
+  10GsfpLAN → Downstairs sfp-sfpplus2 (MAC 04:F4:1C:E7:24:45)
+  10GsfpLAN → Upstairs ether8      (MAC 04:F4:1C:E6:7C:13, via downstairs)
+  ether6    → U7LiteBlueRoom       (192.168.5.173)  ← MISLEADING: see note
 
-| Link | Speed |
-|---|---|
-| Router ↔ Downstairs switch | 10GbE SFP+ |
-| Downstairs `ether7` ↔ Upstairs `ether8` | 1GbE RJ45 |
+Downstairs:
+  sfp-sfpplus2 → Router 10GsfpLAN   (MAC 04:F4:1C:E3:71:2F)
+  ether7       → Upstairs ether8    (MAC 04:F4:1C:E6:7C:13)
+  ether5       → U7ProXGSOffice     (192.168.5.171)
+  ether6       → U7LiteBlueRoom     (192.168.5.173)  ← confirmed physical
+
+Upstairs:
+  ether8 → Router 10GsfpLAN         (MAC 04:F4:1C:E3:71:2F)
+  ether8 → Downstairs ether7        (MAC 04:F4:1C:E7:24:42)
+```
+
+### Inter-Device Links (confirmed via MNDP)
+
+| Link | From | To |
+|---|---|---|
+| Router ↔ Downstairs | Router `10GsfpLAN` (sfp-sfpplus1) | Downstairs `sfp-sfpplus2` |
+| Downstairs ↔ Upstairs | Downstairs `ether7` | Upstairs `ether8` |
 
 ### Router (CCR)
 
@@ -157,20 +201,19 @@ Router ←→ Downstairs Switch ←→ Upstairs Switch
 | `ether3` | ether3 | 1GbE | vpin (192.168.5.252) |
 | `ether4` | ether4 | 1GbE | nas 1GbE NIC (192.168.5.176) |
 | `ether5` | ether5 | 1GbE | JetKVM (192.168.5.187) |
+| `ether6` | ether6 | — | DISABLED |
 | `ether7` | ether7 | 1GbE | Front Driveway camera (192.168.1.66) |
 | `to-wifi` | ether8 | — | DISABLED |
-| `10GsfpLAN` / `ether6` | sfp-sfpplus1 / ether6 | 10GbE + 1GbE | Downstairs switch (bridge ports — see note) |
-
-> **Note:** Router bridge host data splits clients between 10GsfpLAN and ether6.
-> This is a RouterOS bridge internal artifact — the physical link is a single
-> connection to the downstairs switch. Do not treat these as separate cables.
+| `10GsfpLAN` | sfp-sfpplus1 | 10GbE SFP+ | Downstairs switch `sfp-sfpplus2` |
 
 ### Downstairs Switch (CRS326-24G-2S+RM)
 
 | Port | Speed | Connected to |
 |---|---|---|
+| `sfp-sfpplus2` | 10GbE SFP+ | Router `10GsfpLAN` (uplink) |
 | `sfp-sfpplus1` | 10GbE SFP+ | nas 10GbE NIC (192.168.5.175) |
 | `ether5` | 1GbE | office (192.168.5.209) + U7 Pro XGS AP (192.168.5.171) |
+| `ether6` | 1GbE | U7 Lite AP (192.168.5.173) |
 | `ether7` | 1GbE | Upstairs switch `ether8` (inter-switch) |
 
 ### Upstairs Switch (CRS310-1G-5S-4S+)
@@ -178,8 +221,9 @@ Router ←→ Downstairs Switch ←→ Upstairs Switch
 | Port | Speed | Connected to |
 |---|---|---|
 | `sfp-sfpplus2` | 1GbE SFP | closet (192.168.5.35) |
+| `sfp-sfpplus1` | 1GbE SFP | arch (192.168.5.226) |
 | `ether1` | 1GbE | Front Gate cam (.64), Front Porch cam (.63), NVR (.67) |
-| `ether2` | 1GbE | Unknown device (192.168.5.8) |
+| `ether2` | 1GbE | GL.iNet KVM (192.168.5.8) — glkvm.ts.2143.me, OpenWrt, Dropbear SSH, nginx |
 | `ether8` | 1GbE | Downstairs switch `ether7` (inter-switch) |
 
 Inbound: Verizon DMZs everything to MikroTik. MikroTik dst-nat rules route specific ports to internal hosts.
@@ -336,7 +380,7 @@ Discovered via live DHCP (2026-05-23):
 | K3B-US-PGA0539A | 192.168.5.127 | C8:FF:77:57:E0:3D | Permanent ARP entry at .219 — ARP entry needs cleanup |
 | Linux ARM device | 192.168.5.147 | B0:FC:0D:DE:FB:50 | Linux 3.18.19 on armv7l (dhcpcd) |
 | John Bedroom Lightswitch | 192.168.5.172 | 00:07:A6:40:E7:4B | Identified via UniFi controller (hostname: John Bedroom Lightswitch, on iot-2707 SSID) |
-| Unknown (ARP only) | 192.168.5.8 | 94:83:C4:C4:9C:4D | In ARP reachable but not in DHCP — static IP? |
+| GL.iNet KVM (glkvm) | 192.168.5.8 | 94:83:C4:C4:9C:4D | GL.iNet OpenWrt KVM for NVR — Dropbear SSH, nginx web UI. Upstairs switch ether2. |
 
 **Transient devices** (phones/laptops with rotating MACs):
 | Device | Typical IPs | MAC fingerprint |
@@ -353,7 +397,7 @@ Discovered via live DHCP (2026-05-23):
 | Device | IP | Model | MAC | Location | Uplink |
 |--------|-----|-------|-----|----------|--------|
 | U7 Pro XGS | 192.168.5.171 (DHCP) | U7 Pro XGS | 90:41:B2:D6:74:DB | Office | 10GbE SFP+ (connected to downstairs switch ether5, limited to 1GbE) |
-| U7 Lite | 192.168.5.173 (DHCP) | U7 Lite | 1C:0B:8B:50:FF:7E | Blue Room | 1GbE via downstairs switch |
+| U7 Lite | 192.168.5.173 (DHCP) | U7 Lite | 1C:0B:8B:50:FF:7E | Blue Room | 1GbE via downstairs switch ether6 |
 
 **U7 Pro XGS (Office):**
 - WiFi 7 (802.11be) — tri-band (2.4 / 5 / 6 GHz)
@@ -363,7 +407,7 @@ Discovered via live DHCP (2026-05-23):
 
 **U7 Lite (Blue Room):**
 - WiFi 7 (802.11be) — dual-band (2.4 / 5 GHz)
-- 2.5GbE uplink (limited to 1GbE by downstairs switch port)
+- 2.5GbE uplink (limited to 1GbE by downstairs switch ether6 port)
 - Compact AP for secondary coverage
 - Hostname: `U7LiteBlueRoom`, DHCP class-id: `ubnt`
 
@@ -663,7 +707,7 @@ Query live: `ssh closet 'kubectl get nodes,pods,svc -A'`
 | k3s nodes | 5 (all Ready) |
 | Cameras online | 7 of 7 |
 | IoT/smart devices | 11 |
-| Switch ports active | 8 router, 3 downstairs, 4 upstairs |
+| Switch ports active | 7 router, 5 downstairs, 5 upstairs |
 | External services | 9 |
 
 ## Notable Observations
