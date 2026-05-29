@@ -171,9 +171,6 @@ spec:
         - --entrypoints.web.address=:80
         - --entrypoints.websecure.address=:443
         - --providers.kubernetesingress
-        - --certificatesresolvers.le.acme.email=john@9s.pics
-        - --certificatesresolvers.le.acme.storage=/data/acme.json
-        - --certificatesresolvers.le.acme.httpchallenge.entrypoint=web
         - --log.level=INFO
         ports:
         - containerPort: 80
@@ -202,6 +199,12 @@ TRAEFIKEOF
         --wait --timeout 120s 2>&1 || true
       kubectl apply --server-side --force-conflicts -f https://raw.githubusercontent.com/cloudnative-pg/cloudnative-pg/release-1.25/releases/cnpg-1.25.1.yaml
       kubectl wait --for=condition=available deployment/cnpg-controller-manager -n cnpg-system --timeout=120s || true
+      # Install cert-manager (Helm) — TLS certificate automation via HTTP01
+      helm repo add jetstack https://charts.jetstack.io 2>/dev/null || true
+      helm repo update 2>/dev/null || true
+      helm upgrade --install cert-manager jetstack/cert-manager --namespace cert-manager --create-namespace \
+        --set crds.enabled=false \
+        --wait --timeout 120s 2>&1 || true
     '';
   };
 
