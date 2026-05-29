@@ -55,6 +55,11 @@
 
   networking.hostName = compName; # Define your hostname.
   networking.networkmanager.enable = true; # Easiest to use and most distros use this by default.
+  # Static ULA IPv6 for stable dual-stack k3s node-ip
+  networking.interfaces.enp6s0.ipv6.addresses = [{
+    address = "fd00:1::35";
+    prefixLength = 64;
+  }];
 
   time.timeZone = "America/New_York";
   i18n.defaultLocale = "en_US.UTF-8";
@@ -125,7 +130,7 @@
       "--cluster-cidr=10.42.0.0/16,fd42:42:42::/56"
       "--service-cidr=10.43.0.0/16,fd42:42:43::/112"
       # Dual-stack nodes must use explicit IPv4+IPv6 addresses
-      "--node-ip=192.168.5.35,2600:4040:2602:f801::35"
+      "--node-ip=192.168.5.35,fd00:1::35"
       # Required for IPv6 pod egress when using flannel
       "--flannel-ipv6-masq"
       # Keep standard per-node subnet sizing across families

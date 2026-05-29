@@ -200,6 +200,11 @@ in
 
   networking.hostName = "arch"; # Define your hostname.
   networking.networkmanager.enable = true; # Easiest to use and most distros use this by default.
+  # Static ULA IPv6 for stable dual-stack k3s node-ip
+  networking.interfaces.enp6s0.ipv6.addresses = [{
+    address = "fd00:1::226";
+    prefixLength = 64;
+  }];
   networking.nameservers = [
     "1.1.1.1"
     "192.168.1.12"
@@ -283,6 +288,7 @@ in
     "--cluster-cidr=10.42.0.0/16,fd42:42:42::/56"
     "--service-cidr=10.43.0.0/16,fd42:42:43::/112"
     "--flannel-ipv6-masq"
+    "--node-ip=192.168.5.226,fd00:1::226"
   ];
   custom.backup.enable = true;
 

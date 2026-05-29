@@ -201,6 +201,11 @@
 
   networking.hostName = compName;
   networking.networkmanager.enable = true;
+  # Static ULA IPv6 for stable dual-stack k3s node-ip (10GbE interface)
+  networking.interfaces.enp1s0f1.ipv6.addresses = [{
+    address = "fd00:1::175";
+    prefixLength = 64;
+  }];
   # ZFS requires a stable hostId — generate with: head -c 8 /etc/machine-id
   networking.hostId = "115e93a1";
 
@@ -309,6 +314,7 @@
     "--cluster-cidr=10.42.0.0/16,fd42:42:42::/56"
     "--service-cidr=10.43.0.0/16,fd42:42:43::/112"
     "--flannel-ipv6-masq"
+    "--node-ip=192.168.5.175,fd00:1::175"
   ];
 
   # ================
