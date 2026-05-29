@@ -260,8 +260,10 @@ in
     hass-macro
     hass-thermostat-status
     inputs.hyprcap.packages.x86_64-linux.default
-    inputs.voxtype.packages.x86_64-linux.default
-    inputs.voxtype.packages.x86_64-linux.vulkan
+    # voxtype disabled: crates.io blocks this IP's User-Agent
+    # Re-enable with: CARGO_HTTP_USER_AGENT="Mozilla/5.0 (X11; Linux x86_64; rv:137.0) Gecko/20100101 Firefox/137.0" nos
+    # inputs.voxtype.packages.x86_64-linux.default
+    # inputs.voxtype.packages.x86_64-linux.vulkan
   ];
 
   # openrgb flakes occasionally — keep the unit out of "failed" state so it

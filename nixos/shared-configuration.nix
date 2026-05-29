@@ -363,15 +363,6 @@ in {
           ];
       });
     })
-    (final: prev: {
-      rustPlatform = prev.rustPlatform // {
-        buildRustPackage = args: prev.rustPlatform.buildRustPackage (args // {
-          cargoRegistries."crates-io" = {
-            index = "sparse+https://mirrors.ustc.edu.cn/crates.io-index/";
-          };
-        });
-      };
-    })
   ];
 
   environment.systemPackages = [pkgs.autoclicker vast-waybar-status vast-render-metrics weather-status];
