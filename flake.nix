@@ -171,7 +171,7 @@
           ./nixos/shared-games-configuration.nix
           ./nixos/arch-configuration.nix
           ./nixos/firejail-desktop.nix
-          ./nixos/modules/k3s-agent.nix
+          ./nixos/modules/k3s-server.nix
           ./nixos/modules/restic-backup.nix
           ./nixos/modules/nas-mounts.nix
           ./nixos/tailscale.nix
@@ -275,7 +275,7 @@
           inputs.disko.nixosModules.default
           ./nixos/shared-cli-configuration.nix
           ./nixos/nas-configuration.nix
-          ./nixos/modules/k3s-agent.nix
+          ./nixos/modules/k3s-server.nix
           ./nixos/modules/disko_nas.nix
           ./nixos/tailscale.nix
 

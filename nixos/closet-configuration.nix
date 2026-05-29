@@ -116,6 +116,7 @@
     role = "server";
     extraFlags = lib.concatStringsSep " " [
       # Dual-stack pod and service networks (IPv4 + IPv6)
+      "--cluster-init"
       "--cluster-cidr=10.42.0.0/16,fd42:42:42::/56"
       "--service-cidr=10.43.0.0/16,fd42:42:43::/112"
       # Dual-stack nodes must use explicit IPv4+IPv6 addresses
@@ -141,6 +142,10 @@
       '';
     };
   };
+  # Tailscale subnet route — advertises LAN to tailnet so tailscale
+  # clients can reach the kube-vip VIP (192.168.5.10) for k8s services.
+  # Approved in headscale admin UI.
+  services.tailscale.extraUpFlags = [ "--advertise-routes=192.168.5.0/24" ];
 
   services.postgresql = {
     enable = true;
