@@ -116,7 +116,7 @@ CMEOF
         --version 34.0.0 \
         --set providers.kubernetesIngress.enabled=true \
         --set service.type=ClusterIP \
-        --set additionalArguments="--certificatesresolvers.le.acme.email=john@9s.pics,--certificatesresolvers.le.acme.storage=/data/acme.json,--certificatesresolvers.le.acme.httpchallenge.entrypoint=web" \
+        --set-json 'additionalArguments=["--certificatesresolvers.le.acme.email=john@9s.pics","--certificatesresolvers.le.acme.storage=/data/acme.json","--certificatesresolvers.le.acme.httpchallenge.entrypoint=web"]' \
         --wait --timeout 120s 2>&1 || true
       # Install Longhorn (Helm) — distributed block storage
       helm repo add longhorn https://charts.longhorn.io 2>/dev/null || true
