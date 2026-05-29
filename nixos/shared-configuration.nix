@@ -363,6 +363,15 @@ in {
           ];
       });
     })
+    (final: prev: {
+      rustPlatform = prev.rustPlatform // {
+        buildRustPackage = args: prev.rustPlatform.buildRustPackage (args // {
+          # crates.io blocks cargo's default User-Agent (403 from this IP).
+          # Setting a browser UA works around it.
+          CARGO_HTTP_USER_AGENT = "Mozilla/5.0 (X11; Linux x86_64; rv:137.0) Gecko/20100101 Firefox/137.0";
+        });
+      };
+    })
   ];
   environment.systemPackages = [pkgs.autoclicker vast-waybar-status vast-render-metrics weather-status];
 }
