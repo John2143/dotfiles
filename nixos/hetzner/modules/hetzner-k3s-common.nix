@@ -66,8 +66,6 @@
       # Install CRDs first (--server-side avoids annotation size limits)
       kubectl apply --server-side --force-conflicts \
         -k https://github.com/argoproj/argo-cd/manifests/crds?ref=stable
-      # Install cert-manager CRDs (needed before ArgoCD syncs wave 0)
-      kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.17.1/cert-manager.crds.yaml 2>&1 || true
       # Install istio CRDs (needed before ArgoCD syncs wave 3)
       kubectl apply -f https://raw.githubusercontent.com/istio/istio/1.27.0/manifests/charts/base/files/crd-all.gen.yaml 2>&1 || true
       kubectl create namespace argocd --dry-run=client -o yaml | kubectl apply -f -
@@ -118,6 +116,7 @@ CMEOF
         --version 34.0.0 \
         --set providers.kubernetesIngress.enabled=true \
         --set service.type=ClusterIP \
+        --set additionalArguments="--certificatesresolvers.le.acme.email=john@9s.pics,--certificatesresolvers.le.acme.storage=/data/acme.json,--certificatesresolvers.le.acme.httpchallenge.entrypoint=web" \
         --wait --timeout 120s 2>&1 || true
       # Install Longhorn (Helm) — distributed block storage
       helm repo add longhorn https://charts.longhorn.io 2>/dev/null || true
@@ -129,12 +128,6 @@ CMEOF
         --wait --timeout 120s 2>&1 || true
       kubectl apply --server-side --force-conflicts -f https://raw.githubusercontent.com/cloudnative-pg/cloudnative-pg/release-1.25/releases/cnpg-1.25.1.yaml
       kubectl wait --for=condition=available deployment/cnpg-controller-manager -n cnpg-system --timeout=120s || true
-      # Install cert-manager (Helm) — TLS certificate automation
-      helm repo add jetstack https://charts.jetstack.io 2>/dev/null || true
-      helm repo update 2>/dev/null || true
-      helm upgrade --install cert-manager jetstack/cert-manager --namespace cert-manager --create-namespace \
-        --set crds.enabled=false \
-        --wait --timeout 120s 2>&1 || true
     '';
   };
 
@@ -145,7 +138,7 @@ CMEOF
   # Runs after k3s is ready, before ArgoCD applies the root app.
   # Secrets created: crowdsec-bouncer-key, mongo-creds,
   #   b2-credentials, seaweedfs-master-key, rclone-config, healthchecks-url,
-  #   temporal-postgres-password, desec-token
+  #   temporal-postgres-password
   # NOTE: mongo-encryption-key removed — mongo:7 Community Edition doesn't support
   #   encryption-at-rest (--enableEncryption is Enterprise-only) 
   # NOTE: These secrets MUST NOT exist as placeholders in the GitOps repo.
@@ -211,21 +204,11 @@ CMEOF
         --from-literal=password="$(head -c 32 /dev/urandom | base64 | tr -d '\n')" \
         --dry-run=client -o yaml | kubectl apply -f -
 
-      # deSEC API token for cert-manager DNS01 webhook
-      kubectl create secret generic desec-token -n cert-manager \
-        --from-literal=token="$(cat ${config.age.secrets."hetzner/desec-token".path})" \
-        --dry-run=client -o yaml | kubectl apply -f -
     '';
   };
 
 
 
-  # Additional age secrets needed by k8s-secrets-bootstrap
-  age.secrets."hetzner/desec-token" = {
-    file = ../secrets/hetzner/desec-token.age;
-    owner = "root";
-    group = "root";
-  };
   age.secrets."hetzner/mongodb-encryption-key" = {
     file = ../secrets/hetzner/mongodb-encryption-key.age;
     owner = "root";
