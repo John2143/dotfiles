@@ -280,12 +280,8 @@ in
     "--tls-san=arch.local"
     "--tls-san=closet.local"
     "--tls-san=192.168.5.226"
-    "--cluster-cidr=10.42.0.0/16,fd42:42:42::/56"
-    "--service-cidr=10.43.0.0/16,fd42:42:43::/112"
     "--node-ip=192.168.5.226"
     "--flannel-ipv6-masq"
-    "--kube-controller-manager-arg=node-cidr-mask-size-ipv4=24"
-    "--kube-controller-manager-arg=node-cidr-mask-size-ipv6=64"
   ];
   custom.backup.enable = true;
 
