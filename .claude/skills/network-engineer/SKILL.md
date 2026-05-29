@@ -126,22 +126,42 @@ Internet
 > Always re-query live state if the answer depends on what's connected *right now*.
 > The commands below are the canonical way to refresh this data.
 
-Query live:
+Query live (re-discovery after cable changes):
 ```
+# MNDP — best first guess at physical neighbors
+mikrotik-connect r '/ip neighbor print'
+mikrotik-connect u '/ip neighbor print'
+mikrotik-connect d '/ip neighbor print'
+
+# Bridge host tables — MAC-to-port (can be misleading)
 mikrotik-connect r '/interface bridge host print terse'
 mikrotik-connect u '/interface bridge host print terse'
 mikrotik-connect d '/interface bridge host print terse'
+
+# Interface names and status
 mikrotik-connect r '/interface print terse'
 mikrotik-connect u '/interface print terse'
 mikrotik-connect d '/interface print terse'
+
+# Cross-reference MACs to IPs/hostnames
 mikrotik-connect r '/ip arp print terse'
 mikrotik-connect r '/ip dhcp-server lease print terse where status=bound'
 ```
 ### Verifying Port Mappings
 
-**Neither bridge host tables nor MNDP are infallible.** Both can show devices on
-ports they aren't physically plugged into — the router's bridge can forward discovery
-packets onto unrelated ports. The only definitive method is physical inspection.
+**Neither bridge host tables nor MNDP are infallible.** MNDP packets (and LLDP)
+traverse bridges just like any other traffic. A device on the downstairs switch
+will have its MNDP packets forwarded through the router's bridge and appear on
+a different router port than the one it's actually plugged into.
+
+The `INTERFACE` column shows the port the packet egressed through, not necessarily
+the port the device is directly connected to. The only definitive method is physical
+inspection.
+
+Example: U7Lite is physically on **downstairs ether6**, but MNDP on the router
+shows it on **router ether6** because the router's bridge forwarded the discovery
+packet out that port. The same applies to any device behind a switch — MNDP on
+the router will show it on whichever port the bridge chose to forward the packet.
 
 Use these to narrow down the candidate port, then confirm physically:
 ```
