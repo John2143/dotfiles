@@ -201,19 +201,6 @@
 
   networking.hostName = compName;
   networking.networkmanager.enable = true;
-  # Static ULA IPv6 for stable dual-stack k3s node-ip (10GbE interface).
-  # systemd oneshot runs AFTER NetworkManager — avoids NM removing the address.
-  systemd.services.ula-ipv6 = {
-    description = "Add static ULA IPv6 to enp1s0f1";
-    after = [ "NetworkManager.service" ];
-    wants = [ "NetworkManager.service" ];
-    serviceConfig = {
-      Type = "oneshot";
-      RemainAfterExit = true;
-      ExecStart = "${pkgs.iproute2}/bin/ip -6 addr add fd00:1::175/64 dev enp1s0f1";
-      ExecStop = "${pkgs.iproute2}/bin/ip -6 addr del fd00:1::175/64 dev enp1s0f1";
-    };
-  };
   # ZFS requires a stable hostId — generate with: head -c 8 /etc/machine-id
   networking.hostId = "115e93a1";
 

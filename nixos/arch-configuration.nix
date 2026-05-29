@@ -200,19 +200,6 @@ in
 
   networking.hostName = "arch"; # Define your hostname.
   networking.networkmanager.enable = true; # Easiest to use and most distros use this by default.
-  # Static ULA IPv6 for stable dual-stack k3s node-ip.
-  # systemd oneshot runs AFTER NetworkManager — avoids NM removing the address.
-  systemd.services.ula-ipv6 = {
-    description = "Add static ULA IPv6 to enp6s0";
-    after = [ "NetworkManager.service" ];
-    wants = [ "NetworkManager.service" ];
-    serviceConfig = {
-      Type = "oneshot";
-      RemainAfterExit = true;
-      ExecStart = "${pkgs.iproute2}/bin/ip -6 addr add fd00:1::226/64 dev enp6s0";
-      ExecStop = "${pkgs.iproute2}/bin/ip -6 addr del fd00:1::226/64 dev enp6s0";
-    };
-  };
   networking.nameservers = [
     "1.1.1.1"
     "192.168.1.12"
