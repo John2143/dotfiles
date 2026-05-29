@@ -120,6 +120,67 @@ Internet
                  ├─ dst-nat rules → internal services
                  └─ LAN subnets (1.0/24, 5.0/24)
 ```
+## Physical Topology — Port-to-Port Mapping
+
+Query live:
+```
+mikrotik-connect r '/interface bridge host print terse'
+mikrotik-connect u '/interface bridge host print terse'
+mikrotik-connect d '/interface bridge host print terse'
+mikrotik-connect r '/interface print terse'
+mikrotik-connect u '/interface print terse'
+mikrotik-connect d '/interface print terse'
+mikrotik-connect r '/ip arp print terse'
+mikrotik-connect r '/ip dhcp-server lease print terse where status=bound'
+```
+
+### Topology
+
+```
+Router ←→ Downstairs Switch ←→ Upstairs Switch
+           (CRS326)     e7↔e8  (CRS310)
+```
+
+### Inter-Device Links
+
+| Link | Speed |
+|---|---|
+| Router ↔ Downstairs switch | 10GbE SFP+ |
+| Downstairs `ether7` ↔ Upstairs `ether8` | 1GbE RJ45 |
+
+### Router (CCR)
+
+| Port (renamed) | Default | Speed | Connected to |
+|---|---|---|---|
+| `2GWAN` | ether1 | 1GbE | Verizon CR1000B (WAN uplink) |
+| `pi` | ether2 | 1GbE | pite (192.168.5.213) |
+| `ether3` | ether3 | 1GbE | vpin (192.168.5.252) |
+| `ether4` | ether4 | 1GbE | nas 1GbE NIC (192.168.5.176) |
+| `ether5` | ether5 | 1GbE | JetKVM (192.168.5.187) |
+| `ether7` | ether7 | 1GbE | Front Driveway camera (192.168.1.66) |
+| `to-wifi` | ether8 | — | DISABLED |
+| `10GsfpLAN` / `ether6` | sfp-sfpplus1 / ether6 | 10GbE + 1GbE | Downstairs switch (bridge ports — see note) |
+
+> **Note:** Router bridge host data splits clients between 10GsfpLAN and ether6.
+> This is a RouterOS bridge internal artifact — the physical link is a single
+> connection to the downstairs switch. Do not treat these as separate cables.
+
+### Downstairs Switch (CRS326-24G-2S+RM)
+
+| Port | Speed | Connected to |
+|---|---|---|
+| `sfp-sfpplus1` | 10GbE SFP+ | nas 10GbE NIC (192.168.5.175) |
+| `ether5` | 1GbE | office (192.168.5.209) + U7 Pro XGS AP (192.168.5.171) |
+| `ether7` | 1GbE | Upstairs switch `ether8` (inter-switch) |
+
+### Upstairs Switch (CRS310-1G-5S-4S+)
+
+| Port | Speed | Connected to |
+|---|---|---|
+| `sfp-sfpplus2` | 1GbE SFP | closet (192.168.5.35) |
+| `ether1` | 1GbE | Front Gate cam (.64), Front Porch cam (.63), NVR (.67) |
+| `ether2` | 1GbE | Unknown device (192.168.5.8) |
+| `ether8` | 1GbE | Downstairs switch `ether7` (inter-switch) |
 
 Inbound: Verizon DMZs everything to MikroTik. MikroTik dst-nat rules route specific ports to internal hosts.
 Domains `john2143.com` and `net.2143.me` resolve to the home public IP.
@@ -291,12 +352,12 @@ Discovered via live DHCP (2026-05-23):
 
 | Device | IP | Model | MAC | Location | Uplink |
 |--------|-----|-------|-----|----------|--------|
-| U7 Pro XGS | 192.168.5.171 (DHCP) | U7 Pro XGS | 90:41:B2:D6:74:DB | Office | 10GbE SFP+ via upstairs switch |
+| U7 Pro XGS | 192.168.5.171 (DHCP) | U7 Pro XGS | 90:41:B2:D6:74:DB | Office | 10GbE SFP+ (connected to downstairs switch ether5, limited to 1GbE) |
 | U7 Lite | 192.168.5.173 (DHCP) | U7 Lite | 1C:0B:8B:50:FF:7E | Blue Room | 1GbE via downstairs switch |
 
 **U7 Pro XGS (Office):**
 - WiFi 7 (802.11be) — tri-band (2.4 / 5 / 6 GHz)
-- 10GbE SFP+ uplink (connected to upstairs switch sfp-sfpplus1)
+- 10GbE SFP+ uplink (connected to downstairs switch ether5, limited to 1GbE by switch port — not upstairs as previously thought)
 - Primary high-performance AP
 - Hostname: `U7ProXGSOffice`, DHCP class-id: `ubnt`
 
@@ -602,7 +663,7 @@ Query live: `ssh closet 'kubectl get nodes,pods,svc -A'`
 | k3s nodes | 5 (all Ready) |
 | Cameras online | 7 of 7 |
 | IoT/smart devices | 11 |
-| Switch ports active | 6 upstairs, 4 downstairs |
+| Switch ports active | 8 router, 3 downstairs, 4 upstairs |
 | External services | 9 |
 
 ## Notable Observations
@@ -618,7 +679,6 @@ Query live: `ssh closet 'kubectl get nodes,pods,svc -A'`
 5. **No MikroTik dst-nat for 6767:** Headscale forward is solely on the Verizon router. MikroTik does not participate.
 
 6. **k3s pod network uses flannel VXLAN:** 10.42.0.0/24 overlay. Nodes communicate via bridge IPs.
-
 ## Config Backup & Restore
 
 Full config exports are saved in the dotfiles repo (`~/dotfiles/network-configs/`) for
