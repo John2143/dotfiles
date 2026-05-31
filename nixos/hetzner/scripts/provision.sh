@@ -4,14 +4,10 @@
 # End-to-end provisioning for a single Hetzner k3s node. Automates:
 #   1. VM creation (cpx31, ubuntu-24.04 base)
 #   2. Floating IP allocation + assignment (for IP masking / DDoS protection)
-#   3. deSEC DNS bootstrap (NS delegation + glue A records)
-#   3b. deSEC node A record (k3s-<region>.9s.pics → floating IP)
-#
-#   4. nixos-anywhere deploy (kexec → disko format → NixOS install)
-#   5. Post-deploy: age key copy, agenix decrypt, headscale cleanup
-#   6. deSEC node A record (k3s-<region>.9s.pics → floating IP)
-#   7. Tailscale connect (via Headscale preauth key)
-#   8. Service verification (k3s, tailscaled)
+#   3. nixos-anywhere deploy (kexec → disko format → NixOS install)
+#   4. Post-deploy: age key copy, agenix decrypt, headscale cleanup
+#   5. Tailscale connect (via Headscale preauth key)
+#   6. Service verification (k3s, tailscaled)
 #
 #   hillsboro NEXT → pulls cache from ashburn (when Attic cache is set up)
 #   nuremberg LAST → same cache benefits
@@ -87,13 +83,7 @@ RAW_IP_ID=$(hcloud floating-ip create \
 hcloud floating-ip assign "${RAW_IP_ID}" "${SERVER_ID}"
 RAW_IP=$(hcloud floating-ip describe "${RAW_IP_ID}" -o json 2>/dev/null | jq -r '.floating_ip.ip // .ip // "unknown"')
 echo "  Raw IP: ${RAW_IP}"
-# ── deSEC DNS bootstrap: NS + glue A records ──
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-echo "  deSEC DNS bootstrap..."
-"${SCRIPT_DIR}/desec-dns.sh" bootstrap-dns "${REGION}" "${RAW_IP}" 2>/dev/null || {
-  echo "    WARNING: deSEC DNS bootstrap failed — continuing (DNS may need manual setup)"
-}
-echo "    NS + glue records set on deSEC"
+
 
 # ── Step 3: Deploy NixOS via nixos-anywhere ──
 echo "  [3/7] Deploying NixOS..."
@@ -134,12 +124,7 @@ for n in data:
         subprocess.run(['ssh', 'john@192.168.0.154', 'sudo', 'headscale', 'nodes', 'delete', '--identifier', str(n['id']), '--force'])
 " 2>/dev/null || true
 echo "    stale headscale nodes cleaned"
-# ── deSEC node A record (k3s-<region>.9s.pics → floating IP) ──
-echo "  deSEC node A record..."
-"$(cd "$(dirname "$0")" && pwd)/desec-dns.sh" set-a "k3s-${REGION}" "${RAW_IP}" 2>/dev/null || {
-  echo "    WARNING: node A record failed — continuing"
-}
-echo "    k3s-${REGION}.9s.pics → ${RAW_IP}"
+
 # Label the floating IP for the health checker to discover it
 hcloud floating-ip add-label "${RAW_IP}" "region=${REGION}" 2>/dev/null || echo "    WARNING: floating IP labeling failed"
 echo "    Floating IP labeled region=${REGION}"
