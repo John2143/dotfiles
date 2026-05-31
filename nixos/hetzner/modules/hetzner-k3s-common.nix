@@ -191,9 +191,9 @@ spec:
 TRAEFIKEOF
       kubectl -n traefik wait --for=condition=available deployment/traefik --timeout=120s 2>&1 || true
       # Install Longhorn (Helm) — distributed block storage
-      helm repo add longhorn https://charts.longhorn.io 2>/dev/null || true
-      helm repo update 2>/dev/null || true
-      helm upgrade --install longhorn longhorn/longhorn --namespace longhorn-system --create-namespace \
+      KUBECONFIG=/etc/rancher/k3s/k3s.yaml helm repo add longhorn https://charts.longhorn.io 2>/dev/null || true
+      KUBECONFIG=/etc/rancher/k3s/k3s.yaml helm repo update 2>/dev/null || true
+      KUBECONFIG=/etc/rancher/k3s/k3s.yaml helm upgrade --install longhorn longhorn/longhorn --namespace longhorn-system --create-namespace \
         --set persistence.defaultClass=true \
         --set defaultSettings.createDefaultDiskLabeledNodes=true \
         --set defaultSettings.defaultDataPath=/var/lib/longhorn \
@@ -201,9 +201,9 @@ TRAEFIKEOF
       kubectl apply --server-side --force-conflicts -f https://raw.githubusercontent.com/cloudnative-pg/cloudnative-pg/release-1.25/releases/cnpg-1.25.1.yaml
       kubectl wait --for=condition=available deployment/cnpg-controller-manager -n cnpg-system --timeout=120s || true
       # Install cert-manager (Helm) — TLS certificate automation via HTTP01
-      helm repo add jetstack https://charts.jetstack.io 2>/dev/null || true
-      helm repo update 2>/dev/null || true
-      helm upgrade --install cert-manager jetstack/cert-manager --namespace cert-manager --create-namespace \
+      KUBECONFIG=/etc/rancher/k3s/k3s.yaml helm repo add jetstack https://charts.jetstack.io 2>/dev/null || true
+      KUBECONFIG=/etc/rancher/k3s/k3s.yaml helm repo update 2>/dev/null || true
+      KUBECONFIG=/etc/rancher/k3s/k3s.yaml helm upgrade --install cert-manager jetstack/cert-manager --namespace cert-manager --create-namespace \
         --set crds.enabled=false \
         --wait --timeout 120s 2>&1 || true
       # Patch only the controller with hostNetwork (cainjector + webhook use default pod networking)
