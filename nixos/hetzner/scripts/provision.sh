@@ -97,10 +97,9 @@ echo "    NS + glue records set on deSEC"
 
 # ── Step 3: Deploy NixOS via nixos-anywhere ──
 echo "  [3/7] Deploying NixOS..."
-nix run github:nix-community/nixos-anywhere -- \
+nix run --builders '' github:nix-community/nixos-anywhere -- \
   --flake "${FLAKE}" \
-  --target-host "root@${IP}" \
-  --build-on remote
+  --target-host "root@${IP}"
 
 # ── Step 4: Wait for NixOS to boot ──
 echo "  [4/7] Waiting for NixOS boot..."
