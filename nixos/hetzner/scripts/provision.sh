@@ -126,7 +126,7 @@ for n in data:
 echo "    stale headscale nodes cleaned"
 
 # Label the floating IP for the health checker to discover it
-hcloud floating-ip add-label "${RAW_IP}" "region=${REGION}" 2>/dev/null || echo "    WARNING: floating IP labeling failed"
+hcloud floating-ip add-label "${RAW_IP_ID}" "region=${REGION}" 2>/dev/null || echo "    WARNING: floating IP labeling failed"
 echo "    Floating IP labeled region=${REGION}"
 
 # ── Step 6: Connect tailscale ──
