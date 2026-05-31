@@ -205,6 +205,8 @@ TRAEFIKEOF
       helm repo update 2>/dev/null || true
       helm upgrade --install cert-manager jetstack/cert-manager --namespace cert-manager --create-namespace \
         --set crds.enabled=false \
+        --set controller.hostNetwork=true \
+        --set cainjector.hostNetwork=true \
         --wait --timeout 120s 2>&1 || true
       # Install cert-manager CRDs separately (Helm set crds.enabled=false)
       # cert-manager 1.16 uses the old `class` field, not `ingressClassName`
