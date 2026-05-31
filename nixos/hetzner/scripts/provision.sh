@@ -44,12 +44,12 @@ case "$REGION" in
   *) echo "Unknown region: $REGION"; exit 1 ;;
 esac
 
-# ── Region + Role → Plan mapping ──
-PLAN=""
-case "${REGION}-${ROLE}" in
-  ashburn-server|hillsboro-server|nuremberg-server) PLAN="cpx31" ;;
-  ashburn-agent|hillsboro-agent|nuremberg-agent)   PLAN="cpx31" ;;
-  *) echo "Unknown region/role: ${REGION}-${ROLE}"; exit 1 ;;
+# Region → Plan mapping
+# ash is out of cpx31 capacity; use ccx13 (dedicated 2-core/8GB/80GB) as fallback
+case "$LOCATION" in
+  ash) PLAN="ccx13"  ;;
+  hil) PLAN="cpx31"  ;;
+  *)   PLAN="cpx31"  ;;
 esac
 
 FLAKE=".#${HOSTNAME}"
