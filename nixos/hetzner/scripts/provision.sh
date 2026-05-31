@@ -45,9 +45,9 @@ case "$REGION" in
 esac
 
 # Region → Plan mapping
-# ash is out of cpx31 capacity; use ccx13 (dedicated 2-core/8GB/80GB) as fallback
+# ash is out of cpx31 capacity; use cpx21 (3-core/4GB/80GB) as fallback
 case "$LOCATION" in
-  ash) PLAN="ccx13"  ;;
+  ash) PLAN="cpx21"  ;;
   hil) PLAN="cpx31"  ;;
   *)   PLAN="cpx31"  ;;
 esac
