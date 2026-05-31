@@ -205,9 +205,9 @@ TRAEFIKEOF
       helm repo update 2>/dev/null || true
       helm upgrade --install cert-manager jetstack/cert-manager --namespace cert-manager --create-namespace \
         --set crds.enabled=false \
-        --set controller.hostNetwork=true \
-        --set cainjector.hostNetwork=true \
         --wait --timeout 120s 2>&1 || true
+      # Patch only the controller with hostNetwork (cainjector + webhook use default pod networking)
+      kubectl patch deployment -n cert-manager cert-manager -p '{"spec":{"template":{"spec":{"hostNetwork":true}}}}' 2>/dev/null || true
       # Install cert-manager CRDs separately (Helm set crds.enabled=false)
       # cert-manager 1.16 uses the old `class` field, not `ingressClassName`
       kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.16.2/cert-manager.crds.yaml 2>&1 || true
