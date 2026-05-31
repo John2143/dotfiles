@@ -105,8 +105,8 @@ PYEOF
         fi
 
         echo "Node healthy. Ensuring floating IP on local interface..."
-        ip addr show dev enp1s0 | grep -q "$FIP_IP" || ip addr add ${FIP_IP}/32 dev enp1s0
-        ip addr show dev lo | grep -q "$FIP_IP" || ip addr add ${FIP_IP}/32 dev lo
+        ip addr show dev enp1s0 | grep -q "$FIP_IP" || ip addr add "$FIP_IP/32" dev enp1s0
+        ip addr show dev lo | grep -q "$FIP_IP" || ip addr add "$FIP_IP/32" dev lo
         echo "Floating IP $FIP_IP added to local interfaces"
         systemctl restart split-ip-firewall 2>/dev/null || true
         echo "Firewall restarted for floating IP $FIP_IP"
@@ -133,8 +133,8 @@ PYEOF
           hcloud floating-ip assign "$FIP_ID" "$MY_ID" 2>/dev/null || true
           echo "Floating IP $FIP_IP assigned to $MY_HOSTNAME"
           # Add floating IP to local interfaces
-          ip addr show dev enp1s0 | grep -q "$FIP_IP" || ip addr add ${FIP_IP}/32 dev enp1s0
-          ip addr show dev lo | grep -q "$FIP_IP" || ip addr add ${FIP_IP}/32 dev lo
+          ip addr show dev enp1s0 | grep -q "$FIP_IP" || ip addr add "$FIP_IP/32" dev enp1s0
+          ip addr show dev lo | grep -q "$FIP_IP" || ip addr add "$FIP_IP/32" dev lo
           echo "Floating IP $FIP_IP added to local interfaces"
           # Restart firewall to pick up the new floating IP
           systemctl restart split-ip-firewall 2>/dev/null || true
