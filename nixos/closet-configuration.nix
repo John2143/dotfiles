@@ -175,8 +175,11 @@
 
   # Firewall enabled via shared-cli-configuration.nix.
   networking.firewall.allowedTCPPorts = [
-    6443 # k3s API server (k3s)
-    10250 # kubelet (k3s agent)
+    6443 # k3s API server
+    10250 # kubelet
+    2379 # etcd client (k3s join)
+    2380 # etcd peer (k3s join)
+    5432 # Postgres
   ];
   networking.firewall.allowedUDPPorts = [
     8472 # flannel VXLAN (k3s)
