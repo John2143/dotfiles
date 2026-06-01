@@ -49,6 +49,12 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
+    screen-control = {
+      url = "path:./screen-control";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+
+
     nix-darwin = {
       url = "github:LnL7/nix-darwin";
       inputs.nixpkgs.follows = "nixpkgs";

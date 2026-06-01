@@ -284,12 +284,20 @@ in
   ];
   custom.backup.enable = true;
 
+  # Building screen-control directly instead of nix run (which was slow and
+  # didn't reliably pass the systemd `path` environment through to the binary).
+  nixpkgs.overlays = [
+    (final: prev: {
+      screen-control = inputs.screen-control.defaultPackage.${prev.system};
+    })
+  ];
+
   systemd.services.screen-control = {
     description = "REST screen control server";
     after = ["network.target"];
     wantedBy = ["multi-user.target"];
     serviceConfig = {
-      ExecStart = "${pkgs.nix}/bin/nix run /home/john/dotfiles/screen-control";
+      ExecStart = "${pkgs.screen-control}/bin/screen-control";
       Restart = "always";
       RestartSec = 5;
       User = "john";
@@ -297,6 +305,7 @@ in
     };
     path = [pkgs.hyprland];
   };
+
 
   networking.firewall.allowedTCPPorts = [
     50051 # screen-control REST API (arch-configuration.nix:290, screen-control/src/main.rs:129)
