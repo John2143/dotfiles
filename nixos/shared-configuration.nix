@@ -363,6 +363,11 @@ in {
           ];
       });
     })
+    (final: prev: {
+      voxtype = inputs.voxtype.packages.${prev.system}.vulkan.overrideAttrs (old: {
+        CARGO_HTTP_USER_AGENT = "Mozilla/5.0 (X11; Linux x86_64; rv:137.0) Gecko/20100101 Firefox/137.0";
+      });
+    })
   ];
 
   environment.systemPackages = [pkgs.autoclicker vast-waybar-status vast-render-metrics weather-status];
