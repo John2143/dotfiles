@@ -106,7 +106,7 @@
 in {
   # ── agenix secret: NVR credentials ─────────────────────────────────
   age.secrets.reolink-nvr = {
-    file = ../secrets/reolink-nvr.age;
+    file = ../../secrets/reolink-nvr.age;
     mode = "0400";
     owner = "root";
     group = "root";
