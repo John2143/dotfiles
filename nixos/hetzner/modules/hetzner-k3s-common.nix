@@ -211,6 +211,52 @@ TRAEFIKEOF
       # Install cert-manager CRDs separately (Helm set crds.enabled=false)
       # cert-manager 1.16 uses the old `class` field, not `ingressClassName`
       kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.16.2/cert-manager.crds.yaml 2>&1 || true
+      # Install k8gb Helm chart for its coredns + CRD (skip the operator — not needed)
+      # Static authoritative DNS via coredns hosts plugin: all 3 FIPs in round-robin.
+      # Firewall opens DNS (53/UDP+TCP) on the floating IP only (see split-ip-firewall).
+      KUBECONFIG=/etc/rancher/k3s/k3s.yaml helm repo add k8gb https://www.k8gb.io 2>/dev/null || true
+      KUBECONFIG=/etc/rancher/k3s/k3s.yaml helm repo update 2>/dev/null || true
+      KUBECONFIG=/etc/rancher/k3s/k3s.yaml helm upgrade --install k8gb k8gb/k8gb \
+        --namespace k8gb --create-namespace \
+        --set k8gb.deployCrds=false \
+        --set coredns.isClusterService=false \
+        --set coredns.serviceType=ClusterIP \
+        --set coredns.deployment.skipConfig=true \
+        --set "coredns.securityContext.capabilities.add[0]=NET_BIND_SERVICE" \
+        --set coredns.servers[0].port=53 \
+        --set coredns.servers[0].servicePort=53 \
+        --wait --timeout 120s 2>&1 || true
+      # Delete the operator (not needed for static DNS). Keep coredns + CRDs.
+      kubectl delete deploy -n k8gb k8gb 2>/dev/null || true
+      # Patch coredns for hostNetwork (binds directly to FIP:53)
+      kubectl patch deployment -n k8gb k8gb-coredns -p '{"spec":{"template":{"spec":{"hostNetwork":true,"dnsPolicy":"ClusterFirstWithHostNet","securityContext":{"runAsUser":0}}}}}' 2>/dev/null || true
+      # Apply static authoritative DNS for *.9s.pics
+      kubectl apply -f - <<'CMEOF' 2>/dev/null || true
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: k8gb-coredns
+  namespace: k8gb
+data:
+  Corefile: |
+    (global) {
+        errors
+        health
+        reload 30s 15s
+        ready
+        prometheus 0.0.0.0:9153
+        forward . /etc/resolv.conf
+    }
+    9s.pics {
+        hosts {
+            5.161.19.201  openfront.9s.pics simulation-api.9s.pics john2143.9s.pics
+            5.78.29.145   openfront.9s.pics simulation-api.9s.pics john2143.9s.pics
+            5.161.19.197  openfront.9s.pics simulation-api.9s.pics john2143.9s.pics
+            fallthrough
+        }
+        import global
+    }
+CMEOF
     '';
   };
 

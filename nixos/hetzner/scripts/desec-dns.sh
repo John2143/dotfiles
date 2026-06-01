@@ -77,6 +77,75 @@ cmd_update_all_nodes() {
   cmd_update_headscale
 }
 
+# ── NS Delegation Setup (k8gb GSLB) ──
+# One-time migration: deSEC wildcard A → NS delegation to self-hosted coredns.
+# Must be run AFTER k8gb coredns is verified working on all 3 FIPs.
+cmd_setup_ns_delegation() {
+  echo "=== Setting up NS delegation for *.9s.pics → k8gb self-hosted DNS ==="
+  echo ""
+  echo "This creates 5 DNS records with 5-minute pauses between each."
+  echo "WARNING: One-time migration. Verify coredns on all 3 FIPs first:"
+  echo "  dig @5.161.19.201 test.9s.pics"
+  echo "  dig @5.78.29.145 test.9s.pics"
+  echo "  dig @5.161.19.197 test.9s.pics"
+  echo ""
+  read -rp "Proceed with NS delegation? (y/N) " CONFIRM
+  if [ "$CONFIRM" != "y" ] && [ "$CONFIRM" != "Y" ]; then
+    echo "Aborting."
+    exit 0
+  fi
+
+  # Step 1-3: Create ns1, ns2, ns3 A records
+  local ips=("5.161.19.201" "5.78.29.145" "5.161.19.197")
+  local names=("ns1" "ns2" "ns3")
+  for i in 1 2 3; do
+    echo "[$i/5] Creating ${names[$((i-1))]}.9s.pics A ${ips[$((i-1))]}..."
+    cmd_set_a "${names[$((i-1))]}" "${ips[$((i-1))]}"
+    echo "Sleeping 300s for deSEC rate limit..."
+    sleep 300
+  done
+
+  # Step 4: Delete old wildcard A record
+  echo "[4/5] Deleting *.9s.pics A record..."
+  curl -sf -X DELETE -H "$AUTH" "$API/*/A/" 2>&1 || echo "    (record may already be absent)"
+  echo "Sleeping 300s for deSEC rate limit..."
+  sleep 300
+
+  # Step 5: Create wildcard NS delegation
+  echo "[5/5] Creating *.9s.pics NS ns1.9s.pics ns2.9s.pics ns3.9s.pics..."
+  curl -sf -X PUT -H "$AUTH" -H "$CT" \
+    "$API/*/NS/" \
+    -d '{"records":["ns1.9s.pics.","ns2.9s.pics.","ns3.9s.pics."]}' 2>&1 | python3 -m json.tool
+
+  echo ""
+  echo "=== NS delegation complete ==="
+  echo "Verify: dig @8.8.8.8 openfront.9s.pics"
+  echo ""
+  echo "Rollback if broken: $0 set-a '*' 5.161.19.201"
+}
+
+cmd_verify_ns_delegation() {
+  echo "=== Verifying *.9s.pics NS delegation ==="
+  echo ""
+  echo "--- NS records via 8.8.8.8 ---"
+  dig +short NS 9s.pics @8.8.8.8 2>/dev/null || echo "(none)"
+  echo ""
+  echo "--- Nameserver A records ---"
+  for ns in ns1 ns2 ns3; do
+    echo -n "  ${ns}.9s.pics: "
+    dig +short "${ns}.9s.pics" @8.8.8.8 2>/dev/null || echo "unresolved"
+  done
+  echo ""
+  echo "--- *.9s.pics NS delegation chain ---"
+  dig +short openfront.9s.pics @8.8.8.8 2>/dev/null || echo "(no records yet — k8gb Gslb not deployed)"
+  echo ""
+  echo "--- Direct to each coredns ---"
+  for ip in 5.161.19.201 5.78.29.145 5.161.19.197; do
+    echo -n "  $ip: "
+    dig +short openfront.9s.pics @"$ip" 2>/dev/null || echo "unreachable"
+  done
+}
+
 
 case "${1:-}" in
   list)
@@ -89,6 +158,12 @@ case "${1:-}" in
   set-ns)
     [ $# -eq 3 ] || { echo "Usage: $0 set-ns <subdomain> <nameserver>"; exit 1; }
     cmd_set_ns "$2" "$3"
+
+  setup-ns-delegation)
+    cmd_setup_ns_delegation
+    ;;
+  verify-ns-delegation)
+    cmd_verify_ns_delegation
     ;;
 
   update-headscale)
@@ -98,13 +173,15 @@ case "${1:-}" in
     cmd_update_all_nodes
     ;;
   *)
-    echo "Usage: $0 {list|set-a|set-ns|update-headscale|update-all-nodes}"
+    echo "Usage: $0 {list|set-a|set-ns|setup-ns-delegation|verify-ns-delegation|update-headscale|update-all-nodes}"
     echo ""
-    echo "  list               List all DNS records for ${DOMAIN}"
-    echo "  set-a NAME IP      Set A record (e.g. headscale → 108.56.153.222)"
-    echo "  set-ns NAME NS     Set NS record"
-    echo "  update-headscale   Auto-detect public IP and update headscale.${DOMAIN}"
-    echo "  update-all-nodes   Update headscale.${DOMAIN} to current public IP"
+    echo "  list                  List all DNS records for ${DOMAIN}"
+    echo "  set-a NAME IP         Set A record (e.g. headscale → 108.56.153.222)"
+    echo "  set-ns NAME NS        Set NS record"
+    echo "  setup-ns-delegation   ONE-TIME: migrate wildcard A → NS delegation (k8gb)"
+    echo "  verify-ns-delegation  Check NS delegation and coredns health"
+    echo "  update-headscale      Auto-detect public IP and update headscale.${DOMAIN}"
+    echo "  update-all-nodes      Update headscale.${DOMAIN} to current public IP"
 
     exit 1
     ;;

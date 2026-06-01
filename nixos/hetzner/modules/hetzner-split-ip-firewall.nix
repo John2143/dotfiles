@@ -73,6 +73,9 @@
 
         # k3s API server
         iptables -A FLOATING_IN -p tcp --dport 6443 -j ACCEPT
+        # DNS (k8gb GSLB — authoritative for *.9s.pics)
+        iptables -A FLOATING_IN -p udp --dport 53 -j ACCEPT
+        iptables -A FLOATING_IN -p tcp --dport 53 -j ACCEPT
 
 
         # Game servers / DERP / TeamSpeak
