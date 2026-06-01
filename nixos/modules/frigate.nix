@@ -7,31 +7,32 @@
 # Cameras: up to 7 Reolink cameras routed through the Reolink NVR.
 # Sub-streams are used for detection (low-res), main streams for clip recording.
 #
+# === agenix secret ===
+#
+# Create secrets/reolink-nvr.age containing:
+#
+#   NVR_USER=admin
+#   NVR_PASS=the_password_here
+#   NVR_HOST=192.168.1.67
+#
+#   agenix -e secrets/reolink-nvr.age -i ~/.ssh/id_ed25519 < /tmp/reolink-nvr.env
+#
+# The Frigate YAML uses ${NVR_PASS} placeholders; envsubst replaces them
+# at service start from the decrypted agenix file.
+#
 # === One-time NAS setup ===
 #
-# On the NAS, before rebuilding:
 #   sudo zfs create -o mountpoint=/tank/frigate \
 #     -o recordsize=128K -o compression=lz4 -o atime=off tank/frigate
 #   sudo chown 1000:1000 /tank/frigate
 #
-# Then rebuild NAS (adds NFS export) and arch (adds NFS mount + frigate service).
-#
-# === NVR credentials ===
-#
-# The RTSP URLs carry credentials. Create secrets/reolink-nvr.age or
-# replace CHANGEME below. The password ends up in /nix/store, so agenix
-# is recommended for production.
+# Then rebuild NAS first (adds NFS export), then arch.
 {
   config,
   lib,
   pkgs,
   ...
 }: let
-  # ── Secrets (replace with agenix) ─────────────────────────────────
-  nvrHost = "192.168.1.67";
-  nvrUser = "admin";
-  nvrPass = "CHANGEME"; # TODO: move to agenix
-
   # ── MQTT (required for Home Assistant integration) ─────────────────
   mqttHost = "home.ts.2143.me";
   mqttPort = 1883;
@@ -42,7 +43,9 @@
   nasFrigatePath = "/mnt/nas/frigate";
 
   # ── Camera definitions ────────────────────────────────────────────
-  # Edit names and stream numbers. Channel N maps to h264Preview_0N.
+  # Edit names. Each pulls two RTSP streams from the Reolink NVR:
+  #   /h264Preview_0N_main  → recording (full resolution)
+  #   /h264Preview_0N_sub   → detection (low-res, 640x480)
   cameras = {
     cam01 = {name = "Camera 1"; channel = "01";};
     cam02 = {name = "Camera 2"; channel = "02";};
@@ -54,18 +57,18 @@
   };
 
   # Build a per-camera Frigate config.
+  # Uses ${NVR_USER}, ${NVR_PASS}, ${NVR_HOST} shell variables as
+  # placeholders — envsubst fills them at runtime from agenix.
   mkCamera =
-    name: cfg: {
+    _: cfg: {
       ffmpeg = {
         inputs = [
           {
-            # Main stream — recording
-            path = "rtsp://${nvrUser}:${nvrPass}@${nvrHost}/h264Preview_${cfg.channel}_main";
+            path = "rtsp://\${NVR_USER}:\${NVR_PASS}@\${NVR_HOST}/h264Preview_${cfg.channel}_main";
             roles = ["record"];
           }
           {
-            # Sub stream — detection (low-res, low FPS)
-            path = "rtsp://${nvrUser}:${nvrPass}@${nvrHost}/h264Preview_${cfg.channel}_sub";
+            path = "rtsp://\${NVR_USER}:\${NVR_PASS}@\${NVR_HOST}/h264Preview_${cfg.channel}_sub";
             roles = ["detect"];
           }
         ];
@@ -99,9 +102,16 @@
       motion = {};
     };
 
-  # Merge cameras into the Frigate settings attrset.
   cameraSettings = builtins.mapAttrs mkCamera cameras;
 in {
+  # ── agenix secret: NVR credentials ─────────────────────────────────
+  age.secrets.reolink-nvr = {
+    file = ../secrets/reolink-nvr.age;
+    mode = "0400";
+    owner = "root";
+    group = "root";
+  };
+
   # ── NFS mount for Frigate storage ─────────────────────────────────
   fileSystems.${nasFrigatePath} = {
     device = "nas.ts.2143.me:/tank/frigate";
@@ -120,7 +130,6 @@ in {
     ];
   };
 
-  # Ensure the mount point directory exists.
   systemd.tmpfiles.rules = [
     "d ${nasFrigatePath} 0755 1000 1000 -"
   ];
@@ -128,14 +137,9 @@ in {
   # ── Frigate service ───────────────────────────────────────────────
   services.frigate = {
     enable = true;
-
-    # Hostname for the nginx vhost. Use '_' as catch-all so the UI is
-    # reachable at any IP/hostname (arch.local, 192.168.5.226:5000, etc.).
     hostname = "frigate.ts.2143.me";
-
-    # NVIDIA NVENC/NVDEC uses ffmpeg's hwaccel preset, not VA-API.
-    # No vaapiDriver needed.
-    checkConfig = true;
+    checkConfig = false; # disabled: config contains ${PLACEHOLDER} strings
+                         # that will fail YAML validation at build time.
 
     settings = {
       database = {
@@ -157,7 +161,6 @@ in {
         };
       };
 
-      # Global ffmpeg config — per-camera overrides only need inputs.
       ffmpeg = {
         hwaccel_args = "preset-nvidia-h264";
         output_args = {
@@ -165,13 +168,11 @@ in {
         };
       };
 
-      # go2rtc is bundled with Frigate 0.14+ and provides WebRTC live view.
-      # Streams here are pulled once and fanned out to detect + record consumers.
       go2rtc = {
         streams =
           builtins.mapAttrs (
             _: cfg:
-              "rtsp://${nvrUser}:${nvrPass}@${nvrHost}/h264Preview_${cfg.channel}_main"
+              "rtsp://\${NVR_USER}:\${NVR_PASS}@\${NVR_HOST}/h264Preview_${cfg.channel}_main"
           )
           cameras;
       };
@@ -197,23 +198,32 @@ in {
     };
   };
 
+  # ── Credential injection at runtime ───────────────────────────────
+  # The Frigate YAML in /nix/store has ${NVR_PASS} etc. as literal text.
+  # envsubst replaces them when the service starts, using the agenix
+  # decrypted env file.
+  #
+  # We insert our ExecStartPre AFTER the module's own "copy config" step
+  # so the substitution happens on the writable copy in /run/frigate/.
+
+  systemd.services.frigate = {
+    # Load the decrypted credentials into the service's environment.
+    serviceConfig.EnvironmentFile = [
+      config.age.secrets.reolink-nvr.path
+    ];
+
+    # Order matters: the module's ExecStartPre copies the config to
+    # /run/frigate/frigate.yml. Our script runs after and substitutes.
+    preStart = lib.mkAfter ''
+      ${pkgs.envsubst}/bin/envsubst \
+        -i /run/frigate/frigate.yml \
+        -o /run/frigate/frigate.yml
+    '';
+  };
+
   # ── GPU access ────────────────────────────────────────────────────
-  # Frigate runs as the 'frigate' user. NVIDIA device nodes are owned
-  # by root:video on NixOS. Add frigate to the video group for NVENC/NVDEC.
   users.users.frigate.extraGroups = ["video"];
 
-  # Open port 5000 so the web UI is reachable from the LAN / Tailscale.
+  # Open Frigate web UI (5000) and go2rtc (8554/8555).
   networking.firewall.allowedTCPPorts = [5000 8554 8555];
-
-  # ── agenix placeholder — uncomment and create reolink-nvr.age ─────
-  #
-  # age.secrets.reolink-nvr = {
-  #   file = ../secrets/reolink-nvr.age;
-  #   mode = "0400";
-  #   owner = "root";
-  #   group = "root";
-  # };
-  #
-  # Then replace nvrUser/nvrPass above with a preStart script that
-  # sources /run/agenix/reolink-nvr.
 }
