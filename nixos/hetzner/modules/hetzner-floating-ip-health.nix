@@ -57,7 +57,7 @@ result = subprocess.run(
 )
 data = json.loads(result.stdout)
 for fip in data:
-    labels = fip.get("labels", {})
+    labels = fip.get("labels") or {}
     if labels.get("region") == "${myRegion}":
         print(json.dumps(fip))
         sys.exit(0)
@@ -73,7 +73,7 @@ result = subprocess.run(
 )
 data = json.loads(result.stdout)
 for fip in data:
-    labels = fip.get("labels", {})
+    labels = fip.get("labels") or {}
     if labels.get("region") == "${myRegion}":
         print(fip["id"], fip["ip"], fip.get("server", {}).get("name", ""))
         sys.exit(0)
