@@ -388,6 +388,7 @@ in {
           modules-right =
             [
               "custom/tailscale"
+              "custom/voxtype"
               "group/hardware"
               "group/clock"
               "custom/updates"
@@ -533,6 +534,14 @@ in {
               end
               pkill -RTMIN+14 waybar
             '";
+            tooltip = true;
+          };
+
+          # ---- Voxtype status ----
+          "custom/voxtype" = {
+            exec = "voxtype status --follow --format json";
+            return-type = "json";
+            format = "{}";
             tooltip = true;
           };
 

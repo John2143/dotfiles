@@ -397,3 +397,21 @@ window#waybar > box {
     from { background-color: @red; }
     to   { background-color: @maroon; }
 }
+/* ---- Voxtype ---- */
+#custom-voxtype {
+    min-width: 30px;
+}
+
+#custom-voxtype.recording {
+    color: @red;
+    animation: pulse-voxtype 1s infinite;
+}
+
+#custom-voxtype.transcribing {
+    color: @yellow;
+}
+
+@keyframes pulse-voxtype {
+    from { opacity: 1; }
+    to   { opacity: 0.5; }
+}
