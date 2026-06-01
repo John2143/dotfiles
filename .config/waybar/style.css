@@ -161,7 +161,7 @@ window#waybar > box {
 #group-clock > box {
     background: @surface0;
     border-radius: 8px;
-    padding: 0 16px;
+    padding: 0 16px 0 4px;
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
 }
 
@@ -172,7 +172,7 @@ window#waybar > box {
     font-weight: 600;
     background: transparent;
     border-radius: 0;
-    padding: 0;
+    padding: 0 0 0 2px;
     box-shadow: none;
 }
 
@@ -180,7 +180,7 @@ window#waybar > box {
 #custom-clock-date {
     color: @subtext0;
     font-size: 13px;
-    padding-left: 16px;
+    padding-right: 15px;
 }
 
 /* ---- Media Player (center) ---- */
@@ -199,9 +199,12 @@ window#waybar > box {
     color: @yellow;
 }
 #custom-media.stopped {
-    color: @overlay0;
+    color: @subtext0;
 }
-
+#custom-media:hover {
+    background: @surface1;
+    transition: background 0.15s ease;
+}
 /* ---- Module Pills (right zone) ---- */
 #tray,
 #pulseaudio,
@@ -219,6 +222,7 @@ window#waybar > box {
 #custom-updates,
 #custom-autoclicker,
 #custom-privacy,
+#custom-eww-hello,
 #group-hardware {
     background: @surface0;
     color: @text;
@@ -392,4 +396,22 @@ window#waybar > box {
 @keyframes pulse-active {
     from { background-color: @red; }
     to   { background-color: @maroon; }
+}
+/* ---- Voxtype ---- */
+#custom-voxtype {
+    min-width: 30px;
+}
+
+#custom-voxtype.recording {
+    color: @red;
+    animation: pulse-voxtype 1s infinite;
+}
+
+#custom-voxtype.transcribing {
+    color: @yellow;
+}
+
+@keyframes pulse-voxtype {
+    from { opacity: 1; }
+    to   { opacity: 0.5; }
 }

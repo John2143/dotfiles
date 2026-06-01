@@ -168,6 +168,7 @@ in {
   imports = [
     ./home-cli.nix
     ./modules/waybar.nix
+    ./modules/eww.nix
     #./modules/swaync.nix  # DISABLED: gitlab.gnome.org 503 — re-enable when upstream recovers
   ];
 
@@ -418,6 +419,10 @@ in {
         { _args = ["Print" (mkLua ''hl.dsp.dpms({ action = "enable" })'')]; }
         { _args = [(mkLua ''mainMod .. " + SHIFT + M"'') (mkLua "hl.dsp.exit()")]; }
 
+        # Voxtype voice-to-text (push-to-talk on SUPER+A)
+        { _args = [(mkLua ''mainMod .. " + A"'') (mkLua ''hl.dsp.exec_cmd([[voxtype record start]])'')]; }
+        { _args = [(mkLua ''mainMod .. " + A"'') (mkLua ''hl.dsp.exec_cmd([[voxtype record stop]])'') { release = true; }]; }
+
         # Media keys
         { _args = ["XF86AudioRaiseVolume" (mkLua ''hl.dsp.exec_cmd([[fish -c "pamixer -i 5"]])'')]; }
         { _args = ["XF86AudioLowerVolume" (mkLua ''hl.dsp.exec_cmd([[fish -c "pamixer -d 5"]])'')]; }
@@ -487,6 +492,7 @@ in {
             hl.exec_cmd("fish ~/.xprofile.fish")
             hl.exec_cmd("wl-paste --type text --watch cliphist store")
             hl.exec_cmd("wl-paste --type image --watch cliphist store")
+            hl.exec_cmd("voxtype daemon")
           end
         ''))]; }
       ];

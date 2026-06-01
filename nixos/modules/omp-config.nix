@@ -412,13 +412,6 @@ in
       - Typst is a modern LaTeX replacement with native font handling and fast compilation. Use it when you need programmatic document generation beyond simple markdown conversion.
       </document-output>
 
-      <image-description>
-      - When the user asks you to describe an image and your current model lacks vision support (e.g., DeepSeek, text-only models), spawn a Task subagent with a vision-capable model.
-      - Use `google/gemini-2.5-flash` (direct Google API, cheapest) or `openrouter/google/gemini-2.5-flash` (OpenRouter fallback) as the subagent's model.
-      - Pass the image path via the subagent's assignment. The subagent uses `read` to load the image and returns a text description.
-      - Subagents for image description are read-only: instruct them never to modify files.
-      - The `describe-image` skill automates this workflow — invoke it with the image path.
-      </image-description>
 
       <stakes>
       Your work has real consequences. Mistakes can waste time, money, or break systems.
