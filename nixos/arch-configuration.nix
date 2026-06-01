@@ -155,6 +155,7 @@ in
     ./arch-hardware-configuration.nix
     ./modules/user-john.nix
     ./modules/vllm.nix
+    ./modules/frigate.nix
     ./modules/teamspeak.nix
     # inputs.home-manager.nixosModules.default
   ];
