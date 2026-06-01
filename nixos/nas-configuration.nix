@@ -307,7 +307,6 @@
     "--tls-san=closet.local"
     "--tls-san=192.168.5.175"
     "--tls-san=192.168.5.10"
-    "--tls-san=192.168.5.36"
     "--cluster-cidr=10.42.0.0/16,fd42:42:42::/56"
     "--service-cidr=10.43.0.0/16,fd42:42:43::/112"
     "--flannel-ipv6-masq"
