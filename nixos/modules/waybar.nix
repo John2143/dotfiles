@@ -8,10 +8,13 @@
     name = "media-player-status";
     runtimeInputs = with pkgs; [playerctl jq];
     text = ''
+      # Icons use ASCII for portability (nas.local builder lacks UTF-8 locale)
+      # Originals: ▶ (play), || -> ⏸ (pause), * -> ♫ (stopped), # -> ■ (stopped), - -> — (emdash)
       # Get all active players
       players=$(playerctl --list-all 2>/dev/null)
       if [ -z "$players" ]; then
-        echo '{"text": "♪", "class": "stopped", "tooltip": "No media playing"}'
+        # TODO: restore ♫ when all builders support UTF-8
+        echo '{"text": "*", "class": "stopped", "tooltip": "No media playing"}'
         exit 0
       fi
 
@@ -50,14 +53,17 @@
       player_name="$best"
 
       case "$best_status" in
-        Playing)  class="playing"; icon="▶" ;;
-        Paused)   class="paused";  icon="⏸" ;;
-        *)        echo '{"text": "♪", "class": "stopped", "tooltip": "No media playing"}'; exit 0 ;;
+        Playing)  class="playing"; icon=">" ;;
+        Paused)   class="paused";  icon="||" ;;
+*)        
+        player_display=$(playerctl --player="$best" metadata --format '{{ playerName }}' 2>/dev/null || echo "$player_name")
+        echo "{\"text\": \"* $player_name\", \"class\": \"stopped\", \"tooltip\": \"$player_display: state unknown\"}"
+        exit 0 ;;
       esac
 
       if [ -n "$title" ]; then
         if [ -n "$artist" ]; then
-          text="$icon  $player_name: $artist — $title"
+          text="$icon  $player_name: $artist - $title"
         else
           text="$icon  $player_name: $title"
         fi
@@ -73,18 +79,105 @@
         t=$(playerctl --player="$p" metadata title 2>/dev/null)
         icon_t=""
         case "$s" in
-          Playing) icon_t="▶" ;;
-          Paused)  icon_t="⏸" ;;
-          *)       icon_t="■" ;;
+          Playing) icon_t=">" ;;
+          Paused)  icon_t="||" ;;
+          *)       icon_t="#" ;;
         esac
         if [ -n "$t" ]; then
-          tooltip="$tooltip$icon_t $p: $a — $t\n"
+          tooltip="$tooltip$icon_t $p: $a - $t\n"
         fi
       done
       tooltip=$(echo -e "$tooltip" | head -c 500)  # convert \n, truncate
-
       jq -n --arg text "$text" --arg class "$class" --arg tooltip "$tooltip" \
         '{text: $text, class: $class, tooltip: $tooltip}'
+    '';
+  };
+
+  media-player-toggle = pkgs.writeShellApplication {
+    name = "media-player-toggle";
+    runtimeInputs = with pkgs; [playerctl];
+    text = ''
+      # Icons use ASCII for portability (nas.local builder lacks UTF-8 locale)
+      # Same mapping as media-player-status
+      players=$(playerctl --list-all 2>/dev/null)
+      if [ -z "$players" ]; then
+        exit 0
+      fi
+
+      best=""
+      browser_playing=""
+      for p in $players; do
+        s=$(playerctl --player="$p" status 2>/dev/null)
+        case "$p" in
+          firefox*|chromium*|chrome*|Floorp*)
+            [ "$s" = "Playing" ] && browser_playing="$p"
+            continue
+            ;;
+        esac
+        case "$s" in
+          Playing) best="$p"; break ;;
+          Paused)  [ -z "$best" ] && best="$p" ;;
+        esac
+      done
+
+      if [ -z "$best" ] && [ -n "$browser_playing" ]; then
+        best="$browser_playing"
+      fi
+
+      if [ -z "$best" ]; then
+        best=$(echo "$players" | head -1)
+      fi
+
+      playerctl --player="$best" play-pause
+      pkill -RTMIN+12 waybar
+    '';
+  };
+
+  media-player-menu = pkgs.writeShellApplication {
+    name = "media-player-menu";
+    runtimeInputs = with pkgs; [playerctl wofi coreutils];
+    text = ''
+      # Icons use ASCII for portability (nas.local builder lacks UTF-8 locale)
+      # Originals: > -> ▶ (playing), || -> ⏸ (paused)
+      players=$(playerctl --list-all 2>/dev/null)
+
+      menu="Pause All\nResume Spotify"
+
+      if [ -n "$players" ]; then
+        for p in $players; do
+          s=$(playerctl --player="$p" status 2>/dev/null)
+          icon=">"
+          [ "$s" = "Paused" ] && icon="||"
+          menu="$menu\n$icon $p"
+        done
+      fi
+      menu="$menu\nNext Track\nPrevious Track"
+
+      choice=$(printf "%b" "$menu" | wofi --dmenu -p "Media Player" -i 2>/dev/null)
+      case "$choice" in
+        "Pause All")
+          playerctl --all-players pause
+          ;;
+        "Resume Spotify")
+          playerctl --player=spotify play
+          ;;
+        "Next Track")
+          playerctl --all-players next
+          ;;
+        "Previous Track")
+          playerctl --all-players previous
+          ;;
+        *)
+          player=""
+          if [ -n "$choice" ]; then
+            player="${choice:2}"
+          fi
+          if [ -n "$player" ]; then
+            playerctl --player="$player" play-pause
+          fi
+          ;;
+      esac
+      pkill -RTMIN+12 waybar
     '';
   };
 
@@ -308,6 +401,7 @@ in {
               "custom/vast"
               "custom/weather"
               "custom/privacy"
+              "custom/eww-hello"
               "battery"
               "custom/autoclicker"
               "tray"
@@ -404,16 +498,17 @@ in {
               if echo "$out" | ${pkgs.jq}/bin/jq empty 2>/dev/null; then
                 echo "$out"
               else
-                echo '{"text":"♪","class":"stopped","tooltip":""}'
+                echo '{"text":"*","class":"stopped","tooltip":""}'
               fi
             ''}";
             return-type = "json";
             interval = 5;
             signal = 12;
             format = "{}";
-            on-click = "playerctl --all-players --ignore-player=firefox,chromium,chrome play-pause; pkill -RTMIN+12 waybar";
-            on-click-right = "playerctl --all-players --ignore-player=firefox,chromium,chrome next; pkill -RTMIN+12 waybar";
-            on-click-middle = "playerctl --all-players --ignore-player=firefox,chromium,chrome previous; pkill -RTMIN+12 waybar";
+            on-click = "${media-player-toggle}/bin/media-player-toggle";
+            on-click-right = "${media-player-menu}/bin/media-player-menu";
+            on-click-shift = "playerctl --all-players pause; pkill -RTMIN+12 waybar";
+            on-click-middle = "playerctl --all-players next; pkill -RTMIN+12 waybar";
           };
 
           # ---- Tailscale VPN ----
@@ -513,6 +608,15 @@ in {
             interval = "once";
             signal = 13;
             format = "{}";
+          };
+
+          # ---- Eww Hello World ----
+          "custom/eww-hello" = {
+            format = "";
+            on-click = "eww open hello-world";
+            on-click-right = "eww close hello-world";
+            tooltip = true;
+            tooltip-format = "Open eww hello-world widget";
           };
 
           # ---- Battery ----

@@ -1,0 +1,46 @@
+/* Catppuccin Mocha palette */
+@define-color base #1e1e2e;
+@define-color surface0 #313244;
+@define-color overlay0 #6c7086;
+@define-color text #cdd6f4;
+@define-color subtext0 #a6adc8;
+@define-color blue #89b4fa;
+@define-color mauve #cba6f7;
+
+* {
+  all: unset;
+  font-family: "JetBrainsMono Nerd Font";
+  font-size: 14px;
+}
+
+.hello-box {
+  background-color: @base;
+  border: 1px solid @surface0;
+  border-radius: 12px;
+  padding: 24px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+}
+
+.hello-text {
+  font-size: 20px;
+  font-weight: bold;
+  color: @blue;
+}
+
+.hello-subtext {
+  font-size: 13px;
+  color: @subtext0;
+}
+
+.hello-button {
+  background-color: @surface0;
+  color: @text;
+  padding: 6px 20px;
+  border-radius: 8px;
+  margin-top: 4px;
+}
+
+.hello-button:hover {
+  background-color: @mauve;
+  color: @base;
+}

@@ -1,0 +1,21 @@
+;; ── Hello World Widget ──────────────────────────────────────
+(defwindow hello-world
+  :monitor 0
+  :geometry (geometry :x "50%"
+                     :y "50%"
+                     :width "280px"
+                     :height "120px"
+                     :anchor "center")
+  :stacking "overlay"
+  :focusable "ondemand"
+  (box :class "hello-box"
+       :orientation "vertical"
+       :halign "center"
+       :valign "center"
+       :space-evenly false
+       :spacing 12
+    (label :text "Hello, World!" :class "hello-text")
+    (label :text "Eww is running!" :class "hello-subtext")
+    (button :onclick "eww close hello-world"
+            :class "hello-button"
+      "Close")))

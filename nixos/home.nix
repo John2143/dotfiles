@@ -168,6 +168,7 @@ in {
   imports = [
     ./home-cli.nix
     ./modules/waybar.nix
+    ./modules/eww.nix
     #./modules/swaync.nix  # DISABLED: gitlab.gnome.org 503 — re-enable when upstream recovers
   ];
 
