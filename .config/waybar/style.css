@@ -161,7 +161,7 @@ window#waybar > box {
 #group-clock > box {
     background: @surface0;
     border-radius: 8px;
-    padding: 0 16px 0 6px;
+    padding: 0 16px 0 4px;
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
 }
 
@@ -172,7 +172,7 @@ window#waybar > box {
     font-weight: 600;
     background: transparent;
     border-radius: 0;
-    padding: 0 0 0 6px;
+    padding: 0 0 0 2px;
     box-shadow: none;
 }
 

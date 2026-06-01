@@ -10,37 +10,67 @@
 * {
   all: unset;
   font-family: "JetBrainsMono Nerd Font";
-  font-size: 14px;
 }
 
-.hello-box {
+/* ── Widget Card ────────────────────────────────── */
+.hello-widget {
   background-color: @base;
   border: 1px solid @surface0;
   border-radius: 12px;
-  padding: 24px;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+  min-width: 200px;
 }
 
-.hello-text {
-  font-size: 20px;
-  font-weight: bold;
+/* Header */
+.hello-header {
+  background-color: @surface0;
+  padding: 8px 12px;
+  border-radius: 12px 12px 0 0;
+}
+
+.hello-icon {
+  font-size: 14px;
   color: @blue;
+  margin-right: 6px;
 }
 
-.hello-subtext {
+.hello-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: @text;
+}
+
+.hello-close {
+  font-size: 16px;
+  color: @subtext0;
+  margin-left: auto;
+  padding: 0 4px;
+  border-radius: 4px;
+}
+
+.hello-close:hover {
+  color: @mauve;
+}
+
+/* Body */
+.hello-body {
   font-size: 13px;
   color: @subtext0;
+  padding: 12px 12px 4px;
 }
 
-.hello-button {
-  background-color: @surface0;
-  color: @text;
-  padding: 6px 20px;
-  border-radius: 8px;
-  margin-top: 4px;
+/* Footer */
+.hello-footer {
+  padding: 4px 12px 10px;
 }
 
-.hello-button:hover {
-  background-color: @mauve;
-  color: @base;
+.hello-status {
+  font-size: 11px;
+  color: @green;
+}
+
+.hello-version {
+  font-size: 11px;
+  color: @overlay0;
+  margin-left: auto;
 }

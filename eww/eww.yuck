@@ -1,21 +1,32 @@
 ;; ── Hello World Widget ──────────────────────────────────────
 (defwindow hello-world
   :monitor 0
-  :geometry (geometry :x "50%"
-                     :y "50%"
-                     :width "280px"
-                     :height "120px"
-                     :anchor "center")
+  :geometry (geometry :x "-12px"
+                     :y "50px"
+                     :width "220px"
+                     :anchor "top right")
   :stacking "overlay"
-  :focusable "ondemand"
-  (box :class "hello-box"
+  :focusable "none"
+  (box :class "hello-widget"
        :orientation "vertical"
-       :halign "center"
-       :valign "center"
+       :halign "fill"
        :space-evenly false
-       :spacing 12
-    (label :text "Hello, World!" :class "hello-text")
-    (label :text "Eww is running!" :class "hello-subtext")
-    (button :onclick "eww close hello-world"
-            :class "hello-button"
-      "Close")))
+    ;; Header row
+    (box :class "hello-header"
+         :orientation "horizontal"
+         :halign "fill"
+         :space-evenly false
+      (label :text "" :class "hello-icon")
+      (label :text "Hello Widget" :class "hello-title")
+      (button :onclick "eww close hello-world"
+              :class "hello-close"
+        "×"))
+    ;; Body
+    (label :text "Eww is running!" :class "hello-body")
+    ;; Footer / status
+    (box :class "hello-footer"
+         :orientation "horizontal"
+         :halign "fill"
+         :space-evenly false
+      (label :text "● online" :class "hello-status")
+      (label :text "v0.1" :class "hello-version"))))
