@@ -230,40 +230,7 @@ TRAEFIKEOF
       kubectl delete deploy -n k8gb k8gb 2>/dev/null || true
       # Patch coredns for hostNetwork (binds directly to FIP:53)
       kubectl patch deployment -n k8gb k8gb-coredns -p '{"spec":{"template":{"spec":{"hostNetwork":true,"dnsPolicy":"ClusterFirstWithHostNet","securityContext":{"runAsUser":0}}}}}' 2>/dev/null || true
-      # Apply static authoritative DNS zone file for *.9s.pics
-      kubectl apply -f - <<'CMEOF' 2>/dev/null || true
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: coredns-zone
-  namespace: k8gb
-data:
-  zone.db: |
-    $ORIGIN 9s.pics.
-    @   3600 IN SOA ns1.9s.pics. hostmaster.9s.pics. 2026060101 7200 1800 86400 3600
-
-    @   3600 IN NS  ns1.9s.pics.
-    @   3600 IN NS  ns2.9s.pics.
-    @   3600 IN NS  ns3.9s.pics.
-
-    ns1 3600 IN A   5.161.19.201
-    ns2 3600 IN A   5.78.29.145
-    ns3 3600 IN A   5.161.19.197
-
-    openfront       60 IN A 5.161.19.201
-    openfront       60 IN A 5.78.29.145
-    openfront       60 IN A 5.161.19.197
-    simulation-api  60 IN A 5.161.19.201
-    simulation-api  60 IN A 5.78.29.145
-    simulation-api  60 IN A 5.161.19.197
-    john2143        60 IN A 5.161.19.201
-    john2143        60 IN A 5.78.29.145
-    john2143        60 IN A 5.161.19.197
-    *               60 IN A 5.161.19.201
-    *               60 IN A 5.78.29.145
-    *               60 IN A 5.161.19.197
-CMEOF
-      # Update Corefile to use zone file + round-robin load balancing
+      # Corefile only — zone data is generated dynamically by coredns-zone-generator timer.
       kubectl apply -f - <<'CMEOF' 2>/dev/null || true
 apiVersion: v1
 kind: ConfigMap
@@ -286,6 +253,18 @@ data:
         loadbalance round_robin
         import global
     }
+CMEOF
+      # Initial empty zone.db — coredns-zone-generator replaces it within 60s.
+      kubectl apply -f - <<'CMEOF' 2>/dev/null || true
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: coredns-zone
+  namespace: k8gb
+data:
+  zone.db: |
+    $ORIGIN 9s.pics.
+    @ 3600 IN SOA ns1.9s.pics. hostmaster.9s.pics. 0 7200 1800 86400 3600
 CMEOF
       # Mount the zone ConfigMap into coredns
       kubectl patch deployment -n k8gb k8gb-coredns \

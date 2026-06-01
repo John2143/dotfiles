@@ -15,6 +15,7 @@
     ./hetzner-ssh.nix
     ./hetzner-k3s-common.nix
     ./hetzner-floating-ip-health.nix
+    ./hetzner-coredns-zone.nix
   ];
 
   networking.hostName = compName;
