@@ -154,7 +154,7 @@
 
   # On my other computer, I want to install these
   optionalPackagesUpstairs = with pkgs; [
-    prusa-slicer # 3d printer slicer
+    #prusa-slicer # 3d printer slicer
     monero-cli
     monero-gui
     cryptsetup
