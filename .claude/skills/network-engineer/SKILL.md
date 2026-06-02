@@ -120,6 +120,131 @@ Internet
                  ├─ dst-nat rules → internal services
                  └─ LAN subnets (1.0/24, 5.0/24)
 ```
+## Physical Topology — Port-to-Port Mapping
+
+> **Snapshot from 2026-05-28 (physically verified).** Cables move, ports change.
+> Always re-query live state if the answer depends on what's connected *right now*.
+> The commands below are the canonical way to refresh this data.
+
+Query live (re-discovery after cable changes):
+```
+# MNDP — best first guess at physical neighbors
+mikrotik-connect r '/ip neighbor print'
+mikrotik-connect u '/ip neighbor print'
+mikrotik-connect d '/ip neighbor print'
+
+# Bridge host tables — MAC-to-port (can be misleading)
+mikrotik-connect r '/interface bridge host print terse'
+mikrotik-connect u '/interface bridge host print terse'
+mikrotik-connect d '/interface bridge host print terse'
+
+# Interface names and status
+mikrotik-connect r '/interface print terse'
+mikrotik-connect u '/interface print terse'
+mikrotik-connect d '/interface print terse'
+
+# Cross-reference MACs to IPs/hostnames
+mikrotik-connect r '/ip arp print terse'
+mikrotik-connect r '/ip dhcp-server lease print terse where status=bound'
+```
+### Verifying Port Mappings
+
+**Neither bridge host tables nor MNDP are infallible.** MNDP packets (and LLDP)
+traverse bridges just like any other traffic. A device on the downstairs switch
+will have its MNDP packets forwarded through the router's bridge and appear on
+a different router port than the one it's actually plugged into.
+
+The `INTERFACE` column shows the port the packet egressed through, not necessarily
+the port the device is directly connected to. The only definitive method is physical
+inspection.
+
+Example: U7Lite is physically on **downstairs ether6**, but MNDP on the router
+shows it on **router ether6** because the router's bridge forwarded the discovery
+packet out that port. The same applies to any device behind a switch — MNDP on
+the router will show it on whichever port the bridge chose to forward the packet.
+
+Use these to narrow down the candidate port, then confirm physically:
+```
+mikrotik-connect r '/ip neighbor print'
+mikrotik-connect u '/ip neighbor print'
+mikrotik-connect d '/ip neighbor print'
+```
+
+To identify unknown devices by MAC → IP → hostname:
+```
+mikrotik-connect r '/ip arp print terse'
+mikrotik-connect r '/ip dhcp-server lease print terse where status=bound'
+```
+
+Example of misleading data: U7Lite is physically on **downstairs ether6**, but
+MNDP on the router shows it on **router ether6** because the router's bridge
+forwards discovery packets between bridged ports.
+
+### Topology
+
+```
+Router ←→ Downstairs Switch ←→ Upstairs Switch
+           (CRS326)     e7↔e8  (CRS310)
+```
+### Live MNDP Baseline (2026-05-28)
+
+```
+Router:
+  10GsfpLAN → Downstairs sfp-sfpplus2 (MAC 04:F4:1C:E7:24:45)
+  10GsfpLAN → Upstairs ether8      (MAC 04:F4:1C:E6:7C:13, via downstairs)
+  ether6    → U7LiteBlueRoom       (192.168.5.173)  ← MISLEADING: see note
+
+Downstairs:
+  sfp-sfpplus2 → Router 10GsfpLAN   (MAC 04:F4:1C:E3:71:2F)
+  ether7       → Upstairs ether8    (MAC 04:F4:1C:E6:7C:13)
+  ether5       → U7ProXGSOffice     (192.168.5.171)
+  ether6       → U7LiteBlueRoom     (192.168.5.173)  ← confirmed physical
+
+Upstairs:
+  ether8 → Router 10GsfpLAN         (MAC 04:F4:1C:E3:71:2F)
+  ether8 → Downstairs ether7        (MAC 04:F4:1C:E7:24:42)
+```
+
+### Inter-Device Links (confirmed via MNDP)
+
+| Link | From | To |
+|---|---|---|
+| Router ↔ Downstairs | Router `10GsfpLAN` (sfp-sfpplus1) | Downstairs `sfp-sfpplus2` |
+| Downstairs ↔ Upstairs | Downstairs `ether7` | Upstairs `ether8` |
+
+### Router (CCR)
+
+| Port (renamed) | Default | Speed | Connected to |
+|---|---|---|---|
+| `2GWAN` | ether1 | 1GbE | Verizon CR1000B (WAN uplink) |
+| `pi` | ether2 | 1GbE | pite (192.168.5.213) |
+| `ether3` | ether3 | 1GbE | vpin (192.168.5.252) |
+| `ether4` | ether4 | 1GbE | nas 1GbE NIC (192.168.5.176) |
+| `ether5` | ether5 | 1GbE | JetKVM (192.168.5.187) |
+| `ether6` | ether6 | — | DISABLED |
+| `ether7` | ether7 | 1GbE | Front Driveway camera (192.168.1.66) |
+| `to-wifi` | ether8 | — | DISABLED |
+| `10GsfpLAN` | sfp-sfpplus1 | 10GbE SFP+ | Downstairs switch `sfp-sfpplus2` |
+
+### Downstairs Switch (CRS326-24G-2S+RM)
+
+| Port | Speed | Connected to |
+|---|---|---|
+| `sfp-sfpplus2` | 10GbE SFP+ | Router `10GsfpLAN` (uplink) |
+| `sfp-sfpplus1` | 10GbE SFP+ | nas 10GbE NIC (192.168.5.175) |
+| `ether5` | 1GbE | office (192.168.5.209) + U7 Pro XGS AP (192.168.5.171) |
+| `ether6` | 1GbE | U7 Lite AP (192.168.5.173) |
+| `ether7` | 1GbE | Upstairs switch `ether8` (inter-switch) |
+
+### Upstairs Switch (CRS310-1G-5S-4S+)
+
+| Port | Speed | Connected to |
+|---|---|---|
+| `sfp-sfpplus2` | 1GbE SFP | closet (192.168.5.35) |
+| `sfp-sfpplus1` | 1GbE SFP | arch (192.168.5.226) |
+| `ether1` | 1GbE | Front Gate cam (.64), Front Porch cam (.63), NVR (.67) |
+| `ether2` | 1GbE | GL.iNet KVM (192.168.5.8) — glkvm.ts.2143.me, OpenWrt, Dropbear SSH, nginx |
+| `ether8` | 1GbE | Downstairs switch `ether7` (inter-switch) |
 
 Inbound: Verizon DMZs everything to MikroTik. MikroTik dst-nat rules route specific ports to internal hosts.
 Domains `john2143.com` and `net.2143.me` resolve to the home public IP.
@@ -164,20 +289,20 @@ See the `## IPv6` section for the fix.
 mikrotik-connect r '/ip firewall nat print terse where chain=dstnat'
 ```
 
-Baseline (captured 2026-05-22, live-confirmed 2026-05-23):
+Baseline (captured 2026-05-29, live-confirmed 2026-05-29):
 
 | WAN Port(s) | Proto | MikroTik → | Final Target | K8s NodePort | Service |
 |------------|-------|-----------|-------------|-------------|---------|
-| 80, 443 | TCP | closet:80,443 | traefik LB | 31316, 30908 | HTTP/HTTPS ingress |
-| 9987 | UDP | closet:30087 | ts-voice:30087 | 30087 | Teamspeak voice |
-| 30033 | TCP | closet:30034 | ts-files:30034 | 30034 | Teamspeak file transfer |
-| 5432, 5999 | TCP | closet:5432 | CNPG Postgres | (ClusterIP) | PostgreSQL |
-| 25565 | TCP | nas:32565 | minecraft-game:32565 | 32565 | Minecraft (k8s) |
-| 32565 | TCP | nas:32565 | minecraft-game:32565 | 32565 | Minecraft alternate |
-| 11753 | TCP | closet:31753 | openrct2-game:31753 | 31753 | OpenRCT2 |
+| 80, 443 | TCP | **kube-vip VIP (.10):80,443** | traefik LB | 31316, 30908 | HTTP/HTTPS ingress |
+| 9987 | UDP | **VIP (.10):30087** | ts-voice:30087 | 30087 | Teamspeak voice |
+| 30033 | TCP | **VIP (.10):30034** | ts-files:30034 | 30034 | Teamspeak file transfer |
+| 5432 | TCP | **closet (.35):5432** | Postgres (NixOS bare-metal) | — | PostgreSQL |
+| 25565 | TCP | nas (.175):32565 | minecraft-game:32565 | 32565 | Minecraft (k8s) |
+| 32565 | TCP | nas (.175):32565 | minecraft-game:32565 | 32565 | Minecraft alternate |
+| 11753 | TCP | **VIP (.10):31753** | openrct2-game:31753 | 31753 | OpenRCT2 |
 | 6767 | Both | Verizon→home-pi:6767 | home-pi Headscale | (direct) | Headscale control |
-| 30478 | UDP | closet:30478 | headscale-stun:30478 | 30478 | Headscale STUN |
-| — | — | 192.168.0.0/16 → public IP | Hairpin NAT | — | LAN→WAN→LAN loopback |
+| 30478 | UDP | **VIP (.10):30478** | headscale-stun:30478 | 30478 | Headscale STUN/DERP |
+| 18080 | TCP | arch (.226):18080 | Monero P2P (bare-metal) | — | Monero |
 
 **Note:** The Headscale port 6767 forward lives on the Verizon router (192.168.0.1), not the MikroTik. home-pi (192.168.0.154) sits on the WAN subnet (192.168.0.0/24) directly behind the Verizon router. The MikroTik has a secondary DHCP WAN IP at 192.168.0.152 (not to be confused with home-pi).
 ## Subnet Layout
@@ -230,14 +355,13 @@ All hosts run NixOS (except mac which is nix-darwin). Managed from `~/dotfiles` 
 
 | Service | Host | Port/URL |
 |---------|------|----------|
-| k3s API | closet | `192.168.5.35:6443` |
+| k3s API | kube-vip VIP | `192.168.5.10:6443` |
 | Attic Nix cache | nas | `http://nas:8280` |
 | Headscale | home-pi | `headscale.9s.pics:6767` |
 | Home Assistant | (TBD) | `home.ts.2143.me` |
 | ArgoCD | k3s-ashburn | `argocd.ts.2143.me` |
 | RustFS (S3) | (TBD) | `files.john2143.com` |
-| UniFi Controller | closet (k8s) | `https://192.168.5.35:30443` |
-
+| UniFi Controller | k3s (NodePort) | `https://192.168.5.10:30443` |
 
 ## Cameras (Reolink)
 
@@ -275,7 +399,7 @@ Discovered via live DHCP (2026-05-23):
 | K3B-US-PGA0539A | 192.168.5.127 | C8:FF:77:57:E0:3D | Permanent ARP entry at .219 — ARP entry needs cleanup |
 | Linux ARM device | 192.168.5.147 | B0:FC:0D:DE:FB:50 | Linux 3.18.19 on armv7l (dhcpcd) |
 | John Bedroom Lightswitch | 192.168.5.172 | 00:07:A6:40:E7:4B | Identified via UniFi controller (hostname: John Bedroom Lightswitch, on iot-2707 SSID) |
-| Unknown (ARP only) | 192.168.5.8 | 94:83:C4:C4:9C:4D | In ARP reachable but not in DHCP — static IP? |
+| GL.iNet KVM (glkvm) | 192.168.5.8 | 94:83:C4:C4:9C:4D | GL.iNet OpenWrt KVM for NVR — Dropbear SSH, nginx web UI. Upstairs switch ether2. |
 
 **Transient devices** (phones/laptops with rotating MACs):
 | Device | Typical IPs | MAC fingerprint |
@@ -291,18 +415,18 @@ Discovered via live DHCP (2026-05-23):
 
 | Device | IP | Model | MAC | Location | Uplink |
 |--------|-----|-------|-----|----------|--------|
-| U7 Pro XGS | 192.168.5.171 (DHCP) | U7 Pro XGS | 90:41:B2:D6:74:DB | Office | 10GbE SFP+ via upstairs switch |
-| U7 Lite | 192.168.5.173 (DHCP) | U7 Lite | 1C:0B:8B:50:FF:7E | Blue Room | 1GbE via downstairs switch |
+| U7 Pro XGS | 192.168.5.171 (DHCP) | U7 Pro XGS | 90:41:B2:D6:74:DB | Office | 10GbE SFP+ (connected to downstairs switch ether5, limited to 1GbE) |
+| U7 Lite | 192.168.5.173 (DHCP) | U7 Lite | 1C:0B:8B:50:FF:7E | Blue Room | 1GbE via downstairs switch ether6 |
 
 **U7 Pro XGS (Office):**
 - WiFi 7 (802.11be) — tri-band (2.4 / 5 / 6 GHz)
-- 10GbE SFP+ uplink (connected to upstairs switch sfp-sfpplus1)
+- 10GbE SFP+ uplink (connected to downstairs switch ether5, limited to 1GbE by switch port — not upstairs as previously thought)
 - Primary high-performance AP
 - Hostname: `U7ProXGSOffice`, DHCP class-id: `ubnt`
 
 **U7 Lite (Blue Room):**
 - WiFi 7 (802.11be) — dual-band (2.4 / 5 GHz)
-- 2.5GbE uplink (limited to 1GbE by downstairs switch port)
+- 2.5GbE uplink (limited to 1GbE by downstairs switch ether6 port)
 - Compact AP for secondary coverage
 - Hostname: `U7LiteBlueRoom`, DHCP class-id: `ubnt`
 
@@ -466,7 +590,7 @@ mikrotik-connect d '/interface print terse where running'
 mikrotik-connect r /export
 ```
 
-## IPv6 (Known Broken — Prefix Mismatch)
+## IPv6 (NAT66 + ULA — Working 2026-05-29)
 
 ### The Problem
 
@@ -560,20 +684,20 @@ mikrotik-connect r '/ipv6 address print'
 # Masquerade all outbound except to WAN subnet
 chain=srcnat action=masquerade out-interface=2GWAN dst-address=!192.168.0.0/24
 
-# Hairpin NAT for LAN→WAN→LAN loopback
-chain=srcnat action=masquerade out-interface=bridge src-address=192.168.0.0/16 dst-address=192.168.5.35
+# Hairpin NAT removed 2026-05-29 — dynamic public IP makes it impractical.
+# Access services directly via internal IPs (192.168.5.10 for k3s, .35 for Postgres).
 ```
 
 ## k3s Cluster
 
-**Server:** closet (192.168.5.35) — control-plane, 5 nodes (all Ready, v1.35.x).
-Agents: arch (.226), nas (.175), office (.209), pite (.213).
+**Control plane:** 3-node HA (closet, arch, nas) with embedded etcd. **kube-vip VIP `192.168.5.10`** provides a floating IP for the API server — any control-plane node can hold it. **Dual-stack** (IPv4 + IPv6) with static ULA addresses (`fd00:1::/64`) for stable node-ip.
+Agents: office (.209), pite (.213) — 5 nodes total.
 
-Pod network: `10.42.0.0/24` flannel VXLAN overlay. Key services:
+Pod network: `10.42.0.0/24` (IPv4) + `fd42:42:42::/56` (IPv6) flannel VXLAN. Key services:
 
 | Service | Type | External IP / NodePort | Notes |
 |---------|------|----------------------|-------|
-| traefik | LoadBalancer | 192.168.5.35, .226, .175, .209, .213 | HTTP:31316, HTTPS:30908 |
+| traefik | LoadBalancer | 192.168.5.10, fd00:1::35/226/175 | HTTP:31316, HTTPS:30908 |
 | unifi-web | NodePort | :30443 | UniFi controller web UI |
 | unifi-inform | LB | :8080 (closet, arch, nas) | UniFi device adoption |
 | unifi-discovery | LB | :10001/UDP (closet, arch, nas) | UniFi L2 discovery |
@@ -599,10 +723,10 @@ Query live: `ssh closet 'kubectl get nodes,pods,svc -A'`
 | Metric | Count |
 |--------|-------|
 | NixOS hosts | 9 (8 local + 1 WAN-side home-pi) |
-| k3s nodes | 5 (all Ready) |
+| k3s nodes | 5 (3 control-plane, 2 agents, all Ready) |
 | Cameras online | 7 of 7 |
 | IoT/smart devices | 11 |
-| Switch ports active | 6 upstairs, 4 downstairs |
+| Switch ports active | 7 router, 5 downstairs, 5 upstairs |
 | External services | 9 |
 
 ## Notable Observations
@@ -613,12 +737,15 @@ Query live: `ssh closet 'kubectl get nodes,pods,svc -A'`
 
 3. **home-pi on WAN subnet:** Connected directly to Verizon router (192.168.0.154), not behind MikroTik NAT. Headscale traffic bypasses the MikroTik entirely. home-pi cannot reach LAN devices unless via Tailscale routes.
 
-4. **Unknown device .172 (00:07:A6:40:E7:4B):** MAC prefix = Eutron S.p.A. (Italian security/industrial). No hostname or client-id.
+4. **kube-vip VIP 192.168.5.10:** Floating IP for k3s API. Any control-plane node can hold it via ARP. Most dst-nat rules now target the VIP instead of closet directly, providing HA for inbound services.
 
-5. **No MikroTik dst-nat for 6767:** Headscale forward is solely on the Verizon router. MikroTik does not participate.
+5. **ULA IPv6 (fd00:1::/64):** Site-local IPv6 on MikroTik bridge. All 3 k3s servers have static ULA addresses (.35, .226, .175) for stable dual-stack node-ip. Survives ISP prefix delegation changes.
 
-6. **k3s pod network uses flannel VXLAN:** 10.42.0.0/24 overlay. Nodes communicate via bridge IPs.
+6. **Hairpin NAT removed:** Dynamic public IP makes it impractical. Access services via internal IPs from LAN.
 
+7. **No MikroTik dst-nat for 6767:** Headscale forward is solely on the Verizon router.
+
+8. **k3s pod network uses flannel VXLAN:** 10.42.0.0/24 + fd42:42:42::/56 dual-stack overlay.
 ## Config Backup & Restore
 
 Full config exports are saved in the dotfiles repo (`~/dotfiles/network-configs/`) for

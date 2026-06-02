@@ -112,48 +112,45 @@ in
               contextWindow: 1000000
               maxTokens: 8192
 
-        office-ollama:
-          baseUrl: http://office:11434/v1
-          api: openai-completions
-          auth: none
-          models:
-            - id: gemma4
-              name: Gemma 4 (Office ROCm)
-              reasoning: false
-              input: [text]
-              cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }
-              contextWindow: 128000
-              maxTokens: 8192
-            - id: qwen3.6:27b
-              name: Qwen 3 (Office ROCm)
-              reasoning: true
-              input: [text]
-              cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }
-              contextWindow: 128000
-              maxTokens: 8192
+  #office-ollama:        # disabled 2026-05-31
+  #  baseUrl: http://office:11434/v1
+  #  api: openai-completions
+  #  auth: none
+  #  models:
+  #    - id: gemma4
+  #      name: Gemma 4 (Office ROCm)
+  #      reasoning: false
+  #      input: [text]
+  #      cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }
+  #      contextWindow: 128000
+  #      maxTokens: 8192
+  #    - id: qwen3.6:27b
+  #      name: Qwen 3 (Office ROCm)
+  #      reasoning: true
+  #      input: [text]
+  #      cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }
+  #      contextWindow: 128000
+  #      maxTokens: 8192
 
-        # CPU-only instance on office (port 11435). Same model dir as ROCm
-        # instance -- no extra storage needed. Useful when the GPU is busy or
-        # ROCm is misbehaving.
-        office-ollama-cpu:
-          baseUrl: http://office:11435/v1
-          api: openai-completions
-          auth: none
-          models:
-            - id: gemma4
-              name: Gemma 4 (Office CPU)
-              reasoning: false
-              input: [text]
-              cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }
-              contextWindow: 128000
-              maxTokens: 8192
-            - id: qwen3.6:27b
-              name: Qwen 3 (Office CPU)
-              reasoning: true
-              input: [text]
-              cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }
-              contextWindow: 128000
-              maxTokens: 8192
+  #office-ollama-cpu:    # disabled 2026-05-31
+  #  baseUrl: http://office:11435/v1
+  #  api: openai-completions
+  #  auth: none
+  #  models:
+  #    - id: gemma4
+  #      name: Gemma 4 (Office CPU)
+  #      reasoning: false
+  #      input: [text]
+  #      cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }
+  #      contextWindow: 128000
+  #      maxTokens: 8192
+  #    - id: qwen3.6:27b
+  #      name: Qwen 3 (Office CPU)
+  #      reasoning: true
+  #      input: [text]
+  #      cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }
+  #      contextWindow: 128000
+  #      maxTokens: 8192
 
         # OpenRouter — unified API gateway for 300+ models. Used for:
         #   - Gemini Flash/Pro (cheap, fast, 1M context — excellent smol)
@@ -265,6 +262,10 @@ in
     '';
 
     ".omp/agent/config.yml".text = ''
+      # Fish is the default shell across all machines. All agent bash commands
+      # are spawned in fish — the functions, aliases, and completions defined
+      # in home.nix are available during agent sessions.
+      shell: fish
       modelRoles:
         #default: vast-vllm/deepseek-v4-flash
         default: deepseek/deepseek-v4-flash
@@ -277,8 +278,8 @@ in
         - deepseek
         - openrouter
         - office-vllm
-        - office-ollama
-        - office-ollama-cpu
+        #- office-ollama       # disabled 2026-05-31
+        #- office-ollama-cpu   # disabled 2026-05-31
         - anthropic
         - openai
         - google
@@ -287,8 +288,8 @@ in
         - "vast-vllm/*"
         - "deepseek/*"
         - "office-vllm/*"
-        - "office-ollama/*"
-        - "office-ollama-cpu/*"
+        #- "office-ollama/*"       # disabled 2026-05-31
+        #- "office-ollama-cpu/*"   # disabled 2026-05-31
         - "anthropic/*"
         - "openrouter/*"
         - "openai/*"
@@ -303,7 +304,7 @@ in
             - "deepseek/deepseek-v4-pro"
             - "openrouter/anthropic/claude-sonnet-4-6"
             - "anthropic/claude-sonnet-4-6"
-            - "office-ollama/qwen3.6:27b"
+            #"office-ollama/qwen3.6:27b"  # disabled 2026-05-31
           smol:
             - "google/gemini-2.5-flash-lite"
             - "anthropic/claude-haiku-4-5"
@@ -415,13 +416,6 @@ in
       - Typst is a modern LaTeX replacement with native font handling and fast compilation. Use it when you need programmatic document generation beyond simple markdown conversion.
       </document-output>
 
-      <image-description>
-      - When the user asks you to describe an image and your current model lacks vision support (e.g., DeepSeek, text-only models), spawn a Task subagent with a vision-capable model.
-      - Use `google/gemini-2.5-flash` (direct Google API, cheapest) or `openrouter/google/gemini-2.5-flash` (OpenRouter fallback) as the subagent's model.
-      - Pass the image path via the subagent's assignment. The subagent uses `read` to load the image and returns a text description.
-      - Subagents for image description are read-only: instruct them never to modify files.
-      - The `describe-image` skill automates this workflow — invoke it with the image path.
-      </image-description>
 
       <stakes>
       Your work has real consequences. Mistakes can waste time, money, or break systems.
@@ -467,7 +461,7 @@ in
 
       Prefix units `agent-`. Prefer `--on-unit-inactive=` to avoid overlap. Self-clean with `&& systemctl --user stop agent-foo.timer` on success. Remove timers when done.
       Headless OMP: `omp launch -p "do X" --no-session` runs the agent non-interactively from a timer unit (approval hook blocks risky calls when no TTY).
-      Prefer `--model="office-ollama/qwen3.6:27b"` for cheap background queries; save paid models for complex work.
+      # Prefer `--model="office-ollama/qwen3.6:27b"` — disabled 2026-05-31.
       </agent-cron>
       <user-notification>
       ntfy.sh for job completion and status updates only (not questions):

@@ -1,9 +1,9 @@
-# Hetzner k3s Server Node (with DNS)
+# Hetzner k3s Server Node
 #
 # Fully self-contained. All 3 servers (ashburn, hillsboro, nuremberg)
 # import this module identically. Reads compName from specialArgs.
 #
-# Imports: k3s-common (k3s/Cilium/ArgoCD/firewall) + PowerDNS + PostgreSQL schema + SSH.
+# Imports: k3s-common (k3s/ArgoCD/firewall) + SSH.
 {
   config,
   lib,
@@ -14,9 +14,8 @@
   imports = [
     ./hetzner-ssh.nix
     ./hetzner-k3s-common.nix
-    ./hetzner-powerdns-bootstrap.nix
-    ./hetzner-powerdns.nix
-    ./hetzner-postgres-schema.nix
+    ./hetzner-floating-ip-health.nix
+    ./hetzner-coredns-zone.nix
   ];
 
   networking.hostName = compName;
@@ -28,11 +27,7 @@
   # If identities MUST be regenerated, clean stale nodes from headscale first:
   #   sudo headscale nodes delete --identifier <id> --force
 
-  # PowerDNS starts after PostgreSQL schema import (which waits for CNPG in k3s).
-  # k3s no longer depends on pdns — ExternalDNS inside k3s retries until pdns is ready.
-
   environment.systemPackages = with pkgs; [
-    pdns
-    postgresql
+    hcloud
   ];
 }

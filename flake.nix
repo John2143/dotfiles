@@ -49,8 +49,19 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
+    screen-control = {
+      url = "path:./screen-control";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+
+
     nix-darwin = {
       url = "github:LnL7/nix-darwin";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+
+    voxtype = {
+      url = "github:peteonrails/voxtype/dev";
       inputs.nixpkgs.follows = "nixpkgs";
     };
   };
@@ -59,6 +70,7 @@
     nixpkgs,
     nix-cachyos-kernel,
     agenix,
+    voxtype,
     ...
   } @ inputs: let
     system = "x86_64-linux";
@@ -165,7 +177,7 @@
           ./nixos/shared-games-configuration.nix
           ./nixos/arch-configuration.nix
           ./nixos/firejail-desktop.nix
-          ./nixos/modules/k3s-agent.nix
+          ./nixos/modules/k3s-server.nix
           ./nixos/modules/restic-backup.nix
           ./nixos/modules/nas-mounts.nix
           ./nixos/tailscale.nix
@@ -181,6 +193,7 @@
         modules = [
           ./nixos/shared-cli-configuration.nix
           ./nixos/closet-configuration.nix
+          ./nixos/modules/k3s-server.nix
           ./nixos/modules/longhorn-host.nix
           ./nixos/modules/restic-backup.nix
           ./nixos/modules/nas-mounts.nix
@@ -269,7 +282,7 @@
           inputs.disko.nixosModules.default
           ./nixos/shared-cli-configuration.nix
           ./nixos/nas-configuration.nix
-          ./nixos/modules/k3s-agent.nix
+          ./nixos/modules/k3s-server.nix
           ./nixos/modules/disko_nas.nix
           ./nixos/tailscale.nix
 

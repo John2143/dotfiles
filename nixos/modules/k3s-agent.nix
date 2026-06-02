@@ -23,8 +23,13 @@
     services.k3s = {
       enable = true;
       role = "agent";
-      serverAddr = "https://192.168.5.35:6443";
+      serverAddr = "https://192.168.5.10:6443";
       tokenFile = config.age.secrets.k3s-local-token.path;
+    };
+    # Agent needs avahi to resolve .local server hostnames
+    systemd.services.k3s = {
+      after = [ "avahi-daemon.service" ];
+      wants = [ "avahi-daemon.service" ];
     };
   };
 }

@@ -1,8 +1,6 @@
-# Home Pi — Headscale server + PowerDNS
+# Home Pi — Headscale server
 #
 # Dedicated Raspberry Pi running Headscale for the Hetzner tailnet.
-# Also serves as authoritative PowerDNS server (multi-provider tiebreaker).
-# PowerDNS connects to CloudNativePG PostgreSQL on k3s-ashburn via tailnet.
 #
 # Permanent node — not part of the Hetzner rolling rotation.
 # Provisioned manually at home.
@@ -18,9 +16,6 @@
     ./home-pi-hardware-configuration.nix
     ../modules/headscale.nix
     ../modules/hetzner-ssh.nix
-    ../modules/hetzner-powerdns-bootstrap.nix
-    ../modules/hetzner-postgres-schema.nix
-    ../modules/hetzner-powerdns.nix
     ../modules/tailscale.nix
     ../../modules/attic-server.nix
   ];
@@ -54,45 +49,11 @@
   # Connect to the local Headscale instance running on this host
   custom.headscaleServer = "http://localhost:6767";
 
-  # PowerDNS connects to CloudNativePG on k3s-ashburn via tailnet
-  # Override gpgsql-host from default 127.0.0.1 to the remote node
-  services.powerdns.extraConfig = ''
-    launch=gpgsql
-    gpgsql-host=k3s-ashburn.ts.9s.pics
-    gpgsql-port=30432
-    gpgsql-dbname=pdns
-    gpgsql-user=pdns
-    gpgsql-password=@PDNS_PG_PASSWORD@
-
-    local-address=0.0.0.0
-    local-port=53
-
-    dnsupdate=yes
-    allow-dnsupdate-from=127.0.0.0/8
-
-    default-ttl=60
-
-    api=yes
-    api-key=@PDNS_API_KEY@
-    webserver=yes
-    webserver-address=127.0.0.1
-    webserver-port=8081
-
-    allow-axfr-ips=127.0.0.1
-  '';
   security.sudo.wheelNeedsPassword = false;
 
-  # systemd: do NOT auto-start pdns or hetzner-postgres-schema on boot.
-  # These depend on k3s-ashburn being provisioned and PostgreSQL reachable.
-  # Start them manually in Phase 3 after ashburn is up.
-  systemd.services.pdns = {
-    wantedBy = lib.mkForce [];
-    after = ["hetzner-postgres-schema.service" "tailscaled.service"];
-    wants = ["hetzner-postgres-schema.service" "tailscaled.service"];
-  };
-  systemd.services.hetzner-postgres-schema.wantedBy = lib.mkForce [];
 
   # ── deSEC DDNS: update headscale.9s.pics every 5 minutes ──
+  # Important: Only update if we have CHANGED. otherwise we get rate-limited by deSEC.
   systemd.services.desec-ddns = {
     description = "Update deSEC DNS A record for headscale.9s.pics";
     after = ["network-online.target"];
@@ -110,6 +71,15 @@
       if [ -z "$IP" ]; then
         echo "ERROR: Could not determine public IP"
         exit 1
+      fi
+
+      # Check if we have changed or not:
+      # do direct DNS query without caching to get current DNS record
+      # First try 1.1.1.1, then 1.0.0.1, then 8.8.8.8
+      CURRENT_IP=$(dig +short headscale.9s.pics @1.1.1.1 +noall +answer || dig +short headscale.9s.pics @1.0.0.1 +noall +answer || dig +short headscale.9s.pics @8.8.8.8)
+      if [ "$CURRENT_IP" = "$IP" ]; then
+        echo "OK: headscale.9s.pics already points to $IP, no update needed"
+        exit 0
       fi
 
       # Try PATCH (update existing), fall back to POST (create new)
@@ -132,50 +102,12 @@
   };
 
   systemd.timers.desec-ddns = {
-    description = "Update deSEC DNS every 5 minutes";
+    description = "Update deSEC DNS every 30 minutes";
     wantedBy = ["timers.target"];
     timerConfig = {
-      OnCalendar = "*:0/5";
+      OnCalendar = "*:0/30";
       Persistent = true;
     };
   };
 
-  # ── Local DDNS: update local-home-pi.9s.pics to current LAN IP ──
-  # Keeps the local A record accurate even if DHCP lease changes.
-  # Uses pdnsutil directly; tolerates pdns being down (skips).
-  systemd.services.local-home-pi-ddns = {
-    description = "Update local-home-pi.9s.pics A record to current LAN IP";
-    after = ["network-online.target"];
-    wants = ["pdns.service"];
-    path = [pkgs.pdns pkgs.iproute2];
-    serviceConfig = {
-      Type = "oneshot";
-    };
-    script = ''
-      set -euo pipefail
-      if ! systemctl is-active --quiet pdns 2>/dev/null; then
-        echo "pdns not running, skipping local IP update"
-        exit 0
-      fi
-      LOCAL_IP=$(ip -4 addr show | grep -oP 'inet \K192\.168\.\d+\.\d+' | head -1)
-      if [ -z "$LOCAL_IP" ]; then
-        echo "No 192.168.x.x IP found, skipping"
-        exit 0
-      fi
-      pdnsutil --config-dir=/run/pdns rrset replace 9s.pics local-home-pi.9s.pics A 60 "$LOCAL_IP" 2>/dev/null || {
-        # replace might fail if record doesn't exist yet; try add
-        pdnsutil --config-dir=/run/pdns rrset add 9s.pics local-home-pi.9s.pics A 60 "$LOCAL_IP" 2>/dev/null || true
-      }
-      echo "local-home-pi.9s.pics → $LOCAL_IP"
-    '';
-  };
-
-  systemd.timers.local-home-pi-ddns = {
-    description = "Update local-home-pi DNS record every 5 minutes";
-    wantedBy = ["timers.target"];
-    timerConfig = {
-      OnCalendar = "*:0/5";
-      Persistent = true;
-    };
-  };
 }

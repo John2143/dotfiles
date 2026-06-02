@@ -1,56 +1,14 @@
 # Hetzner Enterprise HA Platform
 
 3-node + Home Pi Kubernetes platform on Hetzner Cloud.
-
-**Stack**: NixOS / k3s / Flannel / ArgoCD / PowerDNS / ExternalDNS (RFC2136) / SeaweedFS / B2 / Longhorn / MongoDB / CloudNativePG (PostgreSQL) / Temporal
+**Stack**: NixOS / k3s / Flannel / ArgoCD / deSEC DNS / SeaweedFS / B2 / Longhorn / MongoDB / CloudNativePG (PostgreSQL) / Temporal
 
 **Modes**: LA (3 server nodes, ~$75/mo) or HA (6 nodes, ~$140/mo).
 
 ## Architecture
 
-### DNS Flow (deSEC → PowerDNS via Floating IPs)
 
-```
-Internet Resolver
-  │
-  ├─ deSEC (authoritative for NS): "9s.pics NS ns1.9s.pics, ns2.9s.pics, ns3.9s.pics"
-  │         glue A: ns1 → <floating-ashburn>, ns2 → <floating-hillsboro>, ns3 → <floating-nuremberg>
-  │
-  ├─ Queries floating IP:53 → PowerDNS on k3s-*
-  │   PowerDNS authoritative for 9s.pics, updated by ExternalDNS via RFC2136
-  │
-  └─ Service DNS (ts.9s.pics, *.9s.pics) resolves to floating IPs
-```
 
-Why NS delegation (not deSEC ExternalDNS webhook):
-- Existing RFC2136 → PowerDNS is working and fast (no API rate limits)
-- One-time NS+glue setup on deSEC; all dynamic records handled by PowerDNS locally
-- deSEC API rate limits would impact frequent Ingress DNS updates
-
-### Node Topology
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│  Tailnet (ts.9s.pics) — Headscale on home-pi               │
-│                                                             │
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐      │
-│  │ k3s-ashburn  │  │k3s-hillsboro │  │k3s-nuremberg │      │
-│  │ control-plane│  │ control-plane│  │ control-plane│      │
-│  │ pdns (ns1)   │  │ pdns (ns2)   │  │ pdns (ns3)   │      │
-│  └──────────────┘  └──────────────┘  └──────────────┘      │
-│          │                 │                 │              │
-│          └─────────┬───────┴─────────────────┘              │
-│                    │                                        │
-│           ┌────────┴────────┐                               │
-│           │    home-pi      │                               │
-│           │ Headscale :6767 │                               │
-│           │ pdns (tiebreak) │                               │
-│           │ deSEC DDNS timer│                               │
-│           └─────────────────┘                               │
-└─────────────────────────────────────────────────────────────┘
-```
-
-All 3 server nodes are fully interchangeable (identical mkServer config). Each runs k3s + PowerDNS with independent CNPG PostgreSQL. Nodes communicate over the tailnet (Headscale at home-pi).
 
 ### Per-Node IP Topology (Split-IP Firewall)
 
@@ -61,10 +19,9 @@ Primary IP (Hetzner DHCP) — locked down
   └─ All other ports DROP
 
 Floating IP (Hetzner Cloud, movable between nodes)
-  ├─ DNS (53 tcp+udp)          ← deSEC NS glue points here
+
   ├─ HTTP/HTTPS (80, 443)
   ├─ k3s API (6443)
-  ├─ CNPG NodePort (30432)
   ├─ Game servers (3478, 9987, 30033, 8080)
   └─ All other ports DROP
 ```
@@ -84,17 +41,14 @@ nixos/hetzner/
 │   ├── hetzner-disko.nix           # Disk layout (EF02 + EFI + ext4)
 │   ├── hetzner-ssh.nix             # SSH + agenix identity
 │   ├── hetzner-k3s-common.nix      # k3s + Flannel + ArgoCD + CNPG + cert-manager + firewall
-│   ├── hetzner-k3s-server.nix      # Adds PowerDNS + PostgreSQL schema import
+│   ├── hetzner-k3s-server.nix      # k3s + ArgoCD + SSH + floating IP health
 │   ├── hetzner-k3s-agent.nix       # Agent node (k3s agent only)
-│   ├── hetzner-powerdns.nix        # PowerDNS authoritative server (gpgsql backend)
-│   ├── hetzner-powerdns-bootstrap.nix  # Zone creation + TSIG key + ns A records (oneshots)
-│   ├── hetzner-postgres-schema.nix # Import pdns schema into CNPG PostgreSQL
 │   ├── hetzner-split-ip-firewall.nix   # Per-IP iptables (primary locked, floating open)
 │   ├── headscale.nix               # Headscale coordination server
 │   ├── tailscale.nix               # Tailscale client (parameterized login-server)
 │   └── longhorn-host.nix           # Longhorn storage prerequisites
 ├── hosts/
-│   ├── home-pi.nix                 # Home Pi (Headscale + pdns + deSEC DDNS)
+│   ├── home-pi.nix                 # Home Pi (Headscale + deSEC DDNS)
 │   └── home-pi-hardware-configuration.nix
 ├── secrets/
 │   ├── secrets.nix                 # agenix public key mapping
@@ -113,7 +67,7 @@ nixos/hetzner/
 # Decrypt Hetzner token
 export HCLOUD_TOKEN=$(cd nixos/hetzner/secrets && agenix -d hetzner/hcloud-token.age -i ~/.ssh/age)
 
-# Provision in order (ashburn first — home-pi DNS depends on it)
+# Provision (any order — DNS is handled by deSEC, not home-pi PowerDNS)
 cd nixos/hetzner/scripts
 ./provision.sh ashburn server    # ~10-15 min
 ./provision.sh hillsboro server  # ~5 min (cache hits from ashburn)
@@ -148,8 +102,6 @@ echo -n "YOUR_DESEC_TOKEN" | agenix -e hetzner/desec-token.age -i ~/.ssh/age
 
 # Generated secrets
 echo -n "$(head -c 32 /dev/urandom | base64)" | agenix -e hetzner/k3s-token.age -i ~/.ssh/age
-echo -n "$(head -c 24 /dev/urandom | base64)" | agenix -e hetzner/postgres-pdns-password.age -i ~/.ssh/age
-echo -n "$(head -c 32 /dev/urandom | base64)" | agenix -e hetzner/powerdns-tsig-key.age -i ~/.ssh/age
 ```
 
 ### Headscale preauth key (generate once on home-pi)
@@ -183,11 +135,11 @@ cd nixos/hetzner/scripts
 ### DNS Bootstrap Flow
 
 During provisioning, each node:
-1. **ashburn**: Sets NS records (`ns1/ns2/ns3.9s.pics`) + glue A for `ns1` → floating IP. Truncates the floating IPs config file.
-2. **hillsboro**: Appends NS + glue A for `ns2` → floating IP. Appends to config.
-3. **nuremberg**: Appends NS + glue A for `ns3` → floating IP. Appends to config.
+1. **ashburn**: Sets NS records (`ns1/ns2/ns3.9s.pics`) + glue A for `ns1` → floating IP.
+2. **hillsboro**: Appends NS + glue A for `ns2` → floating IP.
+3. **nuremberg**: Appends NS + glue A for `ns3` → floating IP.
 
-After all 3 provisioned, `update-all-nodes` reads `desec-dns-floating-ips.conf` and sets node A records (`k3s-ashburn.9s.pics` etc.) pointing to floating IPs.
+
 
 ## Split-IP Firewall
 
@@ -209,16 +161,11 @@ Single-IP fallback: if only one IP detected (e.g., before floating IP attaches),
 
 ## CloudNativePG setup
 
-PostgreSQL runs inside k3s via CloudNativePG (installed automatically by `argocd-bootstrap`). On first boot, the CNPG Cluster CR creates a PostgreSQL instance with `pdns` database and user via `bootstrap.initdb`.
-
-**Important**: CNPG 1.25 generates a random password. The `hetzner-postgres-schema` oneshot waits for PostgreSQL then imports the schema and resets the pdns password to match the agenix secret.
+PostgreSQL runs inside k3s via CloudNativePG (installed automatically by `argocd-bootstrap`). The CNPG Cluster CR creates a PostgreSQL instance with the `temporal` database and user.
 
 ```bash
 # Verify PostgreSQL
-ssh root@<IP> "pg_isready -h 127.0.0.1 -p 30432 -U pdns -d pdns"
-# Verify PowerDNS
-ssh root@<IP> "systemctl status pdns"
-```
+ssh root@<IP> "pg_isready -h 127.0.0.1 -p 5432 -U temporal -d temporal"
 
 ## Nix Binary Cache (Attic on home-pi)
 
@@ -244,20 +191,6 @@ k3s-ashburn (first build)    k3s-hillsboro, k3s-nuremberg
 
 ## Known Issues
 
-### CNPG 1.25 — `bootstrap.initdb` not `spec.managed`
-`spec.managed` was introduced in CNPG 1.26+. The pdns user password must be reset after cluster creation via `hetzner-postgres-schema`.
-
-### `pdnsutil` needs `--config-dir=/run/pdns`
-Runtime config with decrypted secrets lives at `/run/pdns/pdns.conf`. Always use `pdnsutil --config-dir=/run/pdns`.
-
-### `postgres-pdns-password` must be owned by `pdns`
-If pdns fails to start: `chown pdns:pdns /run/agenix/hetzner/postgres-pdns-password`
-
-### ExternalDNS TSIG secret key naming
-The Helm chart (v1.21.1+) expects the RFC2136 credentials secret to have key `tsig-key`, not `rfc2136TsigSecret`. The `k8s-secrets-bootstrap` oneshot uses `tsig-key`. All ArgoCD manifests in 2143-59s reference `tsig-key`.
-
-### ExternalDNS Helm + TSIG args
-ExternalDNS Helm chart v1.21.1+ does not pass `--rfc2136-*` args to the deployment container. The `argocd-bootstrap` script patches the deployment post-install with the correct args. Do not remove the `kubectl patch` block after the `helm upgrade` for external-dns.
 
 ### ArgoCD ConfigMap (argocd-cm)
 The ArgoCD ConfigMap with health checks is applied inline in the bootstrap script (not from a repo file). The health check Lua script uses a permissive default ("Healthy") to avoid stalling wave progression on resources that can't report health (e.g., cert-manager Certificates pending DNS01). Only "Degraded" blocks sync.
@@ -281,11 +214,6 @@ Traefik chart v35+ has template errors with `hostPort` and `hostNetwork`. The bo
 - Must restart `tailscaled` before `tailscale up` on fresh deploys.
 - Never `tailscale logout; tailscale up` — creates duplicate identities. Use `systemctl restart tailscaled-autoconnect`.
 - Tailscale DNS names must be consistent across reboots.
-
-### PowerDNS
-- pdns 5.0.x renamed many commands: `create-zone` → `zone create`, `set-soa` → `rrset replace`, `generate-tsig-key` → `tsigkey generate`, `set-meta` → `metadata set`.
-- PostgreSQL schema imported automatically by `hetzner-postgres-schema` oneshot.
-- `pdns` user and database created declaratively by CloudNativePG Cluster CR.
 
 ### k3s
 - `--node-external-ip` can't be determined at build time. Removed from extraFlags — k3s auto-detects.
@@ -386,7 +314,7 @@ and overwrite runtime-injected values.
 - The `k8s-secrets-bootstrap` script owns creation and refresh of these secrets
 
 **Previous instance of same bug**: `base/cloudnativepg/cluster.yaml` had placeholder
-`pdns-postgres-password` and `temporal-postgres-password` secrets (fixed prior to this sweep).
+`temporal-postgres-password` secret (fixed prior to this sweep).
 
 ### MongoDB Community Edition Restrictions
 

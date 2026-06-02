@@ -5,8 +5,6 @@ let
   aman = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAILO6ntnqr4ERZLUdL2MOMeC++HPIsigce4d42h8UogA2 john@security";
   allKeys = [office arch aman];
 in {
-  "hetzner/powerdns-tsig-key.age".publicKeys = allKeys;
-  "hetzner/postgres-pdns-password.age".publicKeys = allKeys;
   "hetzner/k3s-token.age".publicKeys = allKeys;
   "hetzner/hcloud-token.age".publicKeys = allKeys;
   "hetzner/luks-passphrase.age".publicKeys = allKeys;

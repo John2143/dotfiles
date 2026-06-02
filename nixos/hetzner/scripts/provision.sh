@@ -4,15 +4,11 @@
 # End-to-end provisioning for a single Hetzner k3s node. Automates:
 #   1. VM creation (cpx31, ubuntu-24.04 base)
 #   2. Floating IP allocation + assignment (for IP masking / DDoS protection)
-#   3. deSEC DNS bootstrap (NS delegation + glue A records for PowerDNS)
-#   4. nixos-anywhere deploy (kexec → disko format → NixOS install)
-#   5. Post-deploy: age key copy, agenix decrypt, headscale cleanup
-#   6. deSEC node A record (k3s-<region>.9s.pics → floating IP)
-#   7. Tailscale connect (via Headscale preauth key)
-#   8. Service verification (k3s, pdns, tailscaled)
+#   3. nixos-anywhere deploy (kexec → disko format → NixOS install)
+#   4. Post-deploy: age key copy, agenix decrypt, headscale cleanup
+#   5. Tailscale connect (via Headscale preauth key)
+#   6. Service verification (k3s, tailscaled)
 #
-# Provisioning order matters:
-#   ashburn FIRST  → home-pi PowerDNS depends on ashburn PostgreSQL
 #   hillsboro NEXT → pulls cache from ashburn (when Attic cache is set up)
 #   nuremberg LAST → same cache benefits
 #
@@ -44,12 +40,12 @@ case "$REGION" in
   *) echo "Unknown region: $REGION"; exit 1 ;;
 esac
 
-# ── Region + Role → Plan mapping ──
-PLAN=""
-case "${REGION}-${ROLE}" in
-  ashburn-server|hillsboro-server|nuremberg-server) PLAN="cpx31" ;;
-  ashburn-agent|hillsboro-agent|nuremberg-agent)   PLAN="cpx31" ;;
-  *) echo "Unknown region/role: ${REGION}-${ROLE}"; exit 1 ;;
+# Region → Plan mapping
+# ash is out of cpx31 capacity; use cpx21 (3-core/4GB/80GB) as fallback
+case "$LOCATION" in
+  ash) PLAN="cpx21"  ;;
+  hil) PLAN="cpx31"  ;;
+  *)   PLAN="cpx31"  ;;
 esac
 
 FLAKE=".#${HOSTNAME}"
@@ -87,20 +83,13 @@ RAW_IP_ID=$(hcloud floating-ip create \
 hcloud floating-ip assign "${RAW_IP_ID}" "${SERVER_ID}"
 RAW_IP=$(hcloud floating-ip describe "${RAW_IP_ID}" -o json 2>/dev/null | jq -r '.floating_ip.ip // .ip // "unknown"')
 echo "  Raw IP: ${RAW_IP}"
-# ── deSEC DNS bootstrap: NS + glue A records ──
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-echo "  deSEC DNS bootstrap..."
-"${SCRIPT_DIR}/desec-dns.sh" bootstrap-dns "${REGION}" "${RAW_IP}" 2>/dev/null || {
-  echo "    WARNING: deSEC DNS bootstrap failed — continuing (DNS may need manual setup)"
-}
-echo "    NS + glue records set on deSEC"
+
 
 # ── Step 3: Deploy NixOS via nixos-anywhere ──
 echo "  [3/7] Deploying NixOS..."
-nix run github:nix-community/nixos-anywhere -- \
+nix run --builders '' github:nix-community/nixos-anywhere -- \
   --flake "${FLAKE}" \
-  --target-host "root@${IP}" \
-  --build-on remote
+  --target-host "root@${IP}"
 
 # ── Step 4: Wait for NixOS to boot ──
 echo "  [4/7] Waiting for NixOS boot..."
@@ -135,17 +124,10 @@ for n in data:
         subprocess.run(['ssh', 'john@192.168.0.154', 'sudo', 'headscale', 'nodes', 'delete', '--identifier', str(n['id']), '--force'])
 " 2>/dev/null || true
 echo "    stale headscale nodes cleaned"
-# ── deSEC node A record (k3s-<region>.9s.pics → floating IP) ──
-echo "  deSEC node A record..."
-"$(cd "$(dirname "$0")" && pwd)/desec-dns.sh" set-a "k3s-${REGION}" "${RAW_IP}" 2>/dev/null || {
-  echo "    WARNING: node A record failed — continuing"
-}
-echo "    k3s-${REGION}.9s.pics → ${RAW_IP}"
-      # Copy floating IP config to node for ns-records (no local state, discoverable via hcloud API)
-      echo "${HOSTNAME}=${RAW_IP}" > /tmp/hetzner-floating-ip-${REGION}
-      scp /tmp/hetzner-floating-ip-${REGION} "root@${IP}:/etc/hetzner-floating-ip"
-      rm -f /tmp/hetzner-floating-ip-${REGION}
-      echo "    floating IP config copied to /etc/hetzner-floating-ip"
+
+# Label the floating IP for the health checker to discover it
+hcloud floating-ip add-label "${RAW_IP_ID}" "region=${REGION}" 2>/dev/null || echo "    WARNING: floating IP labeling failed"
+echo "    Floating IP labeled region=${REGION}"
 
 # ── Step 6: Connect tailscale ──
 echo "  [6/7] Connecting tailscale..."
@@ -157,13 +139,13 @@ else
   echo "    WARNING: no preauth key found, tailscale not connected"
 fi
 
-# ── Step 7: Restart services and verify ──
+# ── Step 7: Verify services ──
 echo "  [7/7] Restarting services..."
 if [[ "$ROLE" == "server" ]]; then
-  ssh "root@${IP}" "systemctl restart pdns 2>/dev/null || true"
-  sleep 3
+  ssh "root@${IP}" "systemctl restart k3s 2>/dev/null || true"
+  echo "  k3s instance ready"
   echo "  --- Service Status ---"
-  ssh "root@${IP}" "echo 'k3s:' \$(systemctl is-active k3s); echo 'pdns:' \$(systemctl is-active pdns); echo 'tailscaled:' \$(systemctl is-active tailscaled)"
+  ssh "root@${IP}" "echo 'k3s:' \$(systemctl is-active k3s); echo 'tailscaled:' \$(systemctl is-active tailscaled)"
   ssh "root@${IP}" "kubectl get nodes 2>/dev/null" || echo "    (k3s not ready yet)"
   # Remove stale Cilium taint if present
   ssh "root@${IP}" "kubectl taint node --all node.cilium.io/agent-not-ready:NoSchedule- 2>/dev/null || true"

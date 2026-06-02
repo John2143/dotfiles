@@ -27,7 +27,7 @@ let
   allKeys = [office arch mac];
 in {
   # Readable only by the office machine (k3s agent token).
-  "k3s-local-token.age".publicKeys = [office arch pite nas];
+  "k3s-local-token.age".publicKeys = [office arch pite nas closet];
   # ArgoCD admin password — initial admin secret from the K3s cluster.
   # Retrieve with: ssh closet kubectl get secret -n argocd argocd-initial-admin-secret -o jsonpath='{.data.password}' | base64 -d
   "argo-admin-password.age".publicKeys = [office arch closet];
@@ -162,4 +162,5 @@ in {
   #   NAS_ONBATTERY_URL=http://192.168.5.XX:8123/api/webhook/ups_nas_lost_power
   #   NAS_OFFBATTERY_URL=http://192.168.5.XX:8123/api/webhook/ups_nas_power_returned
   "hass-webhooks.age".publicKeys = [closet nas office arch];
+  "reolink-nvr.age".publicKeys = [office arch];
 }

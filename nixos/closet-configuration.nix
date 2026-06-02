@@ -55,6 +55,8 @@
 
   networking.hostName = compName; # Define your hostname.
   networking.networkmanager.enable = true; # Easiest to use and most distros use this by default.
+  # No hardware-specific network config in NixOS — NM profiles managed via nmcli
+  # DHCPv4 (.36) and DHCPv6 (fd00:1::36) are assigned by MikroTik router
 
   time.timeZone = "America/New_York";
   i18n.defaultLocale = "en_US.UTF-8";
@@ -115,11 +117,22 @@
     enable = true;
     role = "server";
     extraFlags = lib.concatStringsSep " " [
+      # mDNS hostnames for k3s TLS cert — needed for server-to-server join
+      "--tls-san=closet.local"
+      "--tls-san=arch.local"
+      "--tls-san=nas.local"
+      # Primary via 10G NIC (enp8s0f1)
+      "--tls-san=192.168.5.36"
+      # Backup via old 1GbE NIC (enp6s0)
+      "--tls-san=192.168.5.35"
+      "--tls-san=192.168.5.10"
       # Dual-stack pod and service networks (IPv4 + IPv6)
+      # Join existing cluster via VIP (kube-vip LB on .10)
+      "--server=https://192.168.5.10:6443"
       "--cluster-cidr=10.42.0.0/16,fd42:42:42::/56"
       "--service-cidr=10.43.0.0/16,fd42:42:43::/112"
       # Dual-stack nodes must use explicit IPv4+IPv6 addresses
-      "--node-ip=192.168.5.35,2600:4040:2602:f801::35"
+      "--node-ip=192.168.5.36,fd00:1::36"
       # Required for IPv6 pod egress when using flannel
       "--flannel-ipv6-masq"
       # Keep standard per-node subnet sizing across families
@@ -141,6 +154,10 @@
       '';
     };
   };
+  # Tailscale subnet route — advertises LAN to tailnet so tailscale
+  # clients can reach the kube-vip VIP (192.168.5.10) for k8s services.
+  # Approved in headscale admin UI.
+  services.tailscale.extraUpFlags = [ "--advertise-routes=192.168.5.0/24" ];
 
   services.postgresql = {
     enable = true;
@@ -165,8 +182,11 @@
 
   # Firewall enabled via shared-cli-configuration.nix.
   networking.firewall.allowedTCPPorts = [
-    6443 # k3s API server (k3s)
-    10250 # kubelet (k3s agent)
+    6443 # k3s API server
+    10250 # kubelet
+    2379 # etcd client (k3s join)
+    2380 # etcd peer (k3s join)
+    5432 # Postgres
   ];
   networking.firewall.allowedUDPPorts = [
     8472 # flannel VXLAN (k3s)

@@ -2,7 +2,7 @@
 #
 # Fully self-contained. Imported by all 3 agent flake configs identically.
 # Reads compName from specialArgs to set hostname and derive k3s serverAddr.
-# Imports: Longhorn, Tailscale, SSH. No PowerDNS, no Galera.
+# Imports: Longhorn, Tailscale, SSH.
 {
   config,
   lib,

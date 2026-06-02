@@ -50,14 +50,16 @@ fn run_hyprctl(args: &[&str]) -> ScreenResponse {
     let instance = match find_hyprland_instance() {
         Some(sig) => sig,
         None => {
+            let msg = "no hyprland instance found";
+            eprintln!("hyprctl: {msg}");
             return ScreenResponse {
                 success: false,
-                message: "no hyprland instance found".into(),
+                message: msg.into(),
             };
         }
     };
 
-    eprintln!("using HYPRLAND_INSTANCE_SIGNATURE={instance}");
+    eprintln!("hyprctl: HYPRLAND_INSTANCE_SIGNATURE={instance}");
 
     match Command::new("hyprctl")
         .args(args)
@@ -65,24 +67,34 @@ fn run_hyprctl(args: &[&str]) -> ScreenResponse {
         .env("HYPRLAND_INSTANCE_SIGNATURE", &instance)
         .output()
     {
-        Ok(output) if output.status.success() => ScreenResponse {
-            success: true,
-            message: String::from_utf8_lossy(&output.stdout).trim().to_string(),
-        },
+        Ok(output) if output.status.success() => {
+            let msg = String::from_utf8_lossy(&output.stdout).trim().to_string();
+            eprintln!("hyprctl: success: {msg}");
+            ScreenResponse {
+                success: true,
+                message: msg,
+            }
+        }
         Ok(output) => {
             let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
             let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+            let msg = if stderr.is_empty() { stdout } else { stderr };
+            eprintln!("hyprctl: error (code {:?}): {msg}", output.status.code());
             ScreenResponse {
                 success: false,
-                message: if stderr.is_empty() { stdout } else { stderr },
+                message: msg,
             }
         }
-        Err(e) => ScreenResponse {
-            success: false,
-            message: format!("failed to run hyprctl: {e}"),
-        },
+        Err(e) => {
+            eprintln!("hyprctl: failed to launch: {e}");
+            ScreenResponse {
+                success: false,
+                message: format!("failed to run hyprctl: {e}"),
+            }
+        }
     }
 }
+
 
 async fn screen_off() -> Json<ScreenResponse> {
     eprintln!("POST /screen/off");

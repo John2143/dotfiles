@@ -155,6 +155,7 @@ in
     ./arch-hardware-configuration.nix
     ./modules/user-john.nix
     ./modules/vllm.nix
+    #./modules/frigate.nix
     ./modules/teamspeak.nix
     # inputs.home-manager.nixosModules.default
   ];
@@ -260,6 +261,7 @@ in
     hass-macro
     hass-thermostat-status
     inputs.hyprcap.packages.x86_64-linux.default
+    pkgs.voxtype
   ];
 
   # openrgb flakes occasionally — keep the unit out of "failed" state so it
@@ -268,14 +270,36 @@ in
 
 
   custom.k3sNodeTaints = ["seated=true:NoSchedule"];
+
+  # k3s server — join existing cluster via mDNS (bootstrap without tailscale dependency).
+  # Dual-stack cluster CIDRs mirror closet's init node config.
+  services.k3s.extraFlags = lib.concatStringsSep " " [
+    "--server=https://192.168.5.10:6443"
+    "--tls-san=arch.local"
+    "--tls-san=closet.local"
+    "--tls-san=192.168.5.226"
+    "--tls-san=192.168.5.10"
+    "--cluster-cidr=10.42.0.0/16,fd42:42:42::/56"
+    "--service-cidr=10.43.0.0/16,fd42:42:43::/112"
+    "--flannel-ipv6-masq"
+    "--node-ip=192.168.5.226,fd00:1::226"
+  ];
   custom.backup.enable = true;
+
+  # Building screen-control directly instead of nix run (which was slow and
+  # didn't reliably pass the systemd `path` environment through to the binary).
+  nixpkgs.overlays = [
+    (final: prev: {
+      screen-control = inputs.screen-control.defaultPackage.${prev.system};
+    })
+  ];
 
   systemd.services.screen-control = {
     description = "REST screen control server";
     after = ["network.target"];
     wantedBy = ["multi-user.target"];
     serviceConfig = {
-      ExecStart = "${pkgs.nix}/bin/nix run /home/john/dotfiles/screen-control";
+      ExecStart = "${pkgs.screen-control}/bin/screen-control";
       Restart = "always";
       RestartSec = 5;
       User = "john";
@@ -283,6 +307,7 @@ in
     };
     path = [pkgs.hyprland];
   };
+
 
   networking.firewall.allowedTCPPorts = [
     50051 # screen-control REST API (arch-configuration.nix:290, screen-control/src/main.rs:129)

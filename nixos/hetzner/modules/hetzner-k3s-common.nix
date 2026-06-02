@@ -1,9 +1,6 @@
 # Hetzner k3s Common — shared k3s + Flannel + ArgoCD + firewall config
 #
-# Imported by hetzner-k3s-server.nix (adds PowerDNS + PostgreSQL schema on top).
 # All 3 server nodes are identical — drop-in replaceable.
-#
-# Does NOT import PowerDNS or PostgreSQL schema modules (those are in k3s-server).
 {
   config,
   lib,
@@ -69,12 +66,8 @@
       # Install CRDs first (--server-side avoids annotation size limits)
       kubectl apply --server-side --force-conflicts \
         -k https://github.com/argoproj/argo-cd/manifests/crds?ref=stable
-      # Install cert-manager CRDs (needed before ArgoCD syncs wave 0)
-      kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.17.1/cert-manager.crds.yaml 2>&1 || true
       # Install istio CRDs (needed before ArgoCD syncs wave 3)
       kubectl apply -f https://raw.githubusercontent.com/istio/istio/1.27.0/manifests/charts/base/files/crd-all.gen.yaml 2>&1 || true
-      # Install k8gb CRDs (needed before ArgoCD syncs wave 2)
-      kubectl apply -f https://raw.githubusercontent.com/k8gb-io/k8gb/v0.14.0/chart/k8gb/crd/k8gb.absa.oss_gslbs.yaml 2>&1 || true
       kubectl create namespace argocd --dry-run=client -o yaml | kubectl apply -f -
       kubectl apply --server-side --force-conflicts -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
       # Create redis secret with non-empty password (empty password breaks redis config parsing)
@@ -116,46 +109,168 @@ CMEOF
       kubectl wait --for=condition=available deployment/argocd-server -n argocd --timeout=60s || true
       # Apply root Application — wires ArgoCD to the GitOps repo
       kubectl apply -f https://raw.githubusercontent.com/2143-Labs/2143-59s/master/argocd/root-app.yaml
-      # Install Traefik (Helm) — ingress controller, chart v34 (v35+ has template errors)
-      helm repo add traefik https://helm.traefik.io/traefik 2>/dev/null || true
-      helm repo update 2>/dev/null || true
-      helm upgrade --install traefik traefik/traefik --namespace traefik --create-namespace \
-        --version 34.0.0 \
-        --set providers.kubernetesIngress.enabled=true \
-        --set service.type=ClusterIP \
-        --wait --timeout 120s 2>&1 || true
+      # Install Traefik — ingress controller with hostNetwork + ACME
+      # hostNetwork is required because hostPort doesn't work through Flannel CNI.
+      # Direct kubectl deploy (not Helm) — HelmChart controller is unreliable.
+      kubectl create namespace traefik --dry-run=client -o yaml | kubectl apply -f -
+      kubectl apply -f - <<'TRAEFIKEOF'
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: traefik-ingress-controller
+rules:
+- apiGroups: [""]
+  resources: [services, endpoints, secrets, nodes]
+  verbs: [get, list, watch]
+- apiGroups: ["extensions", "networking.k8s.io"]
+  resources: [ingresses, ingresses/status, ingressclasses]
+  verbs: [get, list, watch]
+- apiGroups: ["discovery.k8s.io"]
+  resources: [endpointslices]
+  verbs: [get, list, watch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: traefik-ingress-controller
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: traefik-ingress-controller
+subjects:
+- kind: ServiceAccount
+  name: default
+  namespace: traefik
+---
+apiVersion: networking.k8s.io/v1
+kind: IngressClass
+metadata:
+  name: traefik
+spec:
+  controller: traefik.io/ingress-controller
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: traefik
+  namespace: traefik
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: traefik
+  template:
+    metadata:
+      labels:
+        app: traefik
+    spec:
+      hostNetwork: true
+      containers:
+      - name: traefik
+        image: docker.io/traefik:v3.3.1
+        args:
+        - --entrypoints.web.address=:80
+        - --entrypoints.websecure.address=:443
+        - --providers.kubernetesingress
+        - --log.level=INFO
+        ports:
+        - containerPort: 80
+          name: web
+        - containerPort: 443
+          name: websecure
+        volumeMounts:
+        - name: data
+          mountPath: /data
+        - name: tmp
+          mountPath: /tmp
+      volumes:
+      - name: data
+        emptyDir: {}
+      - name: tmp
+        emptyDir: {}
+TRAEFIKEOF
+      kubectl -n traefik wait --for=condition=available deployment/traefik --timeout=120s 2>&1 || true
       # Install Longhorn (Helm) — distributed block storage
-      helm repo add longhorn https://charts.longhorn.io 2>/dev/null || true
-      helm repo update 2>/dev/null || true
-      helm upgrade --install longhorn longhorn/longhorn --namespace longhorn-system --create-namespace \
+      KUBECONFIG=/etc/rancher/k3s/k3s.yaml helm repo add longhorn https://charts.longhorn.io 2>/dev/null || true
+      KUBECONFIG=/etc/rancher/k3s/k3s.yaml helm repo update 2>/dev/null || true
+      KUBECONFIG=/etc/rancher/k3s/k3s.yaml helm upgrade --install longhorn longhorn/longhorn --namespace longhorn-system --create-namespace \
         --set persistence.defaultClass=true \
         --set defaultSettings.createDefaultDiskLabeledNodes=true \
         --set defaultSettings.defaultDataPath=/var/lib/longhorn \
         --wait --timeout 120s 2>&1 || true
-      # Install ExternalDNS (Helm) — DNS record sync via RFC2136
-      helm repo add external-dns https://kubernetes-sigs.github.io/external-dns/ 2>/dev/null || true
-      helm repo update 2>/dev/null || true
-      kubectl create namespace external-dns --dry-run=client -o yaml | kubectl apply -f -
-      helm upgrade --install external-dns external-dns/external-dns --namespace external-dns \
-        --set provider=rfc2136 \
-        --wait --timeout 120s 2>&1 || true
-      # Patch deployment with RFC2136 args — Helm chart may not pass them correctly
-      # (chart v1.21.1+ changed rfc2136 value keys; this ensures args are always set)
-      kubectl patch deploy external-dns -n external-dns --type=json -p "[
-        {\"op\":\"add\",\"path\":\"/spec/template/spec/containers/0/args/-\",\"value\":\"--rfc2136-host=$(hostname).9s.pics\"},
-        {\"op\":\"add\",\"path\":\"/spec/template/spec/containers/0/args/-\",\"value\":\"--rfc2136-port=53\"},
-        {\"op\":\"add\",\"path\":\"/spec/template/spec/containers/0/args/-\",\"value\":\"--rfc2136-zone=9s.pics\"},
-        {\"op\":\"add\",\"path\":\"/spec/template/spec/containers/0/args/-\",\"value\":\"--rfc2136-tsig-keyname=externaldns\"},
-        {\"op\":\"add\",\"path\":\"/spec/template/spec/containers/0/args/-\",\"value\":\"--rfc2136-tsig-secret-alg=hmac-sha256\"}
-      ]" 2>&1 || true
       kubectl apply --server-side --force-conflicts -f https://raw.githubusercontent.com/cloudnative-pg/cloudnative-pg/release-1.25/releases/cnpg-1.25.1.yaml
       kubectl wait --for=condition=available deployment/cnpg-controller-manager -n cnpg-system --timeout=120s || true
-      # Install cert-manager (Helm) — TLS certificate automation
-      helm repo add jetstack https://charts.jetstack.io 2>/dev/null || true
-      helm repo update 2>/dev/null || true
-      helm upgrade --install cert-manager jetstack/cert-manager --namespace cert-manager --create-namespace \
+      # Install cert-manager (Helm) — TLS certificate automation via HTTP01
+      KUBECONFIG=/etc/rancher/k3s/k3s.yaml helm repo add jetstack https://charts.jetstack.io 2>/dev/null || true
+      KUBECONFIG=/etc/rancher/k3s/k3s.yaml helm repo update 2>/dev/null || true
+      KUBECONFIG=/etc/rancher/k3s/k3s.yaml helm upgrade --install cert-manager jetstack/cert-manager --namespace cert-manager --create-namespace \
         --set crds.enabled=false \
         --wait --timeout 120s 2>&1 || true
+      # Patch only the controller with hostNetwork (cainjector + webhook use default pod networking)
+      kubectl patch deployment -n cert-manager cert-manager -p '{"spec":{"template":{"spec":{"hostNetwork":true}}}}' 2>/dev/null || true
+      # Install cert-manager CRDs separately (Helm set crds.enabled=false)
+      # cert-manager 1.16 uses the old `class` field, not `ingressClassName`
+      kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.16.2/cert-manager.crds.yaml 2>&1 || true
+      # Install k8gb Helm chart for its coredns + CRD (skip the operator — not needed)
+      # Static authoritative DNS via coredns hosts plugin: all 3 FIPs in round-robin.
+      # Firewall opens DNS (53/UDP+TCP) on the floating IP only (see split-ip-firewall).
+      KUBECONFIG=/etc/rancher/k3s/k3s.yaml helm repo add k8gb https://www.k8gb.io 2>/dev/null || true
+      KUBECONFIG=/etc/rancher/k3s/k3s.yaml helm repo update 2>/dev/null || true
+      KUBECONFIG=/etc/rancher/k3s/k3s.yaml helm upgrade --install k8gb k8gb/k8gb \
+        --namespace k8gb --create-namespace \
+        --set k8gb.deployCrds=false \
+        --set coredns.isClusterService=false \
+        --set coredns.serviceType=ClusterIP \
+        --set coredns.deployment.skipConfig=true \
+        --set "coredns.securityContext.capabilities.add[0]=NET_BIND_SERVICE" \
+        --set coredns.servers[0].port=53 \
+        --set coredns.servers[0].servicePort=53 \
+        --wait --timeout 120s 2>&1 || true
+      # Delete the operator (not needed for static DNS). Keep coredns + CRDs.
+      kubectl delete deploy -n k8gb k8gb 2>/dev/null || true
+      # Patch coredns for hostNetwork (binds directly to FIP:53)
+      kubectl patch deployment -n k8gb k8gb-coredns -p '{"spec":{"template":{"spec":{"hostNetwork":true,"dnsPolicy":"ClusterFirstWithHostNet","securityContext":{"runAsUser":0}}}}}' 2>/dev/null || true
+      # Corefile only — zone data is generated dynamically by coredns-zone-generator timer.
+      kubectl apply -f - <<'CMEOF' 2>/dev/null || true
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: k8gb-coredns
+  namespace: k8gb
+data:
+  Corefile: |
+    (global) {
+        errors
+        health
+        reload 30s 15s
+        ready
+        prometheus 0.0.0.0:9153
+        forward . /etc/resolv.conf
+    }
+
+    9s.pics {
+        file /etc/coredns/zone/zone.db
+        loadbalance round_robin
+        import global
+    }
+CMEOF
+      # Initial empty zone.db — coredns-zone-generator replaces it within 60s.
+      kubectl apply -f - <<'CMEOF' 2>/dev/null || true
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: coredns-zone
+  namespace: k8gb
+data:
+  zone.db: |
+    $ORIGIN 9s.pics.
+    @ 3600 IN SOA ns1.9s.pics. hostmaster.9s.pics. 0 7200 1800 86400 3600
+CMEOF
+      # Mount the zone ConfigMap into coredns
+      kubectl patch deployment -n k8gb k8gb-coredns \
+        --type strategic \
+        -p '{"spec":{"template":{"spec":{"volumes":[{"name":"coredns-zone","configMap":{"name":"coredns-zone","defaultMode":420}}],"containers":[{"name":"coredns","volumeMounts":[{"name":"coredns-zone","mountPath":"/etc/coredns/zone"}]}]}}}}' \
+        2>/dev/null || true
     '';
   };
 
@@ -164,9 +279,9 @@ CMEOF
   # ── agenix → Kubernetes Secrets injection ──
   # Decrypts agenix secrets and creates Kubernetes Secrets before ArgoCD syncs.
   # Runs after k3s is ready, before ArgoCD applies the root app.
-  # Secrets created: rfc2136-credentials, crowdsec-bouncer-key, mongo-creds,
+  # Secrets created: crowdsec-bouncer-key, mongo-creds,
   #   b2-credentials, seaweedfs-master-key, rclone-config, healthchecks-url,
-  #   pdns-postgres-password, temporal-postgres-password
+  #   temporal-postgres-password
   # NOTE: mongo-encryption-key removed — mongo:7 Community Edition doesn't support
   #   encryption-at-rest (--enableEncryption is Enterprise-only) 
   # NOTE: These secrets MUST NOT exist as placeholders in the GitOps repo.
@@ -189,14 +304,10 @@ CMEOF
       done
 
       # Create namespaces (needed for secrets, ArgoCD wave -2 creates them later)
-      for ns in external-dns crowdsec seaweedfs backup monitoring; do
+      for ns in crowdsec seaweedfs backup monitoring; do
         kubectl create namespace $ns --dry-run=client -o yaml | kubectl apply -f -
       done
 
-      # RFC2136 TSIG key for ExternalDNS
-      kubectl create secret generic rfc2136-credentials -n external-dns \
-        --from-literal=tsig-key="$(cat ${config.age.secrets."hetzner/powerdns-tsig-key".path})" \
-        --dry-run=client -o yaml | kubectl apply -f -
 
       # CrowdSec bouncer key
       kubectl create secret generic crowdsec-bouncer-key -n crowdsec \
@@ -230,65 +341,17 @@ CMEOF
         --from-literal=HC_URL=https://hc-ping.com/PLACEHOLDER_UUID \
         --dry-run=client -o yaml | kubectl apply -f -
 
-      # PowerDNS PostgreSQL password for CloudNativePG
-      kubectl create secret generic pdns-postgres-password -n default \
-        --from-literal=password="$(cat ${config.age.secrets."hetzner/postgres-pdns-password".path})" \
-        --dry-run=client -o yaml | kubectl apply -f -
+
       # Temporal PostgreSQL password (generated, used by CNPG Cluster CR)
       kubectl create secret generic temporal-postgres-password -n default \
         --from-literal=password="$(head -c 32 /dev/urandom | base64 | tr -d '\n')" \
         --dry-run=client -o yaml | kubectl apply -f -
-    '';
-  };
 
-  # ── CNPG password sync ──
-  # CNPG initdb creates roles with random passwords. The agenix secrets
-  # (pdns-postgres-password) are injected as k8s Secrets by k8s-secrets-bootstrap,
-  # but never synced into PostgreSQL. This oneshot fixes the mismatch.
-  systemd.services.cnpg-password-fix = {
-    description = "Sync CNPG PostgreSQL role passwords with agenix secrets";
-    after = ["k8s-secrets-bootstrap.service"];
-    wants = ["k3s.service"];
-    wantedBy = ["multi-user.target"];
-    path = [pkgs.k3s];
-    serviceConfig = {
-      Type = "oneshot";
-      RemainAfterExit = true;
-    };
-    script = ''
-      export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
-
-      # Wait for CNPG pod to exist and be Running
-      CNPG_POD=""
-      for i in $(seq 1 60); do
-        CNPG_POD=$(kubectl get pod -n default -l cnpg.io/cluster=temporal-postgres \
-          -o jsonpath='{.items[0].metadata.name}' 2>/dev/null)
-        if [ -n "$CNPG_POD" ]; then
-          PHASE=$(kubectl get pod "$CNPG_POD" -n default \
-            -o jsonpath='{.status.phase}' 2>/dev/null)
-          if [ "$PHASE" = "Running" ]; then
-            echo "CNPG pod $CNPG_POD is Running"
-            break
-          fi
-        fi
-        echo "Waiting for CNPG pod... ($i/60)"
-        sleep 5
-      done
-
-      if [ -n "$CNPG_POD" ]; then
-        PDNS_PASS=$(tr -d '\n' < "${config.age.secrets."hetzner/postgres-pdns-password".path}")
-        kubectl exec -i "$CNPG_POD" -n default -- psql -U postgres \
-          -c "ALTER ROLE pdns PASSWORD '$PDNS_PASS';" 2>&1
-        echo "Synced pdns PostgreSQL role password with agenix secret"
-      else
-        echo "WARNING: CNPG pod not found after 300s, skipping password sync"
-      fi
     '';
   };
 
 
-  # Additional age secrets needed by k8s-secrets-bootstrap
-  # (powerdns-tsig-key is declared in hetzner-powerdns.nix)
+
   age.secrets."hetzner/mongodb-encryption-key" = {
     file = ../secrets/hetzner/mongodb-encryption-key.age;
     owner = "root";

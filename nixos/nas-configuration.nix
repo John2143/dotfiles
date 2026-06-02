@@ -298,6 +298,21 @@
     };
   };
 
+  # k3s server — join existing cluster via mDNS (bootstrap without tailscale dependency).
+  # Dual-stack cluster CIDRs mirror closet's init node config.
+  # NAS uses the 10GbE interface at 192.168.5.175 (the 1GbE at .176 is being retired).
+  services.k3s.extraFlags = lib.concatStringsSep " " [
+    "--server=https://192.168.5.10:6443"
+    "--tls-san=nas.local"
+    "--tls-san=closet.local"
+    "--tls-san=192.168.5.175"
+    "--tls-san=192.168.5.10"
+    "--cluster-cidr=10.42.0.0/16,fd42:42:42::/56"
+    "--service-cidr=10.43.0.0/16,fd42:42:43::/112"
+    "--flannel-ipv6-masq"
+    "--node-ip=192.168.5.175,fd00:1::175"
+  ];
+
   # ================
   # === NFS      ===
   # ================
@@ -321,6 +336,7 @@
     enable = true;
     exports = ''
       /tank/longhorn-backups 100.64.0.0/10(rw,sync,no_subtree_check,no_root_squash,fsid=0)
+      /tank/frigate           100.64.0.0/10(rw,sync,no_subtree_check,no_root_squash,fsid=1)
     '';
   };
 
