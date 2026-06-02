@@ -268,7 +268,13 @@ let
             resp = ts3_cmd(sock, f"clientupdate client_input_muted={new}")
             if "error id=0" in resp:
                 state_cache["input_muted"] = new
-            return "", True
+                return "", True
+            else:
+                print(
+                    f"Toggle mic failed: {resp.strip()}",
+                    file=sys.stderr, flush=True,
+                )
+                return json.dumps({"error": f"toggle mic failed: {resp.strip()}"}), True
         elif cmd == "toggle-output":
             if clid is None:
                 return "", True
@@ -287,7 +293,13 @@ let
             resp = ts3_cmd(sock, f"clientupdate client_output_muted={new}")
             if "error id=0" in resp:
                 state_cache["output_muted"] = new
-            return "", True
+                return "", True
+            else:
+                print(
+                    f"Toggle output failed: {resp.strip()}",
+                    file=sys.stderr, flush=True,
+                )
+                return json.dumps({"error": f"toggle output failed: {resp.strip()}"}), True
         else:
             return "", True
 
@@ -397,9 +409,17 @@ let
     text = ''
       SOCK="$XDG_RUNTIME_DIR/ts3query-proxy.sock"
       if [ "''${1:-}" = "--toggle" ]; then
-        printf '%s\n' "toggle" | nc -UN -w 2 "$SOCK" > /dev/null 2>&1 || true
+        RESULT=$(printf '%s\n' "toggle" | nc -UN -w 2 "$SOCK" 2>/dev/null)
+        if [ -n "$RESULT" ]; then
+            echo "$RESULT" >&2
+            false
+        fi
       elif [ "''${1:-}" = "--toggle-output" ]; then
-        printf '%s\n' "toggle-output" | nc -UN -w 2 "$SOCK" > /dev/null 2>&1 || true
+        RESULT=$(printf '%s\n' "toggle-output" | nc -UN -w 2 "$SOCK" 2>/dev/null)
+        if [ -n "$RESULT" ]; then
+            echo "$RESULT" >&2
+            false
+        fi
       elif [ "''${1:-}" = "--mic" ]; then
         RESULT=$(printf '%s\n' "status-input" | nc -UN -w 2 "$SOCK" 2>/dev/null)
         if [ -n "$RESULT" ]; then
