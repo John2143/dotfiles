@@ -121,8 +121,9 @@
       "--tls-san=closet.local"
       "--tls-san=arch.local"
       "--tls-san=nas.local"
+      # Primary via 10G NIC (enp8s0f1)
       "--tls-san=192.168.5.36"
-      # Backup via old 1GbE NIC
+      # Backup via old 1GbE NIC (enp6s0)
       "--tls-san=192.168.5.35"
       "--tls-san=192.168.5.10"
       # Dual-stack pod and service networks (IPv4 + IPv6)
@@ -131,7 +132,7 @@
       "--cluster-cidr=10.42.0.0/16,fd42:42:42::/56"
       "--service-cidr=10.43.0.0/16,fd42:42:43::/112"
       # Dual-stack nodes must use explicit IPv4+IPv6 addresses
-      "--node-ip=192.168.5.35,fd00:1::35"
+      "--node-ip=192.168.5.36,fd00:1::36"
       # Required for IPv6 pod egress when using flannel
       "--flannel-ipv6-masq"
       # Keep standard per-node subnet sizing across families
