@@ -1,4 +1,4 @@
-# DESCRIPTION: Open DeepSeek usage page and show current balance
+# DESCRIPTION: Open DeepSeek usage page and show current balance. Pass --no-open to suppress browser, --debug for raw API responses.
 set -l _pre_vars (set --names -x)
 
 # Load DeepSeek API key from runtime keys.

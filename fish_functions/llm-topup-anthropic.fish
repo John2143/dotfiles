@@ -1,4 +1,4 @@
-# DESCRIPTION: Open Anthropic billing page to purchase \$AMOUNT in credits
+# DESCRIPTION: Open Anthropic billing page to purchase $AMOUNT in credits
 set -l _pre_vars (set --names -x)
 llm-unsafe-load-admin-keys &>/dev/null
 

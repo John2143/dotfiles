@@ -1,4 +1,4 @@
-# DESCRIPTION: Stop an agent-created timer (and its service)
+# DESCRIPTION: Stop an agent-created timer (and its service). Name must start with 'agent-'.
 if test (count $argv) -lt 1
   echo "Usage: agent-cron-stop <unit-name>" >&2
   echo "  e.g. agent-cron-stop agent-check-pr-42" >&2

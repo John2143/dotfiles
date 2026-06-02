@@ -1,4 +1,4 @@
-# DESCRIPTION: Verify the approval hook works — triggers the approve/deny confirm dialog
+# DESCRIPTION: Verify the approval hook works — triggers the approve/deny confirm dialog with a safe echo'd rm -rf command
 # Run omp with the approval hook and a safe prompt that exercises the
 # approve/deny confirm dialog. The prompt instructs the model to run a command
 # containing "rm -rf" (echo'd, not executed). Since the hook checks the

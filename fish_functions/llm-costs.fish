@@ -1,4 +1,4 @@
-# DESCRIPTION: Open Anthropic billing page for balance and show recent spend (7d)
+# DESCRIPTION: Open Anthropic billing page for balance and show recent spend (7d). Pass --no-open to suppress browser, --debug for raw API responses.
 set -l _pre_vars (set --names -x)
 llm-unsafe-load-admin-keys &>/dev/null
 

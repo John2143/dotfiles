@@ -1,4 +1,4 @@
-# DESCRIPTION: Load admin-scoped LLM API keys into current shell (unsafe: exports secrets to env)
+# DESCRIPTION: Load admin-scoped LLM API keys into current shell (unsafe: exports secrets to env). Call before llm-costs, llm-topup-anthropic, openrouter-costs.
 # Loads the admin LLM keys (ANTHROPIC_ADMIN_KEY, OPENROUTER_ADMIN_KEY)
 # for use by llm-costs, llm-topup-anthropic, and openrouter-costs. The
 # runtime key is mounted at /run/agenix/llm-runtime-keys but only the

@@ -1,4 +1,4 @@
-# DESCRIPTION: Show OpenRouter balance, per-key usage, and daily model activity
+# DESCRIPTION: Show OpenRouter balance, per-key usage, and daily model activity. Pass --debug for raw API responses.
 set -l _pre_vars (set --names -x)
 llm-unsafe-load-admin-keys &>/dev/null
 
