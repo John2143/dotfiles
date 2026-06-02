@@ -262,6 +262,10 @@ in
     '';
 
     ".omp/agent/config.yml".text = ''
+      # Fish is the default shell across all machines. All agent bash commands
+      # are spawned in fish — the functions, aliases, and completions defined
+      # in home.nix are available during agent sessions.
+      shell: fish
       modelRoles:
         #default: vast-vllm/deepseek-v4-flash
         default: deepseek/deepseek-v4-flash

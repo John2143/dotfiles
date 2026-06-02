@@ -193,6 +193,7 @@
         modules = [
           ./nixos/shared-cli-configuration.nix
           ./nixos/closet-configuration.nix
+          ./nixos/modules/k3s-server.nix
           ./nixos/modules/longhorn-host.nix
           ./nixos/modules/restic-backup.nix
           ./nixos/modules/nas-mounts.nix
