@@ -119,7 +119,7 @@
     })
     r2modman # game modding
     rusty-path-of-building # Path of Exile build planner
-    bitwarden-desktop # password manager
+    #bitwarden-desktop # password manager
     kind
     mongodb-compass
     doctl # DigitalOcean CLI
