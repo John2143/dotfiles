@@ -274,7 +274,9 @@ let
                     f"Toggle mic failed: {resp.strip()}",
                     file=sys.stderr, flush=True,
                 )
-                return json.dumps({"error": f"toggle mic failed: {resp.strip()}"}), True
+                return json.dumps(
+                    {"error": f"toggle mic failed: {resp.strip()}"}
+                ), True
         elif cmd == "toggle-output":
             if clid is None:
                 return "", True
@@ -299,7 +301,9 @@ let
                     f"Toggle output failed: {resp.strip()}",
                     file=sys.stderr, flush=True,
                 )
-                return json.dumps({"error": f"toggle output failed: {resp.strip()}"}), True
+                return json.dumps(
+                    {"error": f"toggle output failed: {resp.strip()}"}
+                ), True
         else:
             return "", True
 
