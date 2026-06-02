@@ -40,6 +40,11 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
+    waytop = {
+      url = "github:vevota/waytop";
+      flake = false;
+    };
+
     node-rally-tools = {
       url = "github:John2143/node-rally-tools";
     };
@@ -70,6 +75,7 @@
     nixpkgs,
     nix-cachyos-kernel,
     agenix,
+    waytop,
     voxtype,
     ...
   } @ inputs: let
@@ -316,6 +322,9 @@
       };
 
     packages.x86_64-linux.installer = nixosConfigurations.installer.config.system.build.isoImage;
+    packages.x86_64-linux.waytop = nixpkgs.legacyPackages.x86_64-linux.callPackage ./nixos/waytop.nix {
+      src = waytop;
+    };
 
     darwinConfigurations.mac = inputs.nix-darwin.lib.darwinSystem {
       system = "aarch64-darwin";

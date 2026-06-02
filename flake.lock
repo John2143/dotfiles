@@ -771,7 +771,8 @@
         "node-rally-tools": "node-rally-tools",
         "oh-my-pi": "oh-my-pi",
         "screen-control": "screen-control",
-        "voxtype": "voxtype"
+        "voxtype": "voxtype",
+        "waytop": "waytop"
       }
     },
     "rust-analyzer-src": {
@@ -1074,6 +1075,22 @@
         "owner": "peteonrails",
         "ref": "dev",
         "repo": "voxtype",
+        "type": "github"
+      }
+    },
+    "waytop": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1780437000,
+        "narHash": "sha256-BoLu/nCUMSV4orrKira6Qnc7F1RUDPD6kxEfUzfdZUI=",
+        "owner": "vevota",
+        "repo": "waytop",
+        "rev": "d76d7a2fa783eb6116bd770770c2d7c3af03a994",
+        "type": "github"
+      },
+      "original": {
+        "owner": "vevota",
+        "repo": "waytop",
         "type": "github"
       }
     }
