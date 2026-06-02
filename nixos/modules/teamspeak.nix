@@ -253,23 +253,23 @@ let
         elif cmd == "toggle":
             if clid is None:
                 return "", True
-            if state_cache.get("input_muted") is not None:
-                cur = state_cache["input_muted"]
-            else:
-                resp = ts3_cmd(
-                    sock,
-                    f"clientvariable clid={clid} client_input_muted",
-                )
-                if "connection_lost" in resp:
-                    return "", False
-                m = re.search(r"client_input_muted=(\d+)", resp)
-                cur = m.group(1) if m else "0"
+            # Always query TS3 for current state to avoid cache staleness
+            resp = ts3_cmd(
+                sock,
+                f"clientvariable clid={clid} client_input_muted",
+            )
+            if "connection_lost" in resp:
+                return "", False
+            m = re.search(r"client_input_muted=(\d+)", resp)
+            cur = m.group(1) if m else "0"
             new = "0" if cur == "1" else "1"
+            state_cache["input_muted"] = new  # optimistically set before confirm
             resp = ts3_cmd(sock, f"clientupdate client_input_muted={new}")
             if "error id=0" in resp:
-                state_cache["input_muted"] = new
                 return "", True
             else:
+                # Revert cache on failure
+                state_cache["input_muted"] = cur
                 print(
                     f"Toggle mic failed: {resp.strip()}",
                     file=sys.stderr, flush=True,
@@ -278,23 +278,23 @@ let
         elif cmd == "toggle-output":
             if clid is None:
                 return "", True
-            if state_cache.get("output_muted") is not None:
-                cur = state_cache["output_muted"]
-            else:
-                resp = ts3_cmd(
-                    sock,
-                    f"clientvariable clid={clid} client_output_muted",
-                )
-                if "connection_lost" in resp:
-                    return "", False
-                m = re.search(r"client_output_muted=(\d+)", resp)
-                cur = m.group(1) if m else "0"
+            # Always query TS3 for current state to avoid cache staleness
+            resp = ts3_cmd(
+                sock,
+                f"clientvariable clid={clid} client_output_muted",
+            )
+            if "connection_lost" in resp:
+                return "", False
+            m = re.search(r"client_output_muted=(\d+)", resp)
+            cur = m.group(1) if m else "0"
             new = "0" if cur == "1" else "1"
+            state_cache["output_muted"] = new  # optimistically set before confirm
             resp = ts3_cmd(sock, f"clientupdate client_output_muted={new}")
             if "error id=0" in resp:
-                state_cache["output_muted"] = new
                 return "", True
             else:
+                # Revert cache on failure
+                state_cache["output_muted"] = cur
                 print(
                     f"Toggle output failed: {resp.strip()}",
                     file=sys.stderr, flush=True,
