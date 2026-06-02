@@ -1,14 +1,14 @@
 # Hardware Specs: closet
 
-**Generated:** 2026-05-24T02:16:59Z
+**Generated:** 2026-06-02T21:20:39Z
 
 ## System Overview
 
 | Field | Value |
 |---|---|
 | Hostname | closet |
-| OS | NixOS 26.05 (Yarara) |
-| Kernel | 6.18.31 x86_64 |
+| OS | NixOS 26.11 (Zokor) |
+| Kernel | 6.18.33 x86_64 |
 | Motherboard | ASUSTeK COMPUTER INC. PRIME A320M-K (Rev X.0x) |
 | Chassis | Desktop |
 | BIOS | American Megatrends Inc. 4207 (12/07/2018) |
@@ -39,19 +39,22 @@
 | RAM | 7.7Gi |
 | Swap | 8.0Gi |
 
-_No DIMM details available (requires root/dmidecode on x86)_
+### DIMM Details
+
+| Slot | Size | Type | Speed | Manufacturer | Part Number |
+|---|---|---|---|---|---|
+| DIMM_A1 | 8 GiB | DDR4 | 2400 MT/s (configured: 1200 MT/s) | CRUCIAL | BLS8G4D32AESBK.M8FE1 |
 
 ## Storage
 
 ```
 sda           3.6T disk                                                                                                                                            CT4000X9SSD9    1
 └─sda1        3.6T part ext4   /mnt                                                                                                                                                1
-sdb           4.7G disk ext4   /var/lib/kubelet/pods/436891aa-55b4-4463-8caa-e0db2e286731/volumes/kubernetes.io~csi/pvc-a71a966d-8ce7-4b3a-9341-5fe0467f2e6d/mount VIRTUAL-DISK    1
-sdc           9.3G disk ext4   /var/lib/kubelet/pods/28039af6-0b2d-44c8-b576-e348049adea8/volumes/kubernetes.io~csi/pvc-f06012f1-ffff-4279-9905-144359eb15cc/mount VIRTUAL-DISK    1
-sdd           9.3G disk ext4   /var/lib/kubelet/pods/f062bfb4-d701-4cc2-aaac-537acd524bd4/volumes/kubernetes.io~csi/pvc-374214a1-74f2-4143-8c88-3bedafa66f0b/mount VIRTUAL-DISK    1
-sde             1G disk ext4   /var/lib/kubelet/pods/a2826809-4995-46a8-a11a-1887a135ea40/volumes/kubernetes.io~csi/pvc-d6926bd9-5fd6-4100-a601-85f675f90e23/mount VIRTUAL-DISK    1
-sdf           4.7G disk ext4   /var/lib/kubelet/pods/a357a035-8536-43fa-8642-91fc3cc56976/volumes/kubernetes.io~csi/pvc-de6e9470-2911-4b8a-8ce4-6657967e6bb1/mount VIRTUAL-DISK    1
-sdg           4.7G disk ext4   /var/lib/kubelet/pods/9980fedc-d75b-485e-b204-bdb92215ae9c/volumes/kubernetes.io~csi/pvc-2c60403d-3084-4ed4-b6bf-e4a72b3ea5e4/mount VIRTUAL-DISK    1
+sdb           9.3G disk ext4   /var/lib/kubelet/pods/c3b9782d-9fff-44c4-a27c-888b1408dbfa/volumes/kubernetes.io~csi/pvc-374214a1-74f2-4143-8c88-3bedafa66f0b/mount VIRTUAL-DISK    1
+sdc             5G disk ext4                                                                                                                                       VIRTUAL-DISK    1
+sdd           4.7G disk ext4   /var/lib/kubelet/pods/1cfcdbb7-ab54-4b02-8afc-383eff11c970/volumes/kubernetes.io~csi/pvc-a71a966d-8ce7-4b3a-9341-5fe0467f2e6d/mount VIRTUAL-DISK    1
+sde           9.3G disk ext4   /var/lib/kubelet/pods/d08289be-86a6-4401-ae00-ee9c2af0141a/volumes/kubernetes.io~csi/pvc-f06012f1-ffff-4279-9905-144359eb15cc/mount VIRTUAL-DISK    1
+sdf             1G disk ext4   /var/lib/kubelet/pods/b9f61351-72f9-4615-bb6b-4d898ae0b1a6/volumes/kubernetes.io~csi/pvc-d6926bd9-5fd6-4100-a601-85f675f90e23/mount VIRTUAL-DISK    1
 nvme0n1     238.5G disk                                                                                                                                            PCIe SSD        0
 ├─nvme0n1p1     2G part vfat   /boot                                                                                                                                               0
 └─nvme0n1p2 236.5G part ext4   /                                                                                                                                                   0
@@ -62,6 +65,8 @@ nvme0n1     238.5G disk                                                         
 | Device | Interface | Description |
 |---|---|---|
 | 06:00.0 | enp6s0 | Realtek Semiconductor Co., Ltd. RTL8111/8168/8211/8411 PCI Express Gigabit Ethernet Controller [10ec:8168] rev 15 |
+| 08:00.0 | enp8s0f0 | Intel Corporation 82599ES 10-Gigabit SFI/SFP+ Network Connection [8086:10fb] rev 01 |
+| 08:00.1 | enp8s0f1 | Intel Corporation 82599ES 10-Gigabit SFI/SFP+ Network Connection [8086:10fb] rev 01 |
 
 ## PCI Devices
 
@@ -72,6 +77,7 @@ nvme0n1     238.5G disk                                                         
 - `00:01.3` Advanced Micro Devices, Inc. [AMD] Family 17h (Models 00h-0fh) PCIe GPP Bridge [1022:1453]
 - `00:02.0` Advanced Micro Devices, Inc. [AMD] Family 17h (Models 00h-1fh) PCIe Dummy Host Bridge [1022:1452]
 - `00:03.0` Advanced Micro Devices, Inc. [AMD] Family 17h (Models 00h-1fh) PCIe Dummy Host Bridge [1022:1452]
+- `00:03.1` Advanced Micro Devices, Inc. [AMD] Family 17h (Models 00h-0fh) PCIe GPP Bridge [1022:1453]
 - `00:04.0` Advanced Micro Devices, Inc. [AMD] Family 17h (Models 00h-1fh) PCIe Dummy Host Bridge [1022:1452]
 - `00:07.0` Advanced Micro Devices, Inc. [AMD] Family 17h (Models 00h-1fh) PCIe Dummy Host Bridge [1022:1452]
 - `00:07.1` Advanced Micro Devices, Inc. [AMD] Family 17h (Models 00h-0fh) Internal PCIe GPP Bridge 0 to Bus B [1022:1454]
@@ -96,12 +102,14 @@ nvme0n1     238.5G disk                                                         
 - `03:06.0` Advanced Micro Devices, Inc. [AMD] 300 Series Chipset PCIe Port [1022:43b4] rev 02
 - `03:07.0` Advanced Micro Devices, Inc. [AMD] 300 Series Chipset PCIe Port [1022:43b4] rev 02
 - `06:00.0` Realtek Semiconductor Co., Ltd. RTL8111/8168/8211/8411 PCI Express Gigabit Ethernet Controller [10ec:8168] rev 15
-- `08:00.0` Advanced Micro Devices, Inc. [AMD] Zeppelin/Raven/Raven2 PCIe Dummy Function [1022:145a]
-- `08:00.2` Advanced Micro Devices, Inc. [AMD] Family 17h (Models 00h-0fh) Platform Security Processor (PSP) 3.0 Device [1022:1456]
-- `08:00.3` Advanced Micro Devices, Inc. [AMD] Family 17h (Models 00h-0fh) USB 3.0 Host Controller [1022:145c]
-- `09:00.0` Advanced Micro Devices, Inc. [AMD] Zeppelin/Renoir PCIe Dummy Function [1022:1455]
-- `09:00.2` Advanced Micro Devices, Inc. [AMD] FCH SATA Controller [AHCI mode] [1022:7901] rev 51
-- `09:00.3` Advanced Micro Devices, Inc. [AMD] Family 17h (Models 00h-0fh) HD Audio Controller [1022:1457]
+- `08:00.0` Intel Corporation 82599ES 10-Gigabit SFI/SFP+ Network Connection [8086:10fb] rev 01
+- `08:00.1` Intel Corporation 82599ES 10-Gigabit SFI/SFP+ Network Connection [8086:10fb] rev 01
+- `09:00.0` Advanced Micro Devices, Inc. [AMD] Zeppelin/Raven/Raven2 PCIe Dummy Function [1022:145a]
+- `09:00.2` Advanced Micro Devices, Inc. [AMD] Family 17h (Models 00h-0fh) Platform Security Processor (PSP) 3.0 Device [1022:1456]
+- `09:00.3` Advanced Micro Devices, Inc. [AMD] Family 17h (Models 00h-0fh) USB 3.0 Host Controller [1022:145c]
+- `0a:00.0` Advanced Micro Devices, Inc. [AMD] Zeppelin/Renoir PCIe Dummy Function [1022:1455]
+- `0a:00.2` Advanced Micro Devices, Inc. [AMD] FCH SATA Controller [AHCI mode] [1022:7901] rev 51
+- `0a:00.3` Advanced Micro Devices, Inc. [AMD] Family 17h (Models 00h-0fh) HD Audio Controller [1022:1457]
 
 ## USB Devices
 
@@ -109,8 +117,8 @@ nvme0n1     238.5G disk                                                         
 - `10c4:ea60` Silicon Labs CP210x UART Bridge
 - `1d6b:0003` Linux Foundation 3.0 root hub
 - `1d6b:0002` Linux Foundation 2.0 root hub
-- `0a12:0001` Cambridge Silicon Radio, Ltd Bluetooth Dongle (HCI mode)
 - `051d:0002` American Power Conversion Uninterruptible Power Supply
+- `0a12:0001` Cambridge Silicon Radio, Ltd Bluetooth Dongle (HCI mode)
 - `1d6b:0003` Linux Foundation 3.0 root hub
 - `0634:5605` Micron Technology, Inc. CT4000X9SSD9
 
@@ -127,11 +135,10 @@ nvme-PCIe_SSD_19081425603114_1-part2
 nvme-PCIe_SSD_19081425603114-part1
 nvme-PCIe_SSD_19081425603114-part2
 scsi-360000000000000000e00000000010001
-scsi-360000000000000000e00000000020001
-scsi-360000000000000000e00000000030001
-scsi-360000000000000000e00000000040001
-scsi-360000000000000000e00000000050001
-scsi-360000000000000000e00000000060001
+ps-360000000000000000e00000000020001
+jh-360000000000000000e00000000030001
+wb-360000000000000000e00000000040001
+oq-360000000000000000e00000000050001
 usb-Micron_CT4000X9SSD9_2428E8DB8E58-0:0
 usb-Micron_CT4000X9SSD9_2428E8DB8E58-0:0-part1
 wwn-0x60000000000000000e00000000010001
@@ -139,14 +146,12 @@ wwn-0x60000000000000000e00000000020001
 wwn-0x60000000000000000e00000000030001
 wwn-0x60000000000000000e00000000040001
 wwn-0x60000000000000000e00000000050001
-wwn-0x60000000000000000e00000000060001
 ```
 
 ## Temperature Sensors
 
-- nvme-pci-0100: Composite — temp1 alarm: 0°C, temp1 crit: 90°C, temp1: 43°C, temp1 max: 70°C
-- k10temp-pci-00c3: Tctl — temp1: 37°C
-
+- nvme-pci-0100: Composite — temp1 alarm: 0°C, temp1 crit: 90°C, temp1: 49°C, temp1 max: 70°C
+- k10temp-pci-00c3: Tctl — temp1: 35°C
 
 ## UPS
 
@@ -164,12 +169,11 @@ wwn-0x60000000000000000e00000000060001
 | Connection | USB (051d:0002) |
 | Software | apcupsd 3.14.14 (standalone) |
 | Shutdown thresholds | BATTERYLEVEL 10%, MINUTES 5 |
+
 ## Notes
 
-
-
-
 - This machine is a K3s node (longhorn host)
-- The 4TB storage is an external USB Crucial X9 SSD
-- No swap configured
-
+- The 4TB storage is an external USB Crucial X9 SSD (CT4000X9SSD9)
+- 10GbE Intel 82599ES dual-port SFP+ add-in card installed at `08:00.0` / `08:00.1`
+- RAM: one 8 GiB DDR4-2400 stick in DIMM_A1 (Crucial Ballistix BLS8G4D32AESBK.M8FE1); DIMM_B1 empty
+- Swap configured (8.0 GiB, on disk via Longhorn volumes)
