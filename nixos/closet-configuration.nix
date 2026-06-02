@@ -55,6 +55,8 @@
 
   networking.hostName = compName; # Define your hostname.
   networking.networkmanager.enable = true; # Easiest to use and most distros use this by default.
+  # No hardware-specific network config in NixOS — NM profiles managed via nmcli
+  # DHCPv4 (.36) and DHCPv6 (fd00:1::36) are assigned by MikroTik router
 
   time.timeZone = "America/New_York";
   i18n.defaultLocale = "en_US.UTF-8";
@@ -119,9 +121,13 @@
       "--tls-san=closet.local"
       "--tls-san=arch.local"
       "--tls-san=nas.local"
+      "--tls-san=192.168.5.36"
+      # Backup via old 1GbE NIC
       "--tls-san=192.168.5.35"
+      "--tls-san=192.168.5.10"
       # Dual-stack pod and service networks (IPv4 + IPv6)
-      "--cluster-init"
+      # Join existing cluster via VIP (kube-vip LB on .10)
+      "--server=https://192.168.5.10:6443"
       "--cluster-cidr=10.42.0.0/16,fd42:42:42::/56"
       "--service-cidr=10.43.0.0/16,fd42:42:43::/112"
       # Dual-stack nodes must use explicit IPv4+IPv6 addresses

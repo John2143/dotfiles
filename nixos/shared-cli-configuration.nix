@@ -356,7 +356,7 @@
       group = "users";
     };
   # UniFi controller credentials — username + password for API access.
-  # Format: UNIFI_USERNAME=... UNIFI_PASSWORD=... UNIFI_CONTROLLER=https://192.168.5.35:30443
+  # Format: UNIFI_USERNAME=... UNIFI_PASSWORD=... UNIFI_CONTROLLER=https://192.168.5.10:30443
   # Used by fish functions unifi-status, unifi-clients, unifi-ap.
   age.secrets.unifi-credentials =
     lib.mkIf

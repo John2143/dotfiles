@@ -302,10 +302,11 @@
   # Dual-stack cluster CIDRs mirror closet's init node config.
   # NAS uses the 10GbE interface at 192.168.5.175 (the 1GbE at .176 is being retired).
   services.k3s.extraFlags = lib.concatStringsSep " " [
-    "--server=https://192.168.5.35:6443"
+    "--server=https://192.168.5.10:6443"
     "--tls-san=nas.local"
     "--tls-san=closet.local"
     "--tls-san=192.168.5.175"
+    "--tls-san=192.168.5.10"
     "--cluster-cidr=10.42.0.0/16,fd42:42:42::/56"
     "--service-cidr=10.43.0.0/16,fd42:42:43::/112"
     "--flannel-ipv6-masq"
