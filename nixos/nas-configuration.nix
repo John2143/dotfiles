@@ -335,7 +335,7 @@
   services.nfs.server = {
     enable = true;
     exports = ''
-      /tank/longhorn-backups 100.64.0.0/10(rw,sync,no_subtree_check,no_root_squash,fsid=0)
+      /tank/longhorn-backups 100.64.0.0/10(rw,sync,no_subtree_check,no_root_squash,fsid=0) 192.168.5.0/24(rw,sync,no_subtree_check,no_root_squash,fsid=0)
       /tank/frigate           100.64.0.0/10(rw,sync,no_subtree_check,no_root_squash,fsid=1)
     '';
   };
