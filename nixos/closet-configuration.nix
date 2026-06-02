@@ -55,11 +55,8 @@
 
   networking.hostName = compName; # Define your hostname.
   networking.networkmanager.enable = true; # Easiest to use and most distros use this by default.
-  # Static IPv6 ULA on the 10GbE NIC
-  networking.interfaces.enp8s0f1.ipv6.addresses = [{
-    address = "fd00:1::36";
-    prefixLength = 64;
-  }];
+  # No hardware-specific network config in NixOS — NM profiles managed via nmcli
+  # DHCPv4 (.36) and DHCPv6 (fd00:1::36) are assigned by MikroTik router
 
   time.timeZone = "America/New_York";
   i18n.defaultLocale = "en_US.UTF-8";

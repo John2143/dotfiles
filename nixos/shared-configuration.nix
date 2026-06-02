@@ -245,13 +245,12 @@ in {
   xdg.portal = {
     enable = true;
     extraPortals = with pkgs; [
-      xdg-desktop-portal-hyprland
       xdg-desktop-portal-gtk
     ];
     xdgOpenUsePortal = true;
     config = {
       Hyprland = {
-        default = ["hyprland" "gtk"];
+        default = ["gtk"];
       };
     };
   };
