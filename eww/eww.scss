@@ -74,3 +74,180 @@
   color: @overlay0;
   margin-left: auto;
 }
+
+/* ════════════════════════════════════════════
+   Tailscale Widget
+   ════════════════════════════════════════════ */
+
+@define-color green #a6e3a1;
+@define-color red #f38ba8;
+@define-color yellow #f9e2af;
+@define-color teal #94e2d5;
+@define-color pink #f5c2e7;
+@define-color surface1 #45475a;
+@define-color surface2 #585b70;
+
+/* ── Widget Container ──────────────────────── */
+.ts-window {
+  background-color: @base;
+  border: 1px solid @surface0;
+  border-radius: 12px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.5);
+  min-width: 350px;
+}
+
+/* ── Header ────────────────────────────────── */
+.ts-header {
+  background-color: @surface0;
+  padding: 8px 12px;
+  border-radius: 12px 12px 0 0;
+}
+
+.ts-header-icon {
+  font-size: 15px;
+  color: @teal;
+  margin-right: 6px;
+}
+
+.ts-header-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: @text;
+}
+
+.ts-header-tailnet {
+  font-size: 11px;
+  color: @overlay0;
+  margin-left: 6px;
+}
+
+.ts-header-close {
+  font-size: 16px;
+  color: @subtext0;
+  margin-left: auto;
+  padding: 0 4px;
+  border-radius: 4px;
+}
+
+.ts-header-close:hover {
+  color: @mauve;
+}
+
+/* ── Connection Status Bar ─────────────────── */
+.ts-status {
+  padding: 10px 12px;
+  margin: 0 0 1px 0;
+}
+
+.ts-status-icon {
+  font-size: 16px;
+  margin-right: 8px;
+  min-width: 20px;
+}
+
+.ts-status-text {
+  font-size: 13px;
+  font-weight: 600;
+  color: @text;
+}
+
+.ts-status-ip {
+  font-size: 11px;
+  color: @overlay0;
+  margin-left: auto;
+}
+
+/* ── Section shared ────────────────────────── */
+.ts-section {
+  padding: 0 12px;
+  margin-top: 2px;
+}
+
+.ts-section-title {
+  font-size: 10px;
+  font-weight: 700;
+  color: @overlay0;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding: 6px 0 4px;
+}
+
+.ts-section-subtitle {
+  font-size: 10px;
+  color: @overlay0;
+  margin-left: auto;
+  padding: 6px 0 4px;
+}
+
+/* ── Your Node Row ─────────────────────────── */
+.ts-node-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: @text;
+}
+
+.ts-node-ip {
+  font-size: 11px;
+  color: @subtext0;
+  margin-left: 8px;
+}
+
+.ts-status-dot {
+  font-size: 10px;
+  color: @green;
+  margin-left: auto;
+}
+
+/* ── Exit Node Row ─────────────────────────── */
+.ts-exit-name {
+  font-size: 13px;
+  color: @text;
+}
+
+.ts-exit-ip {
+  font-size: 11px;
+  color: @subtext0;
+  margin-left: 8px;
+}
+
+.ts-exit-btn {
+  font-size: 11px;
+  color: @blue;
+  margin-left: auto;
+  padding: 2px 8px;
+  border-radius: 6px;
+  background-color: rgba(137, 180, 250, 0.1);
+}
+
+.ts-exit-btn:hover {
+  background-color: rgba(137, 180, 250, 0.25);
+  color: #b4d0fb;
+}
+
+/* ── Quick Actions Bar ─────────────────────── */
+.ts-actions {
+  padding: 8px 12px;
+  margin: 2px 0;
+}
+
+.ts-action-btn {
+  font-size: 11px;
+  color: @subtext0;
+  padding: 5px 10px;
+  border-radius: 8px;
+  background-color: @surface0;
+}
+
+.ts-action-btn:hover {
+  color: @text;
+  background-color: @surface1;
+}
+
+/* ── Peers List ────────────────────────────── */
+.ts-peers-text {
+  font-size: 11px;
+  color: @subtext0;
+  padding: 4px 0 8px 0;
+  line-height: 1.6;
+  font-family: "JetBrainsMono Nerd Font", monospace;
+}

@@ -30,3 +30,92 @@
          :space-evenly false
       (label :text "● online" :class "hello-status")
       (label :text "v0.1" :class "hello-version"))))
+
+;; ── Tailscale Widget ──────────────────────────────────────
+(defpoll ts_status
+  :interval "10s"
+  :json
+  "tailscale-eww-poll")
+
+(defwindow tailscale
+  :monitor 0
+  :geometry (geometry :x "-12px"
+                     :y "50px"
+                     :width "380px"
+                     :anchor "top right")
+  :stacking "overlay"
+  :focusable "none"
+  (box :class "ts-window"
+       :orientation "vertical"
+       :halign "fill"
+       :space-evenly false
+    ;; Header
+    (box :class "ts-header"
+         :orientation "horizontal"
+         :halign "fill"
+         :space-evenly false
+      (label :text "󱀶" :class "ts-header-icon")
+      (label :text "Tailscale" :class "ts-header-title")
+      (label :text "{ts_status.tailnet}" :class "ts-header-tailnet")
+      (button :onclick "eww close tailscale"
+              :class "ts-header-close"
+        "×"))
+    ;; Connection status bar
+    (box :class "ts-status"
+         :orientation "horizontal"
+         :halign "fill"
+         :space-evenly false
+      (label :text "{ts_status.state_icon}" :class "ts-status-icon")
+      (label :text "{ts_status.state_label}" :class "ts-status-text")
+      (label :text "{ts_status.self_ip}" :class "ts-status-ip"))
+    ;; Your Node section
+    (box :class "ts-section"
+         :orientation "vertical"
+         :halign "fill"
+         :space-evenly false
+      (label :text "Your Node" :class "ts-section-title")
+      (box :orientation "horizontal"
+           :halign "fill"
+           :space-evenly false
+        (label :text "{ts_status.self_name}" :class "ts-node-name")
+        (label :text "{ts_status.self_ip}" :class "ts-node-ip")
+        (label :text "●" :class "ts-status-dot")))
+    ;; Exit Node section
+    (box :class "ts-section"
+         :orientation "vertical"
+         :halign "fill"
+         :space-evenly false
+      (label :text "Exit Node" :class "ts-section-title")
+      (box :orientation "horizontal"
+           :halign "fill"
+           :space-evenly false
+        (label :text "{ts_status.exit_node_name}" :class "ts-exit-name")
+        (label :text "{ts_status.exit_node_ip}" :class "ts-exit-ip")
+        (button :onclick "fish -c 'set nodes (tailscale status --json | jq -r \".Peer[] | select(.ExitNodeOption == true) | .DNSName | rtrimstr(\\\".\\\")\" 2>/dev/null | string collect); if test -z \"$nodes\"; notify-send \"Tailscale\" \"No exit node candidates found\"; exit 0; end; set choice (printf \"None\\\\n%s\" \"$nodes\" | wofi --dmenu -p \"Exit Node\" -i 2>/dev/null); if test \"$choice\" = \"None\"; sudo tailscale set --exit-node=\"\"; else if test -n \"$choice\"; sudo tailscale set --exit-node=\"$choice\" --exit-node-allow-lan-access; end; sleep 1; eww update ts_status \"(tailscale-eww-poll)\"'"
+                :class "ts-exit-btn"
+        "Change…")))
+    ;; Quick actions
+    (box :class "ts-actions"
+         :orientation "horizontal"
+         :halign "fill"
+         :space-evenly true
+      (button :onclick "fish -c 'set s (tailscale status --json 2>/dev/null | jq -r .BackendState); if test \"$s\" = Running; tailscale down; else; tailscale up; end; sleep 2; eww update ts_status \"(tailscale-eww-poll)\"'"
+              :class "ts-action-btn"
+        "𖦹 Toggle Connect")
+      (button :onclick "fish -c 'set nodes (tailscale status --json | jq -r \".Peer[] | select(.ExitNodeOption == true) | .DNSName | rtrimstr(\\\".\\\")\" 2>/dev/null | string collect); if test -z \"$nodes\"; notify-send \"Tailscale\" \"No exit node candidates found\"; exit 0; end; set choice (printf \"None\\\\n%s\" \"$nodes\" | wofi --dmenu -p \"Exit Node\" -i 2>/dev/null); if test \"$choice\" = \"None\"; sudo tailscale set --exit-node=\"\"; else if test -n \"$choice\"; sudo tailscale set --exit-node=\"$choice\" --exit-node-allow-lan-access; end; sleep 1; eww update ts_status \"(tailscale-eww-poll)\"'"
+              :class "ts-action-btn"
+        "󰮂 Exit Nodes")
+      (button :onclick "eww update ts_status \"$(tailscale-eww-poll)\""
+              :class "ts-action-btn"
+        " Refresh"))
+    ;; Peers list section
+    (box :class "ts-section"
+         :orientation "vertical"
+         :halign "fill"
+         :space-evenly false
+      (box :orientation "horizontal"
+           :halign "fill"
+           :space-evenly false
+        (label :text "Peers ({ts_status.peers_online}/{ts_status.peers_total})" :class "ts-section-title")
+        (label :text "{ts_status.peers_exit_count} exit nodes" :class "ts-section-subtitle"))
+      (label :text "{ts_status.peers_text}" :class "ts-peers-text" :wrap "words"))))

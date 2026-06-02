@@ -262,7 +262,7 @@ in
     hass-thermostat-status
     inputs.hyprcap.packages.x86_64-linux.default
     pkgs.voxtype
-    inputs.self.packages.x86_64-linux.waytop
+    #inputs.self.packages.x86_64-linux.waytop
   ];
 
   # openrgb flakes occasionally — keep the unit out of "failed" state so it
@@ -291,7 +291,7 @@ in
   # didn't reliably pass the systemd `path` environment through to the binary).
   nixpkgs.overlays = [
     (final: prev: {
-      screen-control = inputs.screen-control.defaultPackage.${prev.system};
+      screen-control = inputs.screen-control.defaultPackage.${prev.stdenv.hostPlatform.system};
     })
   ];
 

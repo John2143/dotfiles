@@ -222,6 +222,7 @@ window#waybar > box {
 #custom-updates,
 #custom-autoclicker,
 #custom-privacy,
+#custom-tailscale,
 #custom-eww-hello,
 #group-hardware {
     background: @surface0;

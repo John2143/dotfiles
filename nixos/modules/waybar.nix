@@ -519,7 +519,7 @@ in {
             interval = 20;
             signal = 14;
             format = "{}";
-            on-click = "fish -c 'set s (tailscale status --json 2>/dev/null | jq -r .BackendState); if test \"$s\" = Running; tailscale down; else; tailscale up; end; sleep 2; pkill -RTMIN+14 waybar'";
+            on-click = "eww open tailscale || eww close tailscale";
             on-click-right = "fish -c '
               set nodes (tailscale status --json | jq -r \".Peer[] | select(.ExitNodeOption == true) | .DNSName | rtrimstr(\\\".\\\")\" 2>/dev/null | string collect)
               if test -z \"$nodes\"
