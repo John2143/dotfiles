@@ -499,7 +499,7 @@ in {
     };
   };
 
-  services.gammastep = lib.mkIf (compName != "secu") {
+  services.gammastep = lib.mkIf (compName != "secu" && compName != "arch") {
     enable = true;
     # New york
     longitude = -74.0060;
