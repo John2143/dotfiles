@@ -488,7 +488,7 @@
       UPSTYPE usb
       DEVICE
       ONBATTERYDELAY 6
-      BATTERYLEVEL 10
+      BATTERYLEVEL 50
       MINUTES 5
     '';
     hooks = {
@@ -502,7 +502,11 @@
         ${pkgs.curl}/bin/curl -s -X POST "$NAS_OFFBATTERY_URL"
         ${pkgs.util-linux}/bin/wall 'UPS power restored on NAS'
       '';
-      doshutdown = "${pkgs.util-linux}/bin/wall 'UPS battery critical — shutting down NAS NOW'";
+      doshutdown = ''
+        ${pkgs.util-linux}/bin/wall 'UPS battery critical — shutting down NAS NOW'
+        sleep 5
+        ${pkgs.systemd}/bin/systemctl poweroff -f
+      '';
     };
   };
   # ====================
