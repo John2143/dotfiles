@@ -26,7 +26,7 @@
   boot.extraModulePackages = [];
 
   boot.supportedFilesystems = ["zfs"];
-  boot.zfs.extraPools = ["tank" "neo"];
+  boot.zfs.extraPools = ["tank"];  # neo removed — migrating to ext4 for Longhorn replicas
 
   # fileSystems and swapDevices are managed by disko (see modules/disko_nas.nix)
 
