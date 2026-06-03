@@ -88,7 +88,7 @@
         fi
       done
       tooltip=$(echo -e "$tooltip" | head -c 500)  # convert \n, truncate
-      jq -n --arg text "$text" --arg class "$class" --arg tooltip "$tooltip" \
+      jq -nc --arg text "$text" --arg class "$class" --arg tooltip "$tooltip" \
         '{text: $text, class: $class, tooltip: $tooltip}'
     '';
   };
@@ -318,7 +318,7 @@
     runtimeInputs = with pkgs; [tailscale jq coreutils];
     text = ''
       data=$(tailscale status --json 2>/dev/null) || {
-        jq -n '{text: "", class: "disconnected", tooltip: "Tailscale: not running"}'
+        jq -nc '{text: "", class: "disconnected", tooltip: "Tailscale: not running"}'
         exit 0
       }
 
@@ -330,20 +330,20 @@
           if [ "$online" = "true" ]; then
             ip=$(echo "$data" | jq -r '.TailscaleIPs[0] // "?"')
             name=$(echo "$data" | jq -r '.Self.DNSName | rtrimstr(".") // "?"')
-            jq -n --arg ip "$ip" --arg name "$name" \
+            jq -nc --arg ip "$ip" --arg name "$name" \
               '{text: "", class: "connected", tooltip: "Tailscale: Connected (\($name))\nIP: \($ip)"}'
           else
-            jq -n '{text: "", class: "disconnected", tooltip: "Tailscale: Connected but offline"}'
+            jq -nc '{text: "", class: "disconnected", tooltip: "Tailscale: Connected but offline"}'
           fi
           ;;
         Stopped)
-          jq -n '{text: "", class: "disconnected", tooltip: "Tailscale: Stopped"}'
+          jq -nc '{text: "", class: "disconnected", tooltip: "Tailscale: Stopped"}'
           ;;
         NeedsLogin)
-          jq -n '{text: "", class: "needs-login", tooltip: "Tailscale: Needs login"}'
+          jq -nc '{text: "", class: "needs-login", tooltip: "Tailscale: Needs login"}'
           ;;
         *)
-          jq -n --arg state "$state" \
+          jq -nc --arg state "$state" \
             '{text: "", class: "disconnected", tooltip: "Tailscale: \($state)"}'
           ;;
       esac
