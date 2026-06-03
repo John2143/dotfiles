@@ -340,8 +340,7 @@ window#waybar > box {
 }
 
 #custom-privacy.recording {
-    color: @red;
-    font-weight: bold;
+    color: @yellow;
 }
 
 #custom-mullvad.connected {
@@ -373,8 +372,7 @@ window#waybar > box {
 #battery.critical,
 #cpu.critical,
 #memory.critical,
-#temperature.critical,
-#custom-privacy.recording {
+#temperature.critical {
     animation: urgent-blink 1s ease-in-out infinite alternate;
 }
 

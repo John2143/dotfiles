@@ -8,13 +8,11 @@
     name = "media-player-status";
     runtimeInputs = with pkgs; [playerctl jq];
     text = ''
-      # Icons use ASCII for portability (nas.local builder lacks UTF-8 locale)
-      # Originals: ▶ (play), || -> ⏸ (pause), * -> ♫ (stopped), # -> ■ (stopped), - -> — (emdash)
+      # Icons: ▶ (playing), ⏸ (paused), ♫ (stopped), ■ (stopped in tooltip)
       # Get all active players
       players=$(playerctl --list-all 2>/dev/null)
       if [ -z "$players" ]; then
-        # TODO: restore ♫ when all builders support UTF-8
-        echo '{"text": "*", "class": "stopped", "tooltip": "No media playing"}'
+        echo '{"text": "♫", "class": "stopped", "tooltip": "No media playing"}'
         exit 0
       fi
 
@@ -53,14 +51,19 @@
       player_name="$best"
 
       case "$best_status" in
-        Playing)  class="playing"; icon=">" ;;
-        Paused)   class="paused";  icon="||" ;;
+        Playing)  class="playing"; icon="▶" ;;
+        Paused)   class="paused";  icon="⏸" ;;
 *)        
         player_display=$(playerctl --player="$best" metadata --format '{{ playerName }}' 2>/dev/null || echo "$player_name")
-        echo "{\"text\": \"* $player_name\", \"class\": \"stopped\", \"tooltip\": \"$player_display: state unknown\"}"
+        echo "{\"text\": \"♫ $player_name\", \"class\": \"stopped\", \"tooltip\": \"$player_display: state unknown\"}"
         exit 0 ;;
       esac
-
+      vol=$(playerctl --player="$best" volume 2>/dev/null)
+      vol_text=""
+      if [ -n "$vol" ]; then
+        vol_pct=$(echo "$vol" | awk '{printf "%.0f", $1 * 100}')
+        vol_text=" $vol_pct%"
+      fi
       if [ -n "$title" ]; then
         if [ -n "$artist" ]; then
           text="$icon  $player_name: $artist - $title"
@@ -70,6 +73,7 @@
       else
         text="$icon  $player_name"
       fi
+      text="$text$vol_text"
 
       # Build tooltip with all active players
       tooltip=""
@@ -79,9 +83,9 @@
         t=$(playerctl --player="$p" metadata title 2>/dev/null)
         icon_t=""
         case "$s" in
-          Playing) icon_t=">" ;;
-          Paused)  icon_t="||" ;;
-          *)       icon_t="#" ;;
+          Playing) icon_t="▶" ;;
+          Paused)  icon_t="⏸" ;;
+          *)       icon_t="■" ;;
         esac
         if [ -n "$t" ]; then
           tooltip="$tooltip$icon_t $p: $a - $t\n"
@@ -133,21 +137,65 @@
     '';
   };
 
+  media-player-focus = pkgs.writeShellApplication {
+    name = "media-player-focus";
+    runtimeInputs = with pkgs; [playerctl hyprland];
+    text = ''
+      players=$(playerctl --list-all 2>/dev/null)
+      if [ -z "$players" ]; then
+        exit 0
+      fi
+
+      # Find best player (same logic as media-player-status)
+      best=""
+      browser_playing=""
+      for p in $players; do
+        s=$(playerctl --player="$p" status 2>/dev/null)
+        case "$p" in
+          firefox*|chromium*|chrome*|Floorp*)
+            [ "$s" = "Playing" ] && browser_playing="$p"
+            continue
+            ;;
+        esac
+        case "$s" in
+          Playing) best="$p"; break ;;
+          Paused)  [ -z "$best" ] && best="$p" ;;
+        esac
+      done
+
+      if [ -z "$best" ] && [ -n "$browser_playing" ]; then
+        best="$browser_playing"
+      fi
+
+      if [ -z "$best" ]; then
+        best=$(echo "$players" | head -1)
+      fi
+
+      # Focus the window. Try both lowercase and capitalized first letter.
+      cap="''${best^}"
+      if hyprctl clients 2>/dev/null | grep -qi "class: $best"; then
+        hyprctl dispatch focuswindow "class:($best)"
+      elif hyprctl clients 2>/dev/null | grep -qi "class: $cap"; then
+        hyprctl dispatch focuswindow "class:($cap)"
+      else
+        hyprctl dispatch focuswindow "title:($best)"
+      fi
+    '';
+  };
+
   media-player-menu = pkgs.writeShellApplication {
     name = "media-player-menu";
     runtimeInputs = with pkgs; [playerctl wofi coreutils];
     text = ''
-      # Icons use ASCII for portability (nas.local builder lacks UTF-8 locale)
-      # Originals: > -> ▶ (playing), || -> ⏸ (paused)
+      # Icons: ▶ (playing), ⏸ (paused)
       players=$(playerctl --list-all 2>/dev/null)
-
       menu="Pause All\nResume Spotify"
 
       if [ -n "$players" ]; then
         for p in $players; do
           s=$(playerctl --player="$p" status 2>/dev/null)
-          icon=">"
-          [ "$s" = "Paused" ] && icon="||"
+          icon="▶"
+          [ "$s" = "Paused" ] && icon="⏸"
           menu="$menu\n$icon $p"
         done
       fi
@@ -205,7 +253,7 @@
     text = ''
       # Check for active audio capture sources via pactl
       if pactl list sources 2>/dev/null | grep -q "State: RUNNING"; then
-        echo '{"text": "", "class": "recording", "tooltip": "Microphone active"}'
+        echo '{"text": "●", "class": "recording", "tooltip": "An application is currently using your microphone."}'
       else
         echo '{"text": "", "class": "", "tooltip": ""}'
       fi
@@ -387,6 +435,7 @@ in {
           # ---- Right zone ----
           modules-right =
             [
+              "custom/privacy"
               "custom/tailscale"
               "custom/voxtype"
               "group/hardware"
@@ -401,7 +450,6 @@ in {
               "custom/teamspeak-sound"
               "custom/vast"
               "custom/weather"
-              "custom/privacy"
               "custom/eww-hello"
               "battery"
               "custom/autoclicker"
@@ -499,7 +547,7 @@ in {
               if echo "$out" | ${pkgs.jq}/bin/jq empty 2>/dev/null; then
                 echo "$out"
               else
-                echo '{"text":"*","class":"stopped","tooltip":""}'
+                echo '{"text":"♫","class":"stopped","tooltip":""}'
               fi
             ''}";
             return-type = "json";
@@ -507,9 +555,11 @@ in {
             signal = 12;
             format = "{}";
             on-click = "${media-player-toggle}/bin/media-player-toggle";
-            on-click-right = "${media-player-menu}/bin/media-player-menu";
+            on-click-right = "${media-player-focus}/bin/media-player-focus";
             on-click-shift = "playerctl --all-players pause; pkill -RTMIN+12 waybar";
             on-click-middle = "playerctl --all-players next; pkill -RTMIN+12 waybar";
+            on-scroll-up = "playerctl volume +0.05; pkill -RTMIN+12 waybar";
+            on-scroll-down = "playerctl volume -0.05; pkill -RTMIN+12 waybar";
           };
 
           # ---- Tailscale VPN ----
