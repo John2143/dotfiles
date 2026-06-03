@@ -32,6 +32,9 @@ if [ (uname) = "Linux" ]
 
         alias nos="fish -c 'nh os switch'"
         alias nob="fish -c 'nh os boot'"
+        alias noss='sudo nixos-rebuild switch --flake ~/dotfiles --builders "" --option substituters "http://nas:8280/2143nix https://cache.nixos.org"'
+        alias nobb='sudo nixos-rebuild boot --flake ~/dotfiles --builders "" --option substituters "http://nas:8280/2143nix https://cache.nixos.org"'
+
 
         alias update="fish -c 'cd ~/dotfiles/; nix flake update'"
         alias optimize="fish -c 'echo nix collect garbage; sudo nix-collect-garbage --delete-older-than 7d; echo nix store optimize; sudo nix-store --optimise; echo rfish; rfish'"
