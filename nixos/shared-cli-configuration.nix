@@ -44,10 +44,7 @@
     inherit (config.nixpkgs) config;
   };
 
-  # shutdown faster
-  #systemd.extraConfig = ''
-  #DefaultTimeoutStopSec=10s
-  #'';
+
 
   environment.systemPackages = with pkgs;
     [

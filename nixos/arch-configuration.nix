@@ -271,6 +271,7 @@ in
 
 
   custom.k3sNodeTaints = ["seated=true:NoSchedule"];
+  custom.k3sStorageAfter = ["mnt-longhorn.mount"];
 
   # k3s server — join existing cluster via mDNS (bootstrap without tailscale dependency).
   # Dual-stack cluster CIDRs mirror closet's init node config.

@@ -17,6 +17,12 @@
     ./longhorn-host.nix
   ];
 
+  options.custom.k3sStorageAfter = lib.mkOption {
+    type = lib.types.listOf lib.types.str;
+    default = [];
+    description = "Systemd units that must remain active during k3s shutdown (e.g. storage mounts backing Longhorn).";
+  };
+
   options.custom.k3sNodeTaints = lib.mkOption {
     type = lib.types.listOf lib.types.str;
     default = [];
@@ -45,7 +51,7 @@
 
     # k3s needs avahi for mDNS server discovery (closet.local, arch.local, nas.local)
     systemd.services.k3s = {
-      after = [ "avahi-daemon.service" "tailscaled.service" ];
+      after = [ "avahi-daemon.service" "tailscaled.service" ] ++ config.custom.k3sStorageAfter;
       wants = [ "avahi-daemon.service" ];
     };
 

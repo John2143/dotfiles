@@ -265,6 +265,11 @@ let
             new = "0" if cur == "1" else "1"
             state_cache["input_muted"] = new  # optimistically set before confirm
             resp = ts3_cmd(sock, f"clientupdate client_input_muted={new}")
+            print(
+                f"TOGGLE mic: read={cur}, set={new}, "
+                f"resp={resp.strip()}",
+                file=sys.stderr, flush=True,
+            )
             if "error id=0" in resp:
                 return "", True
             else:
@@ -292,6 +297,11 @@ let
             new = "0" if cur == "1" else "1"
             state_cache["output_muted"] = new  # optimistically set before confirm
             resp = ts3_cmd(sock, f"clientupdate client_output_muted={new}")
+            print(
+                f"TOGGLE output: read={cur}, set={new}, "
+                f"resp={resp.strip()}",
+                file=sys.stderr, flush=True,
+            )
             if "error id=0" in resp:
                 return "", True
             else:

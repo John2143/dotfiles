@@ -299,6 +299,9 @@
   };
 
   # k3s server — join existing cluster via mDNS (bootstrap without tailscale dependency).
+  # NAS runs k3s on ZFS — keep ZFS mounted until k3s drains Longhorn volumes.
+  custom.k3sStorageAfter = ["zfs-mount.service"];
+
   # Dual-stack cluster CIDRs mirror closet's init node config.
   # NAS uses the 10GbE interface at 192.168.5.175 (the 1GbE at .176 is being retired).
   services.k3s.extraFlags = lib.concatStringsSep " " [

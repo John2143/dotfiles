@@ -209,7 +209,7 @@
       UPSTYPE usb
       DEVICE
       ONBATTERYDELAY 6
-      BATTERYLEVEL 10
+      BATTERYLEVEL 50
       MINUTES 5
     '';
     hooks = {
@@ -223,7 +223,11 @@
         ${pkgs.curl}/bin/curl -s -X POST "$CLOSET_OFFBATTERY_URL"
         ${pkgs.util-linux}/bin/wall 'UPS power restored'
       '';
-      doshutdown = "${pkgs.util-linux}/bin/wall 'UPS battery critical — shutting down NOW'";
+      doshutdown = ''
+        ${pkgs.util-linux}/bin/wall 'UPS battery critical — shutting down NOW'
+        sleep 5
+        ${pkgs.systemd}/bin/systemctl poweroff -f
+      '';
     };
   };
   # Do NOT change this value unless you have manually inspected all the changes it would make to your configuration,
