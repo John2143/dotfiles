@@ -8,11 +8,16 @@
   endpoint = "http://nas:8280";
 in {
   # ── Nix substituter ────────────────────────────────────────────────
+  # Our Attic cache is primary (first in list = highest priority).
+  # cache.nixos.org is a fallback so we can still build when the
+  # NAS is unreachable or cache entries are missing.
   nix.settings.substituters = lib.mkForce [
     "${endpoint}/${cacheName}"
+    "https://cache.nixos.org"
   ];
   nix.settings.trusted-public-keys = [
     "2143nix:Ysam0ozURtK+1tkP62M6lzbfoi8BVeL6s7ZWJlB6UxE="
+    "cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY="
   ];
 
   # ── Admin token (age-encrypted) ────────────────────────────────────

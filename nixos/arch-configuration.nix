@@ -314,6 +314,7 @@ in
     50051 # screen-control REST API (arch-configuration.nix:290, screen-control/src/main.rs:129)
     10250 # kubelet (k3s agent)
     18080 # monero p2p (monerod)
+    5580 # matter-server (hostNetwork pod)
   ];
   networking.firewall.allowedUDPPorts = [
     8472 # flannel VXLAN (k3s)

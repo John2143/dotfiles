@@ -187,6 +187,7 @@
     2379 # etcd client (k3s join)
     2380 # etcd peer (k3s join)
     5432 # Postgres
+    5580 # matter-server (hostNetwork pod)
   ];
   networking.firewall.allowedUDPPorts = [
     8472 # flannel VXLAN (k3s)

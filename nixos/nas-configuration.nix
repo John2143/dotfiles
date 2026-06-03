@@ -488,7 +488,7 @@
       UPSTYPE usb
       DEVICE
       ONBATTERYDELAY 6
-      BATTERYLEVEL 50
+      BATTERYLEVEL 90
       MINUTES 5
     '';
     hooks = {
@@ -587,6 +587,7 @@
       2049 # nfsv4 (NFS) — Longhorn backup target
       2283 # immich (immich-server)
       25565 # minecraft (paperMC)
+      5580 # matter-server (hostNetwork pod)
       8280 # attic nix cache — nas-configuration.nix:557
       10250 # kubelet (k3s agent)
 
