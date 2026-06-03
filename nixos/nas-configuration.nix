@@ -315,12 +315,7 @@
     "--flannel-ipv6-masq"
     "--node-ip=192.168.5.175,fd00:1::175"
   ];
-  # TEMP: k3s disabled for ZFS pool migration (Longhorn replicas need ext4, not ZFS).
-  # Revert this block after:
-  #   sudo zpool destroy neo
-  #   sudo mkfs.ext4 -L longhorn /dev/sda6
-  #   add mount below and rebuild
-  services.k3s.enable = lib.mkForce false;
+
 
 
   # ================
@@ -624,10 +619,10 @@
   # Formatted from the freed neo pool partition:
   #   sudo mkfs.ext4 -L longhorn /dev/sda6
   # WARNING: ZFS fallocate() incompatibility prevents running Longhorn replicas on neo/longhorn.
-  # fileSystems."/var/lib/longhorn" = {
-  #   device = "/dev/disk/by-label/longhorn";
-  #   fsType = "ext4";
-  # };
+  fileSystems."/var/lib/longhorn" = {
+    device = "/dev/disk/by-label/longhorn";
+    fsType = "ext4";
+  };
 }
 
 
