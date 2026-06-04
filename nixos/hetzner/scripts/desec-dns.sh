@@ -124,6 +124,61 @@ cmd_setup_ns_delegation() {
   echo "Rollback if broken: $0 set-a '*' 5.161.19.201"
 }
 
+cmd_deploy_wildcard_cname() {
+  echo "=== Deploying wildcard CNAME: *.9s.pics → gslb.9s.pics ==="
+  echo ""
+  echo "This sets up the zero-touch DNS architecture:"
+  echo "  1. ns1/ns2/ns3 A records (glue for delegation)"
+  echo "  2. gslb.9s.pics NS → ns1/ns2/ns3 (delegation to self-hosted coredns)"
+  echo "  3. *.9s.pics CNAME → gslb.9s.pics (wildcard catch-all)"
+  echo ""
+  echo "After this, new app domains only need to be added to coredns zone.db."
+  echo "No further deSEC API calls required for new subdomains."
+  echo ""
+  read -rp "Proceed? (y/N) " CONFIRM
+  if [ "$CONFIRM" != "y" ] && [ "$CONFIRM" != "Y" ]; then
+    echo "Aborting."
+    exit 0
+  fi
+
+  local ips=("5.161.19.201" "5.78.29.145" "5.161.19.197")
+  local names=("ns1" "ns2" "ns3")
+
+  # Step 1-3: Create ns1, ns2, ns3 A records
+  for i in 1 2 3; do
+    echo "[$i/6] Creating ${names[$((i-1))]}.9s.pics A ${ips[$((i-1))]}..."
+    cmd_set_a "${names[$((i-1))]}" "${ips[$((i-1))]}"
+    echo "Sleeping 300s for deSEC rate limit..."
+    sleep 300
+  done
+
+  # Step 4: Delete old wildcard A record (if it exists)
+  echo "[4/6] Deleting *.9s.pics A record (if present)..."
+  curl -sf -X DELETE -H "$AUTH" "$API/*/A/" 2>&1 || echo "    (record may already be absent)"
+  echo "Sleeping 300s for deSEC rate limit..."
+  sleep 300
+
+  # Step 5: Create gslb.9s.pics NS delegation
+  echo "[5/6] Creating gslb.9s.pics NS → ns1 ns2 ns3..."
+  curl -sf -X PUT -H "$AUTH" -H "$CT" \
+    "$API/gslb/NS/" \
+    -d '{"records":["ns1.9s.pics.","ns2.9s.pics.","ns3.9s.pics."]}' 2>&1 | python3 -m json.tool
+  echo "Sleeping 300s for deSEC rate limit..."
+  sleep 300
+
+  # Step 6: Create wildcard CNAME
+  echo "[6/6] Creating *.9s.pics CNAME gslb.9s.pics..."
+  curl -sf -X PUT -H "$AUTH" -H "$CT" \
+    "$API/*/CNAME/" \
+    -d '{"records":["gslb.9s.pics."]}' 2>&1 | python3 -m json.tool
+
+  echo ""
+  echo "=== Wildcard CNAME deployed ==="
+  echo "Verify: dig @8.8.8.8 some-random-name.9s.pics"
+  echo ""
+  echo "Rollback if broken: $0 set-a '*' 5.161.19.201"
+}
+
 cmd_verify_ns_delegation() {
   echo "=== Verifying *.9s.pics NS delegation ==="
   echo ""
@@ -158,12 +213,15 @@ case "${1:-}" in
   set-ns)
     [ $# -eq 3 ] || { echo "Usage: $0 set-ns <subdomain> <nameserver>"; exit 1; }
     cmd_set_ns "$2" "$3"
-
+    ;;
   setup-ns-delegation)
     cmd_setup_ns_delegation
     ;;
   verify-ns-delegation)
     cmd_verify_ns_delegation
+    ;;
+  deploy-wildcard-cname)
+    cmd_deploy_wildcard_cname
     ;;
 
   update-headscale)
@@ -173,12 +231,13 @@ case "${1:-}" in
     cmd_update_all_nodes
     ;;
   *)
-    echo "Usage: $0 {list|set-a|set-ns|setup-ns-delegation|verify-ns-delegation|update-headscale|update-all-nodes}"
+    echo "Usage: $0 {list|set-a|set-ns|setup-ns-delegation|deploy-wildcard-cname|verify-ns-delegation|update-headscale|update-all-nodes}"
     echo ""
     echo "  list                  List all DNS records for ${DOMAIN}"
     echo "  set-a NAME IP         Set A record (e.g. headscale → 108.56.153.222)"
     echo "  set-ns NAME NS        Set NS record"
     echo "  setup-ns-delegation   ONE-TIME: migrate wildcard A → NS delegation (k8gb)"
+    echo "  deploy-wildcard-cname ONE-TIME: wildcard CNAME *.9s.pics → gslb.9s.pics"
     echo "  verify-ns-delegation  Check NS delegation and coredns health"
     echo "  update-headscale      Auto-detect public IP and update headscale.${DOMAIN}"
     echo "  update-all-nodes      Update headscale.${DOMAIN} to current public IP"

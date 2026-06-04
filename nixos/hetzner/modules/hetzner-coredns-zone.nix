@@ -16,14 +16,14 @@
     description = "Generate coredns zone.db from Hetzner floating IPs";
     after = ["k3s.service" "floating-ip-health.service"];
     wants = ["k3s.service"];
-    path = [pkgs.k3s pkgs.hcloud pkgs.python3];
+    path = [pkgs.k3s pkgs.hcloud pkgs.python3 pkgs.bind];
     serviceConfig = {
       Type = "oneshot";
       Environment = [
         "KUBECONFIG=/etc/rancher/k3s/k3s.yaml"
         # Domain → region mapping. Each domain resolves to all 3 FIPs.
         # headscale uses Tailscale MagicDNS IP (stable, not a FIP).
-        'ZONE_CONFIG={"openfront":{"regions":["ashburn","hillsboro","nuremberg"]},"simulation-api":{"regions":["ashburn","hillsboro","nuremberg"]},"john2143":{"regions":["ashburn","hillsboro","nuremberg"]},"headscale":{"ip":"100.64.0.14","ttl":3600}}'
+        "ZONE_CONFIG={\"openfront\":{\"regions\":[\"ashburn\",\"hillsboro\",\"nuremberg\"]},\"simulation-api\":{\"regions\":[\"ashburn\",\"hillsboro\",\"nuremberg\"]},\"john2143\":{\"regions\":[\"ashburn\",\"hillsboro\",\"nuremberg\"]},\"headscale\":{\"ip\":\"100.64.0.14\",\"ttl\":3600}}"
       ];
     };
     script = "${pkgs.python3}/bin/python3 ${../scripts/coredns-zone-generator.py}";

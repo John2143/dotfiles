@@ -246,9 +246,11 @@ data:
         ready
         prometheus 0.0.0.0:9153
         forward . /etc/resolv.conf
+        log
+        ratelimit 100
     }
 
-    9s.pics {
+    gslb.9s.pics {
         file /etc/coredns/zone/zone.db
         loadbalance round_robin
         import global
@@ -263,7 +265,7 @@ metadata:
   namespace: k8gb
 data:
   zone.db: |
-    $ORIGIN 9s.pics.
+    $ORIGIN gslb.9s.pics.
     @ 3600 IN SOA ns1.9s.pics. hostmaster.9s.pics. 0 7200 1800 86400 3600
 CMEOF
       # Mount the zone ConfigMap into coredns
