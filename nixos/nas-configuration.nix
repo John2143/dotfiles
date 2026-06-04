@@ -27,21 +27,7 @@
 # 4. Add L2ARC read cache (200GB SSD partition on boot SSD):
 #      sudo zpool add tank cache /dev/disk/by-id/wwn-0x5001b448be24504b-part5
 #
-# 5. Create the "neo" pool (single SSD partition on boot SSD):
-#      sudo zpool create -o ashift=12 \
-#        -O atime=off -O compression=lz4 -O xattr=sa -O acltype=posixacl \
-#        -O mountpoint=/neo \
-#        neo /dev/disk/by-id/wwn-0x5001b448be24504b-part6
-#
-# Current live mapping on this NAS:
-#   - raidz1-0 (data): ata-ST8000DM004-2CX188_{ZR10RP6D,ZR10TRAD,ZR109DM9,ZR10RB8J}
-#     (sda, sdc, sde, sdf)
-#   - special mirror: wwn-0x5e83a97923abf0ec-part1 (sdd1) +
-#                     wwn-0x5001b448be24504b-part4 (sdb4)
-#   - L2ARC cache:    wwn-0x5001b448be24504b-part5 (sdb5)
-#   - neo pool:       wwn-0x5001b448be24504b-part6 (sdb6)
-#
-# 6. Create datasets:
+# 5. Create datasets:
 #      sudo zfs create -o mountpoint=/tank/share    tank/share
 #      sudo zfs create -o mountpoint=/tank/media    tank/media
 #      sudo zfs create -o mountpoint=/tank/backups  tank/backups
@@ -67,7 +53,6 @@
 #        -o atime=off \
 #        tank/minecraft
 #      sudo chown john:john /tank/minecraft
-#
 #    Immich thumbnails — dedicated child dataset pinned to the SSD special
 #    vdev for fast scrolling. recordsize=special_small_blocks=1M means every
 #    block written under thumbs/ lands on the SSD mirror, not the raidz1
@@ -101,24 +86,14 @@
 #      sudo smbpasswd -a john
 #
 #
-###########################
-# 10. Longhorn backing store — lives on the neo SSD pool, not tank.
-#     The neo dataset is mounted at /var/lib/longhorn, which is Longhorn's
-#     default data path. SSD speed means volume operations (attach, snapshot,
-#     rebuild) don't hit HDD seek latency.
+# 9. Longhorn backing store — ext4 on sda6, managed by disko.
+#    Mounted at /var/lib/longhorn. The ext4 fs label "longhorn"
+#    was set via mkfs.ext4 at migration time. No ZFS snapshots needed
+#    — Longhorn manages its own backup/replication lifecycle.
 #
-#     One-time setup:
-#       sudo zfs create \
-#         -o mountpoint=/var/lib/longhorn \
-#         -o recordsize=1M \
-#         -o compression=lz4 \
-#         -o atime=off \
-#         neo/longhorn
-#       sudo chown root:root /var/lib/longhorn
-#       sudo chmod 755 /var/lib/longhorn
+# 10. Rebuild:
+#      sudo nixos-rebuild switch --flake /home/john/dotfiles#nas
 #
-#     11. Rebuild:
-#       sudo nixos-rebuild switch --flake /home/john/dotfiles#nas
 #
 {
   config,
@@ -266,14 +241,6 @@
         autosnap = true;
         daily = 30;
         monthly = 12;
-      };
-      # neo/longhorn backs Longhorn's block-device store on the SSD pool.
-      # Keep daily snapshots for quick volume-level recovery; no monthly
-      # needed since Longhorn manages its own snapshot/backup lifecycle and
-      # monthly ZFS snaps would waste SSD space on stale block data.
-      "neo/longhorn" = {
-        autosnap = true;
-        daily = 7;
       };
     };
   };
