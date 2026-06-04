@@ -16,35 +16,49 @@
         exit 0
       fi
 
-      # Find best player: prefer Playing (non-browser first), then Paused
-      best=""
-      best_status=""
-      for p in $players; do
-        s=$(playerctl --player="$p" status 2>/dev/null)
-        # Skip browser players unless they are the only ones
-        case "$p" in
-          firefox*|chromium*|chrome*|Floorp*)
-            [ "$s" = "Playing" ] && browser_playing="$p"
-            continue
-            ;;
-        esac
-        case "$s" in
-          Playing) best="$p"; best_status="$s"; break ;;
-          Paused)  [ -z "$best" ] && { best="$p"; best_status="$s"; };;
-        esac
-      done
-
-      # Fall back to browser if nothing else is playing
-      if [ -z "$best" ] && [ -n "$browser_playing" ]; then
-        best="$browser_playing"
-        best_status="Playing"
+      # Check for user-selected player override
+      selected=""
+      if [ -f /tmp/media-player-selected ]; then
+        sel=$(cat /tmp/media-player-selected)
+        if echo "$players" | grep -qx "$sel"; then
+          selected="$sel"
+        fi
       fi
 
-      # Fall back to any player
-      if [ -z "$best" ]; then
-        best=$(echo "$players" | head -1)
+      if [ -n "$selected" ]; then
+        best="$selected"
         best_status=$(playerctl --player="$best" status 2>/dev/null)
+      else
+        # Find best player: prefer Playing (non-browser first), then Paused
+        best=""
+        best_status=""
+        for p in $players; do
+          s=$(playerctl --player="$p" status 2>/dev/null)
+          case "$p" in
+            firefox*|chromium*|chrome*|Floorp*)
+              [ "$s" = "Playing" ] && browser_playing="$p"
+              continue
+              ;;
+          esac
+          case "$s" in
+            Playing) best="$p"; best_status="$s"; break ;;
+            Paused)  [ -z "$best" ] && { best="$p"; best_status="$s"; };;
+          esac
+        done
+
+        if [ -z "$best" ] && [ -n "$browser_playing" ]; then
+          best="$browser_playing"
+          best_status="Playing"
+        fi
+
+        if [ -z "$best" ]; then
+          best=$(echo "$players" | head -1)
+          best_status=$(playerctl --player="$best" status 2>/dev/null)
+        fi
       fi
+
+      # Write active player for scroll/volume commands
+      echo "$best" > /tmp/media-player-active
 
       artist=$(playerctl --player="$best" metadata artist 2>/dev/null | head -c 30)
       title=$(playerctl --player="$best" metadata title 2>/dev/null | head -c 50)
@@ -53,17 +67,19 @@
       case "$best_status" in
         Playing)  class="playing"; icon="▶" ;;
         Paused)   class="paused";  icon="⏸" ;;
-*)        
-        player_display=$(playerctl --player="$best" metadata --format '{{ playerName }}' 2>/dev/null || echo "$player_name")
-        echo "{\"text\": \"♫ $player_name\", \"class\": \"stopped\", \"tooltip\": \"$player_display: state unknown\"}"
-        exit 0 ;;
+        *)
+          player_display=$(playerctl --player="$best" metadata --format '{{ playerName }}' 2>/dev/null || echo "$player_name")
+          echo "{\"text\": \"♫ $player_name\", \"class\": \"stopped\", \"tooltip\": \"$player_display: state unknown\"}"
+          exit 0 ;;
       esac
+
       vol=$(playerctl --player="$best" volume 2>/dev/null)
       vol_text=""
       if [ -n "$vol" ]; then
         vol_pct=$(echo "$vol" | awk '{printf "%.0f", $1 * 100}')
         vol_text=" $vol_pct%"
       fi
+
       if [ -n "$title" ]; then
         if [ -n "$artist" ]; then
           text="$icon  $player_name: $artist - $title"
@@ -75,7 +91,6 @@
       fi
       text="$text$vol_text"
 
-      # Build tooltip with all active players
       tooltip=""
       for p in $players; do
         s=$(playerctl --player="$p" status 2>/dev/null)
@@ -91,7 +106,7 @@
           tooltip="$tooltip$icon_t $p: $a - $t\n"
         fi
       done
-      tooltip=$(echo -e "$tooltip" | head -c 500)  # convert \n, truncate
+      tooltip=$(echo -e "$tooltip" | head -c 500)
       jq -nc --arg text "$text" --arg class "$class" --arg tooltip "$tooltip" \
         '{text: $text, class: $class, tooltip: $tooltip}'
     '';
@@ -101,13 +116,32 @@
     name = "media-player-toggle";
     runtimeInputs = with pkgs; [playerctl];
     text = ''
-      # Icons use ASCII for portability (nas.local builder lacks UTF-8 locale)
-      # Same mapping as media-player-status
       players=$(playerctl --list-all 2>/dev/null)
       if [ -z "$players" ]; then
         exit 0
       fi
 
+      # Respect user-selected player first
+      if [ -f /tmp/media-player-selected ]; then
+        sel=$(cat /tmp/media-player-selected)
+        if echo "$players" | grep -qx "$sel"; then
+          playerctl --player="$sel" play-pause
+          pkill -RTMIN+12 waybar
+          exit 0
+        fi
+      fi
+
+      # Fall back to active player
+      if [ -f /tmp/media-player-active ]; then
+        active=$(cat /tmp/media-player-active)
+        if echo "$players" | grep -qx "$active"; then
+          playerctl --player="$active" play-pause
+          pkill -RTMIN+12 waybar
+          exit 0
+        fi
+      fi
+
+      # Final fallback: auto-select
       best=""
       browser_playing=""
       for p in $players; do
@@ -180,6 +214,60 @@
       else
         hyprctl dispatch focuswindow "title:($best)"
       fi
+    '';
+  };
+
+  media-player-cycle = pkgs.writeShellApplication {
+    name = "media-player-cycle";
+    runtimeInputs = with pkgs; [coreutils];
+    text = ''
+      players=$(playerctl --list-all 2>/dev/null)
+      if [ -z "$players" ]; then
+        exit 0
+      fi
+
+      current=""
+      if [ -f /tmp/media-player-selected ]; then
+        current=$(cat /tmp/media-player-selected)
+      fi
+
+      # Find current index, pick next (wrap around)
+      next=""
+      found=false
+      first=""
+      for p in $players; do
+        [ -z "$first" ] && first="$p"
+        if $found; then next="$p"; break; fi
+        [ "$p" = "$current" ] && found=true
+      done
+      [ -z "$next" ] && next="$first"
+
+      echo "$next" > /tmp/media-player-selected
+      pkill -RTMIN+12 waybar
+    '';
+  };
+
+  media-player-volume = pkgs.writeShellApplication {
+    name = "media-player-volume";
+    runtimeInputs = with pkgs; [coreutils];
+    text = ''
+      # Read selected/active player, then adjust volume
+      player=""
+      if [ -f /tmp/media-player-selected ]; then
+        player=$(cat /tmp/media-player-selected)
+      fi
+      if [ -z "$player" ] && [ -f /tmp/media-player-active ]; then
+        player=$(cat /tmp/media-player-active)
+      fi
+      if [ -z "$player" ]; then
+        player=$(playerctl --list-all 2>/dev/null | head -1)
+      fi
+      if [ -z "$player" ]; then
+        exit 0
+      fi
+
+      playerctl --player="$player" volume "$1"
+      pkill -RTMIN+12 waybar
     '';
   };
 
@@ -557,9 +645,9 @@ in {
             on-click = "${media-player-toggle}/bin/media-player-toggle";
             on-click-right = "${media-player-focus}/bin/media-player-focus";
             on-click-shift = "playerctl --all-players pause; pkill -RTMIN+12 waybar";
-            on-click-middle = "playerctl --all-players next; pkill -RTMIN+12 waybar";
-            on-scroll-up = "playerctl volume +0.05; pkill -RTMIN+12 waybar";
-            on-scroll-down = "playerctl volume -0.05; pkill -RTMIN+12 waybar";
+            on-click-middle = "${media-player-cycle}/bin/media-player-cycle";
+            on-scroll-up = "${media-player-volume}/bin/media-player-volume +0.05";
+            on-scroll-down = "${media-player-volume}/bin/media-player-volume -0.05";
           };
 
           # ---- Tailscale VPN ----

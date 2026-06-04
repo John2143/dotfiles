@@ -1,40 +1,38 @@
-# Disko configuration for the NAS machine.
+# Disko configuration for the NAS boot SSD.
 #
-# Target disk: 2TB WD SSD (wwn-0x5001b448be24504b, currently sdb).
+# Target disk: 2TB WD SSD (wwn-0x5001b448be24504b, currently sda).
 #
-# Partition layout declared in this file (GPT):
-#   part1: ESP         (4GB,   vfat, label=BOOT, mount=/boot)
-#   part2: swap        (16GB,  random-key encrypted, label=SWAP)
-#   part3: zfs_special (100GB, raw — tank special mirror leg)
-#   part4: l2arc       (200GB, raw — tank L2ARC read cache)
-#   part5: neo         (500GB, raw — neo ZFS pool)
-#   part6: root        (remainder ~1.1TB, ext4, label=NIXROOT, mount=/)
+# Partition layout (GPT):
+#   part1: ESP         (4GB,    vfat,  mount=/boot)
+#   part2: root        (1024GB, ext4,  mount=/)
+#   part3: swap        (16GB,   plain dm-crypt random-key)
+#   part4: zfs_special (100GB,  raw — tank special mirror leg, attached post-boot)
+#   part5: l2arc       (200GB,  raw — tank L2ARC cache, added post-boot)
+#   part6: longhorn    (remainder ~519GB, ext4, mount=/var/lib/longhorn)
 #
-# Current NAS host differs from this declared layout:
-#   - Actual on-disk order is ESP(sdb1) / root(sdb2) / swap(sdb3) /
-#     zfs_special+l2arc+neo(sdb4-6). This file defines the desired layout
-#     for a fresh disko install; partition numbering may differ on the
-#     live system.
-#   - tank special mirror: wwn-0x5001b448be24504b-part4 (sdb4) +
-#                           wwn-0x5e83a97923abf0ec-part1 (sdd1)
+# The ZFS pool `tank` is NOT managed by disko. After first boot:
+#   1. Import:  sudo zpool import tank
+#   2. Re-attach special mirror leg:
+#      sudo zpool replace tank /dev/disk/by-partlabel/disk-main-zfs_special
+#   3. Re-add L2ARC:
+#      sudo zpool add tank cache /dev/disk/by-partlabel/disk-main-l2arc
+#   4. Rebuild: sudo nixos-rebuild switch --flake /home/john/dotfiles#nas
 #
-# The ZFS pools (`tank`, `neo`) are NOT managed by disko. They are created
-# manually after the first boot and auto-imported by NixOS via
-# boot.zfs.extraPools. See nas-configuration.nix header comments for the
-# full ZFS setup procedure.
-#
-# === INSTALL STEPS ===
+# === INSTALL STEPS (fresh install or boot SSD replacement) ===
 #
 # 1. Boot the NixOS installer USB.
 # 2. Identify the 2TB boot SSD:
-#      ls -l /dev/disk/by-id/ | grep WDC
+#      ls -l /dev/disk/by-id/ | grep -i wdc
 #    Verify it matches wwn-0x5001b448be24504b.
 # 3. Run disko:
 #      sudo nix --experimental-features "nix-command flakes" \
 #        run github:nix-community/disko -- --mode disko ./nixos/modules/disko_nas.nix
 # 4. Install NixOS:
-#      sudo nixos-install --flake .#nas
-# 5. Reboot, then create ZFS pools (see nas-configuration.nix).
+#      sudo mount /dev/disk/by-label/NIXROOT /mnt
+#      sudo mount /dev/disk/by-label/BOOT /mnt/boot
+#      sudo mount /dev/disk/by-label/longhorn /mnt/var/lib/longhorn
+#      sudo nixos-install --flake /home/john/dotfiles#nas
+# 5. Reboot, then re-attach ZFS tank members (see above).
 #
 {
   disko.devices = {
@@ -48,6 +46,7 @@
             ESP = {
               type = "EF00";
               size = "4G";
+              name = "disk-main-ESP";
               content = {
                 type = "filesystem";
                 format = "vfat";
@@ -56,30 +55,49 @@
                 extraArgs = ["-n" "BOOT"];
               };
             };
-            swap = {
-              size = "16G";
-              content = {
-                type = "swap";
-                randomEncryption = true;
-                extraArgs = ["-L" "SWAP"];
-              };
-            };
-            zfs_special = {
-              size = "100G";
-            };
-            l2arc = {
-              size = "200G";
-            };
-            neo = {
-              size = "500G";
-            };
             root = {
-              size = "100%";
+              type = "8300";
+              size = "1024G";
+              name = "disk-main-root";
               content = {
                 type = "filesystem";
                 format = "ext4";
                 mountpoint = "/";
+                mountOptions = ["x-initrd.mount" "defaults"];
                 extraArgs = ["-L" "NIXROOT"];
+              };
+            };
+            swap = {
+              type = "8200";
+              size = "16G";
+              name = "disk-main-swap";
+              content = {
+                type = "swap";
+                randomEncryption = true;
+              };
+            };
+            zfs_special = {
+              type = "8300";
+              size = "100G";
+              name = "disk-main-zfs_special";
+              # Raw — ZFS special mirror leg, attached post-boot
+            };
+            l2arc = {
+              type = "8300";
+              size = "200G";
+              name = "disk-main-l2arc";
+              # Raw — ZFS L2ARC cache, added post-boot
+            };
+            longhorn = {
+              type = "8300";
+              size = "100%";
+              name = "disk-main-longhorn";
+              content = {
+                type = "filesystem";
+                format = "ext4";
+                mountpoint = "/var/lib/longhorn";
+                mountOptions = ["defaults"];
+                extraArgs = ["-L" "longhorn"];
               };
             };
           };
