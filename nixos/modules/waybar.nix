@@ -114,7 +114,7 @@
 
   media-player-toggle = pkgs.writeShellApplication {
     name = "media-player-toggle";
-    runtimeInputs = with pkgs; [playerctl];
+    runtimeInputs = with pkgs; [playerctl procps];
     text = ''
       players=$(playerctl --list-all 2>/dev/null)
       if [ -z "$players" ]; then
@@ -126,7 +126,7 @@
         sel=$(cat /tmp/media-player-selected)
         if echo "$players" | grep -qx "$sel"; then
           playerctl --player="$sel" play-pause
-          pkill -RTMIN+12 waybar
+          pidof -x waybar 2>/dev/null | xargs -r kill -RTMIN+12 2>/dev/null || true
           exit 0
         fi
       fi
@@ -136,7 +136,7 @@
         active=$(cat /tmp/media-player-active)
         if echo "$players" | grep -qx "$active"; then
           playerctl --player="$active" play-pause
-          pkill -RTMIN+12 waybar
+          pidof -x waybar 2>/dev/null | xargs -r kill -RTMIN+12 2>/dev/null || true
           exit 0
         fi
       fi
@@ -167,7 +167,7 @@
       fi
 
       playerctl --player="$best" play-pause
-      pkill -RTMIN+12 waybar
+      pidof -x waybar 2>/dev/null | xargs -r kill -RTMIN+12 2>/dev/null || true
     '';
   };
 
@@ -219,7 +219,7 @@
 
   media-player-cycle = pkgs.writeShellApplication {
     name = "media-player-cycle";
-    runtimeInputs = with pkgs; [coreutils];
+    runtimeInputs = with pkgs; [coreutils procps];
     text = ''
       players=$(playerctl --list-all 2>/dev/null)
       if [ -z "$players" ]; then
@@ -243,13 +243,13 @@
       [ -z "$next" ] && next="$first"
 
       echo "$next" > /tmp/media-player-selected
-      pkill -RTMIN+12 waybar
+      pidof -x waybar 2>/dev/null | xargs -r kill -RTMIN+12 2>/dev/null || true
     '';
   };
 
   media-player-volume = pkgs.writeShellApplication {
     name = "media-player-volume";
-    runtimeInputs = with pkgs; [coreutils];
+    runtimeInputs = with pkgs; [coreutils procps];
     text = ''
       # Read selected/active player, then adjust volume
       player=""
@@ -267,13 +267,13 @@
       fi
 
       playerctl --player="$player" volume "$1"
-      pkill -RTMIN+12 waybar
+      pidof -x waybar 2>/dev/null | xargs -r kill -RTMIN+12 2>/dev/null || true
     '';
   };
 
   media-player-menu = pkgs.writeShellApplication {
     name = "media-player-menu";
-    runtimeInputs = with pkgs; [playerctl wofi coreutils];
+    runtimeInputs = with pkgs; [playerctl wofi coreutils procps];
     text = ''
       # Icons: ▶ (playing), ⏸ (paused)
       players=$(playerctl --list-all 2>/dev/null)
@@ -313,7 +313,7 @@
           fi
           ;;
       esac
-      pkill -RTMIN+12 waybar
+      pidof -x waybar 2>/dev/null | xargs -r kill -RTMIN+12 2>/dev/null || true
     '';
   };
 

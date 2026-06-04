@@ -104,7 +104,7 @@
            :space-evenly false
         (label :text ts_exit_node_name :class "ts-exit-name")
         (label :text ts_exit_node_ip :class "ts-exit-ip")
-        (button :onclick "fish -c 'set nodes (tailscale status --json | jq -r \".Peer[] | select(.ExitNodeOption) | .DNSName | rtrimstr(\\\".\\\")\" | string collect); test -z \"$nodes\" && notify-send Tailscale \"No exit node candidates\" && exit 0; set choice (printf \"None\\n%s\" \"$nodes\" | wofi --dmenu -p \"Exit Node\" -i 2>/dev/null); test \"$choice\" = \"None\" && sudo tailscale set --exit-node= || test -n \"$choice\" && sudo tailscale set --exit-node=\"$choice\" --exit-node-allow-lan-access; sleep 1; tailscale-eww-update'"
+        (button :onclick "tailscale-eww-exitnode"
                 :class "ts-exit-btn"
         "Change…")))
     ;; ── Quick actions ───────────────────────
@@ -112,10 +112,10 @@
          :orientation "horizontal"
          :halign "fill"
          :space-evenly true
-      (button :onclick "fish -c 'tailscale status --json | jq -e \".BackendState == \\\"Running\\\"\" >/dev/null 2>&1 && tailscale down || tailscale up; sleep 2; tailscale-eww-update'"
+      (button :onclick "tailscale-eww-toggle"
               :class "ts-action-btn"
         "𖦹 Toggle Connect")
-      (button :onclick "fish -c 'set nodes (tailscale status --json | jq -r \".Peer[] | select(.ExitNodeOption) | .DNSName | rtrimstr(\\\".\\\")\" | string collect); test -z \"$nodes\" && notify-send Tailscale \"No exit node candidates\" && exit 0; set choice (printf \"None\\n%s\" \"$nodes\" | wofi --dmenu -p \"Exit Node\" -i 2>/dev/null); test \"$choice\" = \"None\" && sudo tailscale set --exit-node= || test -n \"$choice\" && sudo tailscale set --exit-node=\"$choice\" --exit-node-allow-lan-access; sleep 1; tailscale-eww-update'"
+      (button :onclick "tailscale-eww-exitnode"
               :class "ts-action-btn"
         "󰮂 Exit Nodes")
       (button :onclick "eww poll ts_tick"

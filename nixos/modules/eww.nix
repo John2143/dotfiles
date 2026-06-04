@@ -8,7 +8,7 @@ let
     text = ''
       output=$(tailscale status --json 2>/dev/null) || {
         eww update \
-          ts_state_icon="" \
+          ts_state_icon="" \
           ts_state_label="Stopped" \
           ts_tailnet="" \
           ts_self_name="" \
@@ -25,18 +25,21 @@ let
       }
 
       cmd=$(echo "$output" | jq -r '
+        def state_icon:
+          if .BackendState == "NeedsLogin" or .BackendState == "NeedsMachineAuth" then ""
+          elif .BackendState != "Running" then ""
+          elif (.Self.ExitNode // "") != "" then ""
+          else "" end;
+
+        def state_label:
+          if .BackendState == "NeedsLogin" then "Needs Login"
+          elif .BackendState == "NeedsMachineAuth" then "Needs Machine Auth"
+          elif .BackendState == "Running" then "Connected"
+          else .BackendState end;
+
         "eww update " +
-          "ts_state_icon=" + (
-            if .BackendState == "NeedsLogin" or .BackendState == "NeedsMachineAuth" then ""
-            elif .BackendState == "Running" then ""
-            else "" end | @sh
-          ) + " " +
-          "ts_state_label=" + (
-            if .BackendState == "NeedsLogin" then "Needs Login"
-            elif .BackendState == "NeedsMachineAuth" then "Needs Machine Auth"
-            elif .BackendState == "Running" then "Connected"
-            else .BackendState end | @sh
-          ) + " " +
+          "ts_state_icon=" + (state_icon | @sh) + " " +
+          "ts_state_label=" + (state_label | @sh) + " " +
           "ts_tailnet=" + ((.CurrentTailnet.Name // "") | @sh) + " " +
           "ts_self_name=" + ((.Self.HostName // "") | @sh) + " " +
           "ts_self_ip=" + ((.Self.TailscaleIPs[0] // "") | @sh) + " " +
@@ -68,6 +71,41 @@ let
       echo "ok"
     '';
   };
+
+  tailscale-eww-toggle = pkgs.writeShellApplication {
+    name = "tailscale-eww-toggle";
+    runtimeInputs = with pkgs; [ tailscale jq coreutils ];
+    text = ''
+      running=$(tailscale status --json 2>/dev/null | jq -e '.BackendState == "Running"' >/dev/null 2>&1 && echo true || echo false)
+      if [ "$running" = "true" ]; then
+        sudo tailscale down
+      else
+        sudo tailscale up --login-server=https://net.john2143.com
+      fi
+      sleep 2
+      tailscale-eww-update
+    '';
+  };
+
+  tailscale-eww-exitnode = pkgs.writeShellApplication {
+    name = "tailscale-eww-exitnode";
+    runtimeInputs = with pkgs; [ tailscale jq coreutils wofi ];
+    text = ''
+      nodes=$(tailscale status --json 2>/dev/null | jq -r '.Peer[] | select(.ExitNodeOption) | .DNSName | rtrimstr(".")' | sort)
+      if [ -z "$nodes" ]; then
+        notify-send "Tailscale" "No exit node candidates found"
+        exit 0
+      fi
+      choice=$(printf "None\n%s" "$nodes" | wofi --dmenu -p "Exit Node" -i 2>/dev/null)
+      if [ "$choice" = "None" ]; then
+        sudo tailscale set --exit-node=
+      elif [ -n "$choice" ]; then
+        sudo tailscale set --exit-node="$choice" --exit-node-allow-lan-access
+      fi
+      sleep 1
+      tailscale-eww-update
+    '';
+  };
 in {
   programs.eww = {
     enable = true;
@@ -76,5 +114,5 @@ in {
     systemd.enable = true;
   };
 
-  home.packages = [ tailscale-eww-update ];
+  home.packages = [ tailscale-eww-update tailscale-eww-toggle tailscale-eww-exitnode ];
 }
