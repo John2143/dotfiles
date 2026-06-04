@@ -133,8 +133,10 @@
   imports = [
     ./nas-hardware-configuration.nix
     ./modules/user-john.nix
+    ./modules/disko_nas.nix
 
   ];
+  fileSystems."/".neededForBoot = lib.mkForce true;
   home-manager.users."john" = import ./home-cli.nix;
   services.getty.autologinUser = "john";
 
@@ -592,14 +594,6 @@
   ];
 
   system.stateVersion = "26.05";
-  # ── Longhorn replica storage (ext4, was neo/longhorn on ZFS) ──
-  # Formatted from the freed neo pool partition:
-  #   sudo mkfs.ext4 -L longhorn /dev/sda6
-  # WARNING: ZFS fallocate() incompatibility prevents running Longhorn replicas on neo/longhorn.
-  fileSystems."/var/lib/longhorn" = {
-    device = "/dev/disk/by-label/longhorn";
-    fsType = "ext4";
-  };
 }
 
 
