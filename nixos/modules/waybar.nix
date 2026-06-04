@@ -126,7 +126,7 @@
         sel=$(cat /tmp/media-player-selected)
         if echo "$players" | grep -qx "$sel"; then
           playerctl --player="$sel" play-pause
-          pidof -x waybar 2>/dev/null | xargs -r kill -RTMIN+12 2>/dev/null || true
+          pidof -x waybar 2>/dev/null | xargs -r kill -46 2>/dev/null || true
           exit 0
         fi
       fi
@@ -136,7 +136,7 @@
         active=$(cat /tmp/media-player-active)
         if echo "$players" | grep -qx "$active"; then
           playerctl --player="$active" play-pause
-          pidof -x waybar 2>/dev/null | xargs -r kill -RTMIN+12 2>/dev/null || true
+          pidof -x waybar 2>/dev/null | xargs -r kill -46 2>/dev/null || true
           exit 0
         fi
       fi
@@ -167,13 +167,13 @@
       fi
 
       playerctl --player="$best" play-pause
-      pidof -x waybar 2>/dev/null | xargs -r kill -RTMIN+12 2>/dev/null || true
+      pidof -x waybar 2>/dev/null | xargs -r kill -46 2>/dev/null || true
     '';
   };
 
   media-player-focus = pkgs.writeShellApplication {
     name = "media-player-focus";
-    runtimeInputs = with pkgs; [playerctl hyprland];
+    runtimeInputs = with pkgs; [playerctl hyprland coreutils];
     text = ''
       players=$(playerctl --list-all 2>/dev/null)
       if [ -z "$players" ]; then
@@ -205,15 +205,12 @@
         best=$(echo "$players" | head -1)
       fi
 
-      # Focus the window. Try both lowercase and capitalized first letter.
+      # Focus the window using Hyprland 0.55 Lua dispatch API
+      # Try both lowercase and capitalized first letter
       cap="''${best^}"
-      if hyprctl clients 2>/dev/null | grep -qi "class: $best"; then
-        hyprctl dispatch focuswindow "class:($best)"
-      elif hyprctl clients 2>/dev/null | grep -qi "class: $cap"; then
-        hyprctl dispatch focuswindow "class:($cap)"
-      else
-        hyprctl dispatch focuswindow "title:($best)"
-      fi
+      hyprctl dispatch "hl.dsp.focus({ window = 'class:^($best)$' })" 2>/dev/null || \
+      hyprctl dispatch "hl.dsp.focus({ window = 'class:^($cap)$' })" 2>/dev/null || \
+      hyprctl dispatch "hl.dsp.focus({ window = 'address:($best)' })" 2>/dev/null || true
     '';
   };
 
@@ -243,7 +240,7 @@
       [ -z "$next" ] && next="$first"
 
       echo "$next" > /tmp/media-player-selected
-      pidof -x waybar 2>/dev/null | xargs -r kill -RTMIN+12 2>/dev/null || true
+      pidof -x waybar 2>/dev/null | xargs -r kill -46 2>/dev/null || true
     '';
   };
 
@@ -267,7 +264,7 @@
       fi
 
       playerctl --player="$player" volume "$1"
-      pidof -x waybar 2>/dev/null | xargs -r kill -RTMIN+12 2>/dev/null || true
+      pidof -x waybar 2>/dev/null | xargs -r kill -46 2>/dev/null || true
     '';
   };
 
@@ -313,7 +310,7 @@
           fi
           ;;
       esac
-      pidof -x waybar 2>/dev/null | xargs -r kill -RTMIN+12 2>/dev/null || true
+      pidof -x waybar 2>/dev/null | xargs -r kill -46 2>/dev/null || true
     '';
   };
 
@@ -454,7 +451,7 @@
     runtimeInputs = with pkgs; [tailscale jq coreutils];
     text = ''
       data=$(tailscale status --json 2>/dev/null) || {
-        jq -nc '{text: "", class: "disconnected", tooltip: "Tailscale: not running"}'
+        jq -nc '{text: "", class: "disconnected", tooltip: "Tailscale: not running"}'
         exit 0
       }
 
@@ -466,21 +463,29 @@
           if [ "$online" = "true" ]; then
             ip=$(echo "$data" | jq -r '.TailscaleIPs[0] // "?"')
             name=$(echo "$data" | jq -r '.Self.DNSName | rtrimstr(".") // "?"')
-            jq -nc --arg ip "$ip" --arg name "$name" \
-              '{text: "", class: "connected", tooltip: "Tailscale: Connected (\($name))\nIP: \($ip)"}'
+            # Detect exit node via debug prefs (works without sudo, unlike .Self.ExitNode in JSON)
+            exit_id=$(tailscale debug prefs 2>/dev/null | jq -r '.ExitNodeID // ""')
+            if [ -n "$exit_id" ] && [ "$exit_id" != "null" ] && [ "$exit_id" != "0" ]; then
+              exit_name=$(tailscale exit-node list 2>/dev/null | awk '/selected/{print $2; exit}')
+              jq -nc --arg ip "$ip" --arg name "$name" --arg exit_name "$exit_name" \
+                '{text: "", class: "connected", tooltip: "Tailscale: Connected (\($name))\nIP: \($ip)\nExit: \($exit_name)"}'
+            else
+              jq -nc --arg ip "$ip" --arg name "$name" \
+                '{text: "", class: "connected", tooltip: "Tailscale: Connected (\($name))\nIP: \($ip)"}'
+            fi
           else
-            jq -nc '{text: "", class: "disconnected", tooltip: "Tailscale: Connected but offline"}'
+            jq -nc '{text: "", class: "disconnected", tooltip: "Tailscale: Connected but offline"}'
           fi
           ;;
         Stopped)
-          jq -nc '{text: "", class: "disconnected", tooltip: "Tailscale: Stopped"}'
+          jq -nc '{text: "", class: "disconnected", tooltip: "Tailscale: Stopped"}'
           ;;
         NeedsLogin)
           jq -nc '{text: "", class: "needs-login", tooltip: "Tailscale: Needs login"}'
           ;;
         *)
           jq -nc --arg state "$state" \
-            '{text: "", class: "disconnected", tooltip: "Tailscale: \($state)"}'
+            '{text: "", class: "disconnected", tooltip: "Tailscale: \($state)"}'
           ;;
       esac
     '';
@@ -643,10 +648,10 @@ in {
             signal = 12;
             format = "{}";
             on-click = "${media-player-toggle}/bin/media-player-toggle";
-            on-click-right = "${media-player-focus}/bin/media-player-focus";
-            on-click-backward = "playerctl --all-players previous; pidof -x waybar 2>/dev/null | xargs -r kill -RTMIN+12 2>/dev/null || true";
-            on-click-forward = "playerctl --all-players next; pidof -x waybar 2>/dev/null | xargs -r kill -RTMIN+12 2>/dev/null || true";
-            on-click-middle = "${media-player-cycle}/bin/media-player-cycle";
+            on-click-right = "${media-player-cycle}/bin/media-player-cycle";
+            on-click-backward = "playerctl --all-players previous; pidof -x waybar 2>/dev/null | xargs -r kill -46 2>/dev/null || true";
+            on-click-forward = "playerctl --all-players next; pidof -x waybar 2>/dev/null | xargs -r kill -46 2>/dev/null || true";
+            on-click-middle = "${media-player-focus}/bin/media-player-focus";
             on-scroll-up = "${media-player-volume}/bin/media-player-volume 0.05+";
             on-scroll-down = "${media-player-volume}/bin/media-player-volume 0.05-";
           };

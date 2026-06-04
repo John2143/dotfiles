@@ -24,13 +24,25 @@ let
         exit 0
       }
 
-      cmd=$(echo "$output" | jq -r '
-        def state_icon:
-          if .BackendState == "NeedsLogin" or .BackendState == "NeedsMachineAuth" then ""
-          elif .BackendState != "Running" then ""
-          elif (.Self.ExitNode // "") != "" then ""
-          else "" end;
+      # Detect exit node via debug prefs (works without sudo, unlike .Self.ExitNode in JSON)
+      exit_id=$(tailscale debug prefs 2>/dev/null | jq -r '.ExitNodeID // ""')
+      if [ -n "$exit_id" ] && [ "$exit_id" != "null" ] && [ "$exit_id" != "0" ]; then
+        exit_name=$(tailscale exit-node list 2>/dev/null | awk '/selected/{print $2; exit}')
+        exit_ip=""
+        state_icon=""
+        exit_label="Active: ''${exit_name:-?}"
+      else
+        exit_name=""
+        exit_ip=""
+        state_icon=""
+        exit_label="None"
+      fi
 
+      cmd=$(echo "$output" | jq -r \
+        --arg state_icon "$state_icon" \
+        --arg exit_label "$exit_label" \
+        --arg exit_ip "$exit_ip" \
+        '
         def state_label:
           if .BackendState == "NeedsLogin" then "Needs Login"
           elif .BackendState == "NeedsMachineAuth" then "Needs Machine Auth"
@@ -38,26 +50,14 @@ let
           else .BackendState end;
 
         "eww update " +
-          "ts_state_icon=" + (state_icon | @sh) + " " +
+          "ts_state_icon=" + ($state_icon | @sh) + " " +
           "ts_state_label=" + (state_label | @sh) + " " +
           "ts_tailnet=" + ((.CurrentTailnet.Name // "") | @sh) + " " +
           "ts_self_name=" + ((.Self.HostName // "") | @sh) + " " +
           "ts_self_ip=" + ((.Self.TailscaleIPs[0] // "") | @sh) + " " +
           "ts_self_online=" + ((if .Self.Online then "●" else "○" end) | @sh) + " " +
-          "ts_exit_node_name=" + (
-            if (.Self.ExitNode // "") != "" then
-              ("Active: " + (.Peer[.Self.ExitNode].HostName // "?"))
-            else
-              "None"
-            end | @sh
-          ) + " " +
-          "ts_exit_node_ip=" + (
-            if (.Self.ExitNode // "") != "" then
-              (.Peer[.Self.ExitNode].TailscaleIPs[0] // "")
-            else
-              ""
-            end | @sh
-          ) + " " +
+          "ts_exit_node_name=" + ($exit_label | @sh) + " " +
+          "ts_exit_node_ip=" + ($exit_ip | @sh) + " " +
           "ts_peers_online=" + (([.Peer[] | select(.Online)] | length | tostring) | @sh) + " " +
           "ts_peers_total=" + (([.Peer[]] | length | tostring) | @sh) + " " +
           "ts_peers_exit_count=" + (([.Peer[] | select(.ExitNodeOption)] | length | tostring) | @sh) + " " +

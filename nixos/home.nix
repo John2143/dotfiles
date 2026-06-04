@@ -547,4 +547,8 @@ in {
   # activation (sd-switch hangs waiting for them to stop).
   systemd.user.services.dunst.Service.TimeoutStopSec = 10;
   systemd.user.services.udiskie.Service.TimeoutStopSec = 10;
+  # Fix eww systemd service: clean stale sockets on startup
+  systemd.user.services.eww.Service.ExecStartPre = [
+    "${pkgs.coreutils}/bin/rm -f /run/user/%U/eww-server_*"
+  ];
 }
