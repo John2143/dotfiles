@@ -639,15 +639,16 @@ in {
               fi
             ''}";
             return-type = "json";
-            interval = 5;
+            interval = 2;
             signal = 12;
             format = "{}";
             on-click = "${media-player-toggle}/bin/media-player-toggle";
             on-click-right = "${media-player-focus}/bin/media-player-focus";
-            on-click-shift = "playerctl --all-players pause; pkill -RTMIN+12 waybar";
+            on-click-backward = "playerctl --all-players previous; pidof -x waybar 2>/dev/null | xargs -r kill -RTMIN+12 2>/dev/null || true";
+            on-click-forward = "playerctl --all-players next; pidof -x waybar 2>/dev/null | xargs -r kill -RTMIN+12 2>/dev/null || true";
             on-click-middle = "${media-player-cycle}/bin/media-player-cycle";
-            on-scroll-up = "${media-player-volume}/bin/media-player-volume +0.05";
-            on-scroll-down = "${media-player-volume}/bin/media-player-volume -0.05";
+            on-scroll-up = "${media-player-volume}/bin/media-player-volume 0.05+";
+            on-scroll-down = "${media-player-volume}/bin/media-player-volume 0.05-";
           };
 
           # ---- Tailscale VPN ----
