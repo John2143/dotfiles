@@ -54,7 +54,7 @@
 
   # ── deSEC DDNS: update headscale.9s.pics every 5 minutes ──
   # Important: Only update if we have CHANGED. otherwise we get rate-limited by deSEC.
-  systemd.services.desec-ddns = {
+  systemd.services.desec-ddns-headscale-9s-pics = {
     description = "Update deSEC DNS A record for headscale.9s.pics";
     after = ["network-online.target"];
     wants = ["network-online.target"];
@@ -101,7 +101,7 @@
     '';
   };
 
-  systemd.timers.desec-ddns = {
+  systemd.timers.desec-ddns-headscale-9s-pics = {
     description = "Update deSEC DNS every 30 minutes";
     wantedBy = ["timers.target"];
     timerConfig = {
@@ -111,7 +111,7 @@
   };
 
   # ── deSEC DDNS: update m.2143.me every 30 minutes ──
-  systemd.services.desec-ddns-m = {
+  systemd.services.desec-ddns-m-2143-me = {
     description = "Update deSEC DNS A record for m.2143.me";
     after = ["network-online.target"];
     wants = ["network-online.target"];
@@ -150,7 +150,7 @@
       fi
     '';
   };
-  systemd.timers.desec-ddns-m = {
+  systemd.timers.desec-ddns-m-2143-me = {
     description = "Update m.2143.me DNS every 30 minutes";
     wantedBy = ["timers.target"];
     timerConfig = {
@@ -160,7 +160,7 @@
   };
 
   # ── deSEC DDNS: update home.john2143.com every 30 minutes ──
-  systemd.services.desec-ddns-home = {
+  systemd.services.desec-ddns-home-john2143-com = {
     description = "Update deSEC DNS A record for home.john2143.com";
     after = ["network-online.target"];
     wants = ["network-online.target"];
@@ -199,7 +199,7 @@
       fi
     '';
   };
-  systemd.timers.desec-ddns-home = {
+  systemd.timers.desec-ddns-home-john2143-com = {
     description = "Update home.john2143.com DNS every 30 minutes";
     wantedBy = ["timers.target"];
     timerConfig = {
