@@ -34,6 +34,34 @@
 #      sudo nixos-install --flake /home/john/dotfiles#nas
 # 5. Reboot, then re-attach ZFS tank members (see above).
 #
+# === DISASTER RECOVERY (boot SSD failure) ===
+#
+# RTO target: ~25-40 minutes (bounded by nixos-install build time).
+# ZFS data arrays (sdb-sde, RAIDZ2) are unaffected — no data loss.
+#
+# 1. PHYSICALLY REPLACE: Swap dead SSD, insert replacement.
+# 2. IDENTIFY: ls -l /dev/disk/by-id/ | grep -i wdc
+#    If the WWN changed (different model), update the `device` line below.
+# 3. PARTITION:
+#      nix run github:nix-community/disko -- --mode disko ./nixos/modules/disko_nas.nix
+# 4. MOUNT & INSTALL:
+#      mount /dev/disk/by-label/NIXROOT /mnt
+#      mount /dev/disk/by-label/BOOT /mnt/boot
+#      mount /dev/disk/by-label/longhorn /mnt/var/lib/longhorn
+#      nixos-install --flake github:John2143/dotfiles#nas
+#    (If GitHub is unreachable, use a local clone of the dotfiles repo.)
+# 5. REBOOT:
+#      reboot
+# 6. RE-ATTACH ZFS TANK MEMBERS:
+#      zpool import tank
+#      zpool replace tank /dev/disk/by-partlabel/disk-main-zfs_special
+#      zpool add tank cache /dev/disk/by-partlabel/disk-main-l2arc
+#      nixos-rebuild switch --flake ~/dotfiles#nas
+#
+# The dotfiles repo must be reachable at install time. If the NAS itself
+# was the only clone of the repo and GitHub is down, clone to the installer
+# from another machine on the LAN or use a USB stick with a tarball.
+#
 {
   disko.devices = {
     disk = {
