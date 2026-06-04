@@ -292,6 +292,7 @@
     "--service-cidr=10.43.0.0/16,fd42:42:43::/112"
     "--flannel-ipv6-masq"
     "--node-ip=192.168.5.175,fd00:1::175"
+    "--node-label=node.longhorn.io/create-default-disk=true"
   ];
 
 
