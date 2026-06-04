@@ -51,8 +51,6 @@
       nameserver 100.100.100.100
     '';
 
-    services.k3s.extraFlags = lib.mkAfter " --resolv-conf=/etc/rancher/k3s/resolv.conf";
-
     # Tailscale subnet route — advertises LAN to tailnet so tailscale
     # clients can reach the kube-vip VIP (192.168.5.10) for k8s services.
     # Approved in headscale admin UI per-node.
@@ -62,6 +60,7 @@
     systemd.services.k3s = {
       after = [ "avahi-daemon.service" "tailscaled.service" ] ++ config.custom.k3sStorageAfter;
       wants = [ "avahi-daemon.service" ];
+      environment.K3S_RESOLV_CONF = "/etc/rancher/k3s/resolv.conf";
     };
 
     networking.firewall.allowedTCPPorts = [
