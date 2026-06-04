@@ -43,6 +43,15 @@
       role = "server";
       tokenFile = config.age.secrets.k3s-local-token.path;
     };
+    # Clean resolv.conf for k3s pods — strips the Tailscale MagicDNS search
+    # domain (ts.2143.me) to prevent ndots:5 expansion from prepending it
+    # to external hostnames. Keeps 100.100.100.100 as the upstream so pods
+    # can still resolve tailnet names (nas.ts.2143.me, etc.) via MagicDNS.
+    environment.etc."rancher/k3s/resolv.conf".text = ''
+      nameserver 100.100.100.100
+    '';
+
+    services.k3s.extraFlags = lib.mkAfter " --resolv-conf=/etc/rancher/k3s/resolv.conf";
 
     # Tailscale subnet route — advertises LAN to tailnet so tailscale
     # clients can reach the kube-vip VIP (192.168.5.10) for k8s services.
