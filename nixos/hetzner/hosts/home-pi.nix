@@ -123,7 +123,7 @@
       set -euo pipefail
       TOKEN=$(cat ${config.age.secrets."hetzner/desec-token".path})
       API="https://desec.io/api/v1/domains/2143.me/rrsets"
-      IP=$(curl -4sf --connect-timeout 10 ifconfig.me 2>/dev/null || curl -4sf --connect-timeout 10 icanhazip.com 2>/dev/null)
+      IP=$(curl -4sf --connect-timeout 10 ifconfig.me 2>/dev/null || curl -4sf --connect-timeout 10 icanhazip.com 2>/dev/null || curl -4sf --connect-timeout 10 https://1.1.1.1/cdn-cgi/trace 2>/dev/null | grep ^ip= | cut -d= -f2)
       if [ -z "$IP" ]; then
         echo "ERROR: Could not determine public IP"
         exit 1
