@@ -74,7 +74,6 @@
             ESP = {
               type = "EF00";
               size = "4G";
-              name = "disk-main-ESP";
               content = {
                 type = "filesystem";
                 format = "vfat";
@@ -86,7 +85,6 @@
             root = {
               type = "8300";
               size = "1024G";
-              name = "disk-main-root";
               content = {
                 type = "filesystem";
                 format = "ext4";
@@ -98,7 +96,6 @@
             swap = {
               type = "8200";
               size = "16G";
-              name = "disk-main-swap";
               content = {
                 type = "swap";
                 randomEncryption = true;
@@ -107,19 +104,16 @@
             zfs_special = {
               type = "8300";
               size = "100G";
-              name = "disk-main-zfs_special";
               # Raw — ZFS special mirror leg, attached post-boot
             };
             l2arc = {
               type = "8300";
               size = "200G";
-              name = "disk-main-l2arc";
               # Raw — ZFS L2ARC cache, added post-boot
             };
             longhorn = {
               type = "8300";
               size = "100%";
-              name = "disk-main-longhorn";
               content = {
                 type = "filesystem";
                 format = "ext4";
