@@ -214,10 +214,13 @@ in {
 
     # Order matters: the module's ExecStartPre copies the config to
     # /run/frigate/frigate.yml. Our script runs after and substitutes.
-    preStart = lib.mkAfter ''
-      ${pkgs.envsubst}/bin/envsubst \
-        -i /run/frigate/frigate.yml \
-        -o /run/frigate/frigate.yml
+    preStart = lib.mkOrder 1500 ''
+      if [ -f /run/frigate/frigate.yml ]; then
+        ${pkgs.envsubst}/bin/envsubst \
+          < /run/frigate/frigate.yml \
+          > /run/frigate/frigate.yml.tmp \
+        && mv /run/frigate/frigate.yml.tmp /run/frigate/frigate.yml
+      fi
     '';
   };
 
