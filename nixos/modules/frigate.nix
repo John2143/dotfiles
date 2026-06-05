@@ -219,6 +219,12 @@ in {
     serviceConfig.EnvironmentFile = [
       config.age.secrets.reolink-nvr.path
     ];
+    # NVIDIA driver libraries (libcuda.so, libnvcuvid.so) for NVENC/NVDEC.
+    # ffmpeg-headless has nvenc compiled in but can't find the driver at runtime
+    # without this. The nixpkgs module omits this because the nvidia package is unfree.
+    environment.LD_LIBRARY_PATH = lib.makeLibraryPath [
+      config.hardware.nvidia.package
+    ];
 
     # Append envsubst AFTER the module's ExecStartPre (which copies
     # the config to /run/frigate/frigate.yml). We use mkAfter on
