@@ -84,11 +84,19 @@
           days = 7;
           mode = "motion";
         };
-        events = {
+        alerts = {
           pre_capture = 5;
           post_capture = 5;
           retain = {
-            default = 30;
+            days = 30;
+            mode = "active_objects";
+          };
+        };
+        detections = {
+          pre_capture = 5;
+          post_capture = 5;
+          retain = {
+            days = 30;
             mode = "active_objects";
           };
         };
@@ -143,7 +151,7 @@ in {
 
     settings = {
       database = {
-        path = "${nasFrigatePath}/frigate.db";
+        path = "/var/lib/frigate/frigate.db";
       };
 
       mqtt = {
