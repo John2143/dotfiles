@@ -212,17 +212,19 @@ in {
       config.age.secrets.reolink-nvr.path
     ];
 
-    # Order matters: the module's ExecStartPre copies the config to
-    # /run/frigate/frigate.yml. Our script runs after and substitutes.
-    preStart = lib.mkOrder 1500 ''
-      if [ -f /run/frigate/frigate.yml ]; then
-        ${pkgs.envsubst}/bin/envsubst \
-          < /run/frigate/frigate.yml \
-          > /run/frigate/frigate.yml.tmp \
-        && mv /run/frigate/frigate.yml.tmp /run/frigate/frigate.yml
-      fi
-    '';
-  };
+    # Append envsubst AFTER the module's ExecStartPre (which copies
+    # the config to /run/frigate/frigate.yml). We use mkAfter on
+    # serviceConfig.ExecStartPre because preStart prepends (wrong order).
+    serviceConfig.ExecStartPre = lib.mkAfter [
+      (pkgs.writeShellScript "frigate-envsubst-config" ''
+        if [ -f /run/frigate/frigate.yml ]; then
+          ${pkgs.envsubst}/bin/envsubst \
+            < /run/frigate/frigate.yml \
+            > /run/frigate/frigate.yml.tmp \
+          && mv /run/frigate/frigate.yml.tmp /run/frigate/frigate.yml
+        fi
+      '')
+    ];
 
   # ── GPU access ────────────────────────────────────────────────────
   users.users.frigate.extraGroups = ["video"];
