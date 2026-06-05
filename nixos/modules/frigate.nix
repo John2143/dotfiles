@@ -225,6 +225,7 @@ in {
         fi
       '')
     ];
+  };
 
   # ── GPU access ────────────────────────────────────────────────────
   users.users.frigate.extraGroups = ["video"];
