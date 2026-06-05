@@ -159,9 +159,9 @@ in {
       };
 
       detectors = {
-        ov = {
-          type = "openvino";
-          device = "CPU";
+        cpu = {
+          type = "cpu";
+          num_threads = 4;
         };
       };
 
