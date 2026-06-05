@@ -65,7 +65,7 @@
         inputs = [
           {
             path = "rtsp://\${NVR_USER}:\${NVR_PASS}@\${NVR_HOST}/h264Preview_${cfg.channel}_main";
-            roles = ["record", "detect"];
+            roles = ["record" "detect"];
           }
         ];
       };
