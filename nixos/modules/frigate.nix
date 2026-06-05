@@ -80,11 +80,19 @@
           days = 7;
           mode = "motion";
         };
-        events = {
+        alerts = {
           pre_capture = 5;
           post_capture = 5;
           retain = {
-            default = 30;
+            days = 30;
+            mode = "active_objects";
+          };
+        };
+        detections = {
+          pre_capture = 5;
+          post_capture = 5;
+          retain = {
+            days = 30;
             mode = "active_objects";
           };
         };
@@ -110,13 +118,13 @@ in {
 
   # ── NFS mount for Frigate storage ─────────────────────────────────
   fileSystems.${nasFrigatePath} = {
-    device = "nas.ts.2143.me:/tank/frigate";
+    device = "192.168.5.175:/tank/frigate";
     fsType = "nfs";
     options = [
-      "nfsvers=4.2"
+      "nfsvers=3"
       "hard"
       "noatime"
-      "nconnect=4"
+      "nolock"
       "x-systemd.automount"
       "noauto"
       "x-systemd.idle-timeout=60"
@@ -139,7 +147,7 @@ in {
 
     settings = {
       database = {
-        path = "${nasFrigatePath}/frigate.db";
+        path = "/var/lib/frigate/frigate.db";
       };
 
       mqtt = {
@@ -207,17 +215,26 @@ in {
     serviceConfig.EnvironmentFile = [
       config.age.secrets.reolink-nvr.path
     ];
+    # NVIDIA driver libraries (libcuda.so, libnvcuvid.so) for NVENC/NVDEC.
+    # ffmpeg-headless has nvenc compiled in but can't find the driver at runtime
+    # without this. The nixpkgs module omits this because the nvidia package is unfree.
+    environment.LD_LIBRARY_PATH = lib.makeLibraryPath [
+      config.hardware.nvidia.package
+    ];
 
-    # Order matters: the module's ExecStartPre copies the config to
-    # /run/frigate/frigate.yml. Our script runs after and substitutes.
-    preStart = lib.mkOrder 1500 ''
-      if [ -f /run/frigate/frigate.yml ]; then
-        ${pkgs.envsubst}/bin/envsubst \
-          < /run/frigate/frigate.yml \
-          > /run/frigate/frigate.yml.tmp \
-        && mv /run/frigate/frigate.yml.tmp /run/frigate/frigate.yml
-      fi
-    '';
+    # Append envsubst AFTER the module's ExecStartPre (which copies
+    # the config to /run/frigate/frigate.yml). We use mkAfter on
+    # serviceConfig.ExecStartPre because preStart prepends (wrong order).
+    serviceConfig.ExecStartPre = lib.mkAfter [
+      (pkgs.writeShellScript "frigate-envsubst-config" ''
+        if [ -f /run/frigate/frigate.yml ]; then
+          ${pkgs.envsubst}/bin/envsubst \
+            < /run/frigate/frigate.yml \
+            > /run/frigate/frigate.yml.tmp \
+          && mv /run/frigate/frigate.yml.tmp /run/frigate/frigate.yml
+        fi
+      '')
+    ];
   };
 
   # ── GPU access ────────────────────────────────────────────────────
