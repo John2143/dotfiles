@@ -562,6 +562,14 @@
     "http://localhost:8280/2143nix"
   ];
 
+  # Longhorn replica storage — ext4 on sda6 (disk label "longhorn").
+  # Mounted at /mnt/longhorn directly (not a symlink) so the instance-manager
+  # container can bind-mount it without symlink resolution issues.
+  fileSystems."/mnt/longhorn" = {
+    device = "/dev/disk/by-label/longhorn";
+    fsType = "ext4";
+  };
+
   system.stateVersion = "26.05";
 }
 
