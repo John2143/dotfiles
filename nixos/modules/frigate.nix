@@ -114,13 +114,13 @@ in {
 
   # ── NFS mount for Frigate storage ─────────────────────────────────
   fileSystems.${nasFrigatePath} = {
-    device = "nas.ts.2143.me:/tank/frigate";
+    device = "192.168.5.175:/tank/frigate";
     fsType = "nfs";
     options = [
-      "nfsvers=4.2"
+      "nfsvers=3"
       "hard"
       "noatime"
-      "nconnect=4"
+      "nolock"
       "x-systemd.automount"
       "noauto"
       "x-systemd.idle-timeout=60"
