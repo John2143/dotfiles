@@ -126,6 +126,11 @@
     systemd-boot.enable = true;
     efi.canTouchEfiVariables = true;
   };
+  boot.kernel.sysctl = {
+    "kernel.hardlockup_panic" = "1";
+    "kernel.softlockup_panic" = "1";
+  };
+
 
   virtualisation.podman = {
     enable = true;
@@ -366,6 +371,9 @@
   services.samba-wsdd = {
     enable = true;
     openFirewall = true;
+  };
+  systemd.services.samba-smbd.environment = {
+    NSS_WRAPPER_P11_KIT = "0";
   };
 
   # ================
