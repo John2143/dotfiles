@@ -349,6 +349,15 @@ in {
   ];
   boot.extraModulePackages = [];
   boot.extraModprobeConfig = '''';
+  # Keyfile for pool1 LUKS auto-unlock at boot. Password keyslot (slot 0)
+  # is preserved as fallback — if the keyfile is missing or wrong, system
+  # still prompts for the LUKS passphrase.
+  # To generate/enroll: sudo cryptsetup luksAddKey /dev/sdb1 /etc/secrets/pool1-keyfile
+  boot.initrd.luks.devices."pool1" = {
+    device = "/dev/disk/by-uuid/9340760b-a19d-4392-9021-8f4b14c794f8";
+    keyFile = "/etc/secrets/pool1-keyfile";
+    allowDiscards = true;
+  };
   #blacklist nouveau
   #options nouveauu modeset=0
 
@@ -411,10 +420,17 @@ in {
     neededForBoot = false;
   };
 
-  fileSystems."/mnt/games_a" = {
-    device = "/dev/pool1a/games_a";
-    fsType = "ext4";
-  };
+
+# SSD expansion volume (pool1/ssdext1, 663G ext4). Created manually
+# inside the pool1 LUKS volume alongside longhorn:
+#   sudo mkfs.ext4 /dev/pool1/ssdext1
+#   sudo install -d -m 0755 -o root -g root /mnt/ssdext1
+fileSystems."/mnt/ssdext1" = {
+  device = "/dev/pool1/ssdext1";
+  fsType = "ext4";
+  options = ["defaults" "nofail"];
+};
+
 
   # Longhorn replica disk for the k3s cluster. The LV (pool1/longhorn, 1.2T)
   # was created manually inside the existing pool1 LUKS volume. Bring up the
