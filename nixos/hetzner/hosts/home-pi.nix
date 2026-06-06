@@ -159,9 +159,9 @@
     };
   };
 
-  # ── deSEC DDNS: update home.john2143.com every 30 minutes ──
-  systemd.services.desec-ddns-home-john2143-com = {
-    description = "Update deSEC DNS A record for home.john2143.com";
+  # ── deSEC DDNS: update john2143.com every 30 minutes ──
+  systemd.services.desec-ddns-john2143-com = {
+    description = "Update deSEC DNS A record for john2143.com";
     after = ["network-online.target"];
     wants = ["network-online.target"];
     path = [pkgs.curl pkgs.dnsutils];
@@ -177,30 +177,30 @@
         echo "ERROR: Could not determine public IP"
         exit 1
       fi
-      CURRENT_IP=$(dig +short home.john2143.com @1.1.1.1 +noall +answer || dig +short home.john2143.com @1.0.0.1 +noall +answer || dig +short home.john2143.com @8.8.8.8)
+      CURRENT_IP=$(dig +short john2143.com @1.1.1.1 +noall +answer || dig +short john2143.com @1.0.0.1 +noall +answer || dig +short john2143.com @8.8.8.8)
       if [ "$CURRENT_IP" = "$IP" ]; then
-        echo "OK: home.john2143.com already points to $IP, no update needed"
+        echo "OK: john2143.com already points to $IP, no update needed"
         exit 0
       fi
       HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" -X PATCH \
         -H "Authorization: Token $TOKEN" \
         -H "Content-Type: application/json" \
-        "$API/home/A/" \
+        "$API/A/" \
         -d "{\"records\":[\"$IP\"]}")
       if [ "$HTTP_CODE" = "200" ] || [ "$HTTP_CODE" = "204" ]; then
-        echo "OK: home.john2143.com -> $IP (PATCH $HTTP_CODE)"
+        echo "OK: john2143.com -> $IP (PATCH $HTTP_CODE)"
       else
         curl -sf -X POST \
           -H "Authorization: Token $TOKEN" \
           -H "Content-Type: application/json" \
           "$API/" \
-          -d "{\"subname\":\"home\",\"type\":\"A\",\"ttl\":300,\"records\":[\"$IP\"]}"
-        echo "OK: home.john2143.com -> $IP (POST created)"
+          -d "{\"subname\":\"\",\"type\":\"A\",\"ttl\":300,\"records\":[\"$IP\"]}"
+        echo "OK: john2143.com -> $IP (POST created)"
       fi
     '';
   };
-  systemd.timers.desec-ddns-home-john2143-com = {
-    description = "Update home.john2143.com DNS every 30 minutes";
+  systemd.timers.desec-ddns-john2143-com = {
+    description = "Update john2143.com DNS every 30 minutes";
     wantedBy = ["timers.target"];
     timerConfig = {
       OnCalendar = "*:0/30";
