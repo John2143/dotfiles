@@ -37,9 +37,58 @@ Parse `$ARGUMENTS`:
 
 ---
 
+## Resolve target directory
+
+Before proceeding with the scaffold, determine where to write the skill. Skills must live in a dotfiles repo so they can be committed and deployed.
+
+Determine `$SKILLS_DIR` — the absolute path to the `.claude/skills/` directory in the user's dotfiles repo:
+
+1. Check if the current working directory is already inside the dotfiles repo. Run:
+   ```bash
+   SKILLS_DIR_CANDIDATE=""
+   if git rev-parse --show-toplevel 2>/dev/null; then
+     TOP=$(git rev-parse --show-toplevel)
+     REMOTE=$(git -C "$TOP" remote get-url origin 2>/dev/null)
+     case "$REMOTE" in
+       *John2143/dotfiles*|*2143-Labs/dotfiles*)
+         SKILLS_DIR_CANDIDATE="$TOP/.claude/skills"
+         ;;
+     esac
+   fi
+   ```
+2. If empty and a `dotfiles/` subdirectory exists in cwd:
+   ```bash
+   if [ -z "$SKILLS_DIR_CANDIDATE" ] && [ -d dotfiles/.git ]; then
+     REMOTE=$(git -C dotfiles remote get-url origin 2>/dev/null)
+     case "$REMOTE" in
+       *John2143/dotfiles*|*2143-Labs/dotfiles*)
+         SKILLS_DIR_CANDIDATE="$PWD/dotfiles/.claude/skills"
+         ;;
+     esac
+   fi
+   ```
+3. If still empty, check common locations:
+   ```bash
+   for dir in "$HOME/dotfiles" "$HOME/repos/dotfiles"; do
+     if [ -z "$SKILLS_DIR_CANDIDATE" ] && [ -d "$dir/.git" ]; then
+       REMOTE=$(git -C "$dir" remote get-url origin 2>/dev/null)
+       case "$REMOTE" in
+         *John2143/dotfiles*|*2143-Labs/dotfiles*)
+           SKILLS_DIR_CANDIDATE="$dir/.claude/skills"
+           ;;
+       esac
+     fi
+   done
+   ```
+4. If `$SKILLS_DIR_CANDIDATE` is still empty, ask the user: "I couldn't auto-detect a dotfiles repo. Where should I write this skill? Provide the full path to the `.claude/skills/` directory."
+5. Set `$SKILLS_DIR` to the confirmed path. Create it if it doesn't exist:
+   ```bash
+   mkdir -p "$SKILLS_DIR"
+   ```
+6. Use `$SKILLS_DIR` for all file operations below. **Do not** write skills to the bare cwd `.claude/skills/` — always use `$SKILLS_DIR`.
 ## Mode: Interactive Skill Scaffolding
 
-Your job is to produce a complete skill document (SKILL.md) under `.claude/skills/<skill-name>/` based on a user's idea. You work through five phases in order, presenting intermediate artifacts to the user before proceeding.
+Your job is to produce a complete skill document (SKILL.md) under `$SKILLS_DIR/<skill-name>/` based on a user's idea. You work through five phases in order, presenting intermediate artifacts to the user before proceeding.
 
 ### Phase 1 — Clarify the idea
 
@@ -157,7 +206,7 @@ For **multi-session skills** (user invokes the skill several times; each invocat
 For **loop prompts** (designed for the `/loop` harness, which calls the same prompt repeatedly with no arguments), the body must additionally include:
 - A **gap-evaluation checklist** in "How to start each session" — the agent must decide whether there is work to do before acting. If no work exists, the agent should use Bash `sleep <seconds>` to pause and retry later, or call **`exit_loop_mode(reason)`** to stop permanently.
 - "Do not ask questions" in constraints (the agent runs unattended).
-- See `.claude/skills/prompt-engineer/SKILL.md` Mode: Loop Prompt Generation for the full template.
+- See `$SKILLS_DIR/prompt-engineer/SKILL.md` Mode: Loop Prompt Generation for the full template.
 
 Present the proposed design to the user as a structured outline, then STOP and wait for confirmation before proceeding to Phase 3. Do not begin Phase 3 until the user explicitly approves the design.
 
@@ -167,17 +216,17 @@ First, save the current skill draft — based on the Phase 2 design and all clar
 
 1. Ensure the directory exists:
    ```bash
-   mkdir -p .claude/skills/<skill-name>/
+   mkdir -p "$SKILLS_DIR/<skill-name>/"
    ```
-2. Write the draft to `.claude/skills/<skill-name>/SKILL.draft.md` using `write`. Include:
+2. Write the draft to `$SKILLS_DIR/<skill-name>/SKILL.draft.md` using `write`. Include:
    - Complete frontmatter (as designed in Phase 2).
    - Argument parsing section.
    - Mode structure outline with section headings and brief content notes.
    - This draft will evolve into the final SKILL.md in Phase 4 — write real content, not placeholders.
-3. Verify the draft was saved: use `read` to check the first 10 lines of `.claude/skills/<skill-name>/SKILL.draft.md`. If the file is missing, empty, or truncated, STOP and report: "Draft save failed: \<reason\>." Do not continue to research until the draft is confirmed saved.
+3. Verify the draft was saved: use `read` to check the first 10 lines of `$SKILLS_DIR/<skill-name>/SKILL.draft.md`. If the file is missing, empty, or truncated, STOP and report: "Draft save failed: \<reason\>." Do not continue to research until the draft is confirmed saved.
 Then research the following using your tools:
 
-- Read 2-3 existing skills from `.claude/skills/*/SKILL.md` to match conventions, argument patterns, and frontmatter style.
+- Read 2-3 existing skills from `$SKILLS_DIR/*/SKILL.md` to match conventions, argument patterns, and frontmatter style.
 - If the skill targets a specific tool or runtime (e.g., `nix`, `docker`, `kubectl`), check whether it's available in the environment.
 - If the skill references specific files or directories in the repo, verify they exist.
 
@@ -186,7 +235,7 @@ Report findings concisely. Flag any risks (e.g., tool unavailable, ambiguous nam
 After reporting findings, STOP and wait for the user to confirm before proceeding to Phase 4. Ask explicitly: "Ready to write the final SKILL.md based on these findings?" Do not begin Phase 4 until the user approves.
 ### Phase 4 — Write the skill
 
-Write the SKILL.md file to `.claude/skills/<skill-name>/SKILL.md`.
+Write the SKILL.md file to `$SKILLS_DIR/<skill-name>/SKILL.md`.
 
 Include:
 - Complete YAML frontmatter with `description`, `argument-hint`, `allowed-tools`, and `tool-hints`.
@@ -208,7 +257,7 @@ After presenting the checklist, STOP and wait for the user to review the written
 
 If the user passed `--refine`, run the prompt-engineer refinement automatically. Otherwise, offer to run it:
 
-- For one-shot and multi-session skills: `/skill:prompt-engineer .claude/skills/<skill-name>/SKILL.md`
-- For loop prompts (for `/loop` harness): `/skill:prompt-engineer loop .claude/skills/<skill-name>/SKILL.md`
+- For one-shot and multi-session skills: `/skill:prompt-engineer $SKILLS_DIR/<skill-name>/SKILL.md`
+- For loop prompts (for `/loop` harness): `/skill:prompt-engineer loop $SKILLS_DIR/<skill-name>/SKILL.md`
 
 If the user accepts, follow the prompt-engineer skill instructions and apply the revised prompt back to the file.
