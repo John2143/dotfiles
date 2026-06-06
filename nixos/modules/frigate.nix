@@ -1,8 +1,7 @@
 # Frigate NVR — smart object detection on Reolink RTSP streams.
 #
-# Runs bare-metal on arch for GPU decode (NVIDIA NVENC/NVDEC) and fast CPU
-# detection (OpenVINO on i9-9900K). Recordings + database live on the NAS
-# over NFSv4 (10GbE).
+# Runs in Podman using the -tensorrt image for NVIDIA GPU-accelerated
+# object detection. Recordings + database live on the NAS over NFSv3.
 #
 # Cameras: up to 7 Reolink cameras routed through the Reolink NVR.
 # Main streams are used for both detection and recording (no sub-streams).
@@ -18,7 +17,7 @@
 #   agenix -e secrets/reolink-nvr.age -i ~/.ssh/id_ed25519 < /tmp/reolink-nvr.env
 #
 # The Frigate YAML uses ${NVR_PASS} placeholders; envsubst replaces them
-# at service start from the decrypted agenix file.
+# at container startup from the decrypted agenix env file.
 #
 # === One-time NAS setup ===
 #
@@ -36,13 +35,10 @@
   # ── MQTT (required for Home Assistant integration) ─────────────────
   mqttHost = "home.ts.2143.me";
   mqttPort = 1883;
-  # mqttUser = "frigate";
-  # mqttPass = "CHANGEME";
 
   # ── NAS NFS mount for recordings + database ───────────────────────
   nasFrigatePath = "/mnt/nas/frigate";
 
-  # ── Camera definitions ────────────────────────────────────────────
   # ── Camera definitions ────────────────────────────────────────────
   # Edit names. Each pulls one RTSP stream from the Reolink NVR:
   #   /h264Preview_0N_main  → detection + recording (full resolution)
@@ -57,8 +53,8 @@
   };
 
   # Build a per-camera Frigate config.
-  # Uses ${NVR_USER}, ${NVR_PASS}, ${NVR_HOST} shell variables as
-  # placeholders — envsubst fills them at runtime from agenix.
+  # Uses ${NVR_USER}, ${NVR_PASS}, ${NVR_HOST} placeholders —
+  # envsubst fills them at runtime from the agenix env file.
   mkCamera =
     _: cfg: {
       ffmpeg = {
@@ -107,6 +103,85 @@
     };
 
   cameraSettings = builtins.mapAttrs mkCamera cameras;
+
+  # ── Frigate YAML config (built at Nix build time) ─────────────────
+  # The config contains ${NVR_*} placeholders that envsubst replaces
+  # at container startup from the agenix secret env file.
+  yamlFormat = pkgs.formats.yaml {};
+
+  frigateConfigFile = yamlFormat.generate "frigate-config.yml" {
+    mqtt = {
+      host = mqttHost;
+      port = mqttPort;
+    };
+
+    detectors = {
+      onnx = {
+        type = "onnx";
+      };
+    };
+
+    model = {
+      # YOLOv9-tiny 320x320: the recommended model for GTX 1080 Ti.
+      # Build it with Frigate's Dockerfile-based exporter:
+      #   https://github.com/blakeblackshear/frigate/blob/dev/docs/docs/configuration/object_detectors.md#models
+      path = "/config/model_cache/yolov9-t-320.onnx";
+      model_type = "yolo-generic";
+      width = 320;
+      height = 320;
+      input_tensor = "nchw";
+      input_dtype = "float";
+    };
+
+    ffmpeg = {
+      hwaccel_args = "preset-nvidia-h264";
+    };
+
+    go2rtc = {
+      streams =
+        builtins.mapAttrs (
+          _: cfg:
+            "rtsp://\${NVR_USER}:\${NVR_PASS}@\${NVR_HOST}/h264Preview_${cfg.channel}_main"
+        )
+        cameras;
+    };
+
+    record = {
+      enabled = true;
+      retain = {
+        days = 7;
+        mode = "motion";
+      };
+    };
+
+    snapshots = {
+      enabled = true;
+      retain = {
+        default = 30;
+      };
+    };
+
+    cameras = cameraSettings;
+  };
+
+  # Bootstrap script that substitutes credentials and starts Frigate.
+  # Must use #!/bin/sh (not Nix store bash) since it runs inside the container.
+  frigateEntrypoint = pkgs.runCommandLocal "frigate-entrypoint" { } ''
+    cat > $out << 'SCRIPT'
+#!/bin/sh
+set -e
+# Copy the Nix-generated config template into the writable /config dir.
+# Frigate requires /config to be a mount point; Nix store paths are read-only.
+cp /nix-config.yml /config/config.yml.tpl
+# Substitute NVR_* placeholders in the config template.
+# The env vars (NVR_USER, NVR_PASS, NVR_HOST) are provided by
+# the agenix secret via Podman's --env-file.
+/usr/local/bin/envsubst < /config/config.yml.tpl > /config/config.yml
+# Start Frigate's init process.
+exec /init
+SCRIPT
+    chmod +x $out
+  '';
 in {
   # ── agenix secret: NVR credentials ─────────────────────────────────
   age.secrets.reolink-nvr = {
@@ -136,110 +211,61 @@ in {
 
   systemd.tmpfiles.rules = [
     "d ${nasFrigatePath} 0755 1000 1000 -"
+    "d /var/lib/frigate 0755 1000 1000 -"
   ];
 
-  # ── Frigate service ───────────────────────────────────────────────
-  services.frigate = {
-    enable = true;
-    hostname = "frigate.ts.2143.me";
-    checkConfig = false; # disabled: config contains ${PLACEHOLDER} strings
-                         # that will fail YAML validation at build time.
+  # ── NVIDIA Container Toolkit for GPU passthrough ──────────────────
+  hardware.nvidia-container-toolkit.enable = true;
 
-    settings = {
-      database = {
-        path = "/var/lib/frigate/frigate.db";
-      };
+  # ── Frigate Podman container ──────────────────────────────────────
+  virtualisation.oci-containers = {
+    backend = "podman";
+    containers.frigate = {
+      image = "ghcr.io/blakeblackshear/frigate:stable-tensorrt";
+      autoStart = true;
 
-      mqtt = {
-        enabled = true;
-        host = mqttHost;
-        port = mqttPort;
-        # user = mqttUser;
-        # password = mqttPass;
-      };
+      # Load NVR credentials from the decrypted agenix file.
+      # This sets NVR_USER, NVR_PASS, NVR_HOST in the container environment.
+      environmentFiles = [
+        config.age.secrets.reolink-nvr.path
+      ];
 
-      detectors = {
-        cpu = {
-          type = "cpu";
-          num_threads = 4;
-        };
-      };
+      volumes = [
+        # Writable config directory (local, not NAS — NFS root_squash prevents writes)
+        "/var/lib/frigate:/config"
+        # Nix-generated config template (copied to /config by entrypoint)
+        "${frigateConfigFile}:/nix-config.yml:ro"
 
-      ffmpeg = {
-        hwaccel_args = "preset-nvidia-h264";
-        output_args = {
-          record = "preset-record-generic-audio-copy";
-        };
-      };
+        # Bootstrap entrypoint that runs envsubst then execs /init
+        "${frigateEntrypoint}:/frigate-entrypoint.sh:ro"
+        # Static Go envsubst binary for credential substitution
+        "${pkgs.envsubst}/bin/envsubst:/usr/local/bin/envsubst:ro"
+        # Recordings and exports on NAS
+        "${nasFrigatePath}:/media/frigate"
+        # Timezone
+        "/etc/localtime:/etc/localtime:ro"
+      ];
 
-      go2rtc = {
-        streams =
-          builtins.mapAttrs (
-            _: cfg:
-              "rtsp://\${NVR_USER}:\${NVR_PASS}@\${NVR_HOST}/h264Preview_${cfg.channel}_main"
-          )
-          cameras;
-      };
+      extraOptions = [
+        # GPU passthrough
+        "--device=nvidia.com/gpu=all"
+        # Podman security: needed for GPU access
+        "--security-opt=label=disable"
+        # Map container root to host user (NFS root_squash workaround)
+        # Video group for /dev/dri/* (NVIDIA DRM)
+        "--group-add=video"
+      ];
 
-      record = {
-        enabled = true;
-        retain = {
-          days = 7;
-          mode = "motion";
-        };
-      };
+      # Use our bootstrap script as the container entrypoint
+      entrypoint = "/frigate-entrypoint.sh";
 
-      snapshots = {
-        enabled = true;
-        retain = {
-          default = 30;
-        };
-      };
-
-      cameras = cameraSettings;
-
-      version = "0.17";
+      ports = [
+        "127.0.0.1:5000:5000"  # Frigate web UI — localhost only
+        "8554:8554"             # go2rtc TCP
+        "8554:8554/udp"         # go2rtc UDP
+        "8555:8555"             # go2rtc TCP
+        "8555:8555/udp"         # go2rtc UDP
+      ];
     };
   };
-
-  # ── Credential injection at runtime ───────────────────────────────
-  # The Frigate YAML in /nix/store has ${NVR_PASS} etc. as literal text.
-  # envsubst replaces them when the service starts, using the agenix
-  # decrypted env file.
-  #
-  # We insert our ExecStartPre AFTER the module's own "copy config" step
-  # so the substitution happens on the writable copy in /run/frigate/.
-
-  systemd.services.frigate = {
-    # Load the decrypted credentials into the service's environment.
-    serviceConfig.EnvironmentFile = [
-      config.age.secrets.reolink-nvr.path
-    ];
-    # NVIDIA driver libraries (libcuda.so, libnvcuvid.so) for NVENC/NVDEC.
-    # ffmpeg-headless has nvenc compiled in but can't find the driver at runtime
-    # without this. The nixpkgs module omits this because the nvidia package is unfree.
-    environment.LD_LIBRARY_PATH = lib.makeLibraryPath [
-      config.hardware.nvidia.package
-    ];
-
-    # Append envsubst AFTER the module's ExecStartPre (which copies
-    # the config to /run/frigate/frigate.yml). We use mkAfter on
-    # serviceConfig.ExecStartPre because preStart prepends (wrong order).
-    serviceConfig.ExecStartPre = lib.mkAfter [
-      (pkgs.writeShellScript "frigate-envsubst-config" ''
-        if [ -f /run/frigate/frigate.yml ]; then
-          ${pkgs.envsubst}/bin/envsubst \
-            < /run/frigate/frigate.yml \
-            > /run/frigate/frigate.yml.tmp \
-          && mv /run/frigate/frigate.yml.tmp /run/frigate/frigate.yml
-        fi
-      '')
-    ];
-  };
-
-  # ── GPU access ────────────────────────────────────────────────────
-  users.users.frigate.extraGroups = ["video"];
-
-  # Open Frigate web UI (5000) and go2rtc (8554/8555).
-  networking.firewall.allowedTCPPorts = [5000 8554 8555];
 }
