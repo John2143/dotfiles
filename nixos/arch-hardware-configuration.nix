@@ -416,7 +416,7 @@ in {
     fsType = "ext4";
   };
 
-  # Longhorn replica disk for the k3s cluster. The LV (pool1/longhorn, 700G)
+  # Longhorn replica disk for the k3s cluster. The LV (pool1/longhorn, 1.2T)
   # was created manually inside the existing pool1 LUKS volume. Bring up the
   # filesystem on first deploy with:
   #   sudo mkfs.ext4 -L longhorn /dev/mapper/pool1-longhorn

@@ -50,8 +50,8 @@ sda                                             1.8T disk                       
 sdb                                             1.8T disk                            PSSD T7                 0
 └─sdb1                                          1.8T part  crypto_LUKS                                       0
   └─luks-9340760b-a19d-4392-9021-8f4b14c794f8   1.8T crypt LVM2_member                                       0
-    ├─pool1-bfdl                               1000G lvm   crypto_LUKS                                       0
-    └─pool1-longhorn                            700G lvm   ext4        /mnt/longhorn                         0
+    ├─pool1-longhorn                           1200G lvm   ext4        /mnt/longhorn                         0
+    └─pool1-ssdext1                             663G lvm   ext4
 sdc                                               0B disk                            USB3.0 CRW -SD          0
 sdd                                               0B disk                            USB3.0 CRW -SD          0
 nvme0n1                                       953.9G disk                            INTEL SSDPEKNW010T8     0
@@ -146,14 +146,13 @@ ata-WDC_WD20EZRZ-00Z5HB0_WD-WCC4M2YS41RZ-part1
 dm-name-luks-9340760b-a19d-4392-9021-8f4b14c794f8
 dm-name-pool1a-games_a
 dm-name-pool1a-john_home
-dm-name-pool1-bfdl
 dm-name-pool1b-monero
 dm-name-pool1b-swap
 dm-name-pool1-longhorn
+dm-name-pool1-ssdext1
 dm-uuid-CRYPT-LUKS2-9340760ba19d439290218f4b14c794f8-luks-9340760b-a19d-4392-9021-8f4b14c794f8
 dm-uuid-LVM-dNxSc19lfU7LhZDs3YIIzxXcPijvyqD04RsuuGRR3jZsn8GBfEqSJXiWXAQ1s0dA
 dm-uuid-LVM-dNxSc19lfU7LhZDs3YIIzxXcPijvyqD0IfnQdpkFgp8alt3MFnj8cFiRdqtgm8ay
-dm-uuid-LVM-udpgOyVkPRr5pheziAPyvVTxd4L9ML6dFTuvqJSKxWkGmQm1pEEY2R23dkPmMHJ5
 dm-uuid-LVM-udpgOyVkPRr5pheziAPyvVTxd4L9ML6dvrMO8JN1mv6fBewHYRLyDoJeiE0rF3HG
 dm-uuid-LVM-XKhWWVWdGUy315MdhGUMhe00uY10NL4yu7azXOxRSInFCdcOS7ACV7kdS14Qj4iq
 dm-uuid-LVM-XKhWWVWdGUy315MdhGUMhe00uY10NL4yvWer6M1adFET3E84IJiOv6jpYnW6nXsp
