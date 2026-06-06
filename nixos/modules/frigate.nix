@@ -5,7 +5,7 @@
 # over NFSv4 (10GbE).
 #
 # Cameras: up to 7 Reolink cameras routed through the Reolink NVR.
-# Sub-streams are used for detection (low-res), main streams for clip recording.
+# Main streams are used for both detection and recording (no sub-streams).
 #
 # === agenix secret ===
 #
@@ -43,9 +43,9 @@
   nasFrigatePath = "/mnt/nas/frigate";
 
   # ── Camera definitions ────────────────────────────────────────────
-  # Edit names. Each pulls two RTSP streams from the Reolink NVR:
-  #   /h264Preview_0N_main  → recording (full resolution)
-  #   /h264Preview_0N_sub   → detection (low-res, 640x480)
+  # ── Camera definitions ────────────────────────────────────────────
+  # Edit names. Each pulls one RTSP stream from the Reolink NVR:
+  #   /h264Preview_0N_main  → detection + recording (full resolution)
   cameras = {
     cam01 = {name = "Camera 1"; channel = "01";};
     cam02 = {name = "Camera 2"; channel = "02";};
@@ -65,17 +65,13 @@
         inputs = [
           {
             path = "rtsp://\${NVR_USER}:\${NVR_PASS}@\${NVR_HOST}/h264Preview_${cfg.channel}_main";
-            roles = ["record"];
-          }
-          {
-            path = "rtsp://\${NVR_USER}:\${NVR_PASS}@\${NVR_HOST}/h264Preview_${cfg.channel}_sub";
-            roles = ["detect"];
+            roles = ["record" "detect"];
           }
         ];
       };
       detect = {
-        width = 640;
-        height = 480;
+        width = 2560;
+        height = 1440;
         fps = 5;
       };
       record = {
@@ -163,9 +159,9 @@ in {
       };
 
       detectors = {
-        ov = {
-          type = "openvino";
-          device = "CPU";
+        cpu = {
+          type = "cpu";
+          num_threads = 4;
         };
       };
 
@@ -218,6 +214,12 @@ in {
     # Load the decrypted credentials into the service's environment.
     serviceConfig.EnvironmentFile = [
       config.age.secrets.reolink-nvr.path
+    ];
+    # NVIDIA driver libraries (libcuda.so, libnvcuvid.so) for NVENC/NVDEC.
+    # ffmpeg-headless has nvenc compiled in but can't find the driver at runtime
+    # without this. The nixpkgs module omits this because the nvidia package is unfree.
+    environment.LD_LIBRARY_PATH = lib.makeLibraryPath [
+      config.hardware.nvidia.package
     ];
 
     # Append envsubst AFTER the module's ExecStartPre (which copies
