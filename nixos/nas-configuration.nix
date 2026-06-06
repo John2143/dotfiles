@@ -86,10 +86,14 @@
 #      sudo smbpasswd -a john
 #
 #
-# 9. Longhorn backing store — ext4 on sda6, managed by disko.
-#    Mounted at /var/lib/longhorn. The ext4 fs label "longhorn"
-#    was set via mkfs.ext4 at migration time. No ZFS snapshots needed
-#    — Longhorn manages its own backup/replication lifecycle.
+# 9. Longhorn replica storage.
+#    Disk 1: /var/lib/longhorn — ext4 on sda6 (disko-managed, label "longhorn").
+#      Holds primary Longhorn replicas. Recreated by disko on rebuild.
+#    Disk 2: /var/lib/longhorn-2 — directory on root partition (sda2, ~1TiB).
+#      Created by systemd-tmpfiles. Re-added to Longhorn node CRD post-rebuild.
+#      UUID for longhorn-disk.cfg if recreating from scratch:
+#        diskUUID: 719fbb40-d0b3-498c-a8e4-77b23a402481
+#        diskName: nas-root-longhorn
 #
 # 10. Rebuild:
 #      sudo nixos-rebuild switch --flake /home/john/dotfiles#nas
@@ -562,13 +566,14 @@
     "http://localhost:8280/2143nix"
   ];
 
-  # Longhorn replica storage — ext4 on sda6 (disk label "longhorn").
-  # Mounted at /mnt/longhorn directly (not a symlink) so the instance-manager
-  # container can bind-mount it without symlink resolution issues.
-  fileSystems."/mnt/longhorn" = {
-    device = "/dev/disk/by-label/longhorn";
-    fsType = "ext4";
-  };
+  # Longhorn disks are managed declaratively:
+  #   - /var/lib/longhorn on sda6 → disko (`disko_nas.nix`)
+  #   - /var/lib/longhorn-2 on root → systemd-tmpfiles (`longhorn-host.nix`)
+  # After a full rebuild, re-add the second disk to the Longhorn node CRD:
+  #   kubectl patch nodes.longhorn.io -n longhorn-system nas --type=merge \
+  #     -p '{"spec":{"disks":{"nas-root-longhorn":{"allowScheduling":true,"diskDriver":"","diskType":"filesystem","evictionRequested":false,"path":"/var/lib/longhorn-2","storageReserved":42949672960,"tags":[]}}}}'
+  # Then delete the instance-manager pod on nas to pick up the change:
+  #   kubectl delete pod -n longhorn-system -l longhorn.io/instance-manager -l longhorn.io/node=nas
 
   system.stateVersion = "26.05";
 }

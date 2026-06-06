@@ -9,6 +9,10 @@
 #   part4: zfs_special (100GB,  raw — tank special mirror leg, attached post-boot)
 #   part5: l2arc       (200GB,  raw — tank L2ARC cache, added post-boot)
 #   part6: longhorn    (remainder ~519GB, ext4, mount=/var/lib/longhorn)
+#   Part 6 also hosts longhorn-disk.cfg for /var/lib/longhorn.
+#   A SECOND Longhorn disk lives at /var/lib/longhorn-2 on the root
+#   partition (sda2, ~1TiB) — created by systemd-tmpfiles and added
+#   to the Longhorn node CRD post-boot.
 #
 # The ZFS pool `tank` is NOT managed by disko. After first boot:
 #   1. Import:  sudo zpool import tank
@@ -51,6 +55,11 @@
 #      nixos-install --flake github:John2143/dotfiles#nas
 #    (If GitHub is unreachable, use a local clone of the dotfiles repo.)
 # 5. REBOOT:
+# 6. POST-BOOT: Re-add second Longhorn disk to the nas node CRD:
+#      kubectl patch nodes.longhorn.io -n longhorn-system nas --type=merge \
+#        -p '{"spec":{"disks":{"nas-root-longhorn":{"allowScheduling":true,"diskDriver":"","diskType":"filesystem","evictionRequested":false,"path":"/var/lib/longhorn-2","storageReserved":42949672960,"tags":[]}}}}'
+# 7. Restart instance-manager to pick up the new disk:
+#      kubectl delete pod -n longhorn-system -l longhorn.io/instance-manager -l longhorn.io/node=nas
 #      reboot
 # 6. RE-ATTACH ZFS TANK MEMBERS:
 #      zpool import tank
@@ -59,6 +68,10 @@
 #      nixos-rebuild switch --flake ~/dotfiles#nas
 #
 # The dotfiles repo must be reachable at install time. If the NAS itself
+# 
+# The second Longhorn disk at /var/lib/longhorn-2 lives on the root
+# partition (sda2, ~1TiB). Its longhorn-disk.cfg UUID must be stable
+# across rebuilds — the current value is documented in nas-configuration.nix.
 # was the only clone of the repo and GitHub is down, clone to the installer
 # from another machine on the LAN or use a USB stick with a tarball.
 #

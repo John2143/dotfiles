@@ -35,6 +35,7 @@
   systemd.tmpfiles.rules = [
     "d /var/lib/longhorn 0755 root root - -"
     "d /mnt/longhorn 0755 root root - -"
+    "d /var/lib/longhorn-2 0755 root root - -"
     "L+ /usr/local/sbin/iscsiadm  - - - - ${pkgs.openiscsi}/bin/iscsiadm"
     "L+ /usr/local/bin/mount      - - - - ${pkgs.util-linux}/bin/mount"
     "L+ /usr/local/bin/umount     - - - - ${pkgs.util-linux}/bin/umount"
