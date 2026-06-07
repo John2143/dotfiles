@@ -249,7 +249,7 @@ data:
         log
     }
 
-    gslb.9s.pics {
+    gslb.9s.pics:53 {
         file /etc/coredns/zone/zone.db
         loadbalance round_robin
         import global
