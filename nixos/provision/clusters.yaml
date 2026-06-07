@@ -23,7 +23,7 @@ providers:
 
 # ── Cluster definitions ──
 clusters:
-  - name: hetzner-ashburn
+  - name: hetzner-ashburn-k3s
     cloud: hetzner
     region: ashburn
     geo_tag: us-ashburn
@@ -37,7 +37,7 @@ clusters:
       - role: server
         size: cpx21
 
-  - name: hetzner-hillsboro
+  - name: hetzner-hillsboro-k3s
     cloud: hetzner
     region: hillsboro
     geo_tag: us-hillsboro
@@ -51,7 +51,7 @@ clusters:
       - role: server
         size: cpx31
 
-#  - name: do-nyc                         # DEFERRED — waiting for DO token
+#  - name: do-nyc-k3s                        # DEFERRED — waiting for DO token
 #    cloud: digitalocean
 #    region: nyc1
 #    geo_tag: us-nyc

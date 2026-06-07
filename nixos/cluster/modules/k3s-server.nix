@@ -27,7 +27,7 @@
   #   sudo headscale nodes delete --identifier <id> --force
 
   environment.systemPackages = with pkgs; [
-    # hcloud was removed — no longer needed. Pulumi manages cloud resources,
-    # coredns-zone-generator reads from FIP ConfigMap instead of hcloud API.
+    agenix
+    # hcloud was removed — Pulumi manages cloud resources.
   ];
 }

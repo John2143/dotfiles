@@ -19,3 +19,5 @@ nixos/provision/state/
 nixos/provision/__pycache__/
 nixos/provision/resources/__pycache__/
 nixos/provision/.venv-py312/
+nixos/cluster/secrets/cloud-ssh-key.age
+nixos/cluster/secrets/do-pat.age
