@@ -8,8 +8,9 @@
 # On clouds with true dual-IP (AWS, DO), this is not needed — the FIP
 # appears as a secondary address on the primary interface.
 #
-# FIP is discovered from the fip-registry ConfigMap in k8gb namespace.
-# Falls back gracefully if ConfigMap is not yet present.
+# FIP is discovered from the fip-registry ConfigMap. Hostname format
+# {cloud}-{region}-k3s is parsed to find the matching region in the registry.
+# Falls back gracefully if ConfigMap or k3s is not yet present.
 {
   config,
   lib,
@@ -19,44 +20,28 @@
   fipBindingScript = pkgs.writeShellScript "fip-loopback-bind" ''
     set -euo pipefail
 
-    # Try to read FIP from Kubernetes ConfigMap
-    FIP=""
-    if KUBECONFIG=/etc/rancher/k3s/k3s.yaml kubectl get configmap fip-registry -n k8gb -o json 2>/dev/null | \
-       ${pkgs.python3}/bin/python3 -c "
-import json, sys
+    # Read FIP from Kubernetes ConfigMap, matching hostname region
+    FIP=$(KUBECONFIG=/etc/rancher/k3s/k3s.yaml kubectl get configmap fip-registry \
+      -n k8gb -o json 2>/dev/null | \
+      ${pkgs.python3}/bin/python3 -c "
+import json, sys, os
 try:
     cm = json.load(sys.stdin)
     fips = json.loads(cm.get('data', {}).get('fips.json', '{}'))
-    hostname = '$(hostname)'
-    # Map hostname to region: hetzner-ashburn-k3s -> ashburn
+    hostname = os.uname().nodename           # e.g., hetzner-ashburn-k3s
     parts = hostname.split('-')
     if len(parts) >= 3:
-        region = parts[1]
+        region = parts[1]                    # ashburn, hillsboro, nyc
         for r, info in fips.items():
-            if r == region or info.get('geo', '').endswith(region):
+            if r == region:
                 print(info['ip'])
                 break
-except: pass
-" 2>/dev/null; then
-      FIP=$(${pkgs.python3}/bin/python3 -c "
-import json, sys
-try:
-    cm = json.load(sys.stdin)
-    fips = json.loads(cm.get('data', {}).get('fips.json', '{}'))
-    hostname = '$(hostname)'
-    parts = hostname.split('-')
-    if len(parts) >= 3:
-        region = parts[1]
-        for r, info in fips.items():
-            if r == region or info.get('geo', '').endswith(region):
-                print(info['ip'])
-                break
-except: pass
-" < <(KUBECONFIG=/etc/rancher/k3s/k3s.yaml kubectl get configmap fip-registry -n k8gb -o json 2>/dev/null))
-    fi
+except Exception:
+    pass
+")
 
     if [ -z "$FIP" ]; then
-      echo "fip-loopback-bind: FIP not found in ConfigMap, skipping"
+      echo "fip-loopback-bind: FIP not found in ConfigMap (k3s/ConfigMap not ready yet?)"
       exit 0
     fi
 
@@ -71,11 +56,14 @@ except: pass
 
     # Policy routing: responses to FIP traffic must use FIP as source
     FIP_TABLE="fip"
-    if ! ip rule show | grep -q "from $FIP"; then
-      ip rule add from "$FIP" table "$FIP_TABLE" pref 100 2>/dev/null || true
-      ip route add default via "$(ip -4 route get 8.8.8.8 | grep -oP 'via \K[\d.]+')" \
-        dev "$(ip -4 route get 8.8.8.8 | grep -oP 'dev \K\S+')" \
-        table "$FIP_TABLE" 2>/dev/null || true
+    if ! ip rule show 2>/dev/null | grep -q "from $FIP"; then
+      GATEWAY=$(ip -4 route get 8.8.8.8 2>/dev/null | grep -oP 'via \K[\d.]+' || echo "")
+      DEVICE=$(ip -4 route get 8.8.8.8 2>/dev/null | grep -oP 'dev \K\S+' || echo "")
+      if [ -n "$GATEWAY" ] && [ -n "$DEVICE" ]; then
+        ip rule add from "$FIP" table "$FIP_TABLE" pref 100
+        ip route add default via "$GATEWAY" dev "$DEVICE" table "$FIP_TABLE"
+        echo "fip-loopback-bind: Policy routing added for $FIP"
+      fi
     fi
   '';
 in {
