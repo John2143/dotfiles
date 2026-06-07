@@ -1,5 +1,5 @@
 {
-  description = "Hetzner Enterprise HA Platform — 6 k3s nodes + Home Pi";
+  description = "Multi-Cloud k3s Platform — Pulumi-provisioned clusters + Home Pi";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
@@ -27,9 +27,10 @@
       "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOktI2Vry/5fbhZiG35o5mf7w3dnaTEDqkRJVM07cu3a john@arch"
       "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFVckq0oXyXkxiLo39typ6PR039XrLwze/Cb0PZaTzmi john@office"
       "ecdsa-sha2-nistp256 AAAAE2VjZHNhLXNoYTItbmlzdHAyNTYAAAAIbmlzdHAyNTYAAABBBHjc0NNrHCwjrBUvUByFoFPW9vKGVFsWVD6LoKp1FLtNaIjyigMTYXoCKZSNNguKdNwUiyqKIZfCExZmgc3Cccw= phone"
+      "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFNmxHc5ArL5bnSMgF3tRpXquIRSFQ67TJ1Phvi2xvxG k3s-multi-cloud-provisioning"
     ];
 
-    # All 3 server nodes are fully identical — drop-in replaceable.
+    # k3s server nodes — cloud-agnostic, Pulumi-provisioned.
     # DNS via deSEC.io (NS delegation + A records). cert-manager uses deSEC webhook for DNS01.
     mkServer = { compName, rawIP ? null }: nixpkgs.lib.nixosSystem {
       inherit system;
@@ -37,9 +38,9 @@
       modules = [
         disko.nixosModules.default
         agenix.nixosModules.default
-        ./modules/hetzner-disko.nix
-        ./modules/hetzner-ssh.nix
-        ./modules/hetzner-k3s-server.nix
+        ./modules/disko.nix
+        ./modules/ssh.nix
+        ./modules/k3s-server.nix
         ./modules/tailscale.nix
       ];
     };
@@ -51,23 +52,23 @@
       modules = [
         disko.nixosModules.default
         agenix.nixosModules.default
-        ./modules/hetzner-disko.nix
-        ./modules/hetzner-ssh.nix
-        ./modules/hetzner-k3s-agent.nix
+        ./modules/disko.nix
+        ./modules/ssh.nix
+        ./modules/k3s-agent.nix
         ./modules/tailscale.nix
       ];
     };
   in {
     nixosConfigurations = {
       # ── Server nodes (LA mode, 24/7) ──
-      k3s-ashburn   = mkServer { compName = "k3s-ashburn"; };
-      k3s-hillsboro = mkServer { compName = "k3s-hillsboro"; };
-      k3s-nuremberg = mkServer { compName = "k3s-nuremberg"; };
+      hetzner-ashburn-k3s   = mkServer { compName = "hetzner-ashburn-k3s"; };
+      hetzner-hillsboro-k3s = mkServer { compName = "hetzner-hillsboro-k3s"; };
+      do-nyc-k3s            = mkServer { compName = "do-nyc-k3s"; };
 
-      # ── Agent nodes (HA toggle, provisioned/destroyed via scripts) ──
-      k3s-ashburn-agent   = mkAgent { compName = "k3s-ashburn-agent";   };
-      k3s-hillsboro-agent = mkAgent { compName = "k3s-hillsboro-agent"; };
-      k3s-nuremberg-agent = mkAgent { compName = "k3s-nuremberg-agent"; };
+      # ── Agent nodes (HA toggle, provisioned via Pulumi) ──
+      hetzner-ashburn-k3s-agent   = mkAgent { compName = "hetzner-ashburn-k3s-agent"; };
+      hetzner-hillsboro-k3s-agent = mkAgent { compName = "hetzner-hillsboro-k3s-agent"; };
+      do-nyc-k3s-agent            = mkAgent { compName = "do-nyc-k3s-agent"; };
 
       # ── Home Pi (Headscale) ──
       home-pi = nixpkgs.lib.nixosSystem {

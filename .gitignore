@@ -15,3 +15,7 @@ vimfiles/*
 
 # nix build output
 result
+nixos/provision/state/
+nixos/provision/__pycache__/
+nixos/provision/resources/__pycache__/
+nixos/provision/.venv-py312/

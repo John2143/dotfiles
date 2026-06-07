@@ -1,11 +1,12 @@
-# Split-IP Firewall — per-IP iptables rules for DDoS blast radius containment
+# Dual-IP Firewall — per-IP iptables rules for DDoS blast radius containment
 #
-# Each node has two IPs, both detected at runtime:
-#   Primary IP (Hetzner DHCP):  SSH + Tailscale only — locked down
-#   Floating IP (Hetzner Cloud): DNS, HTTP/HTTPS, k3s API, CNPG, game servers
+# Each node may have two IPs, both detected at runtime:
+#   Primary IP (cloud DHCP):  SSH + Tailscale only — locked down
+#   Floating IP (cloud assigned): DNS, HTTP/HTTPS, k3s API, CNPG, game servers
 #
-# Detection: primary = IP with default route; floating = the other IP on enp1s0.
+# Detection: primary = IP with default route; floating = the other IP on same interface.
 # Falls back gracefully on single-IP nodes (one chain, SSH+Tailscale only).
+# Interface detection is dynamic — works on Hetzner (enp1s0), DO (eth0), AWS (ens5), etc.
 {
   config,
   lib,
@@ -29,9 +30,11 @@
       # ── IP Detection ──
       # Primary IP: the one with the default route
       PRIMARY_IP=$(ip -4 route get 8.8.8.8 2>/dev/null | grep -oP 'src \K[\d.]+' | head -1)
-      # All IPs on enp1s0 (Hetzner Cloud predictable interface name)
-      ALL_IPS=$(ip -4 addr show enp1s0 2>/dev/null | grep -oP 'inet \K[\d.]+' || true)
-      # Floating IP: the IP on enp1s0 that is NOT the primary
+      # Find the interface with the default route (works on Hetzner enp1s0, DO eth0, AWS ens5...)
+      IFACE=$(ip -4 route get 8.8.8.8 2>/dev/null | grep -oP 'dev \K\S+')
+      # All IPs on the primary interface
+      ALL_IPS=$(ip -4 addr show "$IFACE" 2>/dev/null | grep -oP 'inet \K[\d.]+' || true)
+      # Floating IP: the IP on the same interface that is NOT the primary
       FLOATING_IP=$(echo "$ALL_IPS" | grep -v "$PRIMARY_IP" | head -1 || true)
 
       if [ -z "$PRIMARY_IP" ]; then

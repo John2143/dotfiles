@@ -182,12 +182,11 @@ Flow:
 ```
 home-pi (atticd :8280)
   ↑ push (watch-store)        ↑ pull (substituter)
-k3s-ashburn (first build)    k3s-hillsboro, k3s-nuremberg
+hetzner-ashburn-k3s             hetzner-hillsboro-k3s, do-nyc-k3s
 ```
 
 - Ashburn builds everything → `attic watch-store` pushes to Pi
-- Hillsboro/Nuremberg pull from cache → 90%+ cache hits → near-instant deploys
-- All nodes reach the Pi over Tailscale at `100.64.0.2:8280`
+- Hillsboro / NYC pull from cache → 90%+ cache hits → near-instant deploys
 
 ## Known Issues
 

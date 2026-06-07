@@ -12,22 +12,22 @@
   ...
 }: {
   imports = [
-    ./hetzner-ssh.nix
-    ./hetzner-k3s-common.nix
-    ./hetzner-floating-ip-health.nix
-    ./hetzner-coredns-zone.nix
+    ./ssh.nix
+    ./k3s-common.nix
+    ./coredns-zone.nix
   ];
 
   networking.hostName = compName;
 
   # WARNING: Never do `tailscale logout; tailscale up` after initial deploy.
-  # This creates a new identity with a different DNS name (e.g. k3s-ashburn → k3s-ashburn-XXXX).
+  # This creates a new identity with a different DNS name (e.g. hetzner-ashburn-k3s → hetzner-ashburn-k3s-XXXX).
   # If tailscale needs reconnection, restart `tailscaled-autoconnect` instead:
   #   systemctl restart tailscaled-autoconnect
   # If identities MUST be regenerated, clean stale nodes from headscale first:
   #   sudo headscale nodes delete --identifier <id> --force
 
   environment.systemPackages = with pkgs; [
-    hcloud
+    # hcloud was removed — no longer needed. Pulumi manages cloud resources,
+    # coredns-zone-generator reads from FIP ConfigMap instead of hcloud API.
   ];
 }

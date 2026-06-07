@@ -15,7 +15,7 @@
   imports = [
     ./home-pi-hardware-configuration.nix
     ../modules/headscale.nix
-    ../modules/hetzner-ssh.nix
+    ../modules/ssh.nix
     ../modules/tailscale.nix
     ../../modules/attic-server.nix
   ];

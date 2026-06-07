@@ -11,7 +11,7 @@
   ...
 }: {
   imports = [
-    ./hetzner-ssh.nix
+    ./ssh.nix
     ./longhorn-host.nix
     ./tailscale.nix
   ];

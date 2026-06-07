@@ -10,7 +10,7 @@
   imports = [
     ./longhorn-host.nix
     ./tailscale.nix
-    ./hetzner-split-ip-firewall.nix
+    ./dual-ip-firewall.nix
   ];
 
   # agenix secret: k3s cluster token

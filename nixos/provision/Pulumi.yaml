@@ -1,0 +1,5 @@
+name: k3s-multi-cloud
+runtime: python
+description: Multi-cloud k3s provisioning via Pulumi
+backend:
+  url: file://./state
