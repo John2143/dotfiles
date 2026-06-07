@@ -18,8 +18,8 @@ defaults:
 providers:
   hetzner:
     token_env: HCLOUD_TOKEN
-  # digitalocean:                        # DEFERRED — waiting for DO token
-  #   token_env: DIGITALOCEAN_TOKEN
+  digitalocean:
+    token_env: DIGITALOCEAN_TOKEN
 
 # ── Cluster definitions ──
 clusters:
@@ -51,17 +51,17 @@ clusters:
       - role: server
         size: cpx31
 
-#  - name: do-nyc-k3s                        # DEFERRED — waiting for DO token
-#    cloud: digitalocean
-#    region: nyc1
-#    geo_tag: us-nyc
-#    floating_ip: true
-#    image: ubuntu-24-04-x64
-#    tags:
-#      - "k3s"
-#      - "john2143"
-#      - "managed-by-pulumi"
-#      - "k3s-server"
-#    nodes:
-#      - role: server
-#        size: s-2vcpu-4gb
+  - name: do-nyc-k3s
+    cloud: digitalocean
+    region: nyc1
+    geo_tag: us-nyc
+    floating_ip: true
+    image: ubuntu-24-04-x64
+    tags:
+      - "k3s"
+      - "john2143"
+      - "managed-by-pulumi"
+      - "k3s-server"
+    nodes:
+      - role: server
+        size: s-2vcpu-4gb

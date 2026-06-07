@@ -82,6 +82,7 @@ def ssh_exec(host: str, command: str, user: str = "root", timeout: int = 120) ->
     """Execute a command on a remote host via SSH."""
     result = subprocess.run(
         ["ssh", "-o", "StrictHostKeyChecking=accept-new",
+         "-o", "UserKnownHostsFile=/dev/null",
          "-o", "ConnectTimeout=10",
          f"{user}@{host}", command],
         capture_output=True, text=True, timeout=timeout,
@@ -124,3 +125,19 @@ data:
   zones.json: |
 {zones_block}
 """
+
+def scp_exec(local_path: str, remote_dest: str, timeout: int = 30) -> str:
+    """Copy a file to a remote host via SCP."""
+    result = subprocess.run(
+        ["scp", "-o", "StrictHostKeyChecking=accept-new",
+         "-o", "UserKnownHostsFile=/dev/null",
+         "-o", "ConnectTimeout=10",
+         local_path, f"root@{remote_dest}"],
+        capture_output=True, text=True, timeout=timeout,
+    )
+    if result.returncode != 0:
+        raise RuntimeError(
+            f"SCP to {remote_dest} failed (exit {result.returncode}):\n"
+            f"stdout: {result.stdout}\nstderr: {result.stderr}"
+        )
+    return result.stdout

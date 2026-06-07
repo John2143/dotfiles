@@ -32,9 +32,9 @@
 
     # k3s server nodes — cloud-agnostic, Pulumi-provisioned.
     # DNS via deSEC.io (NS delegation + A records). cert-manager uses deSEC webhook for DNS01.
-    mkServer = { compName, rawIP ? null }: nixpkgs.lib.nixosSystem {
+    mkServer = { compName, rawIP ? null, diskDevice ? "/dev/sda" }: nixpkgs.lib.nixosSystem {
       inherit system;
-      specialArgs = { inherit inputs compName rawIP; sshKeys = my-keys; };
+      specialArgs = { inherit inputs compName rawIP diskDevice; sshKeys = my-keys; };
       modules = [
         disko.nixosModules.default
         agenix.nixosModules.default
@@ -46,9 +46,9 @@
     };
 
     # Agent nodes join the corresponding server's k3s cluster.
-    mkAgent = { compName }: nixpkgs.lib.nixosSystem {
+    mkAgent = { compName, diskDevice ? "/dev/sda" }: nixpkgs.lib.nixosSystem {
       inherit system;
-      specialArgs = { inherit inputs compName; sshKeys = my-keys; };
+      specialArgs = { inherit inputs compName diskDevice; sshKeys = my-keys; };
       modules = [
         disko.nixosModules.default
         agenix.nixosModules.default
@@ -63,12 +63,12 @@
       # ── Server nodes (LA mode, 24/7) ──
       hetzner-ashburn-k3s   = mkServer { compName = "hetzner-ashburn-k3s"; };
       hetzner-hillsboro-k3s = mkServer { compName = "hetzner-hillsboro-k3s"; };
-      do-nyc-k3s            = mkServer { compName = "do-nyc-k3s"; };
+      do-nyc-k3s            = mkServer { compName = "do-nyc-k3s"; diskDevice = "/dev/vda"; };
 
       # ── Agent nodes (HA toggle, provisioned via Pulumi) ──
       hetzner-ashburn-k3s-agent   = mkAgent { compName = "hetzner-ashburn-k3s-agent"; };
       hetzner-hillsboro-k3s-agent = mkAgent { compName = "hetzner-hillsboro-k3s-agent"; };
-      do-nyc-k3s-agent            = mkAgent { compName = "do-nyc-k3s-agent"; };
+      do-nyc-k3s-agent            = mkAgent { compName = "do-nyc-k3s-agent"; diskDevice = "/dev/vda"; };
 
       # ── Home Pi (Headscale) ──
       home-pi = nixpkgs.lib.nixosSystem {

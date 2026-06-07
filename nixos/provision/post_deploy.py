@@ -4,10 +4,11 @@ Runs via SSH after nixos-anywhere completes. Uses the cloud SSH key
 for all operations.
 """
 
+import os
 import time
 import pulumi
 
-from resources.common import ssh_exec
+from resources.common import ssh_exec, scp_exec
 
 
 def post_deploy(
@@ -34,15 +35,20 @@ def post_deploy(
     pulumi.log.info(f"[{cloud}/{region}] Post-deploy for {hostname}...")
 
     # Step 1: Wait for NixOS to finish rebooting (longer timeout for first boot)
-    _wait_for_nixos(host_ip, hostname, timeout=300)
+    _wait_for_nixos(host_ip, hostname, timeout=600)
 
     # Step 2: Copy age key to both locations agenix checks
     pulumi.log.info(f"[{cloud}/{region}] Copying age identity...")
+    local_age = os.path.expanduser(agenix_key_path)
+    if not os.path.exists(local_age):
+        pulumi.log.warn(f"Age key not found at {local_age}, skipping age-identity setup")
+    else:
+        # Create target dirs, then copy to both paths via scp
+        ssh_exec(host_ip, "mkdir -p /etc/agenix/identities /etc/ssh", timeout=10)
+        scp_exec(local_age, f"{host_ip}:/etc/agenix/identities/age-key.txt")
+        scp_exec(local_age, f"{host_ip}:/etc/ssh/age-identity")
     ssh_exec(
         host_ip,
-        f"mkdir -p /etc/agenix/identities && "
-        f"cp {agenix_key_path} /etc/agenix/identities/age-key.txt && "
-        f"cp {agenix_key_path} /etc/ssh/age-identity && "
         f"chmod 600 /etc/agenix/identities/age-key.txt /etc/ssh/age-identity",
         timeout=30,
     )
@@ -85,7 +91,7 @@ def post_deploy(
     return status
 
 
-def _wait_for_nixos(host_ip: str, hostname: str, timeout: int = 120) -> None:
+def _wait_for_nixos(host_ip: str, hostname: str, timeout: int = 600) -> None:
     """Wait for the NixOS system to finish rebooting after nixos-anywhere."""
     deadline = time.time() + timeout
     while time.time() < deadline:

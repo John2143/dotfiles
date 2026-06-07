@@ -10,6 +10,7 @@ import json
 from pathlib import Path
 
 import pulumi
+from pulumi.runtime import is_dry_run
 import pulumi_hcloud as hcloud
 import pulumi_digitalocean as do
 import yaml
@@ -231,11 +232,18 @@ def main():
             public_key=ssh_public_key,
         )
     if "digitalocean" in clouds_in_spec:
-        shared_ssh_keys["digitalocean"] = do.SshKey(
-            "shared-ssh-key-do",
-            name=ssh_key_name,
-            public_key=ssh_public_key,
-        )
+        try:
+            existing = do.get_ssh_key(name=ssh_key_name)
+            shared_ssh_keys["digitalocean"] = do.SshKey.get(
+                "shared-ssh-key-do", id=str(existing.id)
+            )
+            pulumi.log.info(f"Using existing DO SSH key: {existing.name} (id={existing.id})")
+        except Exception:
+            shared_ssh_keys["digitalocean"] = do.SshKey(
+                "shared-ssh-key-do",
+                name=ssh_key_name,
+                public_key=ssh_public_key,
+            )
 
     # Provision all clusters (Pulumi resources)
     cluster_providers = {}
@@ -258,9 +266,12 @@ def main():
         provider = cluster_providers[cluster.name]
         fip = cluster_fips[cluster.name]
 
-        result = deploy_and_configure(
-            cluster, provider, fip, ssh_private_key_path=ssh_private_key_path
-        )
+        if not is_dry_run():
+            result = deploy_and_configure(
+                cluster, provider, fip, ssh_private_key_path=ssh_private_key_path
+            )
+        else:
+            result = {"server_ip": "<preview>", "fip": "<preview>", "hostname": cluster.name}
         deploy_results.append((cluster, result, fip))
 
     # Aggregate results and write FIP registry

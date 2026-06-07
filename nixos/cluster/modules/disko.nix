@@ -1,15 +1,15 @@
-# Hetzner k3s Node — Declarative Disk Layout (disko)
+# Multi-Cloud k3s Node — Declarative Disk Layout (disko)
 #
-# Used by nixos-anywhere to partition Hetzner Cloud VMs.
-# Layout follows the NixOS wiki for Hetzner Cloud:
-#   BIOS boot (1M, EF02) + EFI System Partition (512M) + ext4 root (rest)
+# Used by nixos-anywhere to partition cloud VMs.
+# Defaults to /dev/sda (Hetzner). Set diskDevice=/dev/vda for DigitalOcean.
 #
-# Reference: nixos.wiki/wiki/Install_NixOS_on_Hetzner_Cloud
+# Layout: BIOS boot (1M, EF02) + EFI System Partition (512M) + ext4 root (rest)
 {
   config,
   lib,
   pkgs,
   modulesPath,
+  diskDevice ? "/dev/sda",
   ...
 }: {
   imports = [
@@ -18,7 +18,7 @@
 
   disko.devices = {
     disk.main = {
-      device = "/dev/sda";
+      device = diskDevice;
       type = "disk";
       content = {
         type = "gpt";
@@ -52,10 +52,10 @@
     };
   };
 
-  # Boot loader — GRUB on /dev/sda, UEFI supported
+  # Boot loader — GRUB, UEFI supported
   boot.loader.grub = {
     enable = true;
-    device = "/dev/sda";
+    device = diskDevice;
     efiSupport = true;
   };
 
