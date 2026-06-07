@@ -9,6 +9,7 @@
   lib,
   pkgs,
   compName,
+  inputs,
   ...
 }: {
   imports = [
@@ -27,7 +28,7 @@
   #   sudo headscale nodes delete --identifier <id> --force
 
   environment.systemPackages = with pkgs; [
-    agenix
+    inputs.agenix.packages.${pkgs.system}.default
     # hcloud was removed — Pulumi manages cloud resources.
   ];
 }
