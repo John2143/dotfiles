@@ -247,7 +247,6 @@ data:
         prometheus 0.0.0.0:9153
         forward . /etc/resolv.conf
         log
-        ratelimit 100
     }
 
     gslb.9s.pics {

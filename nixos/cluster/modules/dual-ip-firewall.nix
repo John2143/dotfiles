@@ -46,13 +46,25 @@
       echo "Floating IP: ''${FLOATING_IP:-none (single-IP mode)}"
 
       # ── Primary IP chain ──
-      # Locked down: only SSH + Tailscale + loopback + established
+      # On Hetzner, floating IP traffic arrives on the primary interface (not a secondary IP).
+      # On clouds with true dual-IP (AWS, DO), FLOATING_IN handles the secondary IP.
+      # All service ports allowed here so FIP -> primary IP works transparently.
       iptables -N PRIMARY_IN 2>/dev/null || iptables -F PRIMARY_IN
 
       iptables -A PRIMARY_IN -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
       iptables -A PRIMARY_IN -i lo -j ACCEPT
       iptables -A PRIMARY_IN -i tailscale0 -j ACCEPT
       iptables -A PRIMARY_IN -p tcp --dport 22 -j ACCEPT
+
+      # Service ports (arrive via FIP on primary interface on Hetzner)
+      iptables -A PRIMARY_IN -p tcp --dport 80 -j ACCEPT
+      iptables -A PRIMARY_IN -p tcp --dport 443 -j ACCEPT
+      iptables -A PRIMARY_IN -p tcp --dport 6443 -j ACCEPT
+      iptables -A PRIMARY_IN -p udp --dport 53 -j ACCEPT
+      iptables -A PRIMARY_IN -p tcp --dport 53 -j ACCEPT
+      iptables -A PRIMARY_IN -p udp --dport 3478 -j ACCEPT
+      iptables -A PRIMARY_IN -p tcp --dport 8080 -j ACCEPT
+
       iptables -A PRIMARY_IN -j DROP
 
       iptables -D INPUT -d "$PRIMARY_IP" -j PRIMARY_IN 2>/dev/null || true
