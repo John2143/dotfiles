@@ -33,29 +33,32 @@ def post_deploy(
     """
     pulumi.log.info(f"[{cloud}/{region}] Post-deploy for {hostname}...")
 
-    # Step 1: Wait for NixOS to finish rebooting
-    _wait_for_nixos(host_ip, hostname, timeout=120)
+    # Step 1: Wait for NixOS to finish rebooting (longer timeout for first boot)
+    _wait_for_nixos(host_ip, hostname, timeout=300)
 
-    # Step 2: Copy age key
+    # Step 2: Copy age key to both locations agenix checks
     pulumi.log.info(f"[{cloud}/{region}] Copying age identity...")
     ssh_exec(
         host_ip,
         f"mkdir -p /etc/agenix/identities && "
         f"cp {agenix_key_path} /etc/agenix/identities/age-key.txt && "
-        f"chmod 600 /etc/agenix/identities/age-key.txt",
+        f"cp {agenix_key_path} /etc/ssh/age-identity && "
+        f"chmod 600 /etc/agenix/identities/age-key.txt /etc/ssh/age-identity",
         timeout=30,
     )
 
-    # Step 3: Trigger agenix rekey
-    pulumi.log.info(f"[{cloud}/{region}] Rekeying agenix secrets...")
+    # Step 3: Run NixOS activation to decrypt agenix secrets
+    # agenix --rekey doesn't work standalone (needs secrets.nix from flake context).
+    # The activation script has the right RULES path baked in.
+    pulumi.log.info(f"[{cloud}/{region}] Activating agenix secrets...")
     ssh_exec(
         host_ip,
-        "agenix --rekey 2>&1 || echo 'WARNING: agenix rekey had issues, continuing...'",
+        "/run/current-system/activate 2>&1 || echo 'WARNING: activation had issues, continuing...'",
         timeout=60,
     )
 
-    # Step 4: Restart services that depend on agenix secrets
-    pulumi.log.info(f"[{cloud}/{region}] Restarting services...")
+    # Step 4: Restart k3s (now that k3s-token is decrypted)
+    pulumi.log.info(f"[{cloud}/{region}] Restarting k3s...")
     ssh_exec(host_ip, "systemctl restart k3s 2>/dev/null || true", timeout=30)
 
     # Step 5: Tailscale connect
