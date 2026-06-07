@@ -16,6 +16,7 @@
     ./ssh.nix
     ./k3s-common.nix
     ./coredns-zone.nix
+    ./fip-bind.nix
   ];
 
   networking.hostName = compName;
