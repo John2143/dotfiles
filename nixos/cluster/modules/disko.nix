@@ -57,6 +57,7 @@
     enable = true;
     device = diskDevice;
     efiSupport = true;
+    efiInstallAsRemovable = true;
   };
 
   # Kernel modules needed for Hetzner Cloud virtio
