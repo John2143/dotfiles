@@ -425,10 +425,11 @@ in {
 # inside the pool1 LUKS volume alongside longhorn:
 #   sudo mkfs.ext4 /dev/pool1/ssdext1
 #   sudo install -d -m 0755 -o root -g root /mnt/ssdext1
-fileSystems."/mnt/ssdext1" = {
-  device = "/dev/pool1/ssdext1";
-  fsType = "ext4";
-  options = ["defaults" "nofail"];
+  fileSystems."/mnt/ssdext1" = {
+    device = "/dev/pool1/ssdext1";
+    fsType = "ext4";
+    options = ["defaults" "nofail" "x-systemd.after=lvm2-activation.service"];
+  };
 };
 
 
@@ -441,7 +442,7 @@ fileSystems."/mnt/ssdext1" = {
   fileSystems."/mnt/longhorn" = {
     device = "/dev/disk/by-label/longhorn";
     fsType = "ext4";
-    options = ["defaults" "noatime" "nofail"];
+    options = ["defaults" "noatime" "nofail" "x-systemd.after=lvm2-activation.service"];
   };
 
   #fileSystems."/mnt/games_b" = {
