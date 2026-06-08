@@ -1,11 +1,12 @@
 # CoreDNS Zone Generator — dynamic zone.db from multi-cloud FIP registry
 #
 # Runs every 60s. Reads FIP registry from Kubernetes ConfigMap (populated
-# by Pulumi at provisioning time), renders a BIND zone file, and applies
-# it as a Kubernetes ConfigMap. coredns picks it up with the reload plugin.
+# by deploy_all.py at provisioning time), renders a BIND zone file, and
+# applies it as a Kubernetes ConfigMap. coredns picks it up with the reload
+# plugin.
 #
 # Cloud-agnostic: no cloud API calls needed. Adding a new cloud region
-# just means Pulumi writes its FIP to the registry ConfigMap.
+# just means the FIP registry ConfigMap gets updated.
 #
 # No hardcoded IPs — reprovision a node, new FIP appears within 60s.
 {

@@ -2,7 +2,7 @@
 """Dynamic zone.db generator — reads FIP registry from Kubernetes ConfigMap, renders BIND zone file.
 
 No hardcoded IPs, no cloud API calls. The fip-registry ConfigMap is the source of truth
-for all floating IPs across all clouds. Populated at provisioning time by Pulumi.
+for all floating IPs across all clouds. Populated at provisioning time by deploy_all.py.
 
 Health checking: before including a region's FIP in zone.db, queries the coredns
 on that FIP for a health TXT record. Unhealthy regions are excluded, so DNS

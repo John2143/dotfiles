@@ -1,6 +1,5 @@
 {
-  description = "Multi-Cloud k3s Platform — Pulumi-provisioned clusters + Home Pi";
-
+  description = "Multi-Cloud k3s Platform — OpenTofu-provisioned clusters + Home Pi";
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
 
@@ -30,9 +29,9 @@
       "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFNmxHc5ArL5bnSMgF3tRpXquIRSFQ67TJ1Phvi2xvxG k3s-multi-cloud-provisioning"
     ];
 
-    # k3s server nodes — cloud-agnostic, Pulumi-provisioned.
+    # k3s server nodes — cloud-agnostic, OpenTofu-provisioned.
     # DNS via deSEC.io (NS delegation + A records). cert-manager uses deSEC webhook for DNS01.
-    mkServer = { compName, rawIP ? null, diskDevice ? "/dev/sda" }: nixpkgs.lib.nixosSystem {
+    mkServer = { compName, rawIP ? null, diskDevice ? "/dev/sda", extraModules ? [ ] }: nixpkgs.lib.nixosSystem {
       inherit system;
       specialArgs = { inherit inputs compName rawIP diskDevice; sshKeys = my-keys; };
       modules = [
@@ -42,11 +41,11 @@
         ./modules/ssh.nix
         ./modules/k3s-server.nix
         ./modules/tailscale.nix
-      ];
+      ] ++ extraModules;
     };
 
     # Agent nodes join the corresponding server's k3s cluster.
-    mkAgent = { compName, diskDevice ? "/dev/sda" }: nixpkgs.lib.nixosSystem {
+    mkAgent = { compName, diskDevice ? "/dev/sda", extraModules ? [ ] }: nixpkgs.lib.nixosSystem {
       inherit system;
       specialArgs = { inherit inputs compName diskDevice; sshKeys = my-keys; };
       modules = [
@@ -56,19 +55,19 @@
         ./modules/ssh.nix
         ./modules/k3s-agent.nix
         ./modules/tailscale.nix
-      ];
+      ] ++ extraModules;
     };
   in {
     nixosConfigurations = {
       # ── Server nodes (LA mode, 24/7) ──
       hetzner-ashburn-k3s   = mkServer { compName = "hetzner-ashburn-k3s"; };
       hetzner-hillsboro-k3s = mkServer { compName = "hetzner-hillsboro-k3s"; };
-      do-nyc-k3s            = mkServer { compName = "do-nyc-k3s"; diskDevice = "/dev/vda"; };
+      do-nyc-k3s            = mkServer { compName = "do-nyc-k3s"; diskDevice = "/dev/vda"; extraModules = [ ./modules/digitalocean.nix ]; };
 
-      # ── Agent nodes (HA toggle, provisioned via Pulumi) ──
+      # ── Agent nodes (HA toggle, OpenTofu-provisioned) ──
       hetzner-ashburn-k3s-agent   = mkAgent { compName = "hetzner-ashburn-k3s-agent"; };
       hetzner-hillsboro-k3s-agent = mkAgent { compName = "hetzner-hillsboro-k3s-agent"; };
-      do-nyc-k3s-agent            = mkAgent { compName = "do-nyc-k3s-agent"; diskDevice = "/dev/vda"; };
+      do-nyc-k3s-agent            = mkAgent { compName = "do-nyc-k3s-agent"; diskDevice = "/dev/vda"; extraModules = [ ./modules/digitalocean.nix ]; };
 
       # ── Home Pi (Headscale) ──
       home-pi = nixpkgs.lib.nixosSystem {

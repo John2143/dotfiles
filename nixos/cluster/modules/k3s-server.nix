@@ -30,6 +30,6 @@
 
   environment.systemPackages = with pkgs; [
     inputs.agenix.packages.${pkgs.system}.default
-    # hcloud was removed — Pulumi manages cloud resources.
+    # hcloud was removed — OpenTofu manages cloud resources.
   ];
 }
