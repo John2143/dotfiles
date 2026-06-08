@@ -18,4 +18,5 @@ in {
   "hetzner/attic-server-secret.age".publicKeys = allKeys;
   "cloud-ssh-key.age".publicKeys = allKeys;
   "do-pat.age".publicKeys = allKeys;
+  "s3-credentials.age".publicKeys = allKeys;
 }
