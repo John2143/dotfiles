@@ -357,6 +357,7 @@ in {
     device = "/dev/disk/by-uuid/9340760b-a19d-4392-9021-8f4b14c794f8";
     keyFile = "/etc/secrets/pool1-keyfile";
     allowDiscards = true;
+    noFail = true;
   };
   #blacklist nouveau
   #options nouveauu modeset=0
@@ -430,7 +431,6 @@ in {
     fsType = "ext4";
     options = ["defaults" "nofail" "x-systemd.after=lvm2-activation.service"];
   };
-};
 
 
   # Longhorn replica disk for the k3s cluster. The LV (pool1/longhorn, 1.2T)

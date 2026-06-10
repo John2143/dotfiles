@@ -387,4 +387,9 @@
     trustedInterfaces = ["tailscale0"];
   };
 
+  # Fast shutdown — systemd waits at most 10s for any service before SIGKILL
+  systemd.extraConfig = ''
+    DefaultTimeoutStopSec=10s
+  '';
+
 }
