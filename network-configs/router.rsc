@@ -1,7 +1,7 @@
 ** WARNING: connection is not using a post-quantum key exchange algorithm.
 ** This session may be vulnerable to "store now, decrypt later" attacks.
 ** The server may need to be upgraded. See https://openssh.com/pq.html
-# 2026-05-27 00:10:21 by RouterOS 7.19.6
+# 2026-06-10 16:06:16 by RouterOS 7.19.6
 # software id = 7RHC-3MMG
 #
 # model = RB5009UPr+S+
@@ -20,6 +20,10 @@ add comment=defconf name=LAN
 add name=dhcp ranges=192.168.5.50-192.168.5.254
 /ip dhcp-server
 add address-pool=dhcp interface=bridge name=dchp1
+/ipv6 dhcp-server
+add address-pool=ula-addr-pool interface=bridge name=ula-dhcp
+/ipv6 pool
+add name=ula-addr-pool prefix=fd00:1::/64 prefix-length=128
 /disk settings
 set auto-media-interface=bridge auto-media-sharing=yes auto-smb-sharing=yes
 /interface bridge port
@@ -32,10 +36,8 @@ add bridge=bridge comment=defconf interface=ether7
 add bridge=bridge comment=defconf interface=to-wifi
 add bridge=bridge comment=defconf interface=10GsfpLAN
 /ip neighbor discovery-settings
-# ipv6 *accept router advertisements* configuration has changed, please restart device to apply settings
 set discover-interface-list=LAN
 /ipv6 settings
-# ipv6 *accept router advertisements* configuration has changed, please restart device to apply settings
 set accept-router-advertisements=yes
 /interface list member
 add comment=defconf interface=bridge list=LAN
@@ -47,6 +49,7 @@ add address=192.168.0.2/24 interface=2GWAN network=192.168.0.0
 add address=192.168.1.1/24 interface=bridge network=192.168.1.0
 add address=192.168.88.254/24 interface=bridge network=192.168.88.0
 /ip arp
+add address=192.168.5.36 interface=bridge mac-address=0C:C4:7A:BD:63:3D
 add address=192.168.5.35 interface=bridge mac-address=40:B0:76:D9:69:92
 /ip dhcp-client
 add comment=defconf interface=2GWAN
@@ -59,8 +62,12 @@ add address=192.168.1.65 client-id=1:94:b3:f7:18:52:cc mac-address=\
     94:B3:F7:18:52:CC server=dchp1
 add address=192.168.5.165 client-id=1:80:f1:b2:52:f0:c8 mac-address=\
     80:F1:B2:52:F0:C8 server=dchp1
+add address=192.168.5.35 client-id=1:40:b0:76:d9:69:92 mac-address=\
+    40:B0:76:D9:69:92 server=dchp1
 add address=192.168.5.226 client-id=1:70:85:c2:a5:7:cc mac-address=\
     70:85:C2:A5:07:CC server=dchp1
+add address=192.168.5.175 client-id=1:e8:4d:d0:c1:54:20 mac-address=\
+    E8:4D:D0:C1:54:20 server=dchp1
 add address=192.168.1.67 comment="Reolink NVR" mac-address=EC:71:DB:8B:92:93 \
     server=dchp1
 add address=192.168.1.60 comment="Back yard" mac-address=78:93:C3:8E:34:9F \
@@ -72,6 +79,8 @@ add address=192.168.1.63 comment="Front porch" mac-address=EC:71:DB:89:D8:8B \
 add address=192.168.1.64 comment="Front Gate" mac-address=EC:71:DB:65:58:A3 \
     server=dchp1
 add address=192.168.5.127 mac-address=C8:FF:77:57:E0:3D server=dchp1
+add address=192.168.5.36 comment="closet 10GbE NIC" mac-address=\
+    0C:C4:7A:BD:63:3D server=dchp1
 /ip dhcp-server network
 add address=192.168.1.0/24 dns-server=192.168.5.1 gateway=192.168.1.1
 add address=192.168.5.0/24 dns-server=192.168.5.1 gateway=192.168.5.1 \
@@ -115,29 +124,32 @@ add action=dst-nat chain=dstnat comment="Monero P2P node (arch)" dst-port=\
     18080 in-interface-list=all protocol=tcp to-addresses=192.168.5.226 \
     to-ports=18080
 add action=dst-nat chain=dstnat dst-port=9987 in-interface-list=WAN protocol=\
-    udp to-addresses=192.168.5.35 to-ports=30087
+    udp to-addresses=192.168.5.10 to-ports=30087
 add action=dst-nat chain=dstnat dst-port=30033 in-interface-list=WAN \
-    protocol=tcp to-addresses=192.168.5.35 to-ports=30034
+    protocol=tcp to-addresses=192.168.5.10 to-ports=30034
 add action=dst-nat chain=dstnat dst-port=80 in-interface-list=WAN protocol=\
-    tcp to-addresses=192.168.5.35 to-ports=80
+    tcp to-addresses=192.168.5.10 to-ports=80
 add action=dst-nat chain=dstnat dst-port=443 in-interface-list=WAN protocol=\
-    tcp to-addresses=192.168.5.35 to-ports=443
+    tcp to-addresses=192.168.5.10 to-ports=443
 add action=dst-nat chain=dstnat dst-port=5432 in-interface-list=all protocol=\
     tcp to-addresses=192.168.5.35 to-ports=5432
 add action=dst-nat chain=dstnat dst-port=30478 in-interface-list=all \
-    protocol=udp to-addresses=192.168.5.35 to-ports=30478
+    protocol=udp to-addresses=192.168.5.10 to-ports=30478
 add action=dst-nat chain=dstnat dst-port=25565 in-interface-list=all \
     protocol=tcp to-addresses=192.168.5.175 to-ports=32565
 add action=dst-nat chain=dstnat dst-port=32565 in-interface-list=all \
     protocol=tcp to-addresses=192.168.5.175 to-ports=32565
 add action=masquerade chain=srcnat dst-address=!192.168.0.0/24 out-interface=\
     2GWAN
-add action=dst-nat chain=dstnat comment="hairpin NAT" dst-address=\
-    173.66.223.59 src-address=192.168.0.0/16 to-addresses=192.168.5.35
-add action=masquerade chain=srcnat comment="hairpin srcnat" dst-address=\
-    192.168.5.35 out-interface=bridge src-address=192.168.0.0/16
 add action=dst-nat chain=dstnat dst-port=11753 in-interface-list=all \
-    protocol=tcp to-addresses=192.168.5.35 to-ports=31753
+    protocol=tcp to-addresses=192.168.5.10 to-ports=31753
+add action=dst-nat chain=dstnat comment="mail-smtp stalwart" dst-port=25 \
+    in-interface-list=all protocol=tcp to-addresses=192.168.5.10 to-ports=25
+add action=dst-nat chain=dstnat comment="mail-submission stalwart" dst-port=\
+    587 in-interface-list=all protocol=tcp to-addresses=192.168.5.10 \
+    to-ports=587
+add action=dst-nat chain=dstnat comment="mail-imaps stalwart" dst-port=993 \
+    in-interface-list=all protocol=tcp to-addresses=192.168.5.10 to-ports=993
 /ip route
 add disabled=no dst-address=192.168.1.0/24 gateway=bridge routing-table=main \
     suppress-hw-offload=no
@@ -147,6 +159,9 @@ set www port=8081
 add address=2600:4040:25fa:e400:6f4:1cff:fee3:7127 advertise=no interface=\
     2GWAN
 add address=fd00:1::1 interface=bridge
+/ipv6 dhcp-server binding
+add address=fd00:1::36/128 duid=0x48750ccae3a454a0f9f03492c0c3c4ed ia-type=na \
+    iaid=2138897477 life-time=3d prefix-pool=ula-addr-pool server=ula-dhcp
 /ipv6 firewall address-list
 add address=::/128 comment="defconf: unspecified address" list=bad_ipv6
 add address=::1/128 comment="defconf: lo" list=bad_ipv6
@@ -212,10 +227,12 @@ add action=accept chain=input connection-state=established,related
 add action=accept chain=forward connection-state=established,related
 /ipv6 firewall nat
 add action=masquerade chain=srcnat out-interface=2GWAN
+/ipv6 nd
+set [ find default=yes ] managed-address-configuration=yes
 /system clock
 set time-zone-name=America/New_York
 /system identity
-set name="MikroTik Router"
+set name=router
 /tool mac-server
 set allowed-interface-list=LAN
 /tool mac-server mac-winbox

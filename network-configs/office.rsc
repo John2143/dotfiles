@@ -1,7 +1,7 @@
 ** WARNING: connection is not using a post-quantum key exchange algorithm.
 ** This session may be vulnerable to "store now, decrypt later" attacks.
 ** The server may need to be upgraded. See https://openssh.com/pq.html
-# 2025-10-22 19:06:42 by RouterOS 7.19.6
+# 2025-11-04 12:50:51 by RouterOS 7.19.6
 # software id = UL5S-M34T
 #
 # model = CRS310-8G+2S+
@@ -24,3 +24,5 @@ add address=192.168.5.2/24 comment=defconf interface=bridge network=\
     192.168.5.0
 /ip dns
 set allow-remote-requests=yes servers=1.1.1.1
+/system identity
+set name=office-switch
