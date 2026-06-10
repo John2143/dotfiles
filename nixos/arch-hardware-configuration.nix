@@ -430,7 +430,7 @@ in {
     fsType = "ext4";
     options = ["defaults" "nofail" "x-systemd.after=lvm2-activation.service"];
   };
-};
+
 
 
   # Longhorn replica disk for the k3s cluster. The LV (pool1/longhorn, 1.2T)
