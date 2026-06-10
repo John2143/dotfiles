@@ -357,7 +357,7 @@ in {
     device = "/dev/disk/by-uuid/9340760b-a19d-4392-9021-8f4b14c794f8";
     keyFile = "/etc/secrets/pool1-keyfile";
     allowDiscards = true;
-    noFail = true;
+    crypttabExtraOpts = ["nofail"];
   };
   #blacklist nouveau
   #options nouveauu modeset=0
