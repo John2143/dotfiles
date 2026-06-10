@@ -31,6 +31,9 @@
       after = [ "avahi-daemon.service" ];
       wants = [ "avahi-daemon.service" ];
       environment.K3S_RESOLV_CONF = "/etc/rancher/k3s/resolv.conf";
+      serviceConfig = {
+        TimeoutStopSec = lib.mkForce "10s";
+      };
     };
     # Clean resolv.conf for k3s pods — strips the Tailscale MagicDNS search
     # domain (ts.2143.me) to prevent ndots:5 expansion from prepending it

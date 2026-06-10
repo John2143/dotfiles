@@ -33,9 +33,14 @@
       "--node-label=node.longhorn.io/create-default-disk=true"
     ];
   };
+  # Fast shutdown — systemd waits at most 10s for any service before SIGKILL
+  systemd.extraConfig = ''
+    DefaultTimeoutStopSec=10s
+  '';
   # k3s uses Type=notify but sometimes the startup takes too long and
   # systemd kills it with "Failed with result 'protocol'". Override to simple.
   systemd.services.k3s.serviceConfig.Type = lib.mkForce "simple";
+  systemd.services.k3s.serviceConfig.TimeoutStopSec = lib.mkForce "10s";
 
 
   # ── DDoS kernel hardening ──

@@ -60,4 +60,8 @@
     htop
     tcpdump
   ];
+  # Force fast shutdown — systemd gives k3s 10s to stop before SIGKILL
+  systemd.services.k3s.serviceConfig.TimeoutStopSec = lib.mkForce "10s";
 }
+
+
