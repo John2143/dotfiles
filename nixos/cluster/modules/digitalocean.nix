@@ -1,30 +1,15 @@
-# ── DigitalOcean Cloud-Init Configuration ────────────────────────────
-# DO droplets bootstrap via cloud-init metadata service (169.254.169.254).
-# Without this, the NixOS system has no network config after kexec/install,
-# causing SSH "Connection reset by peer" during nixos-anywhere.
+# ── DigitalOcean Networking ──────────────────────────────────────────
+# DO droplets get network config via DHCP on the public interface.
+# No cloud-init metadata service needed — the flake already hardcodes
+# SSH authorized_keys and hostname.
 #
-# Import this module for DO hosts only via extraModules.
-#
-# Sources:
-#   - nixpkgs: nixos/modules/virtualisation/digital-ocean-config.nix
-#   - srvos:   nixos/common/digital-ocean.nix
-#   - nixos-anywhere-examples: issue #5
+# The built-in NixOS digital-ocean-config module is known to interfere
+# with networking (it sets useDHCP=false and relies on the metadata
+# service, which doesn't always work with nixos-anywhere).
 
-{ config, lib, modulesPath, ... }:
+{ lib, ... }:
 
 {
-  imports = [
-    (modulesPath + "/virtualisation/digital-ocean-config.nix")
-  ];
-
-  # Cloud-init reads the DO metadata service for network configuration.
-  # Disable DHCP since cloud-init handles it.
-  services.cloud-init = {
-    enable = true;
-    settings = {
-      datasource_list = [ "ConfigDrive" "DigitalOcean" ];
-    };
-  };
-
-  networking.useDHCP = lib.mkForce false;
+  # DHCP provides IP config on DO's public interface
+  networking.useDHCP = lib.mkDefault true;
 }

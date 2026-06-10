@@ -1,0 +1,114 @@
+digraph G {
+    rankdir=LR
+    splines=polyline
+    nodesep=0.4
+    ranksep=0.6
+    bgcolor=white
+    fontname="Helvetica"
+
+    // ── Internet / WAN ──
+    internet [shape=ellipse, label="Internet", fillcolor="#e0e0e0", style=filled, peripheries=2]
+    verizon  [shape=box, label="Verizon CR1000B\n192.168.0.1", fillcolor="#ffcc80", style=filled]
+    homepi   [shape=box, label="home-pi\nHeadscale / PDNS\n192.168.0.154", fillcolor="#c8e6c9", style=filled]
+
+    internet -> verizon [label=" Coax ~1Gbps"]
+    verizon -> homepi   [label=" 1GbE | :6767"]
+
+    // ── Router ──
+    router [shape=box, label="ROUTER\nRB5009UPr+S+IN\n192.168.1.1 / .5.1", fillcolor="#bbdefb", style=filled, width=2.0]
+
+    verizon -> router [label=" 1GbE (2GWAN)\nWAN .0.2"]
+
+    // ── Core Switch ──
+    core [shape=box, label="CORE SWITCH\nCRS305-1G-4S+IN\n192.168.5.4", fillcolor="#fff9c4", style=filled, width=2.2]
+
+    router -> core [label=" 10G SFP+ (10GsfpLAN→sfp-sfpplus1)"]
+    router -> core [label=" 1G RJ45 (pi→ether1) mgmt", style=dashed, color=gray, weight=0]
+
+    // ── Router direct ports ──
+    vpin        [shape=box, label="vpin\nMullvad exit\n192.168.5.252", fillcolor="#c8e6c9", style=filled]
+    jetkvm      [shape=box, label="JetKVM\n192.168.5.187", fillcolor="#e1bee7", style=filled]
+    cam_driveway [shape=box, label="Front Driveway cam\n192.168.1.66", fillcolor="#ffcdd2", style=filled]
+
+    router -> vpin         [label=" eth3 1G"]
+    router -> jetkvm       [label=" eth5 1G"]
+    router -> cam_driveway [label=" eth6 1G"]
+
+    // ── Switches ──
+    upstairs [shape=box, label="UPSTAIRS SWITCH\nCRS310-8G+2S+IN\n192.168.5.3", fillcolor="#fff9c4", style=filled, width=2.0]
+    office   [shape=box, label="OFFICE SWITCH\nCRS310-8G+2S+IN\n192.168.5.2", fillcolor="#fff9c4", style=filled, width=2.0]
+
+    core -> upstairs [label=" sfp-sfpplus3→2 10G SFP+"]
+    core -> office   [label=" sfp-sfpplus4→ether8 10G→2.5G"]
+
+    // ── NAS (direct on core) ──
+    nas [shape=box, label="nas\nZFS / k3s / Attic\n192.168.5.175 (10G)\n.176 (1G)", fillcolor="#c8e6c9", style=filled]
+
+    core -> nas [label=" sfp-sfpplus2 10G SFP+"]
+
+    // ── Upstairs wired devices ──
+    closet  [shape=box, label="closet\nk3s / Unifi / Postgres\n192.168.5.35 (.36 10G)", fillcolor="#c8e6c9", style=filled]
+    arch    [shape=box, label="arch\nk3s / GPU compute\n192.168.5.226\n(I211 1G NIC)", fillcolor="#c8e6c9", style=filled]
+    glkvm   [shape=box, label="GL-KVM\nOpenWrt\n192.168.5.8", fillcolor="#e1bee7", style=filled]
+    brother [shape=box, label="Brother printer\n192.168.5.6", fillcolor="#e1bee7", style=filled]
+
+    upstairs -> closet  [label=" sfp-sfpplus1 10G SFP+"]
+    upstairs -> arch    [label=" ether4 1G"]
+    upstairs -> glkvm   [label=" ether2 1G"]
+    upstairs -> brother [label=" ether6 100M HD"]
+
+    // ── NVR + wired cameras (NVR acts as PoE switch) ──
+    nvr       [shape=box, label="Reolink NVR\n(PoE switch)\n192.168.1.67", fillcolor="#ffcdd2", style=filled]
+    cam_gate  [shape=box, label="Front Gate cam\n192.168.1.64", fillcolor="#ffcdd2", style=filled]
+    cam_porch [shape=box, label="Front Porch cam\n192.168.1.63", fillcolor="#ffcdd2", style=filled]
+
+    upstairs -> nvr      [label=" ether1 100M"]
+    nvr      -> cam_gate  [label=" PoE 100M"]
+    nvr      -> cam_porch [label=" PoE 100M"]
+
+    // ── Office: APs wired, workstation on WiFi ──
+    u7proxgs [shape=box, label="U7 Pro XGS\nWiFi 7 tri-band AP\n192.168.5.171", fillcolor="#d7ccc8", style=filled]
+    u7lite   [shape=box, label="U7 Lite\nWiFi 7 AP (Blue Room)\n192.168.5.173", fillcolor="#d7ccc8", style=filled]
+
+    office -> u7proxgs [label=" ether4 2.5G"]
+    office -> u7lite   [label=" 1G"]
+
+    // ── WiFi clients ──
+    officepc [shape=box, label="office\nk3s agent / GPU\n192.168.5.209\n(via WiFi)", fillcolor="#c8e6c9", style=filled]
+    secu     [shape=box, label="secu\nCamera NVR (SW)\n192.168.5.140\n(via WiFi)", fillcolor="#c8e6c9", style=filled]
+    cam_back  [shape=box, label="Back yard cam\n192.168.1.60\n(WiFi)", fillcolor="#ffcdd2", style=filled]
+    cam_garage [shape=box, label="Garage cam\n192.168.1.61\n(WiFi)", fillcolor="#ffcdd2", style=filled]
+    cam_side  [shape=box, label="Side yard cam\n192.168.1.65\n(WiFi)", fillcolor="#ffcdd2", style=filled]
+
+    u7proxgs -> officepc   [label=" WiFi"]
+    u7proxgs -> secu       [label=" WiFi"]
+    u7proxgs -> cam_garage [label=" WiFi", style=dotted]
+    u7proxgs -> cam_side   [label=" WiFi", style=dotted]
+    u7lite   -> cam_back   [label=" WiFi", style=dotted]
+
+    // ── IoT / transient clients ──
+    iot [shape=ellipse, label="IoT / transient clients:\nAiDot lights (.164-.168)\nAkamatis sensors (.165, .170)\nWiZ (.132), Peloton (.146)\nBedroom switch (.172)\niPhones, Mac, Pop!_OS", fillcolor="#f5f5f5", style=filled]
+
+    u7proxgs -> iot [style=dotted, color=gray, weight=0]
+    u7lite   -> iot [style=dotted, color=gray, weight=0]
+
+    // ── pite (wired via office switch) ──
+    pite [shape=box, label="pite\nk3s canary\n192.168.5.213", fillcolor="#c8e6c9", style=filled]
+
+    office -> pite [label=" 1G"]
+
+    // ── Legend ──
+    subgraph cluster_legend {
+        label="Legend"
+        style=dashed
+        color=gray
+        fontsize=10
+        legend_wan     [shape=box, label="WAN / ISP", fillcolor="#ffcc80", style=filled, width=1.0]
+        legend_router  [shape=box, label="Router", fillcolor="#bbdefb", style=filled, width=1.0]
+        legend_switch  [shape=box, label="Switch", fillcolor="#fff9c4", style=filled, width=1.0]
+        legend_server  [shape=box, label="Server", fillcolor="#c8e6c9", style=filled, width=1.0]
+        legend_iot     [shape=box, label="IoT / KVM", fillcolor="#e1bee7", style=filled, width=1.0]
+        legend_cam     [shape=box, label="Camera", fillcolor="#ffcdd2", style=filled, width=1.0]
+        legend_ap      [shape=box, label="Access Point", fillcolor="#d7ccc8", style=filled, width=1.0]
+    }
+}
