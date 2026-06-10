@@ -388,8 +388,6 @@
   };
 
   # Fast shutdown — systemd waits at most 10s for any service before SIGKILL
-  systemd.extraConfig = ''
-    DefaultTimeoutStopSec=10s
-  '';
+  systemd.settings.Manager.DefaultTimeoutStopSec = "10s";
 
 }
