@@ -31,9 +31,10 @@
 
     # k3s server nodes — cloud-agnostic, OpenTofu-provisioned.
     # DNS via deSEC.io (NS delegation + A records). cert-manager uses deSEC webhook for DNS01.
-    mkServer = { compName, rawIP ? null, diskDevice ? "/dev/sda", extraModules ? [ ] }: nixpkgs.lib.nixosSystem {
+    mkServer = { compName, rawIP ? null, diskDevice ? "/dev/sda", useEFI ? true, extraModules ? [ ] }: nixpkgs.lib.nixosSystem {
       inherit system;
-      specialArgs = { inherit inputs compName rawIP diskDevice; sshKeys = my-keys; };
+      specialArgs = { inherit inputs compName rawIP diskDevice useEFI; sshKeys = my-keys; };
+
       modules = [
         disko.nixosModules.default
         agenix.nixosModules.default
@@ -45,9 +46,9 @@
     };
 
     # Agent nodes join the corresponding server's k3s cluster.
-    mkAgent = { compName, diskDevice ? "/dev/sda", extraModules ? [ ] }: nixpkgs.lib.nixosSystem {
+    mkAgent = { compName, diskDevice ? "/dev/sda", useEFI ? true, extraModules ? [ ] }: nixpkgs.lib.nixosSystem {
       inherit system;
-      specialArgs = { inherit inputs compName diskDevice; sshKeys = my-keys; };
+      specialArgs = { inherit inputs compName diskDevice useEFI; sshKeys = my-keys; };
       modules = [
         disko.nixosModules.default
         agenix.nixosModules.default
@@ -62,12 +63,13 @@
       # ── Server nodes (LA mode, 24/7) ──
       hetzner-ashburn-k3s   = mkServer { compName = "hetzner-ashburn-k3s"; };
       hetzner-hillsboro-k3s = mkServer { compName = "hetzner-hillsboro-k3s"; };
-      do-nyc-k3s            = mkServer { compName = "do-nyc-k3s"; diskDevice = "/dev/vda"; extraModules = [ ./modules/digitalocean.nix ]; };
+      do-nyc-k3s            = mkServer { compName = "do-nyc-k3s"; diskDevice = "/dev/vda"; useEFI = false; extraModules = [ ./modules/digitalocean.nix ]; };
+
 
       # ── Agent nodes (HA toggle, OpenTofu-provisioned) ──
       hetzner-ashburn-k3s-agent   = mkAgent { compName = "hetzner-ashburn-k3s-agent"; };
       hetzner-hillsboro-k3s-agent = mkAgent { compName = "hetzner-hillsboro-k3s-agent"; };
-      do-nyc-k3s-agent            = mkAgent { compName = "do-nyc-k3s-agent"; diskDevice = "/dev/vda"; extraModules = [ ./modules/digitalocean.nix ]; };
+      do-nyc-k3s-agent            = mkAgent { compName = "do-nyc-k3s-agent"; diskDevice = "/dev/vda"; useEFI = false; extraModules = [ ./modules/digitalocean.nix ]; };
 
       # ── Home Pi (Headscale) ──
       home-pi = nixpkgs.lib.nixosSystem {

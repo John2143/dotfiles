@@ -2,16 +2,30 @@
 #
 # Used by nixos-anywhere to partition cloud VMs.
 # Defaults to /dev/sda (Hetzner). Set diskDevice=/dev/vda for DigitalOcean.
-#
-# Layout: BIOS boot (1M, EF02) + EFI System Partition (512M) + ext4 root (rest)
+# Set useEFI=false for BIOS-only providers (DigitalOcean).
 {
   config,
   lib,
   pkgs,
   modulesPath,
   diskDevice ? "/dev/sda",
+  useEFI ? true,
   ...
-}: {
+}: let
+  # EFI partition — only needed for UEFI boot
+  efiPartition = lib.optionalAttrs useEFI {
+    ESP = {
+      size = "512M";
+      type = "EF00";
+      content = {
+        type = "filesystem";
+        format = "vfat";
+        mountpoint = "/boot";
+        mountOptions = ["umask=0077"];
+      };
+    };
+  };
+in {
   imports = [
     (modulesPath + "/profiles/qemu-guest.nix")
   ];
@@ -29,16 +43,10 @@
             type = "EF02";
             priority = 1;
           };
-          ESP = {
-            size = "512M";
-            type = "EF00";
-            content = {
-              type = "filesystem";
-              format = "vfat";
-              mountpoint = "/boot";
-              mountOptions = ["umask=0077"];
-            };
-          };
+        }
+        # Merge in optional EFI partition
+        // efiPartition
+        // {
           root = {
             size = "100%";
             content = {
@@ -52,15 +60,14 @@
     };
   };
 
-  # Boot loader — GRUB, UEFI supported
+  # Boot loader — GRUB (device managed by disko via mirroredBoots)
   boot.loader.grub = {
     enable = true;
-    device = diskDevice;
-    efiSupport = true;
-    efiInstallAsRemovable = true;
+    efiSupport = useEFI;
+    efiInstallAsRemovable = useEFI;
   };
 
-  # Kernel modules needed for Hetzner Cloud virtio
+  # Kernel modules needed for Hetzner/DO Cloud virtio
   boot.initrd.availableKernelModules = [
     "ahci"
     "xhci_pci"
