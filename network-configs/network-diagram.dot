@@ -53,7 +53,7 @@ digraph G {
     brother [shape=box, label="Brother printer\n192.168.5.6", fillcolor="#e1bee7", style=filled]
 
     upstairs -> closet  [label=" sfp-sfpplus1 10G SFP+"]
-    upstairs -> arch    [label=" ether4 1G"]
+    upstairs -> arch    [label=" ether7 1G"]
     upstairs -> glkvm   [label=" ether2 1G"]
     upstairs -> brother [label=" ether6 100M HD"]
 
@@ -95,7 +95,7 @@ digraph G {
     // ── pite (wired via office switch) ──
     pite [shape=box, label="pite\nk3s canary\n192.168.5.213", fillcolor="#c8e6c9", style=filled]
 
-    office -> pite [label=" 1G"]
+    office -> pite [label=" ether1 1G"]
 
     // ── Legend ──
     subgraph cluster_legend {

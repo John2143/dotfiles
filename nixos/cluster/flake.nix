@@ -1,5 +1,6 @@
 {
   description = "Multi-Cloud k3s Platform — OpenTofu-provisioned clusters + Home Pi";
+# Note: this flake is in nixos/cluster/. Use ?dir=nixos/cluster when referencing from nixos-rebuild --flake.
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
 
