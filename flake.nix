@@ -208,6 +208,7 @@
           ./nixos/modules/attic.nix
 
           ./nixos/modules/remote-builders.nix
+        ];
       })
       // (mkHost {
         name = "pite";
