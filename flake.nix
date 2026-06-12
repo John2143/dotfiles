@@ -209,17 +209,76 @@
 
           ./nixos/modules/remote-builders.nix
         ];
-      })
       // (mkHost {
         name = "pite";
         modules = [
-          ./nixos/shared-cli-configuration.nix
-          ./nixos/remote-cli-config.nix
-          ./nixos/modules/k3s-agent.nix
-          ./nixos/tailscale.nix
+        ./nixos/modules/k3s-agent.nix
+        ./nixos/tailscale.nix
+        ./nixos/modules/attic.nix
+        ./nixos/modules/remote-builders.nix
 
-          ./nixos/modules/attic.nix
-          ./nixos/modules/remote-builders.nix
+        ./nixos/security-hardware-configuration.nix
+
+        ({ config, lib, pkgs, ... }: {
+          networking.hostName = "pite";
+          networking.networkmanager.enable = true;
+          networking.nameservers = [ "1.1.1.1" ];
+
+          services.resolved = {
+            enable = true;
+            settings.Resolve = {
+              DNSOverTLS = "true";
+              DNSSEC = "true";
+              Domains = [ "~." ];
+              FallbackDNS = [ "1.1.1.1" "1.0.0.1" ];
+            };
+          };
+
+          time.timeZone = "America/New_York";
+          i18n.defaultLocale = "en_US.UTF-8";
+
+          environment.systemPackages = with pkgs; [ git fish curl tmux vim btop ];
+
+          programs.fish.enable = true;
+          services.openssh.enable = true;
+
+          users.users.root.openssh.authorizedKeys.keys = [
+            "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOktI2Vry/5fbhZiG35o5mf7w3dnaTEDqkRJVM07cu3a john@arch"
+            "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFVckq0oXyXkxiLo39typ6PR039XrLwze/Cb0PZaTzmi john@office"
+            "ecdsa-sha2-nistp256 AAAAE2VjZHNhLXNoYTItbmlzdHAyNTYAAAAIbmlzdHAyNTYAAABBBHjc0NNrHCwjrBUvUByFoFPW9vKGVFsWVD6LoKp1FLtNaIjyigMTYXoCKZSNNguKdNwUiyqKIZfCExZmgc3Cccw= phone"
+          ];
+          users.users.john = {
+            isNormalUser = true;
+            extraGroups = [ "wheel" ];
+            openssh.authorizedKeys.keys = [
+              "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOktI2Vry/5fbhZiG35o5mf7w3dnaTEDqkRJVM07cu3a john@arch"
+              "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFVckq0oXyXkxiLo39typ6PR039XrLwze/Cb0PZaTzmi john@office"
+              "ecdsa-sha2-nistp256 AAAAE2VjZHNhLXNoYTItbmlzdHAyNTYAAAAIbmlzdHAyNTYAAABBBHjc0NNrHCwjrBUvUByFoFPW9vKGVFsWVD6LoKp1FLtNaIjyigMTYXoCKZSNNguKdNwUiyqKIZfCExZmgc3Cccw= phone"
+            ];
+          };
+          security.sudo.wheelNeedsPassword = false;
+
+          services.avahi = {
+            enable = true;
+            nssmdns4 = true;
+            publish = {
+              enable = true;
+              addresses = true;
+              domain = true;
+              hinfo = true;
+              userServices = true;
+              workstation = true;
+            };
+          };
+
+          networking.firewall.allowedTCPPorts = [ 22 10250 ];
+          networking.firewall.allowedUDPPorts = [ 8472 ];
+          networking.firewall.allowedTCPPortRanges = [
+            { from = 30000; to = 32767; }
+          ];
+
+          system.stateVersion = "26.05";
+        })
         ];
       })
       // (mkHost {
