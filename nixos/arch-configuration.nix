@@ -155,7 +155,7 @@ in
     ./arch-hardware-configuration.nix
     ./modules/user-john.nix
     ./modules/vllm.nix
-    ./modules/frigate.nix
+    #./modules/frigate.nix
     ./modules/teamspeak.nix
     # inputs.home-manager.nixosModules.default
   ];
@@ -279,12 +279,12 @@ in
     "--server=https://192.168.5.10:6443"
     "--tls-san=arch.local"
     "--tls-san=closet.local"
-    "--tls-san=192.168.5.226"
+    "--tls-san=192.168.5.76"
     "--tls-san=192.168.5.10"
     "--cluster-cidr=10.42.0.0/16,fd42:42:42::/56"
     "--service-cidr=10.43.0.0/16,fd42:42:43::/112"
     "--flannel-ipv6-masq"
-    "--node-ip=192.168.5.226,fd00:1::226"
+    "--node-ip=192.168.5.76,fd00:1::7ce1:b412:3068:c799"
   ];
   custom.backup.enable = true;
 

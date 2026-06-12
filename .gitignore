@@ -15,3 +15,11 @@ vimfiles/*
 
 # nix build output
 result
+# tofu state and provider cache (generated at runtime)
+tofu/terraform.tfstate
+tofu/terraform.tfstate.*.backup
+tofu/.terraform/
+tofu/__pycache__/
+tofu/.venv/
+nixos/cluster/secrets/cloud-ssh-key.age
+nixos/cluster/secrets/do-pat.age

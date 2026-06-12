@@ -61,6 +61,9 @@
       after = [ "avahi-daemon.service" "tailscaled.service" ] ++ config.custom.k3sStorageAfter;
       wants = [ "avahi-daemon.service" ];
       environment.K3S_RESOLV_CONF = "/etc/rancher/k3s/resolv.conf";
+      serviceConfig = {
+        TimeoutStopSec = lib.mkForce "10s";
+      };
     };
 
     networking.firewall.allowedTCPPorts = [

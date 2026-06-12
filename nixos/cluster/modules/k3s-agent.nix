@@ -1,0 +1,67 @@
+# Hetzner k3s Agent Node
+#
+# Fully self-contained. Imported by all 3 agent flake configs identically.
+# Reads compName from specialArgs to set hostname and derive k3s serverAddr.
+# Imports: Longhorn, Tailscale, SSH.
+{
+  config,
+  lib,
+  pkgs,
+  compName,
+  ...
+}: {
+  imports = [
+    ./ssh.nix
+    ./longhorn-host.nix
+    ./tailscale.nix
+  ];
+
+  networking.hostName = compName;
+
+  # agenix secret: k3s join token
+  age.secrets."hetzner/k3s-token" = {
+    file = ../secrets/hetzner/k3s-token.age;
+    owner = "root";
+    group = "root";
+  };
+
+  # k3s agent — joins the server whose hostname matches (strip "-agent" suffix)
+  services.k3s = {
+    enable = true;
+    role = "agent";
+    tokenFile = config.age.secrets."hetzner/k3s-token".path;
+    serverAddr = "https://${lib.removeSuffix "-agent" compName}:6443";
+    extraFlags = toString [
+    ];
+  };
+
+  boot.kernel.sysctl = {
+    "net.ipv4.conf.all.rp_filter" = 0;
+    "net.ipv4.conf.default.rp_filter" = 0;
+  };
+  boot.kernelModules = ["xt_socket"];
+
+  boot.kernel.sysctl = {
+    "net.ipv4.tcp_syncookies" = 1;
+    "net.ipv4.tcp_syn_retries" = 2;
+  };
+
+  networking.firewall.allowedTCPPorts = [
+    80   # HTTP (k3s ingress)
+    443  # HTTPS (k3s ingress)
+    6443 # k3s API server
+  ];
+  networking.firewall.allowedUDPPorts = [
+    8472 # flannel VXLAN (k3s)
+  ];
+
+  environment.systemPackages = with pkgs; [
+    k3s
+    htop
+    tcpdump
+  ];
+  # Force fast shutdown — systemd gives k3s 10s to stop before SIGKILL
+  systemd.services.k3s.serviceConfig.TimeoutStopSec = lib.mkForce "10s";
+}
+
+

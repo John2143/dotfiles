@@ -263,6 +263,8 @@ in {
     DefaultEnvironment="XDG_DATA_DIRS=/home/%u/.local/share/flatpak/exports/share:/var/lib/flatpak/exports/share:/run/current-system/sw/share"
     DefaultEnvironment="XDG_CONFIG_DIRS=/home/%u/.local/share/flatpak/exports/etc/xdg:/var/lib/flatpak/exports/etc/xdg:/run/current-system/sw/etc/xdg"
     DefaultEnvironment="XDG_RUNTIME_DIR=/run/user/%U"
+    DefaultTimeoutStopSec=10s
+
   '';
   xdg.mime = rec {
     enable = true;

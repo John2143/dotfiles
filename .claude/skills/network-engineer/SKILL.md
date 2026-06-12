@@ -48,8 +48,9 @@ fy|
 
 **Switch port status:**
 ```
+mikrotik-connect c '/interface print terse where running'
 mikrotik-connect u '/interface print terse where running'
-mikrotik-connect d '/interface print terse where running'
+mikrotik-connect o '/interface print terse where running'
 ```
 **UniFi wireless snapshot (credentials from agenix):**
 ```
@@ -92,8 +93,9 @@ mikrotik-connect <alias> <RouterOS command...>
 | Device     | Alias              | IP            |
 |------------|--------------------|---------------|
 | Router     | `r`, `router`      | 192.168.1.1   |
+| Core       | `c`, `core`        | 192.168.5.4   |
 | Upstairs   | `u`, `upstairs`    | 192.168.5.3   |
-| Downstairs | `d`, `downstairs`  | 192.168.5.2   |
+| Office     | `o`, `office`      | 192.168.5.2   |
 
 All use `admin@` with ed25519 key auth (auto-materialized from agenix to `/run/user/$UID/mikrotik-key`).
 The `mikrotik-connect` wrapper works from both bash and fish.
@@ -122,7 +124,7 @@ Internet
 ```
 ## Physical Topology — Port-to-Port Mapping
 
-> **Snapshot from 2026-05-28 (physically verified).** Cables move, ports change.
+> **Snapshot from 2026-06-10 (post CRS305 install).** Cables move, ports change.
 > Always re-query live state if the answer depends on what's connected *right now*.
 > The commands below are the canonical way to refresh this data.
 
@@ -130,18 +132,21 @@ Query live (re-discovery after cable changes):
 ```
 # MNDP — best first guess at physical neighbors
 mikrotik-connect r '/ip neighbor print'
+mikrotik-connect c '/ip neighbor print'
 mikrotik-connect u '/ip neighbor print'
-mikrotik-connect d '/ip neighbor print'
+mikrotik-connect o '/ip neighbor print'
 
 # Bridge host tables — MAC-to-port (can be misleading)
 mikrotik-connect r '/interface bridge host print terse'
+mikrotik-connect c '/interface bridge host print terse'
 mikrotik-connect u '/interface bridge host print terse'
-mikrotik-connect d '/interface bridge host print terse'
+mikrotik-connect o '/interface bridge host print terse'
 
 # Interface names and status
 mikrotik-connect r '/interface print terse'
+mikrotik-connect c '/interface print terse'
 mikrotik-connect u '/interface print terse'
-mikrotik-connect d '/interface print terse'
+mikrotik-connect o '/interface print terse'
 
 # Cross-reference MACs to IPs/hostnames
 mikrotik-connect r '/ip arp print terse'
@@ -150,24 +155,24 @@ mikrotik-connect r '/ip dhcp-server lease print terse where status=bound'
 ### Verifying Port Mappings
 
 **Neither bridge host tables nor MNDP are infallible.** MNDP packets (and LLDP)
-traverse bridges just like any other traffic. A device on the downstairs switch
-will have its MNDP packets forwarded through the router's bridge and appear on
-a different router port than the one it's actually plugged into.
+traverse bridges just like any other traffic. A device on the office switch
+will have its MNDP packets forwarded through the core switch's bridge and appear on
+a different port than the one it's actually plugged into.
 
 The `INTERFACE` column shows the port the packet egressed through, not necessarily
 the port the device is directly connected to. The only definitive method is physical
 inspection.
 
-Example: U7Lite is physically on **downstairs ether6**, but MNDP on the router
+Example: U7Lite is physically on **office switch ether6**, but MNDP on the router
 shows it on **router ether6** because the router's bridge forwarded the discovery
-packet out that port. The same applies to any device behind a switch — MNDP on
-the router will show it on whichever port the bridge chose to forward the packet.
+packet out that port.
 
 Use these to narrow down the candidate port, then confirm physically:
 ```
 mikrotik-connect r '/ip neighbor print'
+mikrotik-connect c '/ip neighbor print'
 mikrotik-connect u '/ip neighbor print'
-mikrotik-connect d '/ip neighbor print'
+mikrotik-connect o '/ip neighbor print'
 ```
 
 To identify unknown devices by MAC → IP → hostname:
@@ -176,75 +181,87 @@ mikrotik-connect r '/ip arp print terse'
 mikrotik-connect r '/ip dhcp-server lease print terse where status=bound'
 ```
 
-Example of misleading data: U7Lite is physically on **downstairs ether6**, but
-MNDP on the router shows it on **router ether6** because the router's bridge
-forwards discovery packets between bridged ports.
-
 ### Topology
 
 ```
-Router ←→ Downstairs Switch ←→ Upstairs Switch
-           (CRS326)     e7↔e8  (CRS310)
+Router (RB5009) —10G— Core Switch (CRS305) —10G— Office Switch (CRS310)
+                           │                         (in office)
+                           ├─10G→ NAS
+                           └─10G→ Upstairs Switch (CRS310)
 ```
-### Live MNDP Baseline (2026-05-28)
+### Live MNDP Baseline (2026-06-10)
 
 ```
-Router:
-  10GsfpLAN → Downstairs sfp-sfpplus2 (MAC 04:F4:1C:E7:24:45)
-  10GsfpLAN → Upstairs ether8      (MAC 04:F4:1C:E6:7C:13, via downstairs)
-  ether6    → U7LiteBlueRoom       (192.168.5.173)  ← MISLEADING: see note
+Router (10GsfpLAN):
+  → core-switch sfp-sfpplus1  (MAC D0:EA:11:70:B9:EC)
+  → office-switch             (MAC 04:F4:1C:E7:24:42, via core)
+  → upstairs-switch           (MAC 04:F4:1C:E6:7C:15, via core)
 
-Downstairs:
-  sfp-sfpplus2 → Router 10GsfpLAN   (MAC 04:F4:1C:E3:71:2F)
-  ether7       → Upstairs ether8    (MAC 04:F4:1C:E6:7C:13)
-  ether5       → U7ProXGSOffice     (192.168.5.171)
-  ether6       → U7LiteBlueRoom     (192.168.5.173)  ← confirmed physical
+Core Switch (CRS305):
+  ether1        → Router pi/ether2        (MAC 04:F4:1C:E3:71:28, 1G management)
+  sfp-sfpplus1  → Router 10GsfpLAN        (MAC 04:F4:1C:E3:71:2F, 10G uplink)
+  sfp-sfpplus3  → Upstairs sfp-sfpplus2   (MAC 04:F4:1C:E6:7C:15, 10G)
+  sfp-sfpplus4  → Office ether8           (MAC 04:F4:1C:E7:24:43, 10G)
 
-Upstairs:
-  ether8 → Router 10GsfpLAN         (MAC 04:F4:1C:E3:71:2F)
-  ether8 → Downstairs ether7        (MAC 04:F4:1C:E7:24:42)
+Office Switch (CRS310):
+  ether8        → Core sfp-sfpplus4       (uplink)
+  ether4        → U7ProXGSOffice          (192.168.5.171)
+
+Upstairs Switch (CRS310):
+  sfp-sfpplus2  → Core sfp-sfpplus3       (uplink)
 ```
 
 ### Inter-Device Links (confirmed via MNDP)
 
 | Link | From | To |
 |---|---|---|
-| Router ↔ Downstairs | Router `10GsfpLAN` (sfp-sfpplus1) | Downstairs `sfp-sfpplus2` |
-| Downstairs ↔ Upstairs | Downstairs `ether7` | Upstairs `ether8` |
+| Router ↔ Core | Router `10GsfpLAN` (sfp-sfpplus1) | Core `sfp-sfpplus1` |
+| Router → Core (mgmt) | Router `pi` (ether2) | Core `ether1` |
+| Core ↔ Upstairs | Core `sfp-sfpplus3` | Upstairs `sfp-sfpplus2` |
+| Core ↔ Office | Core `sfp-sfpplus4` | Office `ether8` |
+| Core → NAS | Core `sfp-sfpplus2` | nas 10GbE NIC (.175) |
 
-### Router (CCR)
+### Router (RB5009UPr+S+IN)
 
 | Port (renamed) | Default | Speed | Connected to |
 |---|---|---|---|
-| `2GWAN` | ether1 | 1GbE | Verizon CR1000B (WAN uplink) |
-| `pi` | ether2 | 1GbE | pite (192.168.5.213) |
+| `2GWAN` | ether1 | 1GbE/2.5GbE | Verizon CR1000B (WAN uplink) |
+| `pi` | ether2 | 1GbE | core-switch `ether1` (management) |
 | `ether3` | ether3 | 1GbE | vpin (192.168.5.252) |
-| `ether4` | ether4 | 1GbE | nas 1GbE NIC (192.168.5.176) |
+| `ether4` | ether4 | 1GbE | (in use, device TBD) |
 | `ether5` | ether5 | 1GbE | JetKVM (192.168.5.187) |
-| `ether6` | ether6 | — | DISABLED |
-| `ether7` | ether7 | 1GbE | Front Driveway camera (192.168.1.66) |
+| `ether6` | ether6 | 1GbE | Front Driveway camera (192.168.1.66) |
+| `ether7` | ether7 | 1GbE | (in use, device TBD) |
 | `to-wifi` | ether8 | — | DISABLED |
-| `10GsfpLAN` | sfp-sfpplus1 | 10GbE SFP+ | Downstairs switch `sfp-sfpplus2` |
+| `10GsfpLAN` | sfp-sfpplus1 | 10GbE SFP+ | Core switch `sfp-sfpplus1` (10G uplink) |
 
-### Downstairs Switch (CRS326-24G-2S+RM)
-
-| Port | Speed | Connected to |
-|---|---|---|
-| `sfp-sfpplus2` | 10GbE SFP+ | Router `10GsfpLAN` (uplink) |
-| `sfp-sfpplus1` | 10GbE SFP+ | nas 10GbE NIC (192.168.5.175) |
-| `ether5` | 1GbE | office (192.168.5.209) + U7 Pro XGS AP (192.168.5.171) |
-| `ether6` | 1GbE | U7 Lite AP (192.168.5.173) |
-| `ether7` | 1GbE | Upstairs switch `ether8` (inter-switch) |
-
-### Upstairs Switch (CRS310-1G-5S-4S+)
+### Core Switch (CRS305-1G-4S+IN) — S/N HMC0B8ZZ7F2
 
 | Port | Speed | Connected to |
 |---|---|---|
-| `sfp-sfpplus2` | 1GbE SFP | closet (192.168.5.35) |
-| `sfp-sfpplus1` | 1GbE SFP | arch (192.168.5.226) |
+| `ether1` | 1GbE RJ45 | Router `pi`/ether2 (management) |
+| `sfp-sfpplus1` | 10GbE SFP+ | Router `10GsfpLAN` (10G uplink) |
+| `sfp-sfpplus2` | 10GbE SFP+ | nas 10GbE NIC (192.168.5.175) |
+| `sfp-sfpplus3` | 10GbE SFP+ | Upstairs switch `sfp-sfpplus2` |
+| `sfp-sfpplus4` | 10GbE SFP+ | Office switch `ether8` |
+
+### Office Switch (CRS310-8G+2S+IN) — S/N HKG0AJ14YM5 (formerly Downstairs)
+
+| Port | Speed | Connected to |
+|---|---|---|
+| `ether8` | 2.5GbE | Core switch `sfp-sfpplus4` (uplink) |
+| `ether4` | 2.5GbE | office (.209) or U7 Pro XGS (.171) |
+| `ether1` | 1GbE | (in use, device TBD) |
+
+### Upstairs Switch (CRS310-8G+2S+IN) — S/N HKG0AVERD3V
+
+| Port | Speed | Connected to |
+|---|---|---|
+| `sfp-sfpplus2` | 10GbE SFP+ | Core switch `sfp-sfpplus3` (uplink) |
+| `sfp-sfpplus1` | 10GbE SFP+ | closet 10GbE NIC (192.168.5.36) |
 | `ether1` | 1GbE | Front Gate cam (.64), Front Porch cam (.63), NVR (.67) |
 | `ether2` | 1GbE | GL.iNet KVM (192.168.5.8) — glkvm.ts.2143.me, OpenWrt, Dropbear SSH, nginx |
-| `ether8` | 1GbE | Downstairs switch `ether7` (inter-switch) |
+| `ether4` | 2.5GbE | arch (192.168.5.226) |
 
 Inbound: Verizon DMZs everything to MikroTik. MikroTik dst-nat rules route specific ports to internal hosts.
 Domains `john2143.com` and `net.2143.me` resolve to the home public IP.
@@ -415,18 +432,18 @@ Discovered via live DHCP (2026-05-23):
 
 | Device | IP | Model | MAC | Location | Uplink |
 |--------|-----|-------|-----|----------|--------|
-| U7 Pro XGS | 192.168.5.171 (DHCP) | U7 Pro XGS | 90:41:B2:D6:74:DB | Office | 10GbE SFP+ (connected to downstairs switch ether5, limited to 1GbE) |
-| U7 Lite | 192.168.5.173 (DHCP) | U7 Lite | 1C:0B:8B:50:FF:7E | Blue Room | 1GbE via downstairs switch ether6 |
+| U7 Pro XGS | 192.168.5.171 (DHCP) | U7 Pro XGS | 90:41:B2:D6:74:DB | Office | 2.5GbE (connected to office switch ether4) |
+| U7 Lite | 192.168.5.173 (DHCP) | U7 Lite | 1C:0B:8B:50:FF:7E | Blue Room | 1GbE via office switch |
 
 **U7 Pro XGS (Office):**
 - WiFi 7 (802.11be) — tri-band (2.4 / 5 / 6 GHz)
-- 10GbE SFP+ uplink (connected to downstairs switch ether5, limited to 1GbE by switch port — not upstairs as previously thought)
+- 10GbE SFP+ uplink (connected to office switch ether4, limited to 1GbE by switch port)
 - Primary high-performance AP
 - Hostname: `U7ProXGSOffice`, DHCP class-id: `ubnt`
 
 **U7 Lite (Blue Room):**
 - WiFi 7 (802.11be) — dual-band (2.4 / 5 GHz)
-- 2.5GbE uplink (limited to 1GbE by downstairs switch ether6 port)
+- 2.5GbE uplink (limited to 1GbE by office switch port)
 - Compact AP for secondary coverage
 - Hostname: `U7LiteBlueRoom`, DHCP class-id: `ubnt`
 
@@ -579,10 +596,11 @@ mikrotik-connect r '/ip firewall filter print'
 mikrotik-connect r '/ip firewall nat print'
 ```
 
-### Switch Port Status (upstairs/downstairs)
+### Switch Port Status (all switches)
 ```
+mikrotik-connect c '/interface print terse where running'
 mikrotik-connect u '/interface print terse where running'
-mikrotik-connect d '/interface print terse where running'
+mikrotik-connect o '/interface print terse where running'
 ```
 
 ### Full Config Dump
@@ -726,7 +744,7 @@ Query live: `ssh closet 'kubectl get nodes,pods,svc -A'`
 | k3s nodes | 5 (3 control-plane, 2 agents, all Ready) |
 | Cameras online | 7 of 7 |
 | IoT/smart devices | 11 |
-| Switch ports active | 7 router, 5 downstairs, 5 upstairs |
+| Switch ports active | 7 router, 5 core, 8 upstairs, 4 office |
 | External services | 9 |
 
 ## Notable Observations
@@ -746,8 +764,8 @@ Query live: `ssh closet 'kubectl get nodes,pods,svc -A'`
 7. **No MikroTik dst-nat for 6767:** Headscale forward is solely on the Verizon router.
 
 8. **k3s pod network uses flannel VXLAN:** 10.42.0.0/24 + fd42:42:42::/56 dual-stack overlay.
+9. **New CRS305 core switch (2026-06-10):** The CRS305-1G-4S+ (192.168.5.4, "core-switch") now serves as the central 10G backbone. Router `10GsfpLAN` ↔ Core `sfp-sfpplus1` (10G uplink). NAS, upstairs switch, and office switch all connect through the core. The old downstairs switch (CRS310-8G+2S+) was repurposed as the "office-switch" (192.168.5.2). Router `pi` port now connects to Core `ether1` for management.
 ## Config Backup & Restore
-
 Full config exports are saved in the dotfiles repo (`~/dotfiles/network-configs/`) for
 disaster recovery. These are RouterOS script files (`.rsc`) — plain text, one command
 per line. When asked about "the last known-good config" or "what changed", check
@@ -777,17 +795,11 @@ RouterOS expects to replay it in order.
 ### Creating a Backup
 
 ```bash
-# On the MikroTik flash:
-mikrotik-connect r '/export file=mikrotik-export-2026-05-27'
-# Download to local repo (this is what saves to network-configs/):
-ssh -i /run/user/$(id -u)/mikrotik-key admin@192.168.1.1 '/export' \
-  > network-configs/mikrotik-export-YYYY-MM-DD.rsc
-
-# Same for switches:
-ssh -i /run/user/$(id -u)/mikrotik-key admin@192.168.5.3 '/export' \
-  > network-configs/upstairs-switch-export-YYYY-MM-DD.rsc
-ssh -i /run/user/$(id -u)/mikrotik-key admin@192.168.5.2 '/export' \
-  > network-configs/downstairs-switch-export-YYYY-MM-DD.rsc
+# Capture live configs directly to the git-tracked files:
+ssh -i /run/user/$(id -u)/mikrotik-key admin@192.168.1.1 '/export' > network-configs/router.rsc
+ssh -i /run/user/$(id -u)/mikrotik-key admin@192.168.5.4 '/export' > network-configs/core.rsc
+ssh -i /run/user/$(id -u)/mikrotik-key admin@192.168.5.3 '/export' > network-configs/upstairs.rsc
+ssh -i /run/user/$(id -u)/mikrotik-key admin@192.168.5.2 '/export' > network-configs/office.rsc
 ```
 
 The `mikrotik-connect` wrapper's SSH key is auto-materialized from agenix to
@@ -795,18 +807,12 @@ The `mikrotik-connect` wrapper's SSH key is auto-materialized from agenix to
 
 ### Restoring
 
-**⚠️ Destructive — overwrites the entire running config. Reboot recommended after.**
+**Destructive — overwrites the entire running config. Reboot recommended after.**
 
 ```bash
-# Option A via RouterOS flash (file must already exist there):
-mikrotik-connect r '/import file=mikrotik-export-2026-05-27.rsc'
-mikrotik-connect r '/system reboot'
-
-# Option B via SSH pipe (streams commands directly):
-ssh -i /run/user/$(id -u)/mikrotik-key admin@192.168.1.1 \
-  < network-configs/mikrotik-export-2026-05-27.rsc
+# Via SSH pipe (streams commands directly):
+ssh -i /run/user/$(id -u)/mikrotik-key admin@192.168.1.1 < network-configs/router.rsc
 ```
-
 **Never import a switch config onto the router or vice versa** — the interface names
 and hardware topology are different.
 

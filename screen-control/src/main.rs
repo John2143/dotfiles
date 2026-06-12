@@ -98,12 +98,13 @@ fn run_hyprctl(args: &[&str]) -> ScreenResponse {
 
 async fn screen_off() -> Json<ScreenResponse> {
     eprintln!("POST /screen/off");
-    Json(run_hyprctl(&["dispatch", "dpms", "off"]))
+    Json(run_hyprctl(&["dispatch", r#"hl.dsp.dpms({ action = "disable" })"#]))
 }
+
 
 async fn screen_on() -> Json<ScreenResponse> {
     eprintln!("POST /screen/on");
-    Json(run_hyprctl(&["dispatch", "dpms", "on"]))
+    Json(run_hyprctl(&["dispatch", r#"hl.dsp.dpms({ action = "enable" })"#]))
 }
 async fn keypad_off() -> Json<ScreenResponse> {
     eprintln!("POST /keypad/off");

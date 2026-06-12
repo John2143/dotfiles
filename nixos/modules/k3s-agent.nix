@@ -1,6 +1,7 @@
 {
   config,
   lib,
+  pkgs,
   ...
 }: {
   imports = [./longhorn-host.nix];
@@ -31,6 +32,9 @@
       after = [ "avahi-daemon.service" ];
       wants = [ "avahi-daemon.service" ];
       environment.K3S_RESOLV_CONF = "/etc/rancher/k3s/resolv.conf";
+      serviceConfig = {
+        TimeoutStopSec = lib.mkForce "10s";
+      };
     };
     # Clean resolv.conf for k3s pods — strips the Tailscale MagicDNS search
     # domain (ts.2143.me) to prevent ndots:5 expansion from prepending it
@@ -60,11 +64,18 @@
     # falls through to Tailscale's rules as normal.
     #
     # See research: ai_research/what-is-the-best-way-to-run-a-kubernetes-node-on-a-computer-that/final_report.md
-    networking.iproute2 = {
-      enable = true;
-      rules = [
-        "priority 2500 from all to 10.42.0.0/16 lookup main"
-      ];
+    systemd.services.pod-cidr-route = {
+      description = "Add ip rule for pod CIDR traffic before Tailscale";
+      after = [ "tailscaled.service" "network.target" ];
+      wants = [ "tailscaled.service" ];
+      wantedBy = [ "multi-user.target" ];
+      serviceConfig = {
+        Type = "oneshot";
+        RemainAfterExit = true;
+      };
+      script = ''
+        ${pkgs.iproute2}/bin/ip rule add priority 2500 from all to 10.42.0.0/16 lookup main 2>/dev/null || true
+      '';
     };
   };
 }

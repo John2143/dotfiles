@@ -19,16 +19,18 @@ end
 switch "$argv[1]"
   case router r
     ssh -i $keyfile -o StrictHostKeyChecking=accept-new -o LogLevel=ERROR admin@192.168.1.1 $argv[2..-1]
+  case core c
+    ssh -i $keyfile -o StrictHostKeyChecking=accept-new -o LogLevel=ERROR admin@192.168.5.4 $argv[2..-1]
   case upstairs up u
     ssh -i $keyfile -o StrictHostKeyChecking=accept-new -o LogLevel=ERROR admin@192.168.5.3 $argv[2..-1]
-  case downstairs down d
+  case office o
     ssh -i $keyfile -o StrictHostKeyChecking=accept-new -o LogLevel=ERROR admin@192.168.5.2 $argv[2..-1]
   case '-h' '--help'
-    echo "Usage: mikrotik-connect <router|upstairs|downstairs> [ssh-args...]" >&2
-    echo "  r/u/d also accepted as shortcuts" >&2
+    echo "Usage: mikrotik-connect <router|core|upstairs|office> [ssh-args...]" >&2
+    echo "  r/c/u/o also accepted as shortcuts" >&2
   case '*'
     echo "Unknown device: $argv[1]" >&2
-    echo "Usage: mikrotik-connect <router|upstairs|downstairs> [ssh-args...]" >&2
-    echo "  r/u/d also accepted as shortcuts" >&2
+    echo "Usage: mikrotik-connect <router|core|upstairs|office> [ssh-args...]" >&2
+    echo "  r/c/u/o also accepted as shortcuts" >&2
     return 1
 end

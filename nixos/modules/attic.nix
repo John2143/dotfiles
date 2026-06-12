@@ -39,6 +39,7 @@ in {
         exec ${pkgs.attic-client}/bin/attic login ${server} ${endpoint} "$(cat /run/agenix/attic-admin-token)"
       '';
       RemainAfterExit = true;
+      TimeoutStopSec = 10;
     };
     wantedBy = [ "default.target" ];
   };
@@ -69,6 +70,7 @@ in {
       ExecStart = "${pkgs.attic-client}/bin/attic watch-store ${cacheName} --ignore-upstream-cache-filter";
       Restart = "on-failure";
       RestartSec = 30;
+      TimeoutStopSec = 10;
     };
     wantedBy = [ "default.target" ];
   };
