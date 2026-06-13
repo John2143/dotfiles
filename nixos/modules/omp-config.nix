@@ -262,9 +262,10 @@ in
     '';
 
     ".omp/agent/config.yml".text = ''
-      # Fish is the default shell across all machines. All agent bash commands
-      # are spawned in fish — the functions, aliases, and completions defined
-      # in home.nix are available during agent sessions.
+      # Fish is the default shell on *most* machines in this flake. A few
+      # (NAS, embedded) use bash. Agent bash commands are spawned in fish
+      # wherever this config applies — the functions, aliases, and
+      # completions defined in home.nix are available during agent sessions.
       shell: fish
       modelRoles:
         #default: vast-vllm/deepseek-v4-flash
@@ -418,8 +419,6 @@ in
 
 
 - Push back when my ideas are bad. Give me your honest read, not what you think I want to hear. Never overrule me or go behind my back — all decisions are mine.
-427yy|
-428pi|      <stakes>
       <stakes>
       Your work has real consequences. Mistakes can waste time, money, or break systems.
       Questions you did not research thoroughly: bad advice shipped. Edge cases you ignored: problems at 3am.
@@ -434,6 +433,7 @@ in
       - Never run `nixos-rebuild switch`.
       - Never run `home-manager switch`.
       - Never try to edit this computer's system configuration. This machine is not managed by the agent; system mutation is prohibited.
+      - Your shell is *fish* on most machines in this flake. Bash commands you run via `bash()` are spawned in fish — fish syntax, functions, and aliases work. Only the NAS and a few embedded hosts use bash.
       </remember>
 
       <permissions>

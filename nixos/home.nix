@@ -446,6 +446,9 @@ in {
         # Macro pad F20 group — display
         { _args = ["F20" (mkLua ''hl.dsp.dpms({ action = "enable" })'')]; }
         { _args = ["CTRL + F20" (mkLua ''hl.dsp.dpms({ action = "disable" })'')]; }
+        # Macro pad F21 group — Home Assistant toggles
+        { _args = ["F21" (mkLua ''hl.dsp.exec_cmd("hass-macro dyson-fan")'')]; }
+        { _args = ["CTRL + F21" (mkLua ''hl.dsp.exec_cmd("hass-macro desk-light")'')]; }
 
         # TeamSpeak mute: Prior mutes mic, Next mutes sound
         { _args = ["Prior" (mkLua ''hl.dsp.exec_cmd("teamspeak-mute-status --toggle && pkill -RTMIN+10 waybar")'')]; }

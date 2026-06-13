@@ -99,8 +99,18 @@ let
           signal_waybar
           hass_notify bedroom-light "Bedroom Light" "Toggled"
           ;;
+        dyson-fan)
+          hass_post fan/toggle '{"entity_id":"fan.k3b_us_pga0539a"}'
+          signal_waybar
+          hass_notify dyson-fan "Dyson Fan" "Toggled"
+          ;;
+        desk-light)
+          hass_post light/toggle '{"entity_id":"light.wiz_color_strip"}'
+          signal_waybar
+          hass_notify desk-light "Desk Light" "Toggled"
+          ;;
         *)
-          echo "Usage: hass-macro {thermostat-down|thermostat-up|thermostat-toggle|ac-toggle|fan-toggle|light-lamp|light-dresser|light-ac|light-bedroom}" >&2
+          echo "Usage: hass-macro {thermostat-down|thermostat-up|thermostat-toggle|ac-toggle|fan-toggle|light-lamp|light-dresser|light-ac|light-bedroom|dyson-fan|desk-light}" >&2
           exit 1
           ;;
       esac
@@ -253,6 +263,8 @@ in
         f   = "f19";      # thermostat toggle (thermostat-toggle)
         g   = "C-A-f19";  # fan toggle (fan-toggle)
         "5" = "M-f18";    # light: bedroom overhead (light-bedroom)
+        "3" = "f21";      # Dyson fan toggle (dyson-fan)
+        "4" = "C-f21";    # desk light toggle (desk-light)
     };
   };
   }; # close services.keyd
