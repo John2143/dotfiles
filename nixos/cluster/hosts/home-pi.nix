@@ -35,6 +35,9 @@
     grub.enable = false;
     generic-extlinux-compatible.enable = true;
   };
+  # zram: compressed RAM swap — doubles effective memory on Pis.
+  # 50% RAM, zstd ~3:1 compression. Harmless insurance on 4+ GB Pis.
+  zramSwap.enable = true;
 
   system.stateVersion = "26.05";
 

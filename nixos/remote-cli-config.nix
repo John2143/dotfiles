@@ -26,6 +26,10 @@
     generic-extlinux-compatible.enable = true;
     #systemd-boot.enable = true;
   };
+  # zram: compressed RAM swap — doubles effective memory on ~2 GB Pis.
+  # 50% RAM, zstd ~3:1 compression. Essential for 1.8 GB pite with k3s +
+  # Prometheus agent. Harmless insurance on larger Pis (aman, vpin).
+  zramSwap.enable = true;
 
   virtualisation.podman = {
     enable = true;
