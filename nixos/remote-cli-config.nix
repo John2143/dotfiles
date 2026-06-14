@@ -30,6 +30,9 @@
   # 50% RAM, zstd ~3:1 compression. Essential for 1.8 GB pite with k3s +
   # Prometheus agent. Harmless insurance on larger Pis (aman, vpin).
   zramSwap.enable = true;
+  # Swapfile on SD as last-resort overflow. Kernel uses zram (prio 5) first,
+  # swapfile (prio -2) only when zram exhausted. 4 GB is safe for all Pis.
+  swapDevices = [{ device = "/swapfile"; size = 4096; }];
 
   virtualisation.podman = {
     enable = true;

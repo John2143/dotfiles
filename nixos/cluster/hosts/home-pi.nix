@@ -38,6 +38,8 @@
   # zram: compressed RAM swap — doubles effective memory on Pis.
   # 50% RAM, zstd ~3:1 compression. Harmless insurance on 4+ GB Pis.
   zramSwap.enable = true;
+  # Swapfile on SD: last-resort overflow for zram. 8 GB matches existing.
+  swapDevices = [{ device = "/swapfile"; size = 8192; }];
 
   system.stateVersion = "26.05";
 
