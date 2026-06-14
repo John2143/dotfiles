@@ -30,7 +30,7 @@
 in {
   # ── HS256 server secret (base64-encoded, used by atticd for JWT signing) ──
   age.secrets.attic-admin-token = {
-    file = ../hetzner/secrets/hetzner/attic-server-secret.age;
+    file = ../cluster/secrets/hetzner/attic-server-secret.age;
     owner = "root";
     group = "root";
     mode = "0400";
