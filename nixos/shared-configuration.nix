@@ -258,14 +258,15 @@ in {
   # inherit the user's environment so they can find Firefox and MIME
   # associations.  This is normally done by display managers like GDM/SDDM
   # but Lemurs does not.  Without it, flatpak apps cannot open links.
-  systemd.user.extraConfig = ''
-    DefaultEnvironment="PATH=/run/wrappers/bin:/etc/profiles/per-user/%u/bin:/run/current-system/sw/bin:/home/%u/.local/share/flatpak/exports/bin:/var/lib/flatpak/exports/bin"
-    DefaultEnvironment="XDG_DATA_DIRS=/home/%u/.local/share/flatpak/exports/share:/var/lib/flatpak/exports/share:/run/current-system/sw/share"
-    DefaultEnvironment="XDG_CONFIG_DIRS=/home/%u/.local/share/flatpak/exports/etc/xdg:/var/lib/flatpak/exports/etc/xdg:/run/current-system/sw/etc/xdg"
-    DefaultEnvironment="XDG_RUNTIME_DIR=/run/user/%U"
-    DefaultTimeoutStopSec=10s
-
-  '';
+  systemd.user.settings.Manager = {
+    DefaultEnvironment = [
+      "PATH=/run/wrappers/bin:/etc/profiles/per-user/%u/bin:/run/current-system/sw/bin:/home/%u/.local/share/flatpak/exports/bin:/var/lib/flatpak/exports/bin"
+      "XDG_DATA_DIRS=/home/%u/.local/share/flatpak/exports/share:/var/lib/flatpak/exports/share:/run/current-system/sw/share"
+      "XDG_CONFIG_DIRS=/home/%u/.local/share/flatpak/exports/etc/xdg:/var/lib/flatpak/exports/etc/xdg:/run/current-system/sw/etc/xdg"
+      "XDG_RUNTIME_DIR=/run/user/%U"
+    ];
+    DefaultTimeoutStopSec = "10s";
+  };
   xdg.mime = rec {
     enable = true;
     addedAssociations = defaultApplications;
