@@ -114,6 +114,14 @@ let
           exit 1
           ;;
       esac
+        #
+        # ── Adding a new hass-macro command? ─────────────────────────────
+        # 1. Add the case entry here (command name → hass_post/service/call).
+        # 2. Add a keyd mapping in services.keyd above (physical key → F-key).
+        # 3. Add the Hyprland bind in home.nix (F-key → hass-macro <name>).
+        #    Pattern: name) hass_post <domain>/toggle '{"entity_id":"<domain>.<entity>"}';;
+        #    Always include signal_waybar and hass_notify.
+        # ─────────────────────────────────────────────────────────────────
     '';
   };
 
@@ -265,6 +273,14 @@ in
         "5" = "M-f18";    # light: bedroom overhead (light-bedroom)
         "3" = "f21";      # Dyson fan toggle (dyson-fan)
         "4" = "C-f21";    # desk light toggle (desk-light)
+        #
+        # ── Adding a new macropad bind? ──────────────────────────────────
+        # 1. Add the keyd mapping here (physical key → F-key + modifier).
+        # 2. If it controls Home Assistant, add a `hass-macro` case below.
+        # 3. Add the Hyprland bind in home.nix (F-key → command).
+        #    Modifier prefixes: C=Ctrl, A=Alt, M=Super, CA=Ctrl+Alt.
+        #    F18-F21 are available; beyond F24 use XF86Launch*.
+        # ─────────────────────────────────────────────────────────────────
     };
   };
   }; # close services.keyd

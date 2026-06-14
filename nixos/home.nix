@@ -449,6 +449,14 @@ in {
         # Macro pad F21 group — Home Assistant toggles
         { _args = ["F21" (mkLua ''hl.dsp.exec_cmd("hass-macro dyson-fan")'')]; }
         { _args = ["CTRL + F21" (mkLua ''hl.dsp.exec_cmd("hass-macro desk-light")'')]; }
+        #
+        # ── Adding a new macropad bind? ──────────────────────────────────
+        # 1. Add the keyd mapping in arch-configuration.nix (services.keyd).
+        # 2. If it controls Home Assistant, add a `hass-macro` case there too.
+        # 3. Add the Hyprland bind here (same F-key + modifier as in keyd).
+        #    F-key syntax: "F18" / "CTRL + F18" / "ALT + F18" / "SUPER + F18"
+        #    Command syntax: hl.dsp.exec_cmd("hass-macro <name>")
+        # ─────────────────────────────────────────────────────────────────
 
         # TeamSpeak mute: Prior mutes mic, Next mutes sound
         { _args = ["Prior" (mkLua ''hl.dsp.exec_cmd("teamspeak-mute-status --toggle && pkill -RTMIN+10 waybar")'')]; }

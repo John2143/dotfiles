@@ -96,6 +96,7 @@ mikrotik-connect <alias> <RouterOS command...>
 | Core       | `c`, `core`        | 192.168.5.4   |
 | Upstairs   | `u`, `upstairs`    | 192.168.5.3   |
 | Office     | `o`, `office`      | 192.168.5.2   |
+| Upstairs-Core | `uc`, `upstairs-core` | 192.168.5.5   |
 
 All use `admin@` with ed25519 key auth (auto-materialized from agenix to `/run/user/$UID/mikrotik-key`).
 The `mikrotik-connect` wrapper works from both bash and fish.
