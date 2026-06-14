@@ -1,13 +1,14 @@
 ---
 description: Inject network context into any session — device inventory, live ARP/routes/DHCP, server-to-flake mapping, subnet layout
 argument-hint: (none — invoked as skill://network-engineer)
-allowed-tools: Bash(mikrotik-connect *), Bash(kubectl *), Bash(ssh closet *), Read, Search
+allowed-tools: Bash(mikrotik-connect *), Bash(kubectl *), Bash(ssh closet *), Read, Search, Edit
 tool-hints: |
   This skill injects context. It does NOT modify anything.
   All RouterOS commands are read-only (print, export, monitor, get).
   NEVER run add/remove/set/enable/disable/reboot/shutdown without explicit user approval.
   Prefer live queries over stale static data when confirming current state.
   kubectl is available via `ssh closet 'kubectl ...'` for local cluster queries.
+  This skill is allowed to update its own SKILL.md file when the user asks for documentation changes.
 ---
 
 ## Usage
@@ -233,7 +234,7 @@ Core Switch (CRS305):
   sfp-sfpplus4  → Router 10GsfpLAN          (MAC 04:F4:1C:E3:71:2F, 10G uplink)
 
 Upstairs-Core Switch (CRS305):
-  ether1        → ??? (PoE available, carrier present)
+  ether1        → GL-KVM                           (192.168.5.8, PoE)
   sfp-sfpplus1  → closet 10G NIC                 (192.168.5.36)
   sfp-sfpplus2  → Core sfp-sfpplus2               (10G backhaul)
   sfp-sfpplus3  → arch I226 2.5G NIC              (192.168.5.76)
@@ -248,7 +249,6 @@ Office Switch (CRS310):
 Upstairs Switch (CRS310):
   sfp-sfpplus1  → Upstairs-Core sfp-sfpplus4       (uplink, 10G)
   ether1        → Reolink NVR                      (192.168.1.67, PoE)
-  ether2        → GL.iNet KVM                      (192.168.5.8)
   ether6        → Brother printer                  (192.168.5.6)
   sfp-sfpplus2  → NOT RUNNING (was old core uplink)
 
@@ -501,25 +501,25 @@ Query live: `ssh closet 'kubectl get nodes,pods,svc -A'`
 Full config exports are saved in the dotfiles repo (`~/dotfiles/network-configs/`) for
 disaster recovery. These are RouterOS script files (`.rsc`) — plain text, one command
 per line. When asked about "the last known-good config" or "what changed", check
-`network-configs/mikrotik-export-*.rsc` for the most recent backup.
+`~/dotfiles/network-configs/mikrotik-export-*.rsc` for the most recent backup.
 
 ### Creating a Backup
 
 ```bash
 
 # Compact export (non-default settings only, human-readable):
-ssh -i /run/user/$(id -u)/mikrotik-key admin@192.168.1.1 '/export' > network-configs/router.rsc
-ssh -i /run/user/$(id -u)/mikrotik-key admin@192.168.5.4 '/export' > network-configs/core.rsc
-ssh -i /run/user/$(id -u)/mikrotik-key admin@192.168.5.3 '/export' > network-configs/upstairs.rsc
-ssh -i /run/user/$(id -u)/mikrotik-key admin@192.168.5.2 '/export' > network-configs/office.rsc
-ssh -i /run/user/$(id -u)/mikrotik-key admin@192.168.5.5 '/export' > network-configs/upstairs-core.rsc
+ssh -i /run/user/$(id -u)/mikrotik-key admin@192.168.1.1 '/export' > ~/dotfiles/network-configs/router.rsc
+ssh -i /run/user/$(id -u)/mikrotik-key admin@192.168.5.4 '/export' > ~/dotfiles/network-configs/core.rsc
+ssh -i /run/user/$(id -u)/mikrotik-key admin@192.168.5.3 '/export' > ~/dotfiles/network-configs/upstairs.rsc
+ssh -i /run/user/$(id -u)/mikrotik-key admin@192.168.5.2 '/export' > ~/dotfiles/network-configs/office.rsc
+ssh -i /run/user/$(id -u)/mikrotik-key admin@192.168.5.5 '/export' > ~/dotfiles/network-configs/upstairs-core.rsc
 
 # Verbose export (all settings including protocol-mode, bridges, defaults):
-ssh -i /run/user/$(id -u)/mikrotik-key admin@192.168.1.1 '/export verbose' > network-configs/router.verbose.rsc
-ssh -i /run/user/$(id -u)/mikrotik-key admin@192.168.5.4 '/export verbose' > network-configs/core.verbose.rsc
-ssh -i /run/user/$(id -u)/mikrotik-key admin@192.168.5.3 '/export verbose' > network-configs/upstairs.verbose.rsc
-ssh -i /run/user/$(id -u)/mikrotik-key admin@192.168.5.2 '/export verbose' > network-configs/office.verbose.rsc
-ssh -i /run/user/$(id -u)/mikrotik-key admin@192.168.5.5 '/export verbose' > network-configs/upstairs-core.verbose.rsc
+ssh -i /run/user/$(id -u)/mikrotik-key admin@192.168.1.1 '/export verbose' > ~/dotfiles/network-configs/router.verbose.rsc
+ssh -i /run/user/$(id -u)/mikrotik-key admin@192.168.5.4 '/export verbose' > ~/dotfiles/network-configs/core.verbose.rsc
+ssh -i /run/user/$(id -u)/mikrotik-key admin@192.168.5.3 '/export verbose' > ~/dotfiles/network-configs/upstairs.verbose.rsc
+ssh -i /run/user/$(id -u)/mikrotik-key admin@192.168.5.2 '/export verbose' > ~/dotfiles/network-configs/office.verbose.rsc
+ssh -i /run/user/$(id -u)/mikrotik-key admin@192.168.5.5 '/export verbose' > ~/dotfiles/network-configs/upstairs-core.verbose.rsc
 ```
 
 The `mikrotik-connect` wrapper's SSH key is auto-materialized from agenix to
@@ -531,7 +531,7 @@ The `mikrotik-connect` wrapper's SSH key is auto-materialized from agenix to
 
 ```bash
 # Via SSH pipe (streams commands directly):
-ssh -i /run/user/$(id -u)/mikrotik-key admin@192.168.1.1 < network-configs/router.rsc
+ssh -i /run/user/$(id -u)/mikrotik-key admin@192.168.1.1 < ~/dotfiles/network-configs/router.rsc
 ```
 **Never import a switch config onto the router or vice versa** — the interface names
 and hardware topology are different.

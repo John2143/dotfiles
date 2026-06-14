@@ -40,7 +40,7 @@ digraph G {
     upstairs [shape=box, label="UPSTAIRS SWITCH\nCRS310-8G+2S+\n192.168.5.3", fillcolor="#fff9c4", style=filled, width=2.0]
     office   [shape=box, label="OFFICE SWITCH\nCRS310-8G+2S+\n192.168.5.2", fillcolor="#fff9c4", style=filled, width=2.0]
 
-    core -> upstairs_core [label=" sfp-sfpplus2→2 10G SFP+"]
+    core -> upstairs_core [label=" sfp-sfpplus2→sfp-sfpplus2 10G SFP+"]
     upstairs_core -> upstairs [label=" sfp-sfpplus4→sfp-sfpplus1 10G SFP+"]
 
     upstairs_core -> closet [label=" sfp-sfpplus1 10G SFP+"]
@@ -63,7 +63,7 @@ digraph G {
 
 
 
-    upstairs -> glkvm   [label=" ether2 1G"]
+    upstairs_core -> glkvm   [label=" ether1 1G (PoE)"]
     upstairs -> brother [label=" ether6 100M HD"]
 
 
