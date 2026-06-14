@@ -23,7 +23,6 @@ When this skill is loaded, immediately inject the following context into the con
 You are now operating on John's home network. Use this knowledge to answer questions,
 diagnose issues, and navigate the infrastructure.
 
-
 ## First-Run Bootstrap
 
 When this skill is first loaded in a session, run these commands to snapshot the network.
@@ -36,22 +35,32 @@ mikrotik-connect r '/ip arp print terse where status=reachable'
 mikrotik-connect r '/ip arp print terse where status=permanent'
 mikrotik-connect r '/ip route print terse'
 mikrotik-connect r '/ip firewall nat print terse where chain=dstnat'
-
-fy|
+```
 
 **IPv6 state:**
 ```
 mikrotik-connect r '/ipv6 address print terse'
 mikrotik-connect r '/ipv6 dhcp-client print'
 mikrotik-connect r '/ipv6 route print terse'
-fy|
+```
 
 **Switch port status:**
 ```
 mikrotik-connect c '/interface print terse where running'
 mikrotik-connect u '/interface print terse where running'
 mikrotik-connect o '/interface print terse where running'
+mikrotik-connect uc '/interface print terse where running'
 ```
+
+**Hardware identity check (confirm model/serial matches inventory):**
+```
+mikrotik-connect r '/system routerboard print'
+mikrotik-connect c '/system routerboard print'
+mikrotik-connect u '/system routerboard print'
+mikrotik-connect o '/system routerboard print'
+mikrotik-connect uc '/system routerboard print'
+```
+
 **UniFi wireless snapshot (credentials from agenix):**
 ```
 python3 << 'PYEOF'
@@ -63,7 +72,7 @@ with open('/run/agenix/unifi-credentials') as f:
             k, v = line.strip().split('=', 1)
             creds[k] = v.strip('"')
 ctx = ssl.create_default_context(); ctx.check_hostname = False; ctx.verify_mode = ssl.CERT_NONE
-base = 'https://192.168.5.35:30443'
+base = 'https://192.168.5.10:30443'
 cj = http.cookiejar.CookieJar()
 opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(cj), urllib.request.HTTPSHandler(context=ctx))
 data = json.dumps({'username': creds['UNIFI_USERNAME'], 'password': creds['UNIFI_PASSWORD'], 'remember': True}).encode()
@@ -108,6 +117,20 @@ RouterOS syntax: `/path command arg=value`. Common patterns:
 - Terse (scriptable): `/ip route print terse`
 - Count: `/ip route print count-only`
 
+## Verifying Device Identity
+
+When connecting to any MikroTik device, run `/system routerboard print` on first connect and cross-check model + serial against the known inventory. This prevents operating on the wrong box.
+
+| Device | Alias | Model | S/N | Firmware |
+|--------|-------|-------|-----|----------|
+| Router | r | RB5009UPr+S+ | HKG0AWJZPCK | 7.19.6 |
+| Core | c | CRS305-1G-4S+ r2 | HMC0B8ZZ7F2 | 7.20.8 |
+| Upstairs | u | CRS310-8G+2S+ | HKG0AVERD3V | 7.19.6 |
+| Office | o | CRS310-8G+2S+ | HKG0AJ14YM5 | 7.19.6 |
+| Upstairs-Core | uc | CRS305-1G-4S+ r2 | HMB0BED9WV8 | 7.20.8 |
+
+**Note:** RouterOS version (from `/system resource print`) is NOT the same as Routerboard model (from `/system routerboard print`). Always check both to confirm identity.
+
 ## WAN Topology (Double NAT)
 
 ```
@@ -136,18 +159,21 @@ mikrotik-connect r '/ip neighbor print'
 mikrotik-connect c '/ip neighbor print'
 mikrotik-connect u '/ip neighbor print'
 mikrotik-connect o '/ip neighbor print'
+mikrotik-connect uc '/ip neighbor print'
 
 # Bridge host tables — MAC-to-port (can be misleading)
 mikrotik-connect r '/interface bridge host print terse'
 mikrotik-connect c '/interface bridge host print terse'
 mikrotik-connect u '/interface bridge host print terse'
 mikrotik-connect o '/interface bridge host print terse'
+mikrotik-connect uc '/interface bridge host print terse'
 
 # Interface names and status
 mikrotik-connect r '/interface print terse'
 mikrotik-connect c '/interface print terse'
 mikrotik-connect u '/interface print terse'
 mikrotik-connect o '/interface print terse'
+mikrotik-connect uc '/interface print terse'
 
 # Cross-reference MACs to IPs/hostnames
 mikrotik-connect r '/ip arp print terse'
@@ -174,6 +200,7 @@ mikrotik-connect r '/ip neighbor print'
 mikrotik-connect c '/ip neighbor print'
 mikrotik-connect u '/ip neighbor print'
 mikrotik-connect o '/ip neighbor print'
+mikrotik-connect uc '/ip neighbor print'
 ```
 
 To identify unknown devices by MAC → IP → hostname:
@@ -185,87 +212,45 @@ mikrotik-connect r '/ip dhcp-server lease print terse where status=bound'
 ### Topology
 
 ```
-Router (RB5009) —10G— Core Switch (CRS305) —10G— Office Switch (CRS310)
-                           │                         (in office)
-                           ├─10G→ NAS
-                           └─10G→ Upstairs Switch (CRS310)
+Router (RB5009) —10G— Core Switch (CRS305) —10G— Upstairs-Core (CRS305) —10G— Upstairs Switch (CRS310)
+                          │                                              (in upstairs closet)
+                          ├─10G→ NAS
+                          └─10G→ Office Switch (CRS310)
+                                 (in office)
 ```
-### Live MNDP Baseline (2026-06-10)
+### Live MNDP Baseline (2026-06-14)
 
 ```
-Router (10GsfpLAN):
-  → core-switch sfp-sfpplus1  (MAC D0:EA:11:70:B9:EC)
-  → office-switch             (MAC 04:F4:1C:E7:24:42, via core)
-  → upstairs-switch           (MAC 04:F4:1C:E6:7C:15, via core)
+Router (RB5009):
+  → WAN
+  → upstairs-core                  (MAC D0:EA:11:6B:75:F3, via core bridge)
 
 Core Switch (CRS305):
-  ether1        → Router pi/ether2        (MAC 04:F4:1C:E3:71:28, 1G management)
-  sfp-sfpplus1  → Router 10GsfpLAN        (MAC 04:F4:1C:E3:71:2F, 10G uplink)
-  sfp-sfpplus3  → Upstairs sfp-sfpplus2   (MAC 04:F4:1C:E6:7C:15, 10G)
-  sfp-sfpplus4  → Office ether8           (MAC 04:F4:1C:E7:24:43, 10G)
+  ether1        → Router pi/ether2          (MAC 04:F4:1C:E3:71:28, 1G management)
+  sfp-sfpplus1  → nas 10GbE NIC             (MAC E8:4D:D0:C1:54:20, .175)
+  sfp-sfpplus2  → Upstairs-Core sfp-sfpplus2 (MAC D0:EA:11:6B:75:F5, 10G backhaul)
+  sfp-sfpplus3  → Office 10GsfpLAN          (MAC ???, 10G)
+  sfp-sfpplus4  → Router 10GsfpLAN          (MAC 04:F4:1C:E3:71:2F, 10G uplink)
+
+Upstairs-Core Switch (CRS305) — NEW:
+  ether1        → poe power connected to reolink NVR for mgmt (carrier present, peer unknown)
+  sfp-sfpplus2  → Core sfp-sfpplus2         (10G backhaul)
+  sfp-sfpplus4  → Upstairs sfp-sfpplus1     (MAC 04:F4:1C:E6:7C:15, 10G)
+  sfp-sfpplus1  → ??? (carrier present, peer unknown)
+  sfp-sfpplus3  → ??? (carrier present, peer unknown)
 
 Office Switch (CRS310):
-  ether8        → Core sfp-sfpplus4       (uplink)
-  ether4        → U7ProXGSOffice          (192.168.5.171)
+  ether8        → Core sfp-sfpplus3         (uplink)
+  ether4        → U7ProXGSOffice            (192.168.5.171)
+
 
 Upstairs Switch (CRS310):
-  sfp-sfpplus2  → Core sfp-sfpplus3       (uplink)
+  sfp-sfpplus1  → Upstairs-Core sfp-sfpplus4 (uplink, 10G)
+  ether2        → GL.iNet KVM                (192.168.5.8)
+  ether4        → arch                       (192.168.5.226)
+  ether6        → Brother printer            (192.168.5.6)
+  sfp-sfpplus2  → NOT RUNNING (was old core uplink)
 ```
-
-### Inter-Device Links (confirmed via MNDP)
-
-| Link | From | To |
-|---|---|---|
-| Router ↔ Core | Router `10GsfpLAN` (sfp-sfpplus1) | Core `sfp-sfpplus1` |
-| Router → Core (mgmt) | Router `pi` (ether2) | Core `ether1` |
-| Core ↔ Upstairs | Core `sfp-sfpplus3` | Upstairs `sfp-sfpplus2` |
-| Core ↔ Office | Core `sfp-sfpplus4` | Office `ether8` |
-| Core → NAS | Core `sfp-sfpplus2` | nas 10GbE NIC (.175) |
-
-### Router (RB5009UPr+S+IN)
-
-| Port (renamed) | Default | Speed | Connected to |
-|---|---|---|---|
-| `2GWAN` | ether1 | 1GbE/2.5GbE | Verizon CR1000B (WAN uplink) |
-| `pi` | ether2 | 1GbE | core-switch `ether1` (management) |
-| `ether3` | ether3 | 1GbE | vpin (192.168.5.252) |
-| `ether4` | ether4 | 1GbE | (in use, device TBD) |
-| `ether5` | ether5 | 1GbE | JetKVM (192.168.5.187) |
-| `ether6` | ether6 | 1GbE | Front Driveway camera (192.168.1.66) |
-| `ether7` | ether7 | 1GbE | (in use, device TBD) |
-| `to-wifi` | ether8 | — | DISABLED |
-| `10GsfpLAN` | sfp-sfpplus1 | 10GbE SFP+ | Core switch `sfp-sfpplus1` (10G uplink) |
-
-### Core Switch (CRS305-1G-4S+IN) — S/N HMC0B8ZZ7F2
-
-| Port | Speed | Connected to |
-|---|---|---|
-| `ether1` | 1GbE RJ45 | Router `pi`/ether2 (management) |
-| `sfp-sfpplus1` | 10GbE SFP+ | Router `10GsfpLAN` (10G uplink) |
-| `sfp-sfpplus2` | 10GbE SFP+ | nas 10GbE NIC (192.168.5.175) |
-| `sfp-sfpplus3` | 10GbE SFP+ | Upstairs switch `sfp-sfpplus2` |
-| `sfp-sfpplus4` | 10GbE SFP+ | Office switch `ether8` |
-
-### Office Switch (CRS310-8G+2S+IN) — S/N HKG0AJ14YM5 (formerly Downstairs)
-
-| Port | Speed | Connected to |
-|---|---|---|
-| `ether8` | 2.5GbE | Core switch `sfp-sfpplus4` (uplink) |
-| `ether4` | 2.5GbE | office (.209) or U7 Pro XGS (.171) |
-| `ether1` | 1GbE | (in use, device TBD) |
-
-### Upstairs Switch (CRS310-8G+2S+IN) — S/N HKG0AVERD3V
-
-| Port | Speed | Connected to |
-|---|---|---|
-| `sfp-sfpplus2` | 10GbE SFP+ | Core switch `sfp-sfpplus3` (uplink) |
-| `sfp-sfpplus1` | 10GbE SFP+ | closet 10GbE NIC (192.168.5.36) |
-| `ether1` | 1GbE | Front Gate cam (.64), Front Porch cam (.63), NVR (.67) |
-| `ether2` | 1GbE | GL.iNet KVM (192.168.5.8) — glkvm.ts.2143.me, OpenWrt, Dropbear SSH, nginx |
-| `ether4` | 2.5GbE | arch (192.168.5.226) |
-
-Inbound: Verizon DMZs everything to MikroTik. MikroTik dst-nat rules route specific ports to internal hosts.
-Domains `john2143.com` and `net.2143.me` resolve to the home public IP.
 
 ## Verizon Router (Upstream CR1000B)
 
@@ -282,7 +267,8 @@ port forward (6767 → home-pi).
 | DMZ target | 192.168.0.2 (MikroTik) |
 | WAN IPv4 | DHCP from ISP (108.56.153.x) |
 
-**IPv6** (from Verizon admin panel):
+
+**IPv6** (from Verizon admin panel), changes often:
 - **WAN method**: DHCPv6-PD
 - **Delegated prefix**: `2600:4040:25fa:e400::/56` (expires ~100 min, renews automatically)
 - **Router IPv6 address**: `2600:4040:25fa:e4ff::1/56`
@@ -334,53 +320,6 @@ Baseline (captured 2026-05-29, live-confirmed 2026-05-29):
 
 Router bridges all subnets. Inter-subnet routing is automatic (no NAT between 1.0/24 and 5.0/24).
 
-## Device Inventory — NixOS Hosts
-
-All hosts run NixOS (except mac which is nix-darwin). Managed from `~/dotfiles` via `nh os switch .`.
-
-### Local (Home Network)
-
-| Hostname | IP | Role | Hardware |
-|----------|----|------|----------|
-| **office** | 192.168.5.209 (DHCP) | Primary admin workstation, k3s agent, GPU compute (vLLM) | i9-14900K, 64GB, RX 7900 XT, RTL8125 2.5GbE |
-| **arch** | 192.168.5.226 (DHCP) | GenAI workstation, k3s, GPU compute (ollama/vllm) | i9-9900K, 31GB, GTX 1080 Ti |
-| **closet** | 192.168.5.35 (static, permanent ARP) + .202 (DHCP secondary) | k3s server, Longhorn storage, UniFi controller | Ryzen 5 1600, 7.7GB, 4TB USB SSD |
-| **nas** | 192.168.5.175-176 (DHCP, dual NIC) | ZFS file server, atticd cache, k3s + Longhorn | i7-3770K, 15GB, 4×8TB HDD ZFS RAIDZ1, 10GbE SFP+ |
-| **secu** | 192.168.5.140 (DHCP) | Security camera NVR (FDE) | HP EliteDesk 800 G3, i5-6500T, 7.6GB |
-| **pite** | 192.168.5.213 (DHCP) | k3s agent, canary (honeytoken bait) | Raspberry Pi 4B, 1.8GB, 238GB SD |
-| **vpin** | 192.168.5.252 (DHCP) | Mullvad exit node | Raspberry Pi (3?), 3.7GB, 59.5GB SD |
-| **home-pi** | 192.168.0.154 (DHCP, WAN subnet) | Headscale server, PowerDNS | Raspberry Pi (aarch64) |
-| **aman** | DHCP (Tailscale) | Mullvad exit node, Avahi reflector | Raspberry Pi 4B, 3.7GB, 238GB SD |
-
-### Hetzner Cloud (Tailscale only, `ts.9s.pics`)
-
-| Hostname | Region | Role |
-|----------|--------|------|
-| **k3s-ashburn** | Ashburn, VA | k3s server + PostgreSQL (CNPG) + PowerDNS |
-| **k3s-hillsboro** | Hillsboro, OR | k3s server + PostgreSQL + PowerDNS |
-| **k3s-nuremberg** | Nuremberg, DE | k3s server + PostgreSQL + PowerDNS |
-| **k3s-*-agent** | (same regions) | k3s agents (HA toggle, provisioned on demand) |
-
-### Other
-
-| Hostname | Role | Notes |
-|----------|------|-------|
-| **mac** | Work laptop (nix-darwin) | LLM API keys only, no personal secrets |
-| **security** | Unknown | Age key exists but unreachable — may be retired |
-| **term** | Unknown | No age key, shares security's config — likely never deployed |
-
-### Key Services
-
-| Service | Host | Port/URL |
-|---------|------|----------|
-| k3s API | kube-vip VIP | `192.168.5.10:6443` |
-| Attic Nix cache | nas | `http://nas:8280` |
-| Headscale | home-pi | `headscale.9s.pics:6767` |
-| Home Assistant | (TBD) | `home.ts.2143.me` |
-| ArgoCD | k3s-ashburn | `argocd.ts.2143.me` |
-| RustFS (S3) | (TBD) | `files.john2143.com` |
-| UniFi Controller | k3s (NodePort) | `https://192.168.5.10:30443` |
-
 ## Cameras (Reolink)
 
 Reolink cameras — ONVIF/RTSP, not UniFi. All cameras on dedicated 1.0/24 camera subnet.
@@ -391,42 +330,6 @@ WAN egress blocked for entire 1.0/24 subnet via firewall. secu (192.168.5.140) h
 mikrotik-connect r '/ip dhcp-server lease make-static [find host-name=Side]'
 ```
 
-| Camera | IP | Subnet | Connection | MAC | Hostname |
-|--------|-----|--------|-----------|-----|----------|
-| Back yard | 192.168.1.60 | 1.0/24 | WiFi, static | 78:93:C3:8E:34:9F | (none) |
-| Garage | 192.168.1.61 | 1.0/24 | WiFi, static | EC:71:DB:F4:DC:49 | Garage |
-| Front porch | 192.168.1.63 | 1.0/24 | Wired, static | EC:71:DB:89:D8:8B | Front |
-| Front Gate | 192.168.1.64 | 1.0/24 | Wired, static | EC:71:DB:65:58:A3 | Front |
-| Side yard | 192.168.1.65 | 1.0/24 | WiFi, DHCP resv | 94:B3:F7:18:52:CC | Side |
-| Front Driveway | 192.168.1.66 | 1.0/24 | Wired, DHCP resv | EC:71:DB:3E:2F:21 | Front |
-| Reolink NVR | 192.168.1.67 | 1.0/24 | Wired, DHCP resv | EC:71:DB:8B:92:93 | NVR |
-
-**Note:** Side yard was previously at 192.168.5.169 (5.0/24) and Front Driveway at 192.168.5.174 (5.0/24) — both now migrated to 1.0/24. Back yard camera (.60) is back online (ARP reachable as of 2026-05-23).
-
-## IoT / Smart Home Devices
-
-Discovered via live DHCP (2026-05-23):
-
-| Device | IP | MAC | Notes |
-|--------|-----|-----|-------|
-| AiDot lights (×4) | 192.168.5.164, .166, .167, .168 | D0:CF:13:8C:* | Smart bulbs/lighting |
-| Akamatis presence sensor | 192.168.5.170 | 94:A9:90:6C:70:88 | mmWave presence sensor |
-| Akamatis presence sensor | 192.168.5.165 | 80:F1:B2:52:F0:C8 | mmWave presence sensor |
-| WiZ smart light | 192.168.5.132 | D8:A0:11:79:F1:3C | WiZ Connected (hostname: wiz_79f13c) |
-| JetKVM | 192.168.5.187 | 30:52:53:09:E1:72 | Server KVM over IP (hostname: serverkvm) |
-| K3B-US-PGA0539A | 192.168.5.127 | C8:FF:77:57:E0:3D | Permanent ARP entry at .219 — ARP entry needs cleanup |
-| Linux ARM device | 192.168.5.147 | B0:FC:0D:DE:FB:50 | Linux 3.18.19 on armv7l (dhcpcd) |
-| John Bedroom Lightswitch | 192.168.5.172 | 00:07:A6:40:E7:4B | Identified via UniFi controller (hostname: John Bedroom Lightswitch, on iot-2707 SSID) |
-| GL.iNet KVM (glkvm) | 192.168.5.8 | 94:83:C4:C4:9C:4D | GL.iNet OpenWrt KVM for NVR — Dropbear SSH, nginx web UI. Upstairs switch ether2. |
-
-**Transient devices** (phones/laptops with rotating MACs):
-| Device | Typical IPs | MAC fingerprint |
-|--------|------------|----------------|
-| Peloton | 192.168.5.146 | 54:49:DF:12:BF:49 | Identified via UniFi controller (on main SSID, previously labeled "Android phone") |
-| iPhones (×3) | 192.168.5.128, .135, .136 | Private MACs |
-| Mac laptop | 192.168.5.130 | AE:03:7C:11:A5:00 |
-| Pop!_OS laptop | 192.168.5.221 | D4:D8:53:A7:6A:B1 | System76 laptop (hostname: pop-os) |
-
 ## UniFi (APs + Controller)
 
 ### Access Points
@@ -435,18 +338,6 @@ Discovered via live DHCP (2026-05-23):
 |--------|-----|-------|-----|----------|--------|
 | U7 Pro XGS | 192.168.5.171 (DHCP) | U7 Pro XGS | 90:41:B2:D6:74:DB | Office | 2.5GbE (connected to office switch ether4) |
 | U7 Lite | 192.168.5.173 (DHCP) | U7 Lite | 1C:0B:8B:50:FF:7E | Blue Room | 1GbE via office switch |
-
-**U7 Pro XGS (Office):**
-- WiFi 7 (802.11be) — tri-band (2.4 / 5 / 6 GHz)
-- 10GbE SFP+ uplink (connected to office switch ether4, limited to 1GbE by switch port)
-- Primary high-performance AP
-- Hostname: `U7ProXGSOffice`, DHCP class-id: `ubnt`
-
-**U7 Lite (Blue Room):**
-- WiFi 7 (802.11be) — dual-band (2.4 / 5 GHz)
-- 2.5GbE uplink (limited to 1GbE by office switch port)
-- Compact AP for secondary coverage
-- Hostname: `U7LiteBlueRoom`, DHCP class-id: `ubnt`
 
 APs discover the controller via L2 broadcast (same bridge segment) — no special DNS or routing needed.
 Device communication uses the `unifi-inform` service (LoadBalancer, TCP 8080).
@@ -468,86 +359,19 @@ UniFi controller runs in k3s on closet (namespace: default), managed via ArgoCD:
 
 **Web UI (primary method):**
 ```
-https://192.168.5.35:30443
+https://192.168.5.10:30443
 ```
-Any k3s node IP on port 30443 works — use closet (192.168.5.35) as the canonical target.
+Any k3s node IP on port 30443 works — use closet (192.168.5.10) as the canonical target.
 The certificate is self-signed; accept the browser warning. John has admin credentials.
 
 Health check (no auth required):
 ```
-curl -sk https://192.168.5.35:30443/status
+curl -sk https://192.168.5.10:30443/status
 # {"meta":{"rc":"ok","up":true,"server_version":"10.0.162",...},"data":[]}
 ```
 
 **API (programmatic access):**
 The UniFi REST API lives at `/api/`. The correct login endpoint for this self-hosted (k3s) controller is **`/api/login`** (NOT `/api/auth/login` — that's for UniFi OS consoles). Credentials are stored in agenix at `/run/agenix/unifi-credentials`.
-
-**Python (recommended — handles special characters in passwords):**
-```python
-import urllib.request, ssl, json, http.cookiejar
-
-# Load credentials from agenix
-with open('/run/agenix/unifi-credentials') as f:
-    creds = {}
-    for line in f:
-        if '=' in line:
-            k, v = line.strip().split('=', 1)
-            creds[k] = v.strip('"')
-
-ctx = ssl.create_default_context()
-ctx.check_hostname = False
-ctx.verify_mode = ssl.CERT_NONE
-base = 'https://192.168.5.35:30443'
-
-# Login
-cj = http.cookiejar.CookieJar()
-opener = urllib.request.build_opener(
-    urllib.request.HTTPCookieProcessor(cj),
-    urllib.request.HTTPSHandler(context=ctx)
-)
-data = json.dumps({'username': creds['UNIFI_USERNAME'], 'password': creds['UNIFI_PASSWORD'], 'remember': True}).encode()
-opener.open(urllib.request.Request(f'{base}/api/login', data=data,
-    headers={'Content-Type': 'application/json'}))
-
-# Query APs
-resp = opener.open(urllib.request.Request(f'{base}/api/s/default/stat/device'))
-aps = [d for d in json.loads(resp.read())['data'] if d.get('type') == 'uap']
-for ap in aps:
-    print(f"{ap.get('name')} | {ap.get('model')} | state={ap.get('state')} | clients={ap.get('num_sta',0)} | {ap.get('ip')}")
-
-# Query wireless clients with signal
-resp = opener.open(urllib.request.Request(f'{base}/api/s/default/stat/sta'))
-for c in json.loads(resp.read())['data']:
-    print(f"{c.get('hostname') or c.get('name') or '?'} | {c.get('ip')} | {c.get('signal')} dBm | {c.get('radio_proto')} | ch{c.get('channel')} | {c.get('essid')}")
-```
-
-**curl (for passwords without $ * ^ characters):**
-```bash
-source /run/agenix/unifi-credentials
-curl -sk -c /tmp/unifi-jar -X POST "https://192.168.5.35:30443/api/login" \
-  -H "Content-Type: application/json" \
-  -d "{\"username\":\"$UNIFI_USERNAME\",\"password\":\"$UNIFI_PASSWORD\"}"
-
-# List APs
-curl -sk -b /tmp/unifi-jar "https://192.168.5.35:30443/api/s/default/stat/device" | \
-  jq '[.data[] | select(.type=="uap")] | .[] | {name,model,state,num_sta,ip}'
-
-# List wireless clients with signal
-curl -sk -b /tmp/unifi-jar "https://192.168.5.35:30443/api/s/default/stat/sta" | \
-  jq '.data[] | {hostname,ip,signal,radio_proto,channel,essid}'
-```
-
-Key API endpoints under `/api/s/default/`:
-
-| Endpoint | Description |
-|----------|-------------|
-| `/stat/sta` | Wireless clients: signal (dBm), channel, TX/RX rates, AP MAC, uptime |
-| `/stat/user` | All clients (wired + wireless) with OUI vendor lookup |
-| `/stat/device` | UniFi devices: model, IP, state, uptime, client count |
-| `/stat/health` | Site health summary (WAN, LAN, WiFi metrics) |
-| `/stat/rogueap` | Rogue AP detection |
-| `/rest/wlanconf` | WiFi network (SSID) configuration |
-
 **Via kubectl (k3s pod access):**
 ```
 ssh closet 'kubectl get pods,svc -n default | grep unifi'
@@ -555,15 +379,6 @@ ssh closet 'kubectl logs deploy/unifi -n default --tail=100'
 ssh closet 'kubectl exec deploy/unifi -n default -- <command>'
 ```
 
-### Viewing Wireless Clients
-
-Three approaches, from quickest to most detailed:
-
-1. **API (fastest for scripting):** Use `/stat/sta` as shown above. Returns per-client IP, MAC, hostname, connected AP, channel, RSSI (dBm), TX/RX rates, and uptime. Pipe through `jq` for filtering.
-
-2. **Web UI (for visual inspection):** Log into `https://192.168.5.35:30443` → Clients tab → filter by "WiFi". Shows signal strength bars, channel, data rates, and connection history.
-
-3. **Pod logs (for troubleshooting):** `ssh closet 'kubectl logs deploy/unifi -n default --tail=200'` shows device association events, disconnections, and errors.
 
 ## Live Network State
 
@@ -602,6 +417,7 @@ mikrotik-connect r '/ip firewall nat print'
 mikrotik-connect c '/interface print terse where running'
 mikrotik-connect u '/interface print terse where running'
 mikrotik-connect o '/interface print terse where running'
+mikrotik-connect uc '/interface print terse where running'
 ```
 
 ### Full Config Dump
@@ -610,28 +426,9 @@ mikrotik-connect r /export
 ```
 
 ## IPv6 (NAT66 + ULA — Working 2026-05-29)
+NAT66 with ULA (`fd00:1::/64`) masquerades LAN IPv6 through 2GWAN. Fix applied 2026-05-27.
 
-### The Problem
-
-The MikroTik has **stale static IPv6 addresses** that don't match the prefix the ISP
-delegates:
-
-| Source | Prefix | Status |
-|--------|--------|--------|
-| ISP delegates | `2600:4040:25fa:e400::/56` | Real |
-| Verizon CR1000B LAN | `2600:4040:25fa:e400::/64` (SLAAC on 192.168.0.0/24) | Real |
-| **MikroTik WAN (2GWAN)** | **`2600:4040:2602:f800::2/64`** | **Stale — doesn't exist** |
-| **MikroTik LAN (bridge)** | **`2600:4040:2602:f801::1/64`** | **Stale — doesn't exist** |
-| **Default route** | **`2600:4040:2602:f800::1`** | **Stale — unreachable** |
-
-The Verizon router hands out `2600:4040:25fa:e400::/64` via SLAAC on its own LAN
-(192.168.0.0/24). The MikroTik has statically configured `2600:4040:2602::/48`
-addresses — a completely different range the ISP never delegated. The Verizon's
-upstream gateway (`fe80::a81:f4ff:fee0:4964`) returns "Destination unreachable"
-for any outbound IPv6 packet because the source prefix is unknown.
-
-### Quick Check
-
+**Quick check:**
 ```bash
 # MikroTik side: what addresses are configured?
 mikrotik-connect r '/ipv6 address print terse'
@@ -641,61 +438,9 @@ mikrotik-connect r '/ipv6 dhcp-client print'
 
 # Traceroute from a LAN host (e.g. arch) to see where IPv6 dies
 ping -6 -c 2 google.com
-# Expected: "From 2600:4040:2602:f800::2 Destination unreachable" — the
-# MikroTik's WAN address is the one returning the error
 ```
-
-### The Fix (Applied 2026-05-27)
-
-**Root cause**: Two problems:
-1. `accept-router-advertisements=yes-if-forwarding-disabled` combined with `forward=yes`
-   meant the MikroTik ignored SLAAC on its WAN interface — it never picked up the real
-   prefix from the Verizon router.
-2. The Verizon CR1000B does not respond to DHCPv6-PD requests from downstream routers
-   (it uses DHCPv6-PD to get its own prefix from the ISP, but does not delegate sub-
-   prefixes). So a prefix delegation approach won't work.
-
-**Solution** — NAT66 with ULA on the LAN:
-
-The Verizon router sends RAs with a default route and link-local gateway, but without
-Prefix Information Options (no PIO). The MikroTik receives the default route via SLAAC
-but doesn't get a global address automatically. The fix:
-
-```
-# 1. Remove stale static addresses and routes (2600:4040:2602::/48)
-/ipv6 address remove [find address~"2600:4040:2602"]
-/ipv6 route remove [find dst-address="::/0"]
-
-# 2. Accept RAs from the Verizon router on the WAN interface
-/ipv6 settings set accept-router-advertisements=yes
-
-# 3. Assign a global address on 2GWAN from the Verizon's SLAAC prefix
-#    Use EUI-64 to avoid conflicts (MAC-based address)
-/ipv6 address add address=2600:4040:25fa:e400:06f4:1cff:fee3:7127/64 \
-    interface=2GWAN advertise=no
-
-# 4. Assign a ULA prefix on the bridge for LAN hosts
-/ipv6 address add address=fd00:1::1/64 interface=bridge advertise=yes
-
-# 5. NAT66: masquerade all LAN IPv6 traffic out through 2GWAN
-/ipv6 firewall nat add chain=srcnat action=masquerade out-interface=2GWAN
-```
-
-**How it works**:
-- 2GWAN gets a global IPv6 address in the Verizon's `2600:4040:25fa:e400::/64` range
-- The Verizon sends a default route via RA (`fe80::7690:bcff:fe79:aa4`), which the
-  MikroTik installs as a dynamic SLAAC default route
-- LAN hosts get ULA addresses (`fd00:1::/64`) via SLAAC from the MikroTik
-- NAT66 masquerade translates ULA traffic to the global WAN address on 2GWAN
-- Result: LAN hosts get working IPv6 (~5-8ms) without Verizon cooperation
-
-**Important**: The global address on 2GWAN is static-manual. If the Verizon's delegated
-prefix changes (ISP reassigns), this address must be updated. Check with:
-```
-mikrotik-connect r '/ipv6 address print'
-    # 2GWAN should have an address in 2600:4040:25fa:e400::/64
-    # bridge should have fd00:1::1/64
-```
+2GWAN should have an address in 2600:4040:25fa:e400::/64
+bridge should have fd00:1::1/64
 
 ## Source NAT Rules
 
@@ -737,61 +482,21 @@ Query live: `ssh closet 'kubectl get nodes,pods,svc -A'`
 | LAN DNS | MikroTik (static only) | router.lan → 192.168.5.1 |
 | mDNS/Avahi | aman (reflector) | .local across subnets |
 
-## Summary Metrics
-
-| Metric | Count |
-|--------|-------|
-| NixOS hosts | 9 (8 local + 1 WAN-side home-pi) |
-| k3s nodes | 5 (3 control-plane, 2 agents, all Ready) |
-| Cameras online | 7 of 7 |
-| IoT/smart devices | 11 |
-| Switch ports active | 7 router, 5 core, 8 upstairs, 4 office |
-| External services | 9 |
-
 ## Notable Observations
 
-1. **closet dual IP (.35 + .202):** Static primary + DHCP secondary on same interface. Static .35 is the k3s node IP with permanent ARP. DHCP .202 is a dhcpcd/NetworkManager artifact — harmless.
+1. **home-pi on WAN subnet:** Connected directly to Verizon router (192.168.0.154), not behind MikroTik NAT. Headscale traffic bypasses the MikroTik entirely. home-pi cannot reach LAN devices unless via Tailscale routes.
 
-2. **MikroTik dual WAN IP (.2 + .152):** Static .2 is Verizon DMZ target. DHCP .152 is secondary — may be legacy.
+2. **kube-vip VIP 192.168.5.10:** Floating IP for k3s API. Any control-plane node can hold it via ARP. Most dst-nat rules now target the VIP instead of closet directly, providing HA for inbound services.
 
-3. **home-pi on WAN subnet:** Connected directly to Verizon router (192.168.0.154), not behind MikroTik NAT. Headscale traffic bypasses the MikroTik entirely. home-pi cannot reach LAN devices unless via Tailscale routes.
+3. **ULA IPv6 (fd00:1::/64):** Site-local IPv6 on MikroTik bridge. All 3 k3s servers have static ULA addresses (.35, .226, .175) for stable dual-stack node-ip. Survives ISP prefix delegation changes.
 
-4. **kube-vip VIP 192.168.5.10:** Floating IP for k3s API. Any control-plane node can hold it via ARP. Most dst-nat rules now target the VIP instead of closet directly, providing HA for inbound services.
+4. **k3s pod network uses flannel VXLAN:** 10.42.0.0/24 + fd42:42:42::/56 dual-stack overlay.
 
-5. **ULA IPv6 (fd00:1::/64):** Site-local IPv6 on MikroTik bridge. All 3 k3s servers have static ULA addresses (.35, .226, .175) for stable dual-stack node-ip. Survives ISP prefix delegation changes.
-
-6. **Hairpin NAT removed:** Dynamic public IP makes it impractical. Access services via internal IPs from LAN.
-
-7. **No MikroTik dst-nat for 6767:** Headscale forward is solely on the Verizon router.
-
-8. **k3s pod network uses flannel VXLAN:** 10.42.0.0/24 + fd42:42:42::/56 dual-stack overlay.
-9. **New CRS305 core switch (2026-06-10):** The CRS305-1G-4S+ (192.168.5.4, "core-switch") now serves as the central 10G backbone. Router `10GsfpLAN` ↔ Core `sfp-sfpplus1` (10G uplink). NAS, upstairs switch, and office switch all connect through the core. The old downstairs switch (CRS310-8G+2S+) was repurposed as the "office-switch" (192.168.5.2). Router `pi` port now connects to Core `ether1` for management.
 ## Config Backup & Restore
 Full config exports are saved in the dotfiles repo (`~/dotfiles/network-configs/`) for
 disaster recovery. These are RouterOS script files (`.rsc`) — plain text, one command
 per line. When asked about "the last known-good config" or "what changed", check
 `network-configs/mikrotik-export-*.rsc` for the most recent backup.
-
-### Format
-
-The `.rsc` format is RouterOS's native export format. Every line is a valid RouterOS
-command that could be typed at the CLI. Example excerpt:
-
-```rsc
-# may/27/2026 00:06:06 by RouterOS 7.19.6
-# software id = ...
-#
-/interface bridge
-add name=bridge
-/interface vlan
-add interface=bridge name=vlan10 vlan-id=10
-/ip address
-add address=192.168.5.1/24 interface=bridge network=192.168.5.0
-```
-
-The first two lines are comments (date, version, software ID). Everything after is
-executable. **Do not hand-edit** the export for restore — the full dump is atomic and
-RouterOS expects to replay it in order.
 
 ### Creating a Backup
 
@@ -801,6 +506,7 @@ ssh -i /run/user/$(id -u)/mikrotik-key admin@192.168.1.1 '/export' > network-con
 ssh -i /run/user/$(id -u)/mikrotik-key admin@192.168.5.4 '/export' > network-configs/core.rsc
 ssh -i /run/user/$(id -u)/mikrotik-key admin@192.168.5.3 '/export' > network-configs/upstairs.rsc
 ssh -i /run/user/$(id -u)/mikrotik-key admin@192.168.5.2 '/export' > network-configs/office.rsc
+ssh -i /run/user/$(id -u)/mikrotik-key admin@192.168.5.5 '/export' > network-configs/upstairs-core.rsc
 ```
 
 The `mikrotik-connect` wrapper's SSH key is auto-materialized from agenix to
