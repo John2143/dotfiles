@@ -190,7 +190,7 @@ The `INTERFACE` column shows the port the packet egressed through, not necessari
 the port the device is directly connected to. The only definitive method is physical
 inspection.
 
-Example: U7Lite is physically on **office switch ether6**, but MNDP on the router
+Example: U7Lite is physically on **router ether6** (directly connected), not on the office switch.
 shows it on **router ether6** because the router's bridge forwarded the discovery
 packet out that port.
 
@@ -232,25 +232,27 @@ Core Switch (CRS305):
   sfp-sfpplus3  → Office 10GsfpLAN          (MAC ???, 10G)
   sfp-sfpplus4  → Router 10GsfpLAN          (MAC 04:F4:1C:E3:71:2F, 10G uplink)
 
-Upstairs-Core Switch (CRS305) — NEW:
-  ether1        → poe power connected to reolink NVR for mgmt (carrier present, peer unknown)
-  sfp-sfpplus2  → Core sfp-sfpplus2         (10G backhaul)
-  sfp-sfpplus4  → Upstairs sfp-sfpplus1     (MAC 04:F4:1C:E6:7C:15, 10G)
-  sfp-sfpplus1  → ??? (carrier present, peer unknown)
-  sfp-sfpplus3  → ??? (carrier present, peer unknown)
+Upstairs-Core Switch (CRS305):
+  ether1        → ??? (PoE available, carrier present)
+  sfp-sfpplus1  → closet 10G NIC                 (192.168.5.36)
+  sfp-sfpplus2  → Core sfp-sfpplus2               (10G backhaul)
+  sfp-sfpplus3  → arch I226 2.5G NIC              (192.168.5.76)
+  sfp-sfpplus4  → Upstairs sfp-sfpplus1           (10G uplink)
 
 Office Switch (CRS310):
-  ether8        → Core sfp-sfpplus3         (uplink)
-  ether4        → U7ProXGSOffice            (192.168.5.171)
+  sfp-sfpplus2  → Core sfp-sfpplus3               (10G uplink)
+  sfp-sfpplus1  → U7ProXGSOffice                  (10GbE, 192.168.5.171)
+  ether1        → pite                            (192.168.5.213)
 
 
 Upstairs Switch (CRS310):
-  sfp-sfpplus1  → Upstairs-Core sfp-sfpplus4 (uplink, 10G)
-  ether2        → GL.iNet KVM                (192.168.5.8)
-  ether4        → arch                       (192.168.5.226)
-  ether6        → Brother printer            (192.168.5.6)
+  sfp-sfpplus1  → Upstairs-Core sfp-sfpplus4       (uplink, 10G)
+  ether1        → Reolink NVR                      (192.168.1.67, PoE)
+  ether2        → GL.iNet KVM                      (192.168.5.8)
+  ether6        → Brother printer                  (192.168.5.6)
   sfp-sfpplus2  → NOT RUNNING (was old core uplink)
-```
+
+
 
 ## Verizon Router (Upstream CR1000B)
 
@@ -306,7 +308,10 @@ Baseline (captured 2026-05-29, live-confirmed 2026-05-29):
 | 11753 | TCP | **VIP (.10):31753** | openrct2-game:31753 | 31753 | OpenRCT2 |
 | 6767 | Both | Verizon→home-pi:6767 | home-pi Headscale | (direct) | Headscale control |
 | 30478 | UDP | **VIP (.10):30478** | headscale-stun:30478 | 30478 | Headscale STUN/DERP |
-| 18080 | TCP | arch (.226):18080 | Monero P2P (bare-metal) | — | Monero |
+| 18080 | TCP | arch (.76):18080 | Monero P2P (bare-metal) | — | Monero |
+| 25 | TCP | **VIP (.10):25** | stalwart-mail:25 (k8s) | — | SMTP (Stalwart) |
+| 587 | TCP | **VIP (.10):587** | stalwart-mail:587 (k8s) | — | Submission (Stalwart) |
+| 993 | TCP | **VIP (.10):993** | stalwart-mail:993 (k8s) | — | IMAPS (Stalwart) |
 
 **Note:** The Headscale port 6767 forward lives on the Verizon router (192.168.0.1), not the MikroTik. home-pi (192.168.0.154) sits on the WAN subnet (192.168.0.0/24) directly behind the Verizon router. The MikroTik has a secondary DHCP WAN IP at 192.168.0.152 (not to be confused with home-pi).
 ## Subnet Layout
@@ -336,8 +341,8 @@ mikrotik-connect r '/ip dhcp-server lease make-static [find host-name=Side]'
 
 | Device | IP | Model | MAC | Location | Uplink |
 |--------|-----|-------|-----|----------|--------|
-| U7 Pro XGS | 192.168.5.171 (DHCP) | U7 Pro XGS | 90:41:B2:D6:74:DB | Office | 2.5GbE (connected to office switch ether4) |
-| U7 Lite | 192.168.5.173 (DHCP) | U7 Lite | 1C:0B:8B:50:FF:7E | Blue Room | 1GbE via office switch |
+| U7 Pro XGS | 192.168.5.171 (DHCP) | U7 Pro XGS | 90:41:B2:D6:74:DB | Office | 10GbE (connected to office switch sfp-sfpplus1) |
+| U7 Lite | 192.168.5.173 (DHCP) | U7 Lite | 1C:0B:8B:50:FF:7E | Blue Room | 1GbE (connected to router ether6) |
 
 APs discover the controller via L2 broadcast (same bridge segment) — no special DNS or routing needed.
 Device communication uses the `unifi-inform` service (LoadBalancer, TCP 8080).
@@ -488,7 +493,7 @@ Query live: `ssh closet 'kubectl get nodes,pods,svc -A'`
 
 2. **kube-vip VIP 192.168.5.10:** Floating IP for k3s API. Any control-plane node can hold it via ARP. Most dst-nat rules now target the VIP instead of closet directly, providing HA for inbound services.
 
-3. **ULA IPv6 (fd00:1::/64):** Site-local IPv6 on MikroTik bridge. All 3 k3s servers have static ULA addresses (.35, .226, .175) for stable dual-stack node-ip. Survives ISP prefix delegation changes.
+3. **ULA IPv6 (fd00:1::/64):** Site-local IPv6 on MikroTik bridge. All 3 k3s servers have static ULA addresses (.35, .76, .175) for stable dual-stack node-ip. Survives ISP prefix delegation changes.
 
 4. **k3s pod network uses flannel VXLAN:** 10.42.0.0/24 + fd42:42:42::/56 dual-stack overlay.
 
@@ -501,12 +506,20 @@ per line. When asked about "the last known-good config" or "what changed", check
 ### Creating a Backup
 
 ```bash
-# Capture live configs directly to the git-tracked files:
+
+# Compact export (non-default settings only, human-readable):
 ssh -i /run/user/$(id -u)/mikrotik-key admin@192.168.1.1 '/export' > network-configs/router.rsc
 ssh -i /run/user/$(id -u)/mikrotik-key admin@192.168.5.4 '/export' > network-configs/core.rsc
 ssh -i /run/user/$(id -u)/mikrotik-key admin@192.168.5.3 '/export' > network-configs/upstairs.rsc
 ssh -i /run/user/$(id -u)/mikrotik-key admin@192.168.5.2 '/export' > network-configs/office.rsc
 ssh -i /run/user/$(id -u)/mikrotik-key admin@192.168.5.5 '/export' > network-configs/upstairs-core.rsc
+
+# Verbose export (all settings including protocol-mode, bridges, defaults):
+ssh -i /run/user/$(id -u)/mikrotik-key admin@192.168.1.1 '/export verbose' > network-configs/router.verbose.rsc
+ssh -i /run/user/$(id -u)/mikrotik-key admin@192.168.5.4 '/export verbose' > network-configs/core.verbose.rsc
+ssh -i /run/user/$(id -u)/mikrotik-key admin@192.168.5.3 '/export verbose' > network-configs/upstairs.verbose.rsc
+ssh -i /run/user/$(id -u)/mikrotik-key admin@192.168.5.2 '/export verbose' > network-configs/office.verbose.rsc
+ssh -i /run/user/$(id -u)/mikrotik-key admin@192.168.5.5 '/export verbose' > network-configs/upstairs-core.verbose.rsc
 ```
 
 The `mikrotik-connect` wrapper's SSH key is auto-materialized from agenix to

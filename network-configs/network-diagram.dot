@@ -31,8 +31,9 @@ digraph G {
     cam_driveway [shape=box, label="Front Driveway cam\n192.168.1.66", fillcolor="#ffcdd2", style=filled]
 
     router -> vpin         [label=" eth3 1G"]
-    router -> jetkvm       [label=" eth5 1G"]
-    router -> cam_driveway [label=" eth6 1G"]
+    router -> jetkvm       [label=" ether4 1G"]
+    router -> cam_driveway [label=" ether7 1G"]
+    router -> u7lite   [label=" ether6 1G"]
 
     // ── Switches ──
     upstairs_core [shape=box, label="UPSTAIRS-CORE\nCRS305-1G-4S+\n192.168.5.5", fillcolor="#fff9c4", style=filled, width=2.0]
@@ -42,6 +43,8 @@ digraph G {
     core -> upstairs_core [label=" sfp-sfpplus2→2 10G SFP+"]
     upstairs_core -> upstairs [label=" sfp-sfpplus4→sfp-sfpplus1 10G SFP+"]
 
+    upstairs_core -> closet [label=" sfp-sfpplus1 10G SFP+"]
+    upstairs_core -> arch   [label=" sfp-sfpplus3 10G SFP+"]
 
     // ── NAS (direct on core) ──
     nas [shape=box, label="nas\nZFS / k3s / Attic\n192.168.5.175 (10G)\n.176 (1G)", fillcolor="#c8e6c9", style=filled]
@@ -49,18 +52,20 @@ digraph G {
     core -> nas [label=" sfp-sfpplus1 10G SFP+"]
 
     // ── Core → Office ──
-    core -> office [label=" sfp-sfpplus3→ether8 10G→2.5G"]
+    core -> office [label=" sfp-sfpplus3→sfp-sfpplus2 10G SFP+"]
 
     // ── Upstairs wired devices ──
-    closet  [shape=box, label="closet\nk3s / Unifi / Postgres\n192.168.5.35", fillcolor="#c8e6c9", style=filled]
-    arch    [shape=box, label="arch\nk3s / GPU compute\n192.168.5.226\n(I211 1G NIC)", fillcolor="#c8e6c9", style=filled]
+    closet  [shape=box, label="closet\nk3s / Unifi / Postgres\n192.168.5.35 (1G)\n.36 (10G)", fillcolor="#c8e6c9", style=filled]
+    arch    [shape=box, label="arch\nk3s / GPU compute\n192.168.5.76\n(I226 2.5G NIC)", fillcolor="#c8e6c9", style=filled]
     glkvm   [shape=box, label="GL-KVM\nOpenWrt\n192.168.5.8", fillcolor="#e1bee7", style=filled]
     brother [shape=box, label="Brother printer\n192.168.5.6", fillcolor="#e1bee7", style=filled]
 
-    upstairs -> closet  [label=" ??? (was sfp-sfpplus1, re-route pending)"]
-    upstairs -> arch    [label=" ether4 2.5G"]
+
+
+
     upstairs -> glkvm   [label=" ether2 1G"]
     upstairs -> brother [label=" ether6 100M HD"]
+
 
     // ── NVR + wired cameras (NVR acts as PoE switch) ──
     nvr       [shape=box, label="Reolink NVR\n(PoE switch)\n192.168.1.67", fillcolor="#ffcdd2", style=filled]
@@ -68,7 +73,7 @@ digraph G {
     cam_porch [shape=box, label="Front Porch cam\n192.168.1.63", fillcolor="#ffcdd2", style=filled]
     secu      [shape=box, label="secu\nCamera NVR (SW)\n192.168.5.140\n(via WiFi to U7Lite)", fillcolor="#c8e6c9", style=filled]
 
-    upstairs -> nvr      [label=" ether1 1G"]
+    upstairs -> nvr      [label=" ether1 1G (PoE)"]
     nvr      -> cam_gate  [label=" PoE 100M"]
     nvr      -> cam_porch [label=" PoE 100M"]
 
@@ -76,8 +81,8 @@ digraph G {
     u7proxgs [shape=box, label="U7 Pro XGS\nWiFi 7 tri-band AP\nOffice\n192.168.5.171", fillcolor="#d7ccc8", style=filled]
     u7lite   [shape=box, label="U7 Lite\nWiFi 7 AP (Blue Room)\n192.168.5.173", fillcolor="#d7ccc8", style=filled]
 
-    office -> u7proxgs [label=" ether4 2.5G"]
-    office -> u7lite   [label=" 1G"]
+    office -> u7proxgs [label=" sfp-sfpplus1 10G SFP+"]
+
 
     // ── WiFi clients ──
     officepc   [shape=box, label="office\nk3s agent / GPU\n192.168.5.209\n(via WiFi)", fillcolor="#c8e6c9", style=filled]

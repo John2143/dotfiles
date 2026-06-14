@@ -1,7 +1,4 @@
-** WARNING: connection is not using a post-quantum key exchange algorithm.
-** This session may be vulnerable to "store now, decrypt later" attacks.
-** The server may need to be upgraded. See https://openssh.com/pq.html
-# 2026-06-10 16:06:16 by RouterOS 7.19.6
+# 2026-06-14 05:25:06 by RouterOS 7.19.6
 # software id = 7RHC-3MMG
 #
 # model = RB5009UPr+S+
@@ -81,6 +78,7 @@ add address=192.168.1.64 comment="Front Gate" mac-address=EC:71:DB:65:58:A3 \
 add address=192.168.5.127 mac-address=C8:FF:77:57:E0:3D server=dchp1
 add address=192.168.5.36 comment="closet 10GbE NIC" mac-address=\
     0C:C4:7A:BD:63:3D server=dchp1
+add address=192.168.5.76 comment=arch mac-address=98:B7:85:23:48:90
 /ip dhcp-server network
 add address=192.168.1.0/24 dns-server=192.168.5.1 gateway=192.168.1.1
 add address=192.168.5.0/24 dns-server=192.168.5.1 gateway=192.168.5.1 \
@@ -121,7 +119,7 @@ add action=drop chain=forward comment="block camera subnet WAN egress" \
     dst-address=!192.168.0.0/16 src-address=192.168.1.0/24
 /ip firewall nat
 add action=dst-nat chain=dstnat comment="Monero P2P node (arch)" dst-port=\
-    18080 in-interface-list=all protocol=tcp to-addresses=192.168.5.226 \
+    18080 in-interface-list=all protocol=tcp to-addresses=192.168.5.76 \
     to-ports=18080
 add action=dst-nat chain=dstnat dst-port=9987 in-interface-list=WAN protocol=\
     udp to-addresses=192.168.5.10 to-ports=30087
