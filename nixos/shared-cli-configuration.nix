@@ -58,7 +58,7 @@
       aha
       inputs.agenix.packages.${pkgs.stdenv.hostPlatform.system}.default
     ]
-    ++ lib.optionals (builtins.elem config.networking.hostName ["office" "arch" "pite"]) [
+    ++ lib.optionals (builtins.elem config.networking.hostName ["office" "arch"]) [
       # uv on PATH so my_claw (in fish-functions.nix) can `uvx litellm`
       # without needing a writeShellScriptBin nix-store substitution.
       pkgs.uv
@@ -280,7 +280,7 @@
   # to point at the bait .age file at the same /run/agenix/llm-runtime-keys path.
   age.secrets.llm-runtime-keys =
     lib.mkIf
-    (builtins.elem config.networking.hostName ["office" "arch" "pite"])
+    (builtins.elem config.networking.hostName ["office" "arch"])
     {
       file = ../secrets/llm-runtime-keys.age;
       mode = "0400";

@@ -220,6 +220,7 @@
 
           ./nixos/modules/attic.nix
           ./nixos/modules/remote-builders.nix
+          ./nixos/pite-canary.nix
         ];
       })
       // (mkHost {
