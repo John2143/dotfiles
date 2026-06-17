@@ -33,12 +33,20 @@
       "--node-label=node.longhorn.io/create-default-disk=true"
     ];
   };
-  # Fast shutdown — systemd waits at most 10s for any service before SIGKILL
-  systemd.settings.Manager.DefaultTimeoutStopSec = "10s";
+  # Balanced shutdown — systemd waits up to 30s for services before SIGKILL
+  # (10s was too tight for iscsid to cleanly logout iSCSI sessions on reboot)
+  systemd.settings.Manager.DefaultTimeoutStopSec = "30s";
   # k3s uses Type=notify but sometimes the startup takes too long and
   # systemd kills it with "Failed with result 'protocol'". Override to simple.
   systemd.services.k3s.serviceConfig.Type = lib.mkForce "simple";
-  systemd.services.k3s.serviceConfig.TimeoutStopSec = lib.mkForce "10s";
+  systemd.services.k3s.serviceConfig.TimeoutStopSec = lib.mkForce "120s";
+  # Graceful k3s shutdown — tells kubelet to drain pods before systemd
+  # sends SIGKILL when the node shuts down.
+  services.k3s.gracefulNodeShutdown = {
+    enable = true;
+    shutdownGracePeriod = "90s";
+    shutdownGracePeriodCriticalPods = "15s";
+  };
 
 
   # ── DDoS kernel hardening ──

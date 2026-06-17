@@ -387,7 +387,8 @@
     trustedInterfaces = ["tailscale0"];
   };
 
-  # Fast shutdown — systemd waits at most 10s for any service before SIGKILL
-  systemd.settings.Manager.DefaultTimeoutStopSec = "10s";
+  # Balanced shutdown — systemd waits up to 30s for services before SIGKILL
+  # (10s was too tight for iscsid to cleanly logout iSCSI sessions on reboot)
+  systemd.settings.Manager.DefaultTimeoutStopSec = "30s";
 
 }

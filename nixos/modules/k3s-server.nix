@@ -62,8 +62,15 @@
       wants = [ "avahi-daemon.service" ];
       environment.K3S_RESOLV_CONF = "/etc/rancher/k3s/resolv.conf";
       serviceConfig = {
-        TimeoutStopSec = lib.mkForce "10s";
+        TimeoutStopSec = lib.mkForce "120s";
       };
+    };
+    # Graceful k3s shutdown — tells kubelet to drain pods before systemd
+    # sends SIGKILL. 90s for normal pods, 15s for critical (DNS, CNI).
+    services.k3s.gracefulNodeShutdown = {
+      enable = true;
+      shutdownGracePeriod = "90s";
+      shutdownGracePeriodCriticalPods = "15s";
     };
 
     networking.firewall.allowedTCPPorts = [
