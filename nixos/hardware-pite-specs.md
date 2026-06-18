@@ -1,6 +1,6 @@
 # Hardware Specs: pite
 
-**Generated:** 2026-05-24T02:16:59Z
+**Generated:** 2026-06-12T21:00:00Z (SD swap — pite's SD now in the UPS-protected Pi chassis)
 
 ## System Overview
 
@@ -8,7 +8,7 @@
 |---|---|
 | Hostname | pite |
 | OS | NixOS 26.05 (Yarara) |
-| Kernel | 6.18.22 aarch64 |
+| Kernel | 6.18.32 aarch64 |
 | Motherboard |   () |
 | Chassis | Desktop |
 | BIOS |   () |
@@ -33,8 +33,8 @@
 
 | Type | Size |
 |---|---|
-| RAM | 1.8Gi |
-| Swap | 8.0Gi |
+| RAM | 3.7Gi |
+| Swap | 6.0Gi |
 
 _No DIMM details available (requires root/dmidecode on x86)_
 
@@ -78,5 +78,6 @@ mmc-SN256_0x71e4d1d0-part2
 
 - K3s agent node
 - Tailscale connected
+- **On UPS** (SD swapped into the UPS-protected Pi chassis 2026-06-12)
+- **Primary monitoring canary** (Prometheus agent mode + Alertmanager + Blackbox)
 - No DMI data available (ARM platform)
-
