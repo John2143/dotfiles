@@ -192,6 +192,7 @@
     2380 # etcd peer (k3s join)
     5432 # Postgres
     5580 # matter-server (hostNetwork pod)
+    179 # BGP for kube-vip
   ];
   networking.firewall.allowedUDPPorts = [
     8472 # flannel VXLAN (k3s)

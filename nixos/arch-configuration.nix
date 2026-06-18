@@ -344,6 +344,7 @@ in
     10250 # kubelet (k3s agent)
     18080 # monero p2p (monerod)
     5580 # matter-server (hostNetwork pod)
+    179 # BGP for kube-vip
   ];
   networking.firewall.allowedUDPPorts = [
     8472 # flannel VXLAN (k3s)
