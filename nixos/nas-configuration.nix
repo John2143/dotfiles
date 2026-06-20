@@ -552,6 +552,7 @@
       179 # BGP for kube-vip
       8280 # attic nix cache — nas-configuration.nix:557
       10250 # kubelet (k3s agent)
+      9100 # node_exporter (Prometheus metrics)
 
       20048 # rpc.mountd (NFS)
     ];
