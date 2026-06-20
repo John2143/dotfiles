@@ -35,7 +35,6 @@
 #      sudo zfs create -o mountpoint=/tank/scratch  tank/scratch
 #      sudo zfs create -o mountpoint=/tank/private  tank/private
 #      sudo zfs create -o mountpoint=/tank/atticd   tank/atticd
-
 #    Attic Nix cache — chunk-level dedup binary cache shared across all
 #    machines. Store paths land on the raidz1 HDDs with lz4 compression:
 #      sudo zfs create -o mountpoint=/tank/atticd \
@@ -115,12 +114,10 @@
     ./nas-hardware-configuration.nix
     ./modules/user-john.nix
     ./modules/disko_nas.nix
-
   ];
   fileSystems."/".neededForBoot = lib.mkForce true;
   home-manager.users."john" = import ./home-cli.nix;
   services.getty.autologinUser = "john";
-
 
   boot.loader = {
     systemd-boot.enable = true;
@@ -130,7 +127,6 @@
     "kernel.hardlockup_panic" = "1";
     "kernel.softlockup_panic" = "1";
   };
-
 
   virtualisation.podman = {
     enable = true;
@@ -273,8 +269,6 @@
     "--node-label=node.longhorn.io/create-default-disk=true"
   ];
 
-
-
   # ================
   # === NFS      ===
   # ================
@@ -298,6 +292,11 @@
     enable = true;
     exports = ''
       /tank/longhorn-backups 100.64.0.0/10(rw,sync,no_subtree_check,no_root_squash,fsid=0) 192.168.5.0/24(rw,sync,no_subtree_check,no_root_squash,fsid=0) 10.42.0.0/16(rw,sync,no_subtree_check,no_root_squash,fsid=0)
+      # ── Observability archive ──────────────────────────────────
+      # One-time: sudo zfs create -o mountpoint=/tank/logs -o recordsize=1M \
+      #             -o compression=lz4 -o atime=off tank/logs
+      #           sudo chown nobody:nogroup /tank/logs
+      /tank/logs               100.64.0.0/10(rw,async,no_subtree_check,no_root_squash,fsid=3) 192.168.5.0/24(rw,async,no_subtree_check,no_root_squash,fsid=3)
       /tank/frigate           100.64.0.0/10(rw,sync,no_subtree_check,no_root_squash,all_squash,anonuid=1000,anongid=1000,fsid=1) 192.168.5.0/24(rw,sync,no_subtree_check,no_root_squash,all_squash,anonuid=1000,anongid=1000,fsid=1) 10.42.0.0/16(rw,sync,no_subtree_check,no_root_squash,all_squash,anonuid=1000,anongid=1000,fsid=1)
     '';
   };
@@ -486,8 +485,8 @@
   # Token generation remains imperative: atticd-atticadm make-token
   systemd.services.attic-cache-bootstrap = {
     description = "Ensure Attic cache 2143nix exists and is configured";
-    after = [ "atticd.service" ];
-    requires = [ "atticd.service" ];
+    after = ["atticd.service"];
+    requires = ["atticd.service"];
     serviceConfig.Type = "oneshot";
     serviceConfig.RemainAfterExit = true;
     script = ''
@@ -515,7 +514,6 @@
     };
   };
 
-
   age.secrets.attic-jwt-secret = {
     file = ../secrets/attic-jwt-secret.age;
     mode = "0400";
@@ -538,7 +536,7 @@
   systemd.services.atticd.serviceConfig = {
     DynamicUser = lib.mkForce false;
     PrivateUsers = lib.mkForce false;
-    ReadWritePaths = [ "/tank/atticd" ];
+    ReadWritePaths = ["/tank/atticd"];
   };
 
   security.rtkit.enable = true;
@@ -546,24 +544,24 @@
   networking.firewall = {
     enable = true;
     allowedTCPPorts = [
-
-
       111 # rpcbind (NFS)
       2049 # nfsv4 (NFS) — Longhorn backup target
       2283 # immich (immich-server)
       25565 # minecraft (paperMC)
       5580 # matter-server (hostNetwork pod)
-    179 # BGP for kube-vip
+      179 # BGP for kube-vip
       8280 # attic nix cache — nas-configuration.nix:557
       10250 # kubelet (k3s agent)
 
       20048 # rpc.mountd (NFS)
     ];
     allowedTCPPortRanges = [
-      { from = 30000; to = 32767; } # Kubernetes NodePort range
+      {
+        from = 30000;
+        to = 32767;
+      } # Kubernetes NodePort range
     ];
     allowedUDPPorts = [
-
       111 # rpcbind (NFS)
       20048 # rpc.mountd (NFS)
       8472 # flannel VXLAN
@@ -586,5 +584,3 @@
 
   system.stateVersion = "26.05";
 }
-
-

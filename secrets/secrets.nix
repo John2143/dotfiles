@@ -79,7 +79,7 @@ in {
   # a webhook on use. See nixos/pite-canary.nix.
   "llm-runtime-keys-bait.age".publicKeys = [pite];
 
-  "hass-credentials.age".publicKeys = [office arch];
+  "hass-credentials.age".publicKeys = [office arch pite];
   "canary-tokens.age".publicKeys = [office arch pite];
 
   # Vast.ai credentials — combined API key + SSH private key. Both are
@@ -129,6 +129,7 @@ in {
   #     | agenix -e secrets/mikrotik-credentials.age -i ~/.ssh/age
   #   rm /tmp/mikrotik-key /tmp/mikrotik-key.pub
   "mikrotik-credentials.age".publicKeys = [office arch];
+  "ntfy-topic-url.age".publicKeys = [office arch pite];
 
 
   # Remote build cluster SSH key — shared across all builders (x86_64 + aarch64).
