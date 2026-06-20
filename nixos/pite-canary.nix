@@ -3,8 +3,7 @@
 # Roles: k3s agent, Prometheus server (2d retention), Alertmanager,
 # Blackbox exporter, nginx status page.
 #
-# Alerting: ntfy.sh + Home Assistant (critical only). Dual-independent
-# with VPS Alertmanager — no cross-network dependency for alerting.
+# Alerting: ntfy.sh only — ntfy + Home Assistant ruled out per user.
 {
   config,
   pkgs,
@@ -15,15 +14,6 @@
   # ntfy topic URL for Alertmanager notifications.
   age.secrets.ntfy-topic-url = {
     file = ../secrets/ntfy-topic-url.age;
-    mode = "0400";
-    owner = "root";
-    group = "root";
-  };
-
-  # Home Assistant webhook URL for critical alerts (bypasses DND).
-  # Format: full webhook URL e.g. http://home.ts.2143.me:8123/api/webhook/<id>
-  age.secrets.hass-credentials = {
-    file = ../secrets/hass-credentials.age;
     mode = "0400";
     owner = "root";
     group = "root";
@@ -53,10 +43,10 @@
         static_configs = [
           {
             targets = [
-              "closet.local:9100"
-              "arch.local:9100"
-              "nas.local:9100"
-              "office.local:9100"
+              "192.168.5.36:9100" # closet
+              "192.168.5.76:9100" # arch
+              "192.168.5.175:9100" # nas
+              "192.168.5.209:9100" # office
               "localhost:9100"
             ];
           }
@@ -179,11 +169,9 @@
     "d /var/www/status 0755 root root -"
   ];
 
-  # ── Alertmanager — config generated at runtime to inject secrets ──
-  # PreStart substitutes the HA webhook URL from agenix into the config.
+  # ── Alertmanager — ntfy-only, config generated at runtime ──────
   systemd.services.prometheus-alertmanager = {
     preStart = ''
-          HA_WEBHOOK=$(cat /run/agenix/hass-credentials 2>/dev/null || echo "")
           NTFY_URL=$(cat /run/agenix/ntfy-topic-url 2>/dev/null || echo "https://ntfy.sh/2143-site-outages")
 
           cat > /run/alertmanager/config.yml <<'CONFIGEOF'
@@ -195,25 +183,14 @@
         group_wait: 30s
         group_interval: 5m
         repeat_interval: 4h
-        routes:
-          - match: { severity: critical }
-            receiver: ha-critical
-            continue: true
-          - match: { severity: warning }
-            receiver: ntfy
       receivers:
         - name: ntfy
           webhook_configs:
             - url: "NTFY_PLACEHOLDER"
               send_resolved: true
-        - name: ha-critical
-          webhook_configs:
-            - url: "HA_PLACEHOLDER"
-              send_resolved: true
       CONFIGEOF
 
           ${pkgs.gnused}/bin/sed -i "s|NTFY_PLACEHOLDER|$NTFY_URL|g" /run/alertmanager/config.yml
-          [ -n "$HA_WEBHOOK" ] && ${pkgs.gnused}/bin/sed -i "s|HA_PLACEHOLDER|$HA_WEBHOOK|g" /run/alertmanager/config.yml
     '';
     serviceConfig = {
       ExecStart = lib.mkForce [

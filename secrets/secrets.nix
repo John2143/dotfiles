@@ -79,7 +79,7 @@ in {
   # a webhook on use. See nixos/pite-canary.nix.
   "llm-runtime-keys-bait.age".publicKeys = [pite];
 
-  "hass-credentials.age".publicKeys = [office arch pite];
+  "hass-credentials.age".publicKeys = [office arch];
   "canary-tokens.age".publicKeys = [office arch pite];
 
   # Vast.ai credentials — combined API key + SSH private key. Both are
