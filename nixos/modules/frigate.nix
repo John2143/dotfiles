@@ -3,7 +3,9 @@
 # Runs in Podman using the -tensorrt image for NVIDIA GPU-accelerated
 # object detection. Recordings + database live on the NAS over NFSv3.
 #
-# Cameras: up to 7 Reolink cameras routed through the Reolink NVR.
+# Cameras: 6 Reolink cameras routed through the Reolink NVR + 1 direct RTSP.
+
+
 # Main streams are used for both detection and recording (no sub-streams).
 #
 # === agenix secret ===
@@ -43,13 +45,21 @@
   # Edit names. Each pulls one RTSP stream from the Reolink NVR:
   #   /h264Preview_0N_main  → detection + recording (full resolution)
   cameras = {
-    cam01 = {name = "Camera 1"; channel = "01";};
-    cam02 = {name = "Camera 2"; channel = "02";};
+    cam01 = {name = "Camera 1"; channel = "01"; codec = "hevc"; detectWidth = 1920; detectHeight = 1080;};
+    cam02 = {name = "Camera 2"; channel = "02"; codec = "hevc"; detectWidth = 1920; detectHeight = 1080;};
     cam03 = {name = "Camera 3"; channel = "03";};
-    cam04 = {name = "Camera 4"; channel = "04";};
-    cam05 = {name = "Camera 5"; channel = "05";};
-    cam06 = {name = "Camera 6"; channel = "06";};
-    cam07 = {name = "Camera 7"; channel = "07";};
+    cam04 = {name = "Camera 4"; channel = "04"; codec = "hevc"; detectWidth = 1080; detectHeight = 1920; go2rtcSuffix = "#rotate=270";};
+
+
+
+    cam05 = {name = "Camera 5"; channel = "05"; detectHeight = 1920;};
+    cam06 = {name = "Camera 6"; channel = "06"; codec = "hevc"; detectWidth = 1920; detectHeight = 1080;};
+
+    # cam08 is a direct RTSP camera (not routed through the Reolink NVR).
+    cam08 = {name = "Camera 8"; rtspPath = "rtsp://Mg3F1xpG3M0Alt5l:Qm2NdkyYtxhJj32M@192.168.5.59/live0"; detectWidth = 1920; detectHeight = 1080;};
+
+
+
   };
 
   # Build a per-camera Frigate config.
@@ -58,37 +68,35 @@
   mkCamera =
     _: cfg: {
       ffmpeg = {
+        hwaccel_args =
+          if cfg.codec or "h264" == "hevc"
+          then "preset-nvidia-h265"
+
+          else "preset-nvidia-h264";
         inputs = [
-          {
-            path = "rtsp://\${NVR_USER}:\${NVR_PASS}@\${NVR_HOST}/h264Preview_${cfg.channel}_main";
+          ({
+            path =
+              if cfg ? rtspPath
+              then cfg.rtspPath
+              else "rtsp://\${NVR_USER}:\${NVR_PASS}@\${NVR_HOST}/h264Preview_${cfg.channel}_main";
             roles = ["record" "detect"];
-          }
+          } // lib.optionalAttrs (cfg ? inputArgs) { input_args = cfg.inputArgs; })
         ];
-      };
+
+      } // lib.optionalAttrs (cfg ? outputArgs) { output_args = cfg.outputArgs; };
       detect = {
-        width = 2560;
-        height = 1440;
-        fps = 5;
+        width = cfg.detectWidth or 2560;
+        height = cfg.detectHeight or 1440;
+        fps = cfg.detectFps or 5;
       };
+
       record = {
         enabled = true;
-        retain = {
-          days = 7;
-          mode = "motion";
-        };
-        alerts = {
+        events = {
           pre_capture = 5;
           post_capture = 5;
           retain = {
-            days = 30;
-            mode = "active_objects";
-          };
-        };
-        detections = {
-          pre_capture = 5;
-          post_capture = 5;
-          retain = {
-            days = 30;
+            default = 7;
             mode = "active_objects";
           };
         };
@@ -110,6 +118,7 @@
   yamlFormat = pkgs.formats.yaml {};
 
   frigateConfigFile = yamlFormat.generate "frigate-config.yml" {
+
     mqtt = {
       host = mqttHost;
       port = mqttPort;
@@ -119,8 +128,8 @@
       onnx = {
         type = "onnx";
       };
-    };
 
+    };
     model = {
       # YOLOv9-tiny 320x320: the recommended model for GTX 1080 Ti.
       # Build it with Frigate's Dockerfile-based exporter:
@@ -133,24 +142,25 @@
       input_dtype = "float";
     };
 
-    ffmpeg = {
-      hwaccel_args = "preset-nvidia-h264";
-    };
+
 
     go2rtc = {
       streams =
         builtins.mapAttrs (
           _: cfg:
-            "rtsp://\${NVR_USER}:\${NVR_PASS}@\${NVR_HOST}/h264Preview_${cfg.channel}_main"
-        )
-        cameras;
+            (if cfg ? rtspPath then cfg.rtspPath
+            else "rtsp://\${NVR_USER}:\${NVR_PASS}@\${NVR_HOST}/h264Preview_${cfg.channel}_main")
+            + (cfg.go2rtcSuffix or "")
+          ) cameras;
     };
 
     record = {
       enabled = true;
-      retain = {
-        days = 7;
-        mode = "motion";
+      events = {
+        retain = {
+          default = 7;
+          mode = "active_objects";
+        };
       };
     };
 
@@ -215,6 +225,8 @@ in {
   ];
 
   # ── NVIDIA Container Toolkit for GPU passthrough ──────────────────
+  # Podman looks for CDI specs in /etc/cdi, but NixOS generates them in /run/cdi.
+  environment.etc."cdi/nvidia-container-toolkit.json".source = "/run/cdi/nvidia-container-toolkit.json";
   hardware.nvidia-container-toolkit.enable = true;
 
   # ── Frigate Podman container ──────────────────────────────────────
@@ -249,6 +261,8 @@ in {
       extraOptions = [
         # GPU passthrough
         "--device=nvidia.com/gpu=all"
+        # 7 cameras × 1440p: Frigate recommends ≥994MB SHM. Use 2GB for headroom.
+        "--shm-size=2g"
         # Podman security: needed for GPU access
         "--security-opt=label=disable"
         # Map container root to host user (NFS root_squash workaround)
