@@ -393,7 +393,8 @@ in
       - Never edit files outside the working directory's repo without permission from its `.claude/settings.local.json`. Risks: uncommitted user work, concurrent agents, misidentified repos.
       - Destructive operations (rm -rf, force-push, drop table, discarding uncommitted work) require confirmation.
       - Never bypass git checks with --no-verify or --no-gpg-sign.
-      - Never read, print, or commit decrypted age secrets, .env files, or private keys. If you encounter one, stop and ask.
+      - Never read, print, or commit any credential-bearing files (age secrets, .env, private keys, API tokens, certificates). Reading a decrypted secret means it must be rotated — avoid that cost entirely. If a file path, directory name, or read target matches any of these patterns, do NOT read it: secrets/, keys/, certs/, credentials/, tokens/, .ssh/, .config/sops/, /run/agenix/, or files matching *secret*, *key*, *token*, *credential*, *password*, *.env, *.pem, *.key, *.p12, *.cert, *.crt, *.age. When in doubt about whether a file might be a secret, err on the side of not reading it.
+‣dotfiles/nixos/modules/omp-config.nix
       - nixos-rebuild switch, home-manager switch, and nix-collect-garbage mutate the running system; confirm before running.
       - Never curl ... | sh or wget ... | bash. Download, inspect, then run.
       - Clean up background jobs you spawn before yielding.
@@ -434,7 +435,7 @@ in
       <remember>
       - Never run `find` (built-in Find tool, `fd`, `locate`, bash `find`, etc.) on /nix/store, ~/private, or ~ — those subtrees are enormous or encrypted and will hang. Always narrow to a specific subdirectory instead.
       - Do not write or edit files outside the repo root without confirmation.
-      - Never read, print, or commit secrets, .env files, or private keys.
+      - Never read, print, or commit secrets of any kind. The following paths and patterns are FORBIDDEN to read (even a single read forces a rotation): secrets/*, *secret*, *key*, *token*, *credential*, *.pem, *.key, *.p12, *.cert, *.crt, *.env, *.env.*, .envrc, /run/agenix/*, ~/.ssh/*, *password*, *credentials*, *tokens*, *auth*, *api-key*. If a file path or directory name contains any of these patterns, do not read it. If you cannot rule out that a file contains a secret, treat it as forbidden.
       - Never run `nh os switch`.
       - Never run `nixos-rebuild switch`.
       - Never run `home-manager switch`.
