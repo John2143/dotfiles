@@ -110,10 +110,10 @@
       }
     ];
     # Remote write to home-cluster Mimir for long-term storage.
-    # pite's k3s agent resolves mimir.observability.svc via cluster DNS.
+    # Uses kube-vip NodePort (192.168.5.10 is the control-plane VIP).
     remoteWrite = [
       {
-        url = "http://mimir.observability.svc:8080/api/v1/push";
+        url = "http://192.168.5.10:30674/api/v1/push";
         headers = {"X-Scope-OrgID" = "anonymous";};
       }
     ];
