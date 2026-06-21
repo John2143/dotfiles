@@ -115,7 +115,7 @@ in {
   # ntfy.sh topic URL for OMP agent notifications. Topic name is not a
   # cryptographic secret (public server, anyone with the name can publish),
   # but keeping it out of the Nix store avoids accidental exposure.
-  "ntfy-topic-url.age".publicKeys = [office arch];
+  "ntfy-topic-url.age".publicKeys = [office arch pite];
   # MikroTik SSH key — router (192.168.1.1) + two switches.
   # Upstairs: 192.168.5.3, Downstairs: 192.168.5.2. All use admin@.
   # Decrypted by the mikrotik-connect fish helper (key-based, no sshpass).
@@ -129,7 +129,6 @@ in {
   #     | agenix -e secrets/mikrotik-credentials.age -i ~/.ssh/age
   #   rm /tmp/mikrotik-key /tmp/mikrotik-key.pub
   "mikrotik-credentials.age".publicKeys = [office arch];
-  "ntfy-topic-url.age".publicKeys = [office arch pite];
 
 
   # Remote build cluster SSH key — shared across all builders (x86_64 + aarch64).
