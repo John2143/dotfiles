@@ -126,7 +126,14 @@
   boot.kernel.sysctl = {
     "kernel.hardlockup_panic" = "1";
     "kernel.softlockup_panic" = "1";
+    "vm.swappiness" = "100";
   };
+  boot.kernelParams = [
+    "zswap.enabled=1"
+    "zswap.compressor=zstd"
+    "zswap.zpool=zsmalloc"
+    "zswap.max_pool_percent=30"
+  ];
 
   virtualisation.podman = {
     enable = true;
