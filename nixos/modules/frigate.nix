@@ -48,7 +48,7 @@
     cam01 = {name = "Camera 1"; channel = "01"; codec = "hevc"; detectWidth = 1920; detectHeight = 1080;};
     cam02 = {name = "Camera 2"; channel = "02"; codec = "hevc"; detectWidth = 1920; detectHeight = 1080;};
     cam03 = {name = "Camera 3"; channel = "03";};
-    cam04 = {name = "Camera 4"; channel = "04"; codec = "hevc"; detectWidth = 1080; detectHeight = 1920; detectEnabled = false; go2rtcSuffix = "#video=h264#rotate=270";};
+    cam04 = {name = "Camera 4"; channel = "04"; codec = "hevc"; detectWidth = 1080; detectHeight = 1920; detectEnabled = false; go2rtcPrefix = "ffmpeg:"; go2rtcSuffix = "#video=h264#rotate=270";};
 
 
 
@@ -162,7 +162,7 @@
           _: cfg:
             (if cfg ? rtspPath then cfg.rtspPath
             else "rtsp://\${NVR_USER}:\${NVR_PASS}@\${NVR_HOST}/h264Preview_${cfg.channel}_main")
-            + (cfg.go2rtcSuffix or "")
+            + (cfg.go2rtcPrefix or "") + (cfg.go2rtcSuffix or "")
           ) cameras;
     };
 
