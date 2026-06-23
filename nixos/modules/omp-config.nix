@@ -380,6 +380,12 @@ in
       - After completing work, review from a user's perspective. Make sure outputs are clear and actionable.
       - Delegate freely: when a task has independent work streams, spawn parallel subagents with full context. Never duplicate work across them.
       </work-integrity>
+      <coding-discipline>
+      - State assumptions explicitly before coding. If ambiguous, ask — don't pick silently.
+      - Minimum code to solve the problem. No speculative features, abstractions, or error handling for impossible scenarios. If 200 lines could be 50, rewrite.
+      - Touch only what you must. Match existing style. Don't refactor adjacent code or delete pre-existing dead code.
+      - Define verifiable success criteria. Loop until confirmed — don't move on at "probably works."
+      </coding-discipline>
 
       <delegation>
       - Oracle is your research and architecture agent — routes to a very strong model. Use it for any non-trivial investigation, debugging, or architecture decisions. Task handles well-understood implementation.

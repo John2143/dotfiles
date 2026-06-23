@@ -48,7 +48,7 @@
     cam01 = {name = "Camera 1"; channel = "01"; codec = "hevc"; detectWidth = 1920; detectHeight = 1080;};
     cam02 = {name = "Camera 2"; channel = "02"; codec = "hevc"; detectWidth = 1920; detectHeight = 1080;};
     cam03 = {name = "Camera 3"; channel = "03";};
-    cam04 = {name = "Camera 4"; channel = "04"; codec = "hevc"; detectWidth = 1080; detectHeight = 1920; go2rtcSuffix = "#rotate=270";};
+    cam04 = {name = "Camera 4"; channel = "04"; codec = "hevc"; detectWidth = 1080; detectHeight = 1920; go2rtcSuffix = "#rotate=270"; detectEnabled = false;};
 
 
 
@@ -85,6 +85,7 @@
 
       } // lib.optionalAttrs (cfg ? outputArgs) { output_args = cfg.outputArgs; };
       detect = {
+        enabled = cfg.detectEnabled or true;
         width = cfg.detectWidth or 2560;
         height = cfg.detectHeight or 1440;
         fps = cfg.detectFps or 5;
@@ -123,23 +124,34 @@
       host = mqttHost;
       port = mqttPort;
     };
-
     detectors = {
-      onnx = {
+      onnx_0 = {
         type = "onnx";
       };
-
+      onnx_1 = {
+        type = "onnx";
+      };
     };
     model = {
-      # YOLOv9-tiny 320x320: the recommended model for GTX 1080 Ti.
-      # Build it with Frigate's Dockerfile-based exporter:
-      #   https://github.com/blakeblackshear/frigate/blob/dev/docs/docs/configuration/object_detectors.md#models
-      path = "/config/model_cache/yolov9-t-320.onnx";
+      path = "/config/model_cache/yolov9-c-640.onnx";
       model_type = "yolo-generic";
-      width = 320;
-      height = 320;
+      width = 640;
+      height = 640;
       input_tensor = "nchw";
       input_dtype = "float";
+    };
+    face_recognition = {
+      enabled = true;
+      model_size = "large";
+      detection_threshold = 0.7;
+      recognition_threshold = 0.9;
+      min_area = 500;
+    };
+    lpr = {
+      enabled = true;
+      model_size = "large";
+      detection_threshold = 0.7;
+      recognition_threshold = 0.9;
     };
 
 
@@ -281,5 +293,40 @@ in {
         "8555:8555/udp"         # go2rtc UDP
       ];
     };
+  };
+  # ── Auto-build YOLOv9 ONNX model if missing ──────────────────────
+  systemd.services.build-frigate-model = {
+    description = "Build Frigate YOLOv9 ONNX model if missing";
+    wantedBy = ["multi-user.target"];
+    before = ["podman-frigate.service"];
+    path = [ pkgs.podman ];
+    script = ''
+      MODEL=/var/lib/frigate/model_cache/yolov9-c-640.onnx
+      if [ -f "$MODEL" ]; then
+        echo "Model already exists at $MODEL"
+        exit 0
+      fi
+      echo "Building YOLOv9-c-640 ONNX model (this may take ~15 minutes)..."
+      mkdir -p /var/lib/frigate/model_cache
+      podman build \
+        --build-arg MODEL_SIZE=c \
+        --build-arg IMG_SIZE=640 \
+        --output type=local,dest=/var/lib/frigate/model_cache \
+        -f ${../frigate/Dockerfile.yolov9} \
+        /tmp
+      chown 1000:1000 "$MODEL"
+      echo "Model built: $(ls -lh "$MODEL" | awk '{print $5}')"
+    '';
+    serviceConfig = {
+      Type = "oneshot";
+      RemainAfterExit = true;
+      TimeoutStartSec = 1800;
+      User = "root";
+    };
+  };
+
+  systemd.services."podman-frigate" = {
+    after = [ "build-frigate-model.service" ];
+    requires = [ "build-frigate-model.service" ];
   };
 }
