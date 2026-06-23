@@ -126,7 +126,14 @@
   boot.kernel.sysctl = {
     "kernel.hardlockup_panic" = "1";
     "kernel.softlockup_panic" = "1";
+    "vm.swappiness" = "100";
   };
+  boot.kernelParams = [
+    "zswap.enabled=1"
+    "zswap.compressor=zstd"
+    "zswap.zpool=zsmalloc"
+    "zswap.max_pool_percent=30"
+  ];
 
   virtualisation.podman = {
     enable = true;
@@ -552,6 +559,7 @@
       179 # BGP for kube-vip
       8280 # attic nix cache — nas-configuration.nix:557
       10250 # kubelet (k3s agent)
+      9100 # node_exporter (Prometheus metrics)
 
       20048 # rpc.mountd (NFS)
     ];
