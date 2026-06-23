@@ -48,7 +48,7 @@
     cam01 = {name = "Camera 1"; channel = "01"; codec = "hevc"; detectWidth = 1920; detectHeight = 1080;};
     cam02 = {name = "Camera 2"; channel = "02"; codec = "hevc"; detectWidth = 1920; detectHeight = 1080;};
     cam03 = {name = "Camera 3"; channel = "03";};
-    cam04 = {name = "Camera 4"; channel = "04"; codec = "hevc"; detectWidth = 1080; detectHeight = 1920; go2rtcSuffix = "#rotate=270"; detectEnabled = false;};
+    cam04 = {name = "Camera 4"; channel = "04"; codec = "hevc"; detectWidth = 1080; detectHeight = 1920; detectEnabled = false; go2rtcSuffix = "#video=h264#rotate=270";};
 
 
 
