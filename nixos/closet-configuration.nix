@@ -78,11 +78,13 @@ EOF
       set +a
       exec ffmpeg -hide_banner \
         -re \
+        -fflags +genpts+discardcorrupt \
+        -err_detect ignore_err \
         -rtsp_transport tcp \
         -i "rtsp://$NVR_USER:$NVR_PASS@$NVR_HOST/h264Preview_04_main" \
-        -vf fps=5,transpose=2,scale=3840:-1 \
+        -vf fps=2,transpose=2,scale=3840:-1 \
         -c:v libx264 -preset ultrafast -crf 23 -tune zerolatency \
-        -b:v 4M -maxrate 6M -bufsize 8M \
+        -b:v 10M -maxrate 15M -bufsize 20M \
         -g 5 -forced-idr 1 \
         -an \
         -f rtsp rtsp://localhost:8554/cam04
