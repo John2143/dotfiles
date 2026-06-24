@@ -49,9 +49,20 @@
     description = "cam04 restream proxy — rotate Reolink Duo 270°";
     after = ["network.target"];
     wantedBy = ["multi-user.target"];
+    path = [pkgs.ffmpeg pkgs.bash];
+    script = ''
+      set -a
+      source ${config.age.secrets.reolink-nvr.path}
+      set +a
+      exec ffmpeg -hide_banner \
+        -rtsp_transport tcp \
+        -i "rtsp://$NVR_USER:$NVR_PASS@$NVR_HOST/h264Preview_04_main" \
+        -vf transpose=2 \
+        -c:v libx264 -preset ultrafast -crf 23 -tune zerolatency \
+        -an \
+        -f rtsp rtsp://0.0.0.0:8554/cam04
+    '';
     serviceConfig = {
-      EnvironmentFile = config.age.secrets.reolink-nvr.path;
-      ExecStart = "${pkgs.ffmpeg}/bin/ffmpeg -hide_banner -rtsp_transport tcp -i rtsp://\$NVR_USER:\$NVR_PASS@\$NVR_HOST/h264Preview_04_main -vf transpose=2 -c:v libx264 -preset ultrafast -crf 23 -tune zerolatency -an -f rtsp rtsp://0.0.0.0:8554/cam04";
       Restart = "always";
       RestartSec = 10;
     };
