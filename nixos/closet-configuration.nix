@@ -79,8 +79,9 @@ EOF
       exec ffmpeg -hide_banner \
         -rtsp_transport tcp \
         -i "rtsp://$NVR_USER:$NVR_PASS@$NVR_HOST/h264Preview_04_main" \
-        -vf fps=5,transpose=2 \
+        -vf fps=5,transpose=2,scale=3840:-1 \
         -c:v libx264 -preset ultrafast -crf 23 -tune zerolatency \
+        -g 5 -forced-idr 1 \
         -an \
         -f rtsp rtsp://localhost:8554/cam04
     '';
