@@ -45,35 +45,19 @@
     file = ../secrets/reolink-nvr.age;
     owner = "root";
   };
-  # MediaMTX RTSP server — ffmpeg pushes rotated stream here,
-  # Frigate pulls from rtsp://closet:8554/cam04
-  systemd.services.mediamtx = {
-    description = "MediaMTX RTSP server for cam04 restream";
+  # go2rtc-based cam04 restream — pulls HEVC from NVR, rotates 270°, 
+  # re-encodes to H264, serves via RTSP on :8554.
+  # Frigate on arch connects to rtsp://closet:8554/cam04
+  systemd.services.cam04-restream = {
+    description = "cam04 restream proxy — rotate Reolink Duo 270° via go2rtc";
     after = ["network.target"];
     wantedBy = ["multi-user.target"];
-    serviceConfig = {
-      ExecStart = "${pkgs.mediamtx}/bin/mediamtx";
-      Restart = "always";
-      RestartSec = 5;
-    };
-  };
-  systemd.services.cam04-restream = {
-    description = "cam04 restream proxy — rotate Reolink Duo 270°";
-    after = ["network.target" "mediamtx.service"];
-    requires = ["mediamtx.service"];
-    wantedBy = ["multi-user.target"];
-    path = [pkgs.ffmpeg pkgs.bash];
+    path = [pkgs.go2rtc pkgs.bash];
     script = ''
       set -a
       source ${config.age.secrets.reolink-nvr.path}
       set +a
-      exec ffmpeg -hide_banner \
-        -rtsp_transport tcp \
-        -i "rtsp://$NVR_USER:$NVR_PASS@$NVR_HOST/h264Preview_04_main" \
-        -vf transpose=2 \
-        -c:v libx264 -preset ultrafast -crf 23 -tune zerolatency \
-        -an \
-        -f rtsp rtsp://localhost:8554/cam04
+      exec go2rtc -c "streams: { cam04: rtsp://$NVR_USER:$NVR_PASS@$NVR_HOST/h264Preview_04_main#video=h264#rotate=270 }"
     '';
     serviceConfig = {
       Restart = "always";
