@@ -45,9 +45,22 @@
     file = ../secrets/reolink-nvr.age;
     owner = "root";
   };
+  # MediaMTX RTSP server — ffmpeg pushes rotated stream here,
+  # Frigate pulls from rtsp://closet:8554/cam04
+  systemd.services.mediamtx = {
+    description = "MediaMTX RTSP server for cam04 restream";
+    after = ["network.target"];
+    wantedBy = ["multi-user.target"];
+    serviceConfig = {
+      ExecStart = "${pkgs.mediamtx}/bin/mediamtx";
+      Restart = "always";
+      RestartSec = 5;
+    };
+  };
   systemd.services.cam04-restream = {
     description = "cam04 restream proxy — rotate Reolink Duo 270°";
-    after = ["network.target"];
+    after = ["network.target" "mediamtx.service"];
+    requires = ["mediamtx.service"];
     wantedBy = ["multi-user.target"];
     path = [pkgs.ffmpeg pkgs.bash];
     script = ''
@@ -60,7 +73,7 @@
         -vf transpose=2 \
         -c:v libx264 -preset ultrafast -crf 23 -tune zerolatency \
         -an \
-        -f rtsp -listen 1 rtsp://0.0.0.0:8554/cam04
+        -f rtsp rtsp://localhost:8554/cam04
     '';
     serviceConfig = {
       Restart = "always";
