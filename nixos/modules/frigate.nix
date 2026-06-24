@@ -51,7 +51,7 @@
     # cam04 is sideways (rotated 270°). Rotation handled by closet restream proxy.
     # Closet software-decodes HEVC → transpose → H264 encode → RTSP.
     # Frigate connects to the pre-rotated H264 stream directly (no GPU rotation needed).
-    cam04 = { name = "Camera 4"; rtspPath = "rtsp://closet:8554/cam04"; detectWidth = 1920; detectHeight = 1080; detectFps = 2; };
+    cam04 = { name = "Camera 4"; rtspPath = "rtsp://100.64.0.2:8554/cam04"; detectWidth = 1920; detectHeight = 1080; detectFps = 2; };
 
 
 
