@@ -47,16 +47,19 @@
   cameras = {
     cam01 = {name = "Camera 1"; channel = "01"; codec = "hevc"; detectWidth = 1920; detectHeight = 1080;};
     cam02 = {name = "Camera 2"; channel = "02"; codec = "hevc"; detectWidth = 1920; detectHeight = 1080;};
-    cam03 = {name = "Camera 3"; channel = "03";};
-    cam04 = {name = "Camera 4"; channel = "04"; codec = "hevc"; detectWidth = 1080; detectHeight = 1920; detectEnabled = false; go2rtcPrefix = "ffmpeg:"; go2rtcSuffix = "#video=h264#rotate=270";};
+    cam03 = {name = "Camera 3"; channel = "03"; detectFps = 2;};
+    # cam04 is sideways (rotated 270°). Rotation handled by closet restream proxy.
+    # Closet software-decodes HEVC → transpose → H264 encode → RTSP.
+    # Frigate connects to the pre-rotated H264 stream directly (no GPU rotation needed).
+    cam04 = { name = "Camera 4"; rtspPath = "rtsp://closet:8554/cam04"; detectWidth = 1920; detectHeight = 1080; detectFps = 2; };
 
 
 
     cam05 = {name = "Camera 5"; channel = "05"; detectHeight = 1920;};
-    cam06 = {name = "Camera 6"; channel = "06"; codec = "hevc"; detectWidth = 1920; detectHeight = 1080;};
+    cam06 = {name = "Camera 6"; channel = "06"; codec = "hevc"; detectWidth = 1920; detectHeight = 1080; detectFps = 2;};
 
     # cam08 is a direct RTSP camera (not routed through the Reolink NVR).
-    cam08 = {name = "Camera 8"; rtspPath = "rtsp://Mg3F1xpG3M0Alt5l:Qm2NdkyYtxhJj32M@192.168.5.59/live0"; detectWidth = 1920; detectHeight = 1080;};
+    cam08 = {name = "Camera 8"; rtspPath = "rtsp://Mg3F1xpG3M0Alt5l:Qm2NdkyYtxhJj32M@192.168.5.59/live0"; detectWidth = 1920; detectHeight = 1080; detectFps = 1;};
 
 
 
@@ -160,9 +163,10 @@
       streams =
         builtins.mapAttrs (
           _: cfg:
-            (if cfg ? rtspPath then cfg.rtspPath
+            (cfg.go2rtcPrefix or "")
+            + (if cfg ? rtspPath then cfg.rtspPath
             else "rtsp://\${NVR_USER}:\${NVR_PASS}@\${NVR_HOST}/h264Preview_${cfg.channel}_main")
-            + (cfg.go2rtcPrefix or "") + (cfg.go2rtcSuffix or "")
+            + (cfg.go2rtcSuffix or "")
           ) cameras;
     };
 
@@ -286,7 +290,8 @@ in {
       entrypoint = "/frigate-entrypoint.sh";
 
       ports = [
-        "127.0.0.1:5000:5000"  # Frigate web UI — localhost only
+        "127.0.0.1:5000:5000"  # Frigate web UI — localhost
+        "100.64.0.1:5000:5000"  # Frigate web UI — Tailscale
         "8554:8554"             # go2rtc TCP
         "8554:8554/udp"         # go2rtc UDP
         "8555:8555"             # go2rtc TCP

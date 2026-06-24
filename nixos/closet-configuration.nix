@@ -36,22 +36,27 @@
     dockerCompat = true;
   };
 
-  #virtualisation.oci-containers = {
-  #backend = "podman";
-  #containers.teamspeak = {
-  #image = "docker.io/teamspeak:latest";
-  #ports = [
-  #"9987:9987/udp"
-  #"30033:30033"
-  #];
-  #environment = {
-  #TS3SERVER_LICENSE = "accept";
-  #};
-  #volumes = [
-  #"/home/john/teamspeak/teamspeak3-server_linux_amd64_old:/var/ts3server"
-  #];
-  #};
-  #};
+  # ── cam04 restream proxy (rotate Reolink Duo 270°) ───────────────
+  # Software HEVC decode → transpose → H264 encode → RTSP.
+  # GTX 1080 Ti NVENC has 4096px width limit; go2rtc filter ordering
+  # puts scale before rotate, breaking GPU rotation on arch.
+  # See local://cam04-rotation-cuda-arch.md
+  age.secrets.reolink-nvr = {
+    file = ../secrets/reolink-nvr.age;
+    owner = "root";
+  };
+  systemd.services.cam04-restream = {
+    description = "cam04 restream proxy — rotate Reolink Duo 270°";
+    after = ["network.target"];
+    wantedBy = ["multi-user.target"];
+    serviceConfig = {
+      EnvironmentFile = config.age.secrets.reolink-nvr.path;
+      ExecStart = "${pkgs.ffmpeg}/bin/ffmpeg -hide_banner -rtsp_transport tcp -i rtsp://\$NVR_USER:\$NVR_PASS@\$NVR_HOST/h264Preview_04_main -vf transpose=2 -c:v libx264 -preset ultrafast -crf 23 -tune zerolatency -an -f rtsp rtsp://0.0.0.0:8554/cam04";
+      Restart = "always";
+      RestartSec = 10;
+    };
+  };
+  # (old teamspeak container removed; cam04 restream runs via systemd above)
 
   networking.hostName = compName; # Define your hostname.
   networking.networkmanager.enable = true; # Easiest to use and most distros use this by default.
@@ -193,6 +198,7 @@
     5432 # Postgres
     5580 # matter-server (hostNetwork pod)
     179 # BGP for kube-vip
+    8554 # cam04 restream proxy (rotated RTSP)
   ];
   networking.firewall.allowedUDPPorts = [
     8472 # flannel VXLAN (k3s)
