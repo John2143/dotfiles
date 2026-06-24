@@ -60,7 +60,7 @@
         -vf transpose=2 \
         -c:v libx264 -preset ultrafast -crf 23 -tune zerolatency \
         -an \
-        -f rtsp rtsp://0.0.0.0:8554/cam04
+        -f rtsp -listen 1 rtsp://0.0.0.0:8554/cam04
     '';
     serviceConfig = {
       Restart = "always";
