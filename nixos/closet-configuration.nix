@@ -57,7 +57,12 @@
       set -a
       source ${config.age.secrets.reolink-nvr.path}
       set +a
-      exec go2rtc -c "streams: { cam04: rtsp://$NVR_USER:$NVR_PASS@$NVR_HOST/h264Preview_04_main#video=h264#rotate=270 }"
+      cat > /run/cam04-go2rtc.yml << 'EOF'
+streams:
+  cam04: __STREAM_URL__
+EOF
+      sed -i "s|__STREAM_URL__|rtsp://$NVR_USER:$NVR_PASS@$NVR_HOST/h264Preview_04_main#video=h264#rotate=270|" /run/cam04-go2rtc.yml
+      exec go2rtc -c /run/cam04-go2rtc.yml
     '';
     serviceConfig = {
       Restart = "always";
