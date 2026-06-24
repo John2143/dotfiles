@@ -59,7 +59,7 @@
     cam06 = {name = "Camera 6"; channel = "06"; codec = "hevc"; detectWidth = 1920; detectHeight = 1080; detectFps = 2;};
 
     # cam08 is a direct RTSP camera (not routed through the Reolink NVR).
-    cam08 = {name = "Camera 8"; rtspPath = "rtsp://Mg3F1xpG3M0Alt5l:Qm2NdkyYtxhJj32M@192.168.5.59/live0"; detectWidth = 1920; detectHeight = 1080; detectFps = 1;};
+    cam08 = {name = "Camera 8"; rtspPath = "rtsp://\${EUFY_USER}:\${EUFY_PASS}@192.168.5.59/live0"; detectWidth = 1920; detectHeight = 1080; detectFps = 1;};
 
 
 
