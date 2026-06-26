@@ -45,18 +45,16 @@
   # Edit names. Each pulls one RTSP stream from the Reolink NVR:
   #   /h264Preview_0N_main  → detection + recording (full resolution)
   cameras = {
-    cam01 = {name = "Camera 1"; channel = "01"; codec = "hevc"; detectWidth = 1920; detectHeight = 1080;};
+    cam01 = {name = "Camera 1"; channel = "01"; codec = "hevc"; detectWidth = 1920; detectHeight = 1080; lprEnable = true;};
     cam02 = {name = "Camera 2"; channel = "02"; codec = "hevc"; detectWidth = 1920; detectHeight = 1080;};
-    cam03 = {name = "Camera 3"; channel = "03"; detectFps = 2;};
-    # cam04 is sideways (rotated 270°). Rotation handled by closet restream proxy.
-    # Closet software-decodes HEVC → transpose → H264 encode → RTSP.
-    # Frigate connects to the pre-rotated H264 stream directly (no GPU rotation needed).
-    cam04 = { name = "Camera 4"; rtspPath = "rtsp://100.64.0.2:8554/cam04"; detectWidth = 1920; detectHeight = 1080; detectFps = 2; };
+    cam03 = {name = "Camera 3"; channel = "03"; stream = "sub"; detectFps = 2;};
+    # cam04 is sideways (rotated 270°). Sub-stream via NVR, no rotation for now.
+    cam04 = { name = "Camera 4"; channel = "04"; stream = "sub"; detectWidth = 1920; detectHeight = 1080; detectFps = 2; };
 
 
 
-    cam05 = {name = "Camera 5"; channel = "05"; detectHeight = 1920;};
-    cam06 = {name = "Camera 6"; channel = "06"; codec = "hevc"; detectWidth = 1920; detectHeight = 1080; detectFps = 2;};
+    cam05 = {name = "Camera 5"; channel = "05"; stream = "sub"; detectHeight = 1920;};
+    cam06 = {name = "Camera 6"; channel = "06"; codec = "hevc"; detectWidth = 1920; detectHeight = 1080; detectFps = 2; lprEnable = true;};
 
     # cam08 is a direct RTSP camera (not routed through the Reolink NVR).
     cam08 = {name = "Camera 8"; rtspPath = "rtsp://\${EUFY_USER}:\${EUFY_PASS}@192.168.5.59/live0"; detectWidth = 1920; detectHeight = 1080; detectFps = 1;};
@@ -81,7 +79,7 @@
             path =
               if cfg ? rtspPath
               then cfg.rtspPath
-              else "rtsp://\${NVR_USER}:\${NVR_PASS}@\${NVR_HOST}/h264Preview_${cfg.channel}_main";
+              else "rtsp://\${NVR_USER}:\${NVR_PASS}@\${NVR_HOST}/h264Preview_${cfg.channel}_${cfg.stream or "main"}";
             roles = ["record" "detect"];
           } // lib.optionalAttrs (cfg ? inputArgs) { input_args = cfg.inputArgs; })
         ];
@@ -112,6 +110,9 @@
         };
       };
       motion = {};
+      lpr = {
+        enabled = cfg.lprEnable or false;
+      };
     };
 
   cameraSettings = builtins.mapAttrs mkCamera cameras;
@@ -149,12 +150,14 @@
       detection_threshold = 0.7;
       recognition_threshold = 0.9;
       min_area = 500;
+      device = "GPU";
     };
     lpr = {
       enabled = true;
       model_size = "large";
       detection_threshold = 0.7;
       recognition_threshold = 0.9;
+      device = "GPU";
     };
 
 
@@ -165,7 +168,7 @@
           _: cfg:
             (cfg.go2rtcPrefix or "")
             + (if cfg ? rtspPath then cfg.rtspPath
-            else "rtsp://\${NVR_USER}:\${NVR_PASS}@\${NVR_HOST}/h264Preview_${cfg.channel}_main")
+            else "rtsp://\${NVR_USER}:\${NVR_PASS}@\${NVR_HOST}/h264Preview_${cfg.channel}_${cfg.stream or "main"}")
             + (cfg.go2rtcSuffix or "")
           ) cameras;
     };

@@ -36,65 +36,7 @@
     dockerCompat = true;
   };
 
-  # ── cam04 restream proxy (rotate Reolink Duo 270°) ───────────────
-  # Software HEVC decode → transpose → H264 encode → RTSP.
-  # GTX 1080 Ti NVENC has 4096px width limit; go2rtc filter ordering
-  # puts scale before rotate, breaking GPU rotation on arch.
-  # See local://cam04-rotation-cuda-arch.md
-  age.secrets.reolink-nvr = {
-    file = ../secrets/reolink-nvr.age;
-    owner = "root";
-  };
-  # ffmpeg + mediamtx cam04 restream — pulls HEVC from NVR, rotates 270°,
-  # re-encodes to H264, serves via RTSP on :8554.
-  # Frigate on arch connects to rtsp://closet:8554/cam04
-  systemd.services.mediamtx = {
-    description = "MediaMTX RTSP server for cam04 restream";
-    after = ["network.target"];
-    wantedBy = ["multi-user.target"];
-    preStart = ''
-      mkdir -p /run/mediamtx
-      cat > /run/mediamtx/mediamtx.yml << 'EOF'
-paths:
-  cam04:
-    source: publisher
-EOF
-    '';
-    serviceConfig = {
-      ExecStart = "${pkgs.mediamtx}/bin/mediamtx /run/mediamtx/mediamtx.yml";
-      Restart = "always";
-      RestartSec = 5;
-    };
-  };
-  systemd.services.cam04-restream = {
-    description = "cam04 restream proxy — rotate Reolink Duo 270°";
-    after = ["network.target" "mediamtx.service"];
-    requires = ["mediamtx.service"];
-    wantedBy = ["multi-user.target"];
-    path = [pkgs.ffmpeg pkgs.bash];
-    script = ''
-      set -a
-      source ${config.age.secrets.reolink-nvr.path}
-      set +a
-      exec ffmpeg -hide_banner \
-        -re \
-        -fflags +genpts+discardcorrupt \
-        -err_detect ignore_err \
-        -rtsp_transport tcp \
-        -i "rtsp://$NVR_USER:$NVR_PASS@$NVR_HOST/h264Preview_04_main" \
-        -vf fps=2,transpose=2,scale=3840:-1 \
-        -c:v libx264 -preset ultrafast -crf 23 -tune zerolatency \
-        -b:v 10M -maxrate 15M -bufsize 20M \
-        -g 5 -forced-idr 1 \
-        -an \
-        -f rtsp rtsp://localhost:8554/cam04
-    '';
-    serviceConfig = {
-      Restart = "always";
-      RestartSec = 10;
-    };
-  };
-  # (old teamspeak container removed; cam04 restream runs via systemd above)
+  # (cam04 restream moved to Frigate's ffmpeg with NVR sub-stream — no separate service needed)
 
   networking.hostName = compName; # Define your hostname.
   networking.networkmanager.enable = true; # Easiest to use and most distros use this by default.
@@ -236,7 +178,6 @@ EOF
     5432 # Postgres
     5580 # matter-server (hostNetwork pod)
     179 # BGP for kube-vip
-    8554 # cam04 restream proxy (rotated RTSP)
   ];
   networking.firewall.allowedUDPPorts = [
     8472 # flannel VXLAN (k3s)

@@ -304,7 +304,7 @@ Baseline (captured 2026-05-29, live-confirmed 2026-05-29):
 | 80, 443 | TCP | **kube-vip VIP (.10):80,443** | traefik LB | 31316, 30908 | HTTP/HTTPS ingress |
 | 9987 | UDP | **VIP (.10):30087** | ts-voice:30087 | 30087 | Teamspeak voice |
 | 30033 | TCP | **VIP (.10):30034** | ts-files:30034 | 30034 | Teamspeak file transfer |
-| 5432 | TCP | **closet (.35):5432** | Postgres (NixOS bare-metal) | — | PostgreSQL |
+|| 5432 | TCP | **closet (.36):5432** | Postgres (NixOS bare-metal) | — | PostgreSQL |
 | 25565 | TCP | nas (.175):32565 | minecraft-game:32565 | 32565 | Minecraft (k8s) |
 | 32565 | TCP | nas (.175):32565 | minecraft-game:32565 | 32565 | Minecraft alternate |
 | 11753 | TCP | **VIP (.10):31753** | openrct2-game:31753 | 31753 | OpenRCT2 |
@@ -457,7 +457,7 @@ bridge should have fd00:1::1/64
 chain=srcnat action=masquerade out-interface=2GWAN dst-address=!192.168.0.0/24
 
 # Hairpin NAT removed 2026-05-29 — dynamic public IP makes it impractical.
-# Access services directly via internal IPs (192.168.5.10 for k3s, .35 for Postgres).
+# Access services directly via internal IPs (192.168.5.10 for k3s, .36 for Postgres).
 ```
 
 ## k3s Cluster
@@ -496,8 +496,7 @@ Query live: `ssh closet 'kubectl get nodes,pods,svc -A'`
 
 2. **kube-vip VIP 192.168.5.10:** Floating IP for k3s API. Advertised via BGP (migrated from ARP 2026-06-17) to MikroTik AS 65001. The leader pod adds the VIP to loopback and announces a `/32` route. Standby pods maintain BGP sessions but don't advertise. The VIP NEVER appears as a secondary address on physical interfaces — this prevents Flannel VXLAN FDB corruption. Config: `argo/workloads/kube-vip/daemonset.yaml`. AS layout: kube-vip nodes AS 65000, MikroTik AS 65001. See BGP section.
 
-3. **ULA IPv6 (fd00:1::/64):** Site-local IPv6 on MikroTik bridge. All 3 k3s servers have static ULA addresses (.35, .76, .175) for stable dual-stack node-ip. Survives ISP prefix delegation changes.
-
+3. **ULA IPv6 (fd00:1::/64):** Site-local IPv6 on MikroTik bridge. All 3 k3s servers have static ULA addresses (.36, .76, .175) for stable dual-stack node-ip. Survives ISP prefix delegation changes.
 4. **k3s pod network uses flannel VXLAN:** 10.42.0.0/24 + fd42:42:42::/56 dual-stack overlay.
 
 ## BGP (kube-vip — since 2026-06-17)
