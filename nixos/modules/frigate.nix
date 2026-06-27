@@ -110,6 +110,9 @@
         };
       };
       motion = {};
+      objects = {
+        track = ["person" "bicycle" "car" "motorcycle" "bus" "truck" "bird" "cat" "dog" "bear"];
+      };
       lpr = {
         enabled = cfg.lprEnable or false;
       };
