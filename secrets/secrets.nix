@@ -163,4 +163,6 @@ in {
   #   NAS_OFFBATTERY_URL=http://192.168.5.XX:8123/api/webhook/ups_nas_power_returned
   "hass-webhooks.age".publicKeys = [closet nas office arch];
   "reolink-nvr.age".publicKeys = [office arch closet];
+
+  "frigate-plus.age".publicKeys = [arch];
 }
