@@ -112,6 +112,9 @@
       motion = {};
       objects = {
         track = ["person" "bicycle" "car" "motorcycle" "bus" "truck" "bird" "cat" "dog" "bear"];
+        genai = {
+          enabled = true;
+        };
       };
       lpr = {
         enabled = true;
