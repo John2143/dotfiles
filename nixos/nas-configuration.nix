@@ -474,19 +474,27 @@
         ${pkgs.util-linux}/bin/wall 'UPS power restored on NAS'
       '';
       doshutdown = ''
-        ${pkgs.util-linux}/bin/wall 'UPS battery critical — shutting down NAS NOW'
+        ${pkgs.util-linux}/bin/wall 'UPS battery critical — draining k3s node, stopping atticd, and shutting down NOW'
+        # Drain k3s node so Longhorn promotes replicas elsewhere
+        ${pkgs.k3s}/bin/k3s kubectl drain ${compName} --ignore-daemonsets --delete-emptydir-data --grace-period=90 --timeout=150s 2>/dev/null || true
+        # Graceful atticd stop — SIGTERM gives SQLite time to checkpoint WAL
+        ${pkgs.systemd}/bin/systemctl stop atticd
         sleep 5
-        ${pkgs.systemd}/bin/systemctl poweroff -f
+        # No -f — systemd runs orderly shutdown, giving all services TimeoutStopSec
+        ${pkgs.systemd}/bin/systemctl poweroff
       '';
+
     };
   };
   # ====================
   # === Attic Cache ===
   # ====================
 
-  # ZFS dataset (one-time): sudo zfs create -o mountpoint=/tank/atticd \
-  #   -o recordsize=1M -o compression=lz4 -o atime=off tank/atticd
-  #   sudo chown atticd:atticd /tank/atticd
+  # ZFS datasets (one-time):
+  #   Data:    sudo zfs create -o mountpoint=/tank/atticd -o recordsize=1M -o compression=lz4 -o atime=off tank/atticd
+  #   DB:      sudo zfs create -o mountpoint=/tank/atticd/db -o recordsize=64K -o compression=lz4 -o atime=off tank/atticd/db
+  #   Owner:   sudo chown atticd:atticd /tank/atticd /tank/atticd/db
+  #   Migrate: systemctl stop atticd && mv /tank/atticd/server.db /tank/atticd/db/ && systemctl start atticd
 
   # Declarative cache bootstrap — creates + configures the cache on first boot.
   # Token generation remains imperative: atticd-atticadm make-token
@@ -513,7 +521,8 @@
       listen = "[::]:8280";
       allowed-hosts = ["nas.ts.2143.me" "nas.ts.2143.me:8280" "nas" "nas:8280" "nas.local" "nas.local:8280" "localhost" "localhost:8280" "100.64.0.14" "100.64.0.14:8280"];
       api-endpoint = "http://nas:8280/";
-      database.url = "sqlite:///tank/atticd/server.db?mode=rwc";
+      database.url = "sqlite:///tank/atticd/db/server.db?mode=rwc";
+
       storage = {
         type = "local";
         path = "/tank/atticd/storage";
@@ -544,6 +553,7 @@
     DynamicUser = lib.mkForce false;
     PrivateUsers = lib.mkForce false;
     ReadWritePaths = ["/tank/atticd"];
+    TimeoutStopSec = "30s";
   };
 
   security.rtkit.enable = true;
