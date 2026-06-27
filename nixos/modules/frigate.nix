@@ -173,6 +173,11 @@
       api_key = "{FRIGATE_GEMINI_API_KEY}";
       model = "gemini-2.5-flash";
     };
+    classification = {
+      bird = {
+        enabled = true;
+      };
+    };
 
 
 
