@@ -70,7 +70,7 @@
       channel = "01"; codec = "hevc";
       detectWidth = 1920; detectHeight = 1080;
       audioEnabled = true;
-      inertia = 1;
+
       lprQuality = true;
       motionMask = [
         "0.998,0.275,0.716,0.186,0.675,0.1,0.637,0.086,0.587,0.075,0.549,0.102,0.524,0.111,0.491,0.106,0.449,0.097,0.405,0.102,0.377,0.097,0.337,0.102,0.31,0.11,0.27,0.106,0.253,0.104,0.219,0.101,0.215,0.073,0.196,0.075,0.181,0.09,0.166,0.11,0.146,0.116,0.123,0.12,0.104,0.117,0.061,0.111,0.023,0.097,0.002,0.095,0,0.004,0.998,0"
@@ -97,6 +97,7 @@
         road_speed_zone = {
           friendly_name = "Road Speed Zone";
           loitering_time = 0;
+          inertia = 1;
           speed_threshold = 10;
           distances = "8.75,11.51,8.7,14.75";
           coordinates = "0.644,0.214,0.642,0.268,0.899,0.366,0.902,0.321";
@@ -276,27 +277,27 @@
         track = objectLabels.all;
         genai = {
           enabled = true;
+          objects = objectLabels.describe;
         };
-      } // lib.optionalAttrs (cfg ? inertia) {
-        inherit (cfg) inertia;
       } // lib.optionalAttrs (cfg ? personMask || cfg ? objectMasks) {
         filters =
           (lib.optionalAttrs (cfg ? personMask) {
             person = { mask = cfg.personMask; };
           })
           // (cfg.objectMasks or {});
-      };
-      lpr = {
-        enabled = true;
-      };
-    } // lib.optionalAttrs (cfg ? zones) {
-      zones = cfg.zones;
-    } // lib.optionalAttrs (cfg.audioEnabled or false) {
-      audio = {
-        enabled = true;
-        listen = ["bark" "scream" "speech" "yell"];
-      };
     };
+    lpr = {
+      enabled = true;
+    };
+
+  } // lib.optionalAttrs (cfg ? zones) {
+    zones = cfg.zones;
+  } // lib.optionalAttrs (cfg.audioEnabled or false) {
+    audio = {
+      enabled = true;
+      listen = ["bark" "scream" "speech" "yell"];
+    };
+  };
 
   cameraSettings = builtins.mapAttrs mkCamera cameras;
 
@@ -343,9 +344,6 @@
       provider = "ollama";
       base_url = "http://100.64.0.3:11434";
       model = "huihui_ai/qwen3-vl-abliterated:8b";
-      objects = {
-        objects = objectLabels.describe;
-      };
     };
     classification = {
       bird = {
