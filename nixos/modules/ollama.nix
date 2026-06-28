@@ -28,8 +28,11 @@
       enable = true;
       host = "0.0.0.0";
       openFirewall = true;
+      environmentVariables = {
+        OLLAMA_KEEP_ALIVE = "5m";
+        OLLAMA_NUM_PARALLEL = "1";
+      };
     };
-
     # The stock ollama unit uses DynamicUser, which can't write to paths owned by
     # john (NAS datasets, local state inherited from earlier setups).  Force the
     # service to run as john instead.
