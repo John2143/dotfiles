@@ -60,6 +60,36 @@
     describe = lib.subtractLists excludeFromDescribe all;
   };
 
+  # ── GenAI prompt templates (composed per-camera + per-label) ─────
+  genaiPrompts = rec {
+    base = "
+    You are a security camera AI analyzer. You are tasked with describing what is happening in the following sequence of security camera images. The images are spaced abount one second apart. Focus your analysis on only things of interest in the image. Don't be distracted by pretty flowers: look for animals, people, cars, packages, broken objects, or anything else which makes this sequence stand out.
+
+    The first-pass detection that triggered this detection is a {label}. This object may or may not be in the image. If it does not exist, or you cannot find it, you should clearly state that it was not found. The first-pass step is with a very low-res detector and may be inaccurate. If the object is not present, still provide a description.
+
+    If the {label} is found, then you may focus on its intent or behaviour based on its actions and movent. Do not speculate. Consider what the object is doing, and what it might do next. For instance, you may see an image of a person outside a car, a person opening a door, and then just the car. You may infer that this person entered the car. Or if you see a cat hiding and rain, you may infer that the cat is taking shelter. But if you simply see a cat walking, do not speculate that it might be hunting or on the prowl. Only describe what is evident.
+    ";
+
+    suffix = "Remember. Do not speculate. Only describe what is visibly happening. This description must encompass the entire clip. Focus on anything out of the ordinary.";
+    camera = {
+      cam01 = "This camera sits approximately 12 feet in the air and overlooks our front walkway, front gate, and the sidewalk and intersection in front of our house. It can see the entire front yard, sidewalk, and street. Our yard is the fenced in area. Anything in the yard, in the walkway, or otherwise coming into the home is especially of interest. Be aware: This camera may pan and tilt to another location! It may swivel around and look around our house. In that case, you may see a completely different scene, like a yard and a road or a court. Make sure to distinguish if you're in the default position or not.";
+      cam02 = "This is the side yard with the side door and backyard gate. This camera can see a door on its right and the road on its left. The fence separates our yard from outside. To the right of the fence is our yard. Near the middle top of the frame is the back gate. This camera is often obscured partially by hanging plants. Look for cats and dogs near the floor! And cats in the street!";
+      cam03 = "This is our garage. It has two visible doors and two cars, usually. The left car is a blue classic car and the right car is a black Porsche. The garage has a workbench, shelving, and various tools and items. The garage doors are behind both the cars. There is a shelf on the right side of the garage with various items. There is a door offscreen to the right and to the left. A workbench is directly below the camera. The camera may pan and tilt.";
+      cam04 = "This is the backyard. On the left there is our trash storage. On the far left over the black fence is our neighbors yard. This camera oversees our back garage door, left garageu door, shed, back door, back french doors, back gates, and most of our back patio. Behind us is a large infrared light that can cast shadows on the ground that should not be mistaken. Focus on anything entering the house or shed, especially if the doors are closed.";
+      cam05 = "This is the front door and porch area. At the back of the image is our back driveway. This camera sits approximately 8 feet in the air. On the right is our front walkway. This camera is static. It shows inside the fence, and then a bit over the wall on the street behind above our fence.";
+      cam06 = "This is the driveway and front of the house showing the gate. This camera can show all cars entering and leaving the driveway, and also many people exiting our driveway fence gate. Finally, this camera can see all the way across our yard. It shows the other side's gate, and also the road outside our fence. Focus on anything inside our yard as a priority. Look closely for all enterances and across the yard inside the fence. Focus on objects about to enter the gate as well. If the gate opens or closes during your view, say that too.";
+      cam08 = "This is inside the server room. Any users in here are very rare. Describe all actions in detail of anyone who performs anything in here.";
+    };
+    label = {
+      person = "Focus on: clothing colors and style, height/build, items carried (packages, bags, tools), direction of movement, and whether they appear to be approaching, leaving, or loitering. Describe their actions and infer their intent if it is clear. Give extremely detailed physical descriptions of this person. Anything that makes them stand out in any way from the way they stand to their facial expression. Prentend this will be used by the police to identify this person in the event they commit a crime on this property. Do not make assumptions based on race or gender, but do describe their physical appearance in detail. Include at least three sentences for each person seen in the image. ";
+      dog = "If you think you see a dog, then your first goal should be to identify 'Luna'. Luna is a medium sized black labrador retreiver. Luna should be inside the fence, or accompanied by a person. If you see a dog, describe its size, color, and breed if you can identify it. Describe its behavior and whether it is accompanied by a person or not.";
+      cat = "If you think you see a dog, your first goal should be to indetify 'Trixie', 'Mica', or 'Other'. Trixie is a black-and-white cat. Mica is a gray cat. If you see either, then add their name as a maybe. If you see a cat, describe its size, color, and breed if you can identify it. Describe its behavior and whether it is accompanied by a person or not. Describe if its running away or at something";
+      package = "Describe: package size, color, carrier logo if visible, and where it was placed or who interacted with it. We need to be very aware of porch-pirates: if someone is seen taking a package and clearly leaving, then describe them in detail. Otherwise, focus on the package itself, who dropped it off, and where it was placed.";
+      face = "Describe: visible facial features, approximate age, expression, and direction they are facing.";
+      fox = "If you see a fox, then look for our other pets (cats and dogs). Describe the fox's size, color, and behavior. Describe if it is peering at our house. Describe if it may be limping.";
+    };
+  };
+
   # ── Camera definitions ────────────────────────────────────────────
   # Edit names. Each pulls one RTSP stream from the Reolink NVR:
   #   /h264Preview_0N_main  → detection + recording (full resolution)
@@ -216,7 +246,7 @@
   # Uses ${NVR_USER}, ${NVR_PASS}, ${NVR_HOST} placeholders —
   # envsubst fills them at runtime from the agenix env file.
   mkCamera =
-    _: cfg: {
+    key: cfg: {
       ffmpeg = {
         hwaccel_args =
           if cfg.codec or "h264" == "hevc"
@@ -278,6 +308,19 @@
         genai = {
           enabled = true;
           objects = objectLabels.describe;
+          prompt = lib.concatStringsSep " " [
+            genaiPrompts.base
+            (genaiPrompts.camera.${key} or "")
+            genaiPrompts.suffix
+          ];
+          object_prompts = lib.mapAttrs (labelName: hint:
+            lib.concatStringsSep " " [
+              genaiPrompts.base
+              (genaiPrompts.camera.${key} or "")
+              hint
+              genaiPrompts.suffix
+            ]
+          ) genaiPrompts.label;
         };
       } // lib.optionalAttrs (cfg ? personMask || cfg ? objectMasks) {
         filters =
