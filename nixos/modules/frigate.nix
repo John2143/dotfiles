@@ -332,16 +332,125 @@
       bird = {
         enabled = true;
       };
-      # Custom MobileNetV2 classifiers — train in Frigate UI (Classification page)
-      # custom = {
-      #   <model_name> = {
-      #     threshold = 0.8;
-      #     object_config = {
-      #       objects = [ "person" ];   # which tracked object to classify
-      #       classification_type = "sub_label";  # or "attribute"
-      #     };
-      #   };
-      # };
+      custom = {
+        cam05_front_door = {
+          threshold = 0.8;
+          state_config = {
+            motion = true;
+            interval = 10;
+            cameras = {
+              cam05 = { crop = [0, 0, 100, 100]; };  # PLACEHOLDER — draw in UI
+            };
+          };
+        };
+        cam03_garage_door_left = {
+          threshold = 0.8;
+          state_config = {
+            motion = true;
+            interval = 10;
+            cameras = {
+              cam03 = { crop = [0, 0, 100, 100]; };  # PLACEHOLDER — draw in UI
+            };
+          };
+        };
+        cam03_garage_door_right = {
+          threshold = 0.8;
+          state_config = {
+            motion = true;
+            interval = 10;
+            cameras = {
+              cam03 = { crop = [0, 0, 100, 100]; };  # PLACEHOLDER — draw in UI
+            };
+          };
+        };
+        cam06_front_gate = {
+          threshold = 0.8;
+          state_config = {
+            motion = true;
+            interval = 10;
+            cameras = {
+              cam06 = { crop = [0, 0, 100, 100]; };  # PLACEHOLDER — draw in UI
+            };
+          };
+        };
+        cam06_fence_gate = {
+          threshold = 0.8;
+          state_config = {
+            motion = true;
+            interval = 10;
+            cameras = {
+              cam06 = { crop = [0, 0, 100, 100]; };  # PLACEHOLDER — draw in UI
+            };
+          };
+        };
+        cam04_back_garage_door = {
+          threshold = 0.8;
+          state_config = {
+            motion = true;
+            interval = 10;
+            cameras = {
+              cam04 = { crop = [0, 0, 100, 100]; };  # PLACEHOLDER — draw in UI
+            };
+          };
+        };
+        cam04_back_gate = {
+          threshold = 0.8;
+          state_config = {
+            motion = true;
+            interval = 10;
+            cameras = {
+              cam04 = { crop = [0, 0, 100, 100]; };  # PLACEHOLDER — draw in UI
+            };
+          };
+        };
+        cam04_back_door = {
+          threshold = 0.8;
+          state_config = {
+            motion = true;
+            interval = 10;
+            cameras = {
+              cam04 = { crop = [0, 0, 100, 100]; };  # PLACEHOLDER — draw in UI
+            };
+          };
+        };
+        cam04_french_doors = {
+          threshold = 0.8;
+          state_config = {
+            motion = true;
+            interval = 10;
+            cameras = {
+              cam04 = { crop = [0, 0, 100, 100]; };  # PLACEHOLDER — draw in UI
+            };
+          };
+        };
+        cam02_side_door = {
+          threshold = 0.8;
+          state_config = {
+            motion = true;
+            interval = 10;
+            cameras = {
+              cam02 = { crop = [0, 0, 100, 100]; };  # PLACEHOLDER — draw in UI
+            };
+          };
+        };
+        cam01_front_gate = {
+          threshold = 0.8;
+          state_config = {
+            motion = true;
+            interval = 10;
+            cameras = {
+              cam01 = { crop = [0, 0, 100, 100]; };  # PLACEHOLDER — draw in UI
+            };
+          };
+        };
+        our_pets = {
+          threshold = 0.8;
+          object_config = {
+            objects = [ "dog" "cat" ];
+            classification_type = "attribute";
+          };
+        };
+      };
     };
     semantic_search = {
       enabled = true;
