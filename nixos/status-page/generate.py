@@ -531,7 +531,12 @@ def render_summary(nodes, services, pods, certs, alerts):
     nodes_total = len(nodes)
     svc_up = sum(1 for s in services if s["up"])
     svc_total = len(services)
-    pods_ok = "N/A" if pods is None else f"{len([p for p in pods if p['status'] not in ('Error','CrashLoopBackOff','ImagePullBackOff','Pending')])} OK"  # noqa
+    if pods is None:
+        pods_text = "N/A"
+    elif len(pods) == 0:
+        pods_text = "All healthy"
+    else:
+        pods_text = f"{len(pods)} unhealthy"
     certs_ok = sum(1 for c in certs if c["ok"])
     certs_total = len(certs)
     alert_count = len(alerts)
@@ -539,7 +544,7 @@ def render_summary(nodes, services, pods, certs, alerts):
 
     return (
         f'│ Nodes  │ Services │ Pods    │ Certs      │ Alerts {alert_count}  │\n'
-        f'│ {nodes_up}/{nodes_total} UP │ {svc_up}/{svc_total} UP  │ {pods_ok} │ {certs_ok}/{certs_total} valid  │ {alert_text}     │'
+        f'│ {nodes_up}/{nodes_total} UP │ {svc_up}/{svc_total} UP  │ {pods_text} │ {certs_ok}/{certs_total} valid  │ {alert_text}     │'
     )
 
 
