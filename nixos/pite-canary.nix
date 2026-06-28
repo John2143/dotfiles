@@ -62,6 +62,9 @@
             targets = [
               "https://john2143.com"
               "https://2143.me/user"
+              "https://2143.me"
+              "https://i.2143.me"
+              "https://files.john2143.com"
             ];
           }
         ];
@@ -167,6 +170,7 @@
   systemd.tmpfiles.rules = [
     "d /run/alertmanager 0755 root root -"
     "d /var/www/status 0755 root root -"
+    "d /var/lib/status-page 0755 root root -"
   ];
 
   # ── Alertmanager — ntfy-only, config generated at runtime ──────
@@ -278,70 +282,17 @@
       '';
     };
   };
-
-  # Status page generator — queries pite's Prometheus, renders HTML
+  # Status page generator — Python script queries Prometheus + Mimir + kubectl
   systemd.services.status-page = {
-    description = "Generate status page HTML";
+    description = "Generate enhanced status page HTML";
     serviceConfig = {
       Type = "oneshot";
       User = "root";
       Group = "root";
     };
-    path = [pkgs.jq pkgs.curl];
+    path = [pkgs.python3 pkgs.kubectl];
     script = ''
-      OUT="/var/www/status/index.html"
-
-      # Current alerts
-      ALERTS=$(${pkgs.curl}/bin/curl -s localhost:9090/api/v1/alerts | \
-        ${pkgs.jq}/bin/jq -r '
-          .data.alerts[] | select(.status=="firing") |
-          "<tr><td class=\"\(.labels.severity)\">\(.labels.alertname)</td><td>\(.annotations.summary // "N/A")</td></tr>"
-        ' 2>/dev/null)
-
-      # Target health
-      TARGETS_UP=$(${pkgs.curl}/bin/curl -s localhost:9090/api/v1/targets | \
-        ${pkgs.jq}/bin/jq '[.data.activeTargets[] | select(.health=="up")] | length')
-      TARGETS_DOWN=$(${pkgs.curl}/bin/curl -s localhost:9090/api/v1/targets | \
-        ${pkgs.jq}/bin/jq '[.data.activeTargets[] | select(.health=="down")] | length')
-
-      DOWN_HTML=""
-      [ "$TARGETS_DOWN" -gt 0 ] && DOWN_HTML=" / <span class='red'>$TARGETS_DOWN down</span>"
-
-      ALERTS_HTML=""
-      [ -n "$ALERTS" ] && ALERTS_HTML="<h2>Active Alerts</h2><table>$ALERTS</table>"
-
-      cat > "$OUT" <<EOF
-      <!DOCTYPE html>
-      <html lang="en">
-      <head>
-        <title>2143 Status</title>
-        <meta charset="utf-8">
-        <meta http-equiv="refresh" content="30">
-        <style>
-          body { font-family: system-ui, sans-serif; max-width: 720px; margin: 2em auto; padding: 1em; }
-          .green { color: #155724; background: #d4edda; padding: 2px 8px; border-radius: 4px; }
-          .red { color: #721c24; background: #f8d7da; padding: 2px 8px; border-radius: 4px; }
-          table { border-collapse: collapse; width: 100%; }
-          td, th { padding: 6px; border-bottom: 1px solid #ddd; }
-          .critical { color: #721c24; font-weight: bold; }
-          .warning { color: #856404; }
-          .info { color: #0c5460; }
-          a { color: #0056b3; }
-        </style>
-      </head>
-      <body>
-        <h1>2143 Status</h1>
-        <p>Updated: $(date -u +"%Y-%m-%d %H:%M:%S UTC")</p>
-        <p>Targets: <span class="green">$TARGETS_UP up</span>$DOWN_HTML</p>
-        $ALERTS_HTML
-        $( [ -z "$ALERTS" ] && echo "<p>No active alerts.</p>" )
-        <p style="margin-top:2em;font-size:small">
-          <a href="https://grafana.ts.2143.me">Grafana &rarr;</a> —
-          <a href="http://pite.local:9090">Prometheus &rarr;</a>
-        </p>
-      </body>
-      </html>
-      EOF
+      ${pkgs.python3}/bin/python3 ${./status-page/generate.py}
     '';
   };
 
