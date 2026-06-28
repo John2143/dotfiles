@@ -11,7 +11,7 @@
   imports = [
     ./office-hardware-configuration.nix
     ./modules/user-john.nix
-    #./modules/ollama.nix
+    ./modules/ollama.nix
     ./modules/teamspeak.nix
     #./waybar.nix
     # inputs.home-manager.nixosModules.default
@@ -113,11 +113,11 @@
     #inputs.self.packages.x86_64-linux.waytop
   ];
 
-  #services.ollama = {
-  #  package = pkgs.ollama-rocm;
-  #};
+  services.ollama = {
+     package = pkgs.ollama-rocm;
+  };
 
-  ## CPU-only Ollama removed 2026-05-31 — full ollama disable.
+  # Ollama (ROCm) for Frigate GenAI. Serves on :11434 via Tailscale + LAN.
 
   # drones
   services.upower.enable = true;
