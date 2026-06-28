@@ -385,9 +385,12 @@
     };
 
     genai = {
-      provider = "ollama";
-      base_url = "http://100.64.0.3:11434";
-      model = "huihui_ai/qwen3-vl-abliterated:8b";
+      # provider = "ollama";
+      # base_url = "http://100.64.0.3:11434";
+      # model = "huihui_ai/qwen3-vl-abliterated:8b";
+      provider = "gemini";
+      api_key = "\${FRIGATE_GEMINI_API_KEY}";
+      model = "gemini-2.5-flash";
     };
     classification = {
       bird = {
