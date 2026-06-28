@@ -74,6 +74,13 @@
           loitering_time = 0;
           coordinates = "0.533,0.288,0.605,0.318,0.653,0.334,0.716,0.352,0.784,0.373,0.856,0.399,0.926,0.417,0.999,0.551,0.996,0.998,0.887,0.993,0.86,0.926,0.835,0.876,0.813,0.842,0.788,0.793,0.759,0.744,0.744,0.723,0.723,0.678,0.696,0.642,0.665,0.579,0.632,0.517,0.609,0.46,0.592,0.422,0.575,0.382,0.556,0.319";
         };
+        road_speed_zone = {
+          friendly_name = "Road Speed Zone";
+          loitering_time = 0;
+          speed_threshold = 10;
+          distances = "8.75,11.51,8.7,14.75";
+          coordinates = "0.644,0.214,0.642,0.268,0.899,0.366,0.902,0.321";
+        };
       };
     };
     # Main: 3840x2160 4K HEVC 25fps  Sub: 640x360 H264 25fps
@@ -325,6 +332,16 @@
       bird = {
         enabled = true;
       };
+      # Custom MobileNetV2 classifiers — train in Frigate UI (Classification page)
+      # custom = {
+      #   <model_name> = {
+      #     threshold = 0.8;
+      #     object_config = {
+      #       objects = [ "person" ];   # which tracked object to classify
+      #       classification_type = "sub_label";  # or "attribute"
+      #     };
+      #   };
+      # };
     };
     semantic_search = {
       enabled = true;
