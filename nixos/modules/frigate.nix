@@ -148,12 +148,8 @@
       };
     };
     model = {
-      path = "/config/model_cache/yolov9-c-640.onnx";
-      model_type = "yolo-generic";
-      width = 640;
-      height = 640;
-      input_tensor = "nchw";
-      input_dtype = "float";
+      # Downgrade: path = "/config/model_cache/yolov9-c-640.onnx"; model_type = "yolo-generic"; width = 640; height = 640; input_tensor = "nchw"; input_dtype = "float";
+      path = "plus://3468817eacc0ca053c0256a2113b1c04";
     };
     face_recognition = {
       enabled = true;
@@ -173,7 +169,7 @@
 
     genai = {
       provider = "ollama";
-      base_url = "http://office.ts.2143.me:11434";
+      base_url = "http://100.64.0.3:11434";
       model = "huihui_ai/qwen3-vl-abliterated:8b";
     };
     classification = {
@@ -335,13 +331,14 @@ in {
       ];
     };
   };
-  # ── Auto-build YOLOv9 ONNX model if missing ──────────────────────
+  /*
+  # ── Downgrade to YOLOv9 (uncomment all lines between START/END) ──
   systemd.services.build-frigate-model = {
     description = "Build Frigate YOLOv9 ONNX model if missing";
     wantedBy = ["multi-user.target"];
     before = ["podman-frigate.service"];
     path = [ pkgs.podman ];
-    script = ''
+    script = '''
       MODEL=/var/lib/frigate/model_cache/yolov9-c-640.onnx
       if [ -f "$MODEL" ]; then
         echo "Model already exists at $MODEL"
@@ -357,7 +354,7 @@ in {
         /tmp
       chown 1000:1000 "$MODEL"
       echo "Model built: $(ls -lh "$MODEL" | awk '{print $5}')"
-    '';
+    ''';
     serviceConfig = {
       Type = "oneshot";
       RemainAfterExit = true;
@@ -365,9 +362,9 @@ in {
       User = "root";
     };
   };
-
   systemd.services."podman-frigate" = {
     after = [ "build-frigate-model.service" ];
     requires = [ "build-frigate-model.service" ];
   };
+  */
 }
