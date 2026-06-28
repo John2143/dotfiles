@@ -36,22 +36,7 @@
     dockerCompat = true;
   };
 
-  #virtualisation.oci-containers = {
-  #backend = "podman";
-  #containers.teamspeak = {
-  #image = "docker.io/teamspeak:latest";
-  #ports = [
-  #"9987:9987/udp"
-  #"30033:30033"
-  #];
-  #environment = {
-  #TS3SERVER_LICENSE = "accept";
-  #};
-  #volumes = [
-  #"/home/john/teamspeak/teamspeak3-server_linux_amd64_old:/var/ts3server"
-  #];
-  #};
-  #};
+  # (cam04 restream moved to Frigate's ffmpeg with NVR sub-stream — no separate service needed)
 
   networking.hostName = compName; # Define your hostname.
   networking.networkmanager.enable = true; # Easiest to use and most distros use this by default.
@@ -71,6 +56,7 @@
     git
     fish
     curl
+    kubectl
   ];
 
   programs.gnupg.agent = {
@@ -158,6 +144,9 @@
   # clients can reach the kube-vip VIP (192.168.5.10) for k8s services.
   # Approved in headscale admin UI.
   services.tailscale.extraUpFlags = [ "--advertise-routes=192.168.5.0/24" ];
+  # Keep Longhorn data mount active during k3s shutdown so iSCSI can
+  # logout cleanly before the filesystem unmounts.
+  custom.k3sStorageAfter = ["mnt-longhorn.mount"];
 
   services.postgresql = {
     enable = true;
@@ -188,6 +177,7 @@
     2380 # etcd peer (k3s join)
     5432 # Postgres
     5580 # matter-server (hostNetwork pod)
+    179 # BGP for kube-vip
   ];
   networking.firewall.allowedUDPPorts = [
     8472 # flannel VXLAN (k3s)
@@ -224,8 +214,10 @@
         ${pkgs.util-linux}/bin/wall 'UPS power restored'
       '';
       doshutdown = ''
-        ${pkgs.util-linux}/bin/wall 'UPS battery critical — shutting down NOW'
-        sleep 5
+        ${pkgs.util-linux}/bin/wall 'UPS battery critical — draining k3s node and shutting down NOW'
+        # Drain this k3s node before poweroff — gives Longhorn time to
+        # promote replicas and avoids the 5-minute iSCSI timeout delay.
+        ${pkgs.k3s}/bin/k3s kubectl drain ${compName} --ignore-daemonsets --delete-emptydir-data --grace-period=90 --timeout=150s 2>/dev/null || true
         ${pkgs.systemd}/bin/systemctl poweroff -f
       '';
     };

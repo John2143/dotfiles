@@ -35,7 +35,6 @@
 #      sudo zfs create -o mountpoint=/tank/scratch  tank/scratch
 #      sudo zfs create -o mountpoint=/tank/private  tank/private
 #      sudo zfs create -o mountpoint=/tank/atticd   tank/atticd
-
 #    Attic Nix cache — chunk-level dedup binary cache shared across all
 #    machines. Store paths land on the raidz1 HDDs with lz4 compression:
 #      sudo zfs create -o mountpoint=/tank/atticd \
@@ -115,12 +114,10 @@
     ./nas-hardware-configuration.nix
     ./modules/user-john.nix
     ./modules/disko_nas.nix
-
   ];
   fileSystems."/".neededForBoot = lib.mkForce true;
   home-manager.users."john" = import ./home-cli.nix;
   services.getty.autologinUser = "john";
-
 
   boot.loader = {
     systemd-boot.enable = true;
@@ -129,8 +126,14 @@
   boot.kernel.sysctl = {
     "kernel.hardlockup_panic" = "1";
     "kernel.softlockup_panic" = "1";
+    "vm.swappiness" = "100";
   };
-
+  boot.kernelParams = [
+    "zswap.enabled=1"
+    "zswap.compressor=zstd"
+    "zswap.zpool=zsmalloc"
+    "zswap.max_pool_percent=30"
+  ];
 
   virtualisation.podman = {
     enable = true;
@@ -273,8 +276,6 @@
     "--node-label=node.longhorn.io/create-default-disk=true"
   ];
 
-
-
   # ================
   # === NFS      ===
   # ================
@@ -298,6 +299,11 @@
     enable = true;
     exports = ''
       /tank/longhorn-backups 100.64.0.0/10(rw,sync,no_subtree_check,no_root_squash,fsid=0) 192.168.5.0/24(rw,sync,no_subtree_check,no_root_squash,fsid=0) 10.42.0.0/16(rw,sync,no_subtree_check,no_root_squash,fsid=0)
+      # ── Observability archive ──────────────────────────────────
+      # One-time: sudo zfs create -o mountpoint=/tank/logs -o recordsize=1M \
+      #             -o compression=lz4 -o atime=off tank/logs
+      #           sudo chown nobody:nogroup /tank/logs
+      /tank/logs               100.64.0.0/10(rw,async,no_subtree_check,no_root_squash,fsid=3) 192.168.5.0/24(rw,async,no_subtree_check,no_root_squash,fsid=3)
       /tank/frigate           100.64.0.0/10(rw,sync,no_subtree_check,no_root_squash,all_squash,anonuid=1000,anongid=1000,fsid=1) 192.168.5.0/24(rw,sync,no_subtree_check,no_root_squash,all_squash,anonuid=1000,anongid=1000,fsid=1) 10.42.0.0/16(rw,sync,no_subtree_check,no_root_squash,all_squash,anonuid=1000,anongid=1000,fsid=1)
     '';
   };
@@ -468,26 +474,34 @@
         ${pkgs.util-linux}/bin/wall 'UPS power restored on NAS'
       '';
       doshutdown = ''
-        ${pkgs.util-linux}/bin/wall 'UPS battery critical — shutting down NAS NOW'
+        ${pkgs.util-linux}/bin/wall 'UPS battery critical — draining k3s node, stopping atticd, and shutting down NOW'
+        # Drain k3s node so Longhorn promotes replicas elsewhere
+        ${pkgs.k3s}/bin/k3s kubectl drain ${compName} --ignore-daemonsets --delete-emptydir-data --grace-period=90 --timeout=150s 2>/dev/null || true
+        # Graceful atticd stop — SIGTERM gives SQLite time to checkpoint WAL
+        ${pkgs.systemd}/bin/systemctl stop atticd
         sleep 5
-        ${pkgs.systemd}/bin/systemctl poweroff -f
+        # No -f — systemd runs orderly shutdown, giving all services TimeoutStopSec
+        ${pkgs.systemd}/bin/systemctl poweroff
       '';
+
     };
   };
   # ====================
   # === Attic Cache ===
   # ====================
 
-  # ZFS dataset (one-time): sudo zfs create -o mountpoint=/tank/atticd \
-  #   -o recordsize=1M -o compression=lz4 -o atime=off tank/atticd
-  #   sudo chown atticd:atticd /tank/atticd
+  # ZFS datasets (one-time):
+  #   Data:    sudo zfs create -o mountpoint=/tank/atticd -o recordsize=1M -o compression=lz4 -o atime=off tank/atticd
+  #   DB:      sudo zfs create -o mountpoint=/tank/atticd/db -o recordsize=64K -o compression=lz4 -o atime=off tank/atticd/db
+  #   Owner:   sudo chown atticd:atticd /tank/atticd /tank/atticd/db
+  #   Migrate: systemctl stop atticd && mv /tank/atticd/server.db /tank/atticd/db/ && systemctl start atticd
 
   # Declarative cache bootstrap — creates + configures the cache on first boot.
   # Token generation remains imperative: atticd-atticadm make-token
   systemd.services.attic-cache-bootstrap = {
     description = "Ensure Attic cache 2143nix exists and is configured";
-    after = [ "atticd.service" ];
-    requires = [ "atticd.service" ];
+    after = ["atticd.service"];
+    requires = ["atticd.service"];
     serviceConfig.Type = "oneshot";
     serviceConfig.RemainAfterExit = true;
     script = ''
@@ -507,14 +521,14 @@
       listen = "[::]:8280";
       allowed-hosts = ["nas.ts.2143.me" "nas.ts.2143.me:8280" "nas" "nas:8280" "nas.local" "nas.local:8280" "localhost" "localhost:8280" "100.64.0.14" "100.64.0.14:8280"];
       api-endpoint = "http://nas:8280/";
-      database.url = "sqlite:///tank/atticd/server.db?mode=rwc";
+      database.url = "sqlite:///tank/atticd/db/server.db?mode=rwc";
+
       storage = {
         type = "local";
         path = "/tank/atticd/storage";
       };
     };
   };
-
 
   age.secrets.attic-jwt-secret = {
     file = ../secrets/attic-jwt-secret.age;
@@ -538,7 +552,8 @@
   systemd.services.atticd.serviceConfig = {
     DynamicUser = lib.mkForce false;
     PrivateUsers = lib.mkForce false;
-    ReadWritePaths = [ "/tank/atticd" ];
+    ReadWritePaths = ["/tank/atticd"];
+    TimeoutStopSec = "30s";
   };
 
   security.rtkit.enable = true;
@@ -546,23 +561,25 @@
   networking.firewall = {
     enable = true;
     allowedTCPPorts = [
-
-
       111 # rpcbind (NFS)
       2049 # nfsv4 (NFS) — Longhorn backup target
       2283 # immich (immich-server)
       25565 # minecraft (paperMC)
       5580 # matter-server (hostNetwork pod)
+      179 # BGP for kube-vip
       8280 # attic nix cache — nas-configuration.nix:557
       10250 # kubelet (k3s agent)
+      9100 # node_exporter (Prometheus metrics)
 
       20048 # rpc.mountd (NFS)
     ];
     allowedTCPPortRanges = [
-      { from = 30000; to = 32767; } # Kubernetes NodePort range
+      {
+        from = 30000;
+        to = 32767;
+      } # Kubernetes NodePort range
     ];
     allowedUDPPorts = [
-
       111 # rpcbind (NFS)
       20048 # rpc.mountd (NFS)
       8472 # flannel VXLAN
@@ -585,5 +602,3 @@
 
   system.stateVersion = "26.05";
 }
-
-

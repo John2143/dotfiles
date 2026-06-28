@@ -1,6 +1,6 @@
 # Hardware Specs: vpin
 
-**Generated:** 2026-05-24T02:16:59Z
+**Generated:** 2026-06-12T21:00:00Z (SD swap — vpin's SD now in the non-UPS Pi chassis)
 
 ## System Overview
 
@@ -33,7 +33,7 @@
 
 | Type | Size |
 |---|---|
-| RAM | 3.7Gi |
+| RAM | 1.8Gi |
 | Swap | 6.0Gi |
 
 _No DIMM details available (requires root/dmidecode on x86)_
@@ -66,6 +66,6 @@ mmcblk0     59.5G disk                            0
 
 - Mullvad VPN exit node (offers exit node on Tailscale)
 - Tailscale connected
-- 64GB SD card (smaller than the 238GB cards on pite/aman)
-- No DMI data (ARM platform)
-
+- **NOT on UPS** (SD swapped into the non-UPS Pi chassis 2026-06-12)
+- 59.5 GB SD card (was in UPS-protected Pi before SD swap)
+- No DMI data available (ARM platform)

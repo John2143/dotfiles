@@ -22,6 +22,14 @@
     enable = true;
     name = "iqn.2026-05.me.2143:${config.networking.hostName}";
   };
+  # Reduce kernel SCSI replacement_timeout from 120s to 15s — Longhorn handles
+  # replication at the app level, so slow SCSI error recovery just adds
+  # needless delays on reboot (5 minutes compounding across ~30 LUNs).
+  boot.iscsi-initiator.extraConfig = ''
+    node.session.timeo.replacement_timeout = 15
+  '';
+  # Give iscsid enough time for clean iSCSI logout before SIGKILL
+  systemd.services.iscsid.serviceConfig.TimeoutStopSec = "60s";
 
   environment.systemPackages = with pkgs; [
     openiscsi
@@ -44,4 +52,16 @@
     "L+ /usr/local/bin/lsblk      - - - - ${pkgs.util-linux}/bin/lsblk"
     "L+ /usr/local/sbin/mkfs.ext4 - - - - ${pkgs.e2fsprogs}/bin/mkfs.ext4"
   ];
+  # Cleanly logout all iSCSI sessions before shutdown — prevents kernel SCSI
+  # from timing out each orphaned LUN sequentially (which causes ~5min delay).
+  systemd.services.iscsi-logout-shutdown = {
+    description = "Logout all iSCSI sessions before shutdown";
+    wantedBy = ["shutdown.target"];
+    before = ["shutdown.target"];
+    serviceConfig = {
+      Type = "oneshot";
+      RemainAfterExit = false;
+      ExecStart = "${pkgs.openiscsi}/bin/iscsiadm -m node --logoutall=all";
+    };
+  };
 }

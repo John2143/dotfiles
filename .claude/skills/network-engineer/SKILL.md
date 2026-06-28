@@ -36,6 +36,8 @@ mikrotik-connect r '/ip arp print terse where status=reachable'
 mikrotik-connect r '/ip arp print terse where status=permanent'
 mikrotik-connect r '/ip route print terse'
 mikrotik-connect r '/ip firewall nat print terse where chain=dstnat'
+mikrotik-connect r '/routing bgp session print'
+mikrotik-connect r '/routing bgp connection print'
 ```
 
 **IPv6 state:**
@@ -302,7 +304,7 @@ Baseline (captured 2026-05-29, live-confirmed 2026-05-29):
 | 80, 443 | TCP | **kube-vip VIP (.10):80,443** | traefik LB | 31316, 30908 | HTTP/HTTPS ingress |
 | 9987 | UDP | **VIP (.10):30087** | ts-voice:30087 | 30087 | Teamspeak voice |
 | 30033 | TCP | **VIP (.10):30034** | ts-files:30034 | 30034 | Teamspeak file transfer |
-| 5432 | TCP | **closet (.35):5432** | Postgres (NixOS bare-metal) | — | PostgreSQL |
+|| 5432 | TCP | **closet (.36):5432** | Postgres (NixOS bare-metal) | — | PostgreSQL |
 | 25565 | TCP | nas (.175):32565 | minecraft-game:32565 | 32565 | Minecraft (k8s) |
 | 32565 | TCP | nas (.175):32565 | minecraft-game:32565 | 32565 | Minecraft alternate |
 | 11753 | TCP | **VIP (.10):31753** | openrct2-game:31753 | 31753 | OpenRCT2 |
@@ -403,6 +405,7 @@ mikrotik-connect r '/ip arp print terse where status=permanent'
 ### Routes
 ```
 mikrotik-connect r '/ip route print terse'
+mikrotik-connect r '/routing bgp session print'
 ```
 
 ### Uplink Status
@@ -454,7 +457,7 @@ bridge should have fd00:1::1/64
 chain=srcnat action=masquerade out-interface=2GWAN dst-address=!192.168.0.0/24
 
 # Hairpin NAT removed 2026-05-29 — dynamic public IP makes it impractical.
-# Access services directly via internal IPs (192.168.5.10 for k3s, .35 for Postgres).
+# Access services directly via internal IPs (192.168.5.10 for k3s, .36 for Postgres).
 ```
 
 ## k3s Cluster
@@ -491,12 +494,96 @@ Query live: `ssh closet 'kubectl get nodes,pods,svc -A'`
 
 1. **home-pi on WAN subnet:** Connected directly to Verizon router (192.168.0.154), not behind MikroTik NAT. Headscale traffic bypasses the MikroTik entirely. home-pi cannot reach LAN devices unless via Tailscale routes.
 
-2. **kube-vip VIP 192.168.5.10:** Floating IP for k3s API. Any control-plane node can hold it via ARP. Most dst-nat rules now target the VIP instead of closet directly, providing HA for inbound services.
+2. **kube-vip VIP 192.168.5.10:** Floating IP for k3s API. Advertised via BGP (migrated from ARP 2026-06-17) to MikroTik AS 65001. The leader pod adds the VIP to loopback and announces a `/32` route. Standby pods maintain BGP sessions but don't advertise. The VIP NEVER appears as a secondary address on physical interfaces — this prevents Flannel VXLAN FDB corruption. Config: `argo/workloads/kube-vip/daemonset.yaml`. AS layout: kube-vip nodes AS 65000, MikroTik AS 65001. See BGP section.
 
-3. **ULA IPv6 (fd00:1::/64):** Site-local IPv6 on MikroTik bridge. All 3 k3s servers have static ULA addresses (.35, .76, .175) for stable dual-stack node-ip. Survives ISP prefix delegation changes.
-
+3. **ULA IPv6 (fd00:1::/64):** Site-local IPv6 on MikroTik bridge. All 3 k3s servers have static ULA addresses (.36, .76, .175) for stable dual-stack node-ip. Survives ISP prefix delegation changes.
 4. **k3s pod network uses flannel VXLAN:** 10.42.0.0/24 + fd42:42:42::/56 dual-stack overlay.
 
+## BGP (kube-vip — since 2026-06-17)
+
+kube-vip floats the VIP 192.168.5.10 via BGP instead of ARP. This prevents VXLAN FDB corruption that previously caused cross-node pod network outages.
+
+### Topology
+
+```
+kube-vip pods (AS 65000, hostNetwork, port 179)
+  arch    (192.168.5.76)  ──┐
+  closet  (192.168.5.36)  ──┼── BGP peering ── MikroTik (AS 65001, 192.168.5.1)
+  nas     (192.168.5.175) ──┘         │
+                                      │ /32 route
+                                      ▼
+                              192.168.5.10/32 → leader's real IP
+```
+
+The leader pod wins a Kubernetes lease (`kube-system/kube-vip`), adds the VIP to loopback, and announces it via BGP. Standby pods maintain idle sessions. If the leader dies, a new leader wins the lease and re-announces — failover takes 5-15 seconds.
+
+### Live Status
+
+```bash
+# Check BGP sessions
+mikrotik-connect r '/routing bgp session print'
+# Look for: state=established. Leader has prefix-count=1, standbys have prefix-count=0.
+
+# Check VIP route
+mikrotik-connect r '/ip route print where dst-address=192.168.5.10/32'
+# Shows gateway=<leader-ip>, DAb flags (dynamic, active, bgp)
+
+# Which node is leader?
+ssh closet.local 'kubectl get lease -n kube-system kube-vip -o jsonpath="{.spec.holderIdentity}"'
+
+# Verify VIP on leader's loopback
+ssh <leader>.local 'ip addr show lo | grep 192.168.5.10'
+# Should show: inet 192.168.5.10/32 scope host lo
+```
+
+### Adding/Removing Nodes
+
+**Add a control-plane node to BGP:**
+```bash
+# 1. Add BGP connection on MikroTik
+mikrotik-connect r '/routing bgp connection add name=kube-vip-<node> as=65001 local.address=192.168.5.1 local.role=ebgp remote.address=192.168.5.<IP> remote.as=65000'
+
+# 2. Ensure firewall port 179 is open on the new node's NixOS config
+#    (dotfiles/nixos/<node>-configuration.nix)
+
+# 3. The kube-vip DaemonSet uses nodeAffinity for control-plane nodes,
+#    so the pod will auto-deploy. It reads bgp_peers from env var.
+```
+
+**Remove a node:**
+```bash
+mikrotik-connect r '/routing bgp connection remove [find name=kube-vip-<node>]'
+```
+
+### Troubleshooting
+
+```bash
+# BGP session won't establish?
+ssh <node>.local 'ss -tlnp | grep 179'           # Is kube-vip listening?
+ssh <node>.local 'iptables -L INPUT -n | grep 179' # Firewall open?
+ssh closet.local 'kubectl logs -n kube-system -l app=kube-vip --tail=30' | grep -i bgp
+
+# VIP unreachable?
+# Check leader lease, BGP route, loopback VIP (three commands above).
+
+# Force leader failover (test only):
+ssh closet.local 'kubectl delete lease -n kube-system kube-vip'
+
+# VXLAN FDB contaminated again? (shouldn't happen with BGP, but check):
+for node in closet arch nas; do
+  ssh closet.local "kubectl debug node/$node -it --profile=sysadmin --image=nicolaka/netshoot:latest -- nsenter -t 1 -n -- bridge fdb show dev flannel.1 | grep '192.168.5.10'"
+done
+# Should return nothing. If not, see headscale-flannel-fix plan.
+```
+
+### Configs Location
+
+| Component | File |
+|-----------|------|
+| kube-vip DaemonSet (args, env) | `argo/workloads/kube-vip/daemonset.yaml` |
+| MikroTik BGP connections | on router (`mikrotik-connect r /routing bgp connection print`) |
+| Firewall port 179 | `dotfiles/nixos/<host>-configuration.nix` → `networking.firewall.allowedTCPPorts` |
+| MikroTik dst-nat (VIP targets) | on router (`mikrotik-connect r /ip firewall nat print where chain=dstnat`) |
 ## Config Backup & Restore
 Full config exports are saved in the dotfiles repo (`~/dotfiles/network-configs/`) for
 disaster recovery. These are RouterOS script files (`.rsc`) — plain text, one command

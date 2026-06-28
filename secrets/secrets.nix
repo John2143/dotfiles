@@ -115,7 +115,7 @@ in {
   # ntfy.sh topic URL for OMP agent notifications. Topic name is not a
   # cryptographic secret (public server, anyone with the name can publish),
   # but keeping it out of the Nix store avoids accidental exposure.
-  "ntfy-topic-url.age".publicKeys = [office arch];
+  "ntfy-topic-url.age".publicKeys = [office arch pite];
   # MikroTik SSH key — router (192.168.1.1) + two switches.
   # Upstairs: 192.168.5.3, Downstairs: 192.168.5.2. All use admin@.
   # Decrypted by the mikrotik-connect fish helper (key-based, no sshpass).
@@ -162,5 +162,7 @@ in {
   #   NAS_ONBATTERY_URL=http://192.168.5.XX:8123/api/webhook/ups_nas_lost_power
   #   NAS_OFFBATTERY_URL=http://192.168.5.XX:8123/api/webhook/ups_nas_power_returned
   "hass-webhooks.age".publicKeys = [closet nas office arch];
-  "reolink-nvr.age".publicKeys = [office arch];
+  "reolink-nvr.age".publicKeys = [office arch closet];
+
+  "frigate-plus.age".publicKeys = [arch];
 }

@@ -17,7 +17,7 @@
     #./modules/ollama.nix
     # inputs.home-manager.nixosModules.default
   ];
-  home-manager.users."john" = import ./home-cli.nix;
+  home-manager.users."john" = import ./home-remote.nix;
   services.getty.autologinUser = "john";
 
   # Use the systemd-boot EFI boot loader.;

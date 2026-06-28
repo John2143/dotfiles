@@ -44,8 +44,6 @@
     inherit (config.nixpkgs) config;
   };
 
-
-
   environment.systemPackages = with pkgs;
     [
       git
@@ -58,7 +56,7 @@
       aha
       inputs.agenix.packages.${pkgs.stdenv.hostPlatform.system}.default
     ]
-    ++ lib.optionals (builtins.elem config.networking.hostName ["office" "arch" "pite"]) [
+    ++ lib.optionals (builtins.elem config.networking.hostName ["office" "arch"]) [
       # uv on PATH so my_claw (in fish-functions.nix) can `uvx litellm`
       # without needing a writeShellScriptBin nix-store substitution.
       pkgs.uv
@@ -66,36 +64,37 @@
       # omp wrapper: consumes the fork's own flake (John2143/oh-my-pi#omp).
       # Bump via `nix flake update oh-my-pi`. All build hashes (cargoHash,
       # bun.nix) live in the fork.
-      (let
-        omp-unwrapped = inputs.oh-my-pi.packages.${pkgs.stdenv.hostPlatform.system}.omp;
-      in
-      pkgs.writeShellScriptBin "omp" ''
-          if [ -f /run/agenix/llm-runtime-keys ]; then
-            set -a
-            . /run/agenix/llm-runtime-keys
-            set +a
-          fi
-          if [ -f /run/agenix/ntfy-topic-url ]; then
-            set -a
-            . /run/agenix/ntfy-topic-url
-            set +a
-          fi
-          ${omp-unwrapped}/bin/omp --system-prompt "$HOME/.omp/agent/system-prompt.md" "$@"
-          # exec ${pkgs.bubblewrap}/bin/bwrap \
-          #   --ro-bind /nix/store /nix/store \
-          #   --ro-bind /etc/resolv.conf /etc/resolv.conf \
-          #   --ro-bind /etc/ssl /etc/ssl \
-          #   --ro-bind /etc/static /etc/static \
-          #   --ro-bind /etc/passwd /etc/passwd \
-          #   --ro-bind /etc/group /etc/group \
-          #   --tmpfs /tmp --proc /proc --dev /dev \
-          #   --setenv ANTHROPIC_API_KEY "''${ANTHROPIC_API_KEY:-}" \
-          #   --setenv OPENAI_API_KEY "''${OPENAI_API_KEY:-}" \
-          #   --setenv HOME "$HOME" \
-          #   --setenv PATH "$PATH" \
-          #   --setenv TERM "''${TERM:-xterm}" \
-          #   --unshare-all --share-net --die-with-parent \
-        ''
+      (
+        let
+          omp-unwrapped = inputs.oh-my-pi.packages.${pkgs.stdenv.hostPlatform.system}.omp;
+        in
+          pkgs.writeShellScriptBin "omp" ''
+            if [ -f /run/agenix/llm-runtime-keys ]; then
+              set -a
+              . /run/agenix/llm-runtime-keys
+              set +a
+            fi
+            if [ -f /run/agenix/ntfy-topic-url ]; then
+              set -a
+              . /run/agenix/ntfy-topic-url
+              set +a
+            fi
+            ${omp-unwrapped}/bin/omp --system-prompt "$HOME/.omp/agent/system-prompt.md" "$@"
+            # exec ${pkgs.bubblewrap}/bin/bwrap \
+            #   --ro-bind /nix/store /nix/store \
+            #   --ro-bind /etc/resolv.conf /etc/resolv.conf \
+            #   --ro-bind /etc/ssl /etc/ssl \
+            #   --ro-bind /etc/static /etc/static \
+            #   --ro-bind /etc/passwd /etc/passwd \
+            #   --ro-bind /etc/group /etc/group \
+            #   --tmpfs /tmp --proc /proc --dev /dev \
+            #   --setenv ANTHROPIC_API_KEY "''${ANTHROPIC_API_KEY:-}" \
+            #   --setenv OPENAI_API_KEY "''${OPENAI_API_KEY:-}" \
+            #   --setenv HOME "$HOME" \
+            #   --setenv PATH "$PATH" \
+            #   --setenv TERM "''${TERM:-xterm}" \
+            #   --unshare-all --share-net --die-with-parent \
+          ''
       )
       # claude wrapper: allowlist-style sandbox — explicitly bind only what
       # claude needs. Default-deny on $HOME, /run, and the rest of the host.
@@ -280,7 +279,7 @@
   # to point at the bait .age file at the same /run/agenix/llm-runtime-keys path.
   age.secrets.llm-runtime-keys =
     lib.mkIf
-    (builtins.elem config.networking.hostName ["office" "arch" "pite"])
+    (builtins.elem config.networking.hostName ["office" "arch"])
     {
       file = ../secrets/llm-runtime-keys.age;
       mode = "0400";
@@ -387,7 +386,13 @@
     trustedInterfaces = ["tailscale0"];
   };
 
-  # Fast shutdown — systemd waits at most 10s for any service before SIGKILL
-  systemd.settings.Manager.DefaultTimeoutStopSec = "10s";
-
+  # Balanced shutdown — systemd waits up to 30s for services before SIGKILL
+  # (10s was too tight for iscsid to cleanly logout iSCSI sessions on reboot)
+  systemd.settings.Manager.DefaultTimeoutStopSec = "30s";
+  # ── Node Exporter (Prometheus metrics) ──
+  # Scraped by pite Prometheus for home cluster monitoring.
+  services.prometheus.exporters.node = {
+    enable = true;
+    openFirewall = true; # port 9100
+  };
 }

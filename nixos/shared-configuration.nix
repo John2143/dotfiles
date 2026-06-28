@@ -265,7 +265,7 @@ in {
       "XDG_CONFIG_DIRS=/home/%u/.local/share/flatpak/exports/etc/xdg:/var/lib/flatpak/exports/etc/xdg:/run/current-system/sw/etc/xdg"
       "XDG_RUNTIME_DIR=/run/user/%U"
     ];
-    DefaultTimeoutStopSec = "10s";
+    DefaultTimeoutStopSec = "30s";
   };
   xdg.mime = rec {
     enable = true;

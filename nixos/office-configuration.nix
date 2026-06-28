@@ -108,7 +108,7 @@
 
   environment.systemPackages = with pkgs; [
     rocmPackages.rocm-smi
-    inputs.hyprcap.packages.x86_64-linux.default
+    #inputs.hyprcap.packages.x86_64-linux.default
     pkgs.voxtype
     #inputs.self.packages.x86_64-linux.waytop
   ];

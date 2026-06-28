@@ -3,7 +3,9 @@
 # Runs in Podman using the -tensorrt image for NVIDIA GPU-accelerated
 # object detection. Recordings + database live on the NAS over NFSv3.
 #
-# Cameras: up to 7 Reolink cameras routed through the Reolink NVR.
+# Cameras: 6 Reolink cameras routed through the Reolink NVR + 1 direct RTSP.
+
+
 # Main streams are used for both detection and recording (no sub-streams).
 #
 # === agenix secret ===
@@ -43,13 +45,22 @@
   # Edit names. Each pulls one RTSP stream from the Reolink NVR:
   #   /h264Preview_0N_main  → detection + recording (full resolution)
   cameras = {
-    cam01 = {name = "Camera 1"; channel = "01";};
-    cam02 = {name = "Camera 2"; channel = "02";};
-    cam03 = {name = "Camera 3"; channel = "03";};
-    cam04 = {name = "Camera 4"; channel = "04";};
-    cam05 = {name = "Camera 5"; channel = "05";};
-    cam06 = {name = "Camera 6"; channel = "06";};
-    cam07 = {name = "Camera 7"; channel = "07";};
+    cam01 = {name = "Camera 1"; channel = "01"; codec = "hevc"; detectWidth = 1920; detectHeight = 1080; audioEnabled = true;};
+    cam02 = {name = "Camera 2"; channel = "02"; codec = "hevc"; detectWidth = 1920; detectHeight = 1080;};
+    cam03 = {name = "Camera 3"; channel = "03"; stream = "sub"; detectFps = 2;};
+    # cam04 is sideways (rotated 270°). Sub-stream via NVR, no rotation for now.
+    cam04 = { name = "Camera 4"; channel = "04"; stream = "sub"; detectWidth = 1920; detectHeight = 1080; detectFps = 2; };
+
+
+
+    cam05 = {name = "Camera 5"; channel = "05"; stream = "sub"; detectHeight = 1920;};
+    cam06 = {name = "Camera 6"; channel = "06"; codec = "hevc"; detectWidth = 1920; detectHeight = 1080; detectFps = 2;};
+
+    # cam08 is a direct RTSP camera (not routed through the Reolink NVR).
+    cam08 = {name = "Camera 8"; rtspPath = "rtsp://\${EUFY_USER}:\${EUFY_PASS}@192.168.5.59/live0"; detectWidth = 1920; detectHeight = 1080; detectFps = 1;};
+
+
+
   };
 
   # Build a per-camera Frigate config.
@@ -58,37 +69,36 @@
   mkCamera =
     _: cfg: {
       ffmpeg = {
+        hwaccel_args =
+          if cfg.codec or "h264" == "hevc"
+          then "preset-nvidia-h265"
+
+          else "preset-nvidia-h264";
         inputs = [
-          {
-            path = "rtsp://\${NVR_USER}:\${NVR_PASS}@\${NVR_HOST}/h264Preview_${cfg.channel}_main";
-            roles = ["record" "detect"];
-          }
+          ({
+            path =
+              if cfg ? rtspPath
+              then cfg.rtspPath
+              else "rtsp://\${NVR_USER}:\${NVR_PASS}@\${NVR_HOST}/h264Preview_${cfg.channel}_${cfg.stream or "main"}";
+            roles = ["record" "detect"] ++ lib.optional (cfg.audioEnabled or false) "audio";
+          } // lib.optionalAttrs (cfg ? inputArgs) { input_args = cfg.inputArgs; })
         ];
-      };
+
+      } // lib.optionalAttrs (cfg ? outputArgs) { output_args = cfg.outputArgs; };
       detect = {
-        width = 2560;
-        height = 1440;
-        fps = 5;
+        enabled = cfg.detectEnabled or true;
+        width = cfg.detectWidth or 2560;
+        height = cfg.detectHeight or 1440;
+        fps = cfg.detectFps or 5;
       };
+
       record = {
         enabled = true;
-        retain = {
-          days = 7;
-          mode = "motion";
-        };
-        alerts = {
-          pre_capture = 5;
-          post_capture = 5;
+        events = {
+          pre_capture = 3;
+          post_capture = 3;
           retain = {
-            days = 30;
-            mode = "active_objects";
-          };
-        };
-        detections = {
-          pre_capture = 5;
-          post_capture = 5;
-          retain = {
-            days = 30;
+            default = 7;
             mode = "active_objects";
           };
         };
@@ -100,6 +110,20 @@
         };
       };
       motion = {};
+      objects = {
+        track = ["person" "bicycle" "car" "motorcycle" "bus" "truck" "bird" "cat" "dog" "bear"];
+        genai = {
+          enabled = true;
+        };
+      };
+      lpr = {
+        enabled = true;
+      };
+    } // lib.optionalAttrs (cfg.audioEnabled or false) {
+      audio = {
+        enabled = true;
+        listen = ["bark" "scream" "speech" "yell"];
+      };
     };
 
   cameraSettings = builtins.mapAttrs mkCamera cameras;
@@ -110,47 +134,74 @@
   yamlFormat = pkgs.formats.yaml {};
 
   frigateConfigFile = yamlFormat.generate "frigate-config.yml" {
+
     mqtt = {
       host = mqttHost;
       port = mqttPort;
     };
-
     detectors = {
-      onnx = {
+      onnx_0 = {
+        type = "onnx";
+      };
+      onnx_1 = {
         type = "onnx";
       };
     };
-
     model = {
-      # YOLOv9-tiny 320x320: the recommended model for GTX 1080 Ti.
-      # Build it with Frigate's Dockerfile-based exporter:
-      #   https://github.com/blakeblackshear/frigate/blob/dev/docs/docs/configuration/object_detectors.md#models
-      path = "/config/model_cache/yolov9-t-320.onnx";
+      path = "/config/model_cache/yolov9-c-640.onnx";
       model_type = "yolo-generic";
-      width = 320;
-      height = 320;
+      width = 640;
+      height = 640;
       input_tensor = "nchw";
       input_dtype = "float";
     };
-
-    ffmpeg = {
-      hwaccel_args = "preset-nvidia-h264";
+    face_recognition = {
+      enabled = true;
+      model_size = "large";
+      detection_threshold = 0.7;
+      recognition_threshold = 0.9;
+      min_area = 500;
+      device = "GPU";
     };
+    lpr = {
+      enabled = true;
+      model_size = "large";
+      detection_threshold = 0.7;
+      recognition_threshold = 0.9;
+      device = "GPU";
+    };
+
+    genai = {
+      provider = "gemini";
+      api_key = "{FRIGATE_GEMINI_API_KEY}";
+      model = "gemini-2.5-flash";
+    };
+    classification = {
+      bird = {
+        enabled = true;
+      };
+    };
+
+
 
     go2rtc = {
       streams =
         builtins.mapAttrs (
           _: cfg:
-            "rtsp://\${NVR_USER}:\${NVR_PASS}@\${NVR_HOST}/h264Preview_${cfg.channel}_main"
-        )
-        cameras;
+            (cfg.go2rtcPrefix or "")
+            + (if cfg ? rtspPath then cfg.rtspPath
+            else "rtsp://\${NVR_USER}:\${NVR_PASS}@\${NVR_HOST}/h264Preview_${cfg.channel}_${cfg.stream or "main"}")
+            + (cfg.go2rtcSuffix or "")
+          ) cameras;
     };
 
     record = {
       enabled = true;
-      retain = {
-        days = 7;
-        mode = "motion";
+      events = {
+        retain = {
+          default = 7;
+          mode = "active_objects";
+        };
       };
     };
 
@@ -190,6 +241,12 @@ in {
     owner = "root";
     group = "root";
   };
+  age.secrets.frigate-plus = {
+    file = ../../secrets/frigate-plus.age;
+    mode = "0400";
+    owner = "root";
+    group = "root";
+  };
 
   # ── NFS mount for Frigate storage ─────────────────────────────────
   fileSystems.${nasFrigatePath} = {
@@ -215,6 +272,8 @@ in {
   ];
 
   # ── NVIDIA Container Toolkit for GPU passthrough ──────────────────
+  # Podman looks for CDI specs in /etc/cdi, but NixOS generates them in /run/cdi.
+  environment.etc."cdi/nvidia-container-toolkit.json".source = "/run/cdi/nvidia-container-toolkit.json";
   hardware.nvidia-container-toolkit.enable = true;
 
   # ── Frigate Podman container ──────────────────────────────────────
@@ -228,6 +287,7 @@ in {
       # This sets NVR_USER, NVR_PASS, NVR_HOST in the container environment.
       environmentFiles = [
         config.age.secrets.reolink-nvr.path
+        config.age.secrets.frigate-plus.path
       ];
 
       volumes = [
@@ -249,6 +309,8 @@ in {
       extraOptions = [
         # GPU passthrough
         "--device=nvidia.com/gpu=all"
+        # 7 cameras × 1440p: Frigate recommends ≥994MB SHM. Use 2GB for headroom.
+        "--shm-size=2g"
         # Podman security: needed for GPU access
         "--security-opt=label=disable"
         # Map container root to host user (NFS root_squash workaround)
@@ -260,12 +322,48 @@ in {
       entrypoint = "/frigate-entrypoint.sh";
 
       ports = [
-        "127.0.0.1:5000:5000"  # Frigate web UI — localhost only
+        "127.0.0.1:5000:5000"  # Frigate web UI — localhost
+        "100.64.0.1:5000:5000"  # Frigate web UI — Tailscale
         "8554:8554"             # go2rtc TCP
         "8554:8554/udp"         # go2rtc UDP
         "8555:8555"             # go2rtc TCP
         "8555:8555/udp"         # go2rtc UDP
       ];
     };
+  };
+  # ── Auto-build YOLOv9 ONNX model if missing ──────────────────────
+  systemd.services.build-frigate-model = {
+    description = "Build Frigate YOLOv9 ONNX model if missing";
+    wantedBy = ["multi-user.target"];
+    before = ["podman-frigate.service"];
+    path = [ pkgs.podman ];
+    script = ''
+      MODEL=/var/lib/frigate/model_cache/yolov9-c-640.onnx
+      if [ -f "$MODEL" ]; then
+        echo "Model already exists at $MODEL"
+        exit 0
+      fi
+      echo "Building YOLOv9-c-640 ONNX model (this may take ~15 minutes)..."
+      mkdir -p /var/lib/frigate/model_cache
+      podman build \
+        --build-arg MODEL_SIZE=c \
+        --build-arg IMG_SIZE=640 \
+        --output type=local,dest=/var/lib/frigate/model_cache \
+        -f ${../frigate/Dockerfile.yolov9} \
+        /tmp
+      chown 1000:1000 "$MODEL"
+      echo "Model built: $(ls -lh "$MODEL" | awk '{print $5}')"
+    '';
+    serviceConfig = {
+      Type = "oneshot";
+      RemainAfterExit = true;
+      TimeoutStartSec = 1800;
+      User = "root";
+    };
+  };
+
+  systemd.services."podman-frigate" = {
+    after = [ "build-frigate-model.service" ];
+    requires = [ "build-frigate-model.service" ];
   };
 }

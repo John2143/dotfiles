@@ -173,7 +173,7 @@ in
     ./arch-hardware-configuration.nix
     ./modules/user-john.nix
     ./modules/vllm.nix
-    #./modules/frigate.nix
+    ./modules/frigate.nix
     ./modules/teamspeak.nix
     # inputs.home-manager.nixosModules.default
   ];
@@ -288,7 +288,7 @@ in
   environment.systemPackages = [
     hass-macro
     hass-thermostat-status
-    inputs.hyprcap.packages.x86_64-linux.default
+    #inputs.hyprcap.packages.x86_64-linux.default
     pkgs.voxtype
     #inputs.self.packages.x86_64-linux.waytop
   ];
@@ -344,6 +344,7 @@ in
     10250 # kubelet (k3s agent)
     18080 # monero p2p (monerod)
     5580 # matter-server (hostNetwork pod)
+    179 # BGP for kube-vip
   ];
   networking.firewall.allowedUDPPorts = [
     8472 # flannel VXLAN (k3s)
