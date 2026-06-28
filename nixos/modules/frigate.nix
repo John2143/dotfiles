@@ -63,11 +63,11 @@
   # ── GenAI prompt templates (composed per-camera + per-label) ─────
   genaiPrompts = rec {
     base = ''
-      Security camera analysis. Images are ~1 second apart. Describe only what is noteworthy: people, animals, vehicles, packages, or anything out of place.
+      Security camera analysis. You may receive a single image or a sequence spaced ~1 second apart. Describe only what is noteworthy: people, animals, vehicles, packages, or anything out of place.
 
       The first-pass detector flagged a {label}, which may or may not be in frame. If absent, say so — the low-res detector can be wrong.
 
-      If present: describe its actions and movement. You may infer clear intent (e.g., a person getting into a car, a cat sheltering from rain) but do not fabricate. If a cat is just walking, do not claim it is hunting.
+      If you have multiple frames: describe actions and movement. You may infer clear intent (e.g., a person getting into a car, a cat sheltering from rain) but do not fabricate. If a cat is just walking, do not claim it is hunting. If you have only one frame: describe what is visible factually.
     '';
     suffix = ''
       Be concise. Use short factual sentences. Maximum 3 sentences per distinct object or event. Do not narrate, do not editorialize. Only what is visible.
@@ -82,7 +82,7 @@
       cam08 = "Server room interior. Visitors are rare. Describe any person's actions in detail.";
     };
     label = {
-      person = "Describe: clothing (colors, style, layers), build, items carried (packages, tools, bags), direction of movement, and whether approaching/leaving/loitering. Give a detailed physical description — as if for a police report — but do not assume race or gender. Include at least 2 descriptive sentences per person.";
+      person = "Describe: what the person is doing across the sequence (walking, carrying, entering, exiting, stopping, bending), direction and pace of movement. Then: clothing (colors, style, layers), build, items carried (packages, tools, bags), and whether approaching/leaving/loitering. Give a detailed physical description — as if for a police report — but do not assume race or gender.";
       dog = "If you see a dog, first try to identify 'Luna': a medium-sized black Labrador retriever, usually inside the fence or with a person. Describe: size, color, breed if identifiable, behavior, and whether accompanied.";
       cat = "If you see a cat, first try to identify 'Trixie' (black-and-white) or 'Mica' (gray). If unsure, say 'Other.' Note if the cat is running from or at something. Describe: size, color, behavior.";
       package = "Describe: size, color, carrier logo if visible, where placed, who interacted with it. Watch for porch piracy: if someone takes a package and clearly leaves, describe that person in detail.";
