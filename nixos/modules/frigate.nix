@@ -42,7 +42,7 @@
   nasFrigatePath = "/mnt/nas/frigate";
 
   # ── Object labels ─────────────────────────────────────────────────
-  objectLabels = {
+  objectLabels = rec {
     all = [
       # People & Vehicles
       "person" "car" "motorcycle" "bicycle" "truck" "bus" "school_bus" "boat"
@@ -55,15 +55,9 @@
       # Objects
       "waste_bin" "bbq_grill" "robot_lawnmower" "umbrella"
     ];
-    # Everything except cars (passing traffic) and bins (static backyard)
-    describe = [
-      "person" "motorcycle" "bicycle" "truck" "bus" "school_bus" "boat"
-      "bird" "cat" "dog" "deer" "horse" "bear" "cow" "fox" "raccoon"
-      "face" "license_plate" "package"
-      "amazon" "fedex" "ups" "usps" "dhl" "an_post" "purolator" "postnl"
-      "nzpost" "postnord" "gls" "dpd" "royal_mail" "canada_post" "other"
-      "bbq_grill" "robot_lawnmower" "umbrella"
-    ];
+    # dont need to ML label all cars
+    excludeFromDescribe = [ "car" ];
+    describe = lib.subtractLists excludeFromDescribe all;
   };
 
   # ── Camera definitions ────────────────────────────────────────────
@@ -76,6 +70,7 @@
       channel = "01"; codec = "hevc";
       detectWidth = 1920; detectHeight = 1080;
       audioEnabled = true;
+      inertia = 1;
       lprQuality = true;
       motionMask = [
         "0.998,0.275,0.716,0.186,0.675,0.1,0.637,0.086,0.587,0.075,0.549,0.102,0.524,0.111,0.491,0.106,0.449,0.097,0.405,0.102,0.377,0.097,0.337,0.102,0.31,0.11,0.27,0.106,0.253,0.104,0.219,0.101,0.215,0.073,0.196,0.075,0.181,0.09,0.166,0.11,0.146,0.116,0.123,0.12,0.104,0.117,0.061,0.111,0.023,0.097,0.002,0.095,0,0.004,0.998,0"
@@ -150,6 +145,11 @@
         "0.759,0.633,0.726,0.588,0.701,0.611,0.691,0.66,0.676,0.73,0.673,0.782,0.678,0.835,0.678,0.896,0.714,0.893,0.748,0.813"
         "0.666,0.258,0.784,0.361,0.825,0.199,0.91,0.257,0.948,0.132,0.958,0.125,0.937,0.038,0.896,0.113,0.879,0.09,0.859,0.071,0.843,0.092,0.842,0.11,0.831,0.103,0.814,0.083,0.803,0.07,0.797,0.053,0.795,0.037,0.796,0,0.711,0,0.707,0.095,0.677,0.121"
       ];
+      objectMasks = {
+        waste_bin = {
+          mask = [ "0.302,0.54,0.254,0.417,0.225,0.452,0.223,0.538,0.23,0.605,0.238,0.655,0.245,0.711,0.252,0.763,0.257,0.795,0.276,0.828,0.297,0.896,0.326,0.918,0.347,0.9,0.358,0.863,0.354,0.773,0.354,0.638,0.347,0.561" ];
+        };
+      };
     };
     # Main: 2560x1920 H264 25fps  Sub: 640x480 H264 10fps
     cam05 = {
@@ -277,12 +277,14 @@
         genai = {
           enabled = true;
         };
-      } // lib.optionalAttrs (cfg ? personMask) {
-        filters = {
-          person = {
-            mask = cfg.personMask;
-          };
-        };
+      } // lib.optionalAttrs (cfg ? inertia) {
+        inherit (cfg) inertia;
+      } // lib.optionalAttrs (cfg ? personMask || cfg ? objectMasks) {
+        filters =
+          (lib.optionalAttrs (cfg ? personMask) {
+            person = { mask = cfg.personMask; };
+          })
+          // (cfg.objectMasks or {});
       };
       lpr = {
         enabled = true;
@@ -356,7 +358,7 @@
             motion = true;
             interval = 10;
             cameras = {
-              cam05 = { crop = [0, 0, 100, 100]; };  # PLACEHOLDER — draw in UI
+              cam05 = { crop = [0 0 100 100]; };  # PLACEHOLDER — draw in UI
             };
           };
         };
@@ -366,7 +368,7 @@
             motion = true;
             interval = 10;
             cameras = {
-              cam03 = { crop = [0, 0, 100, 100]; };  # PLACEHOLDER — draw in UI
+              cam03 = { crop = [0 0 100 100]; };  # PLACEHOLDER — draw in UI
             };
           };
         };
@@ -376,7 +378,7 @@
             motion = true;
             interval = 10;
             cameras = {
-              cam03 = { crop = [0, 0, 100, 100]; };  # PLACEHOLDER — draw in UI
+              cam03 = { crop = [0 0 100 100]; };  # PLACEHOLDER — draw in UI
             };
           };
         };
@@ -386,7 +388,7 @@
             motion = true;
             interval = 10;
             cameras = {
-              cam06 = { crop = [0, 0, 100, 100]; };  # PLACEHOLDER — draw in UI
+              cam06 = { crop = [0 0 100 100]; };  # PLACEHOLDER — draw in UI
             };
           };
         };
@@ -396,7 +398,7 @@
             motion = true;
             interval = 10;
             cameras = {
-              cam06 = { crop = [0, 0, 100, 100]; };  # PLACEHOLDER — draw in UI
+              cam06 = { crop = [0 0 100 100]; };  # PLACEHOLDER — draw in UI
             };
           };
         };
@@ -406,7 +408,7 @@
             motion = true;
             interval = 10;
             cameras = {
-              cam04 = { crop = [0, 0, 100, 100]; };  # PLACEHOLDER — draw in UI
+              cam04 = { crop = [0 0 100 100]; };  # PLACEHOLDER — draw in UI
             };
           };
         };
@@ -416,7 +418,7 @@
             motion = true;
             interval = 10;
             cameras = {
-              cam04 = { crop = [0, 0, 100, 100]; };  # PLACEHOLDER — draw in UI
+              cam04 = { crop = [0 0 100 100]; };  # PLACEHOLDER — draw in UI
             };
           };
         };
@@ -426,7 +428,7 @@
             motion = true;
             interval = 10;
             cameras = {
-              cam04 = { crop = [0, 0, 100, 100]; };  # PLACEHOLDER — draw in UI
+              cam04 = { crop = [0 0 100 100]; };  # PLACEHOLDER — draw in UI
             };
           };
         };
@@ -436,7 +438,7 @@
             motion = true;
             interval = 10;
             cameras = {
-              cam04 = { crop = [0, 0, 100, 100]; };  # PLACEHOLDER — draw in UI
+              cam04 = { crop = [0 0 100 100]; };  # PLACEHOLDER — draw in UI
             };
           };
         };
@@ -446,7 +448,7 @@
             motion = true;
             interval = 10;
             cameras = {
-              cam02 = { crop = [0, 0, 100, 100]; };  # PLACEHOLDER — draw in UI
+              cam02 = { crop = [0 0 100 100]; };  # PLACEHOLDER — draw in UI
             };
           };
         };
@@ -456,7 +458,7 @@
             motion = true;
             interval = 10;
             cameras = {
-              cam01 = { crop = [0, 0, 100, 100]; };  # PLACEHOLDER — draw in UI
+              cam01 = { crop = [0 0 100 100]; };  # PLACEHOLDER — draw in UI
             };
           };
         };
