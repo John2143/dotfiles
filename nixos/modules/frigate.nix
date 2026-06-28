@@ -174,7 +174,7 @@
     genai = {
       provider = "ollama";
       base_url = "http://office.ts.2143.me:11434";
-      model = "qwen3-vl:8b";
+      model = "huihui_ai/qwen3-vl-abliterated:8b";
     };
     classification = {
       bird = {
