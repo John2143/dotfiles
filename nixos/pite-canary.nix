@@ -88,7 +88,7 @@
         static_configs = [
           {
             targets = [
-              "john2143.com:9987" # TeamSpeak
+              "192.168.5.10:30034" # TeamSpeak file transfer
               "192.168.5.9:9100" # self (node_exporter)
             ];
           }
