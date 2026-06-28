@@ -31,7 +31,7 @@
       environmentVariables = {
         OLLAMA_KEEP_ALIVE = "5m";
         OLLAMA_NUM_PARALLEL = "1";
-      };
+        OLLAMA_MAX_QUEUE = "512";
     };
     # The stock ollama unit uses DynamicUser, which can't write to paths owned by
     # john (NAS datasets, local state inherited from earlier setups).  Force the

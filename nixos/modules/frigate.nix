@@ -377,8 +377,8 @@ cp /nix-config.yml /config/config.yml.tpl
 # The env vars (NVR_USER, NVR_PASS, NVR_HOST) are provided by
 # the agenix secret via Podman's --env-file.
 /usr/local/bin/envsubst < /config/config.yml.tpl > /config/config.yml
-# Patch GenAI timeout from 60s to 180s (81200ms average inference time)
-sed -i 's/timeout: int=60)/timeout: int=180)/' /opt/frigate/frigate/genai/__init__.py
+# Patch GenAI timeout to 600s — requests queue behind each other with num_parallel=1
+sed -i 's/timeout: int = 120)/timeout: int = 600)/' /opt/frigate/frigate/genai/__init__.py
 # Start Frigate's init process.
 exec /init
 SCRIPT
