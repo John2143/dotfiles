@@ -41,6 +41,31 @@
   # ── NAS NFS mount for recordings + database ───────────────────────
   nasFrigatePath = "/mnt/nas/frigate";
 
+  # ── Object labels ─────────────────────────────────────────────────
+  objectLabels = {
+    all = [
+      # People & Vehicles
+      "person" "car" "motorcycle" "bicycle" "truck" "bus" "school_bus" "boat"
+      # Animals
+      "bird" "cat" "dog" "deer" "horse" "bear" "cow" "fox" "raccoon"
+      # Deliveries & Logos
+      "face" "license_plate" "package" "amazon" "fedex" "ups" "usps"
+      "dhl" "an_post" "purolator" "postnl" "nzpost" "postnord" "gls"
+      "dpd" "royal_mail" "canada_post" "other"
+      # Objects
+      "waste_bin" "bbq_grill" "robot_lawnmower" "umbrella"
+    ];
+    # Everything except cars (passing traffic) and bins (static backyard)
+    describe = [
+      "person" "motorcycle" "bicycle" "truck" "bus" "school_bus" "boat"
+      "bird" "cat" "dog" "deer" "horse" "bear" "cow" "fox" "raccoon"
+      "face" "license_plate" "package"
+      "amazon" "fedex" "ups" "usps" "dhl" "an_post" "purolator" "postnl"
+      "nzpost" "postnord" "gls" "dpd" "royal_mail" "canada_post" "other"
+      "bbq_grill" "robot_lawnmower" "umbrella"
+    ];
+  };
+
   # ── Camera definitions ────────────────────────────────────────────
   # Edit names. Each pulls one RTSP stream from the Reolink NVR:
   #   /h264Preview_0N_main  → detection + recording (full resolution)
@@ -248,18 +273,7 @@
         mask = cfg.motionMask;
       };
       objects = {
-        track = [
-          # People & Vehicles
-          "person" "car" "motorcycle" "bicycle" "truck" "bus" "school_bus" "boat"
-          # Animals
-          "bird" "cat" "dog" "deer" "horse" "bear" "cow" "fox" "raccoon"
-          # Deliveries & Logos
-          "face" "license_plate" "package" "amazon" "fedex" "ups" "usps"
-          "dhl" "an_post" "purolator" "postnl" "nzpost" "postnord" "gls"
-          "dpd" "royal_mail" "canada_post" "other"
-          # Objects
-          "waste_bin" "bbq_grill" "robot_lawnmower" "umbrella"
-        ];
+        track = objectLabels.all;
         genai = {
           enabled = true;
         };
@@ -327,6 +341,9 @@
       provider = "ollama";
       base_url = "http://100.64.0.3:11434";
       model = "huihui_ai/qwen3-vl-abliterated:8b";
+      objects = {
+        objects = objectLabels.describe;
+      };
     };
     classification = {
       bird = {
