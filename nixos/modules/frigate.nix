@@ -172,14 +172,18 @@
     };
 
     genai = {
-      provider = "gemini";
-      api_key = "{FRIGATE_GEMINI_API_KEY}";
-      model = "gemini-2.5-flash";
+      provider = "ollama";
+      base_url = "http://office.ts.2143.me:11434";
+      model = "qwen3-vl:8b";
     };
     classification = {
       bird = {
         enabled = true;
       };
+    };
+    semantic_search = {
+      enabled = true;
+      model_size = "large";
     };
 
 
