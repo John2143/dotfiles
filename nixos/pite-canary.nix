@@ -257,7 +257,7 @@
           prober: http
           timeout: 10s
           http:
-            valid_status_codes: [200, 301, 302]
+            valid_status_codes: [200, 301, 302, 403]
             tls_config: { insecure_skip_verify: false }
         tcp_connect:
           prober: tcp

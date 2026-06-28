@@ -257,10 +257,21 @@ def get_ssl_certs():
 
 
 def get_remote_write():
-    """Return dict of remote write stats from pite Prometheus."""
+    """Return dict of remote write stats from pite Prometheus.
+    Returns available=False if the metrics don't exist (e.g. Prometheus 3.x)."""
     def _sum(metric):
         vals = [float(r["value"][1]) for r in prom_instant(metric)]
         return int(sum(vals)) if vals else 0
+
+    # Probe whether remote write metrics exist
+    check = prom_instant("prometheus_remote_storage_samples_total")
+    if not check:
+        return {
+            "available": False,
+            "samples": 0, "failed": 0, "pending": 0, "bytes": 0,
+            "last_sent_ago": None, "retries": 0,
+            "fail_pct": 0, "retry_pct": 0,
+        }
 
     samples = _sum("prometheus_remote_storage_samples_total")
     failed = _sum("prometheus_remote_storage_samples_failed_total")
@@ -280,6 +291,7 @@ def get_remote_write():
     retries = _sum("prometheus_remote_storage_samples_retried_total")
 
     return {
+        "available": True,
         "samples": samples,
         "failed": failed,
         "pending": pending,
@@ -473,6 +485,31 @@ def render_pod_rows(pods):
     return "\n".join(rows)
 
 
+
+def render_rw_rows(rw):
+    """Render remote write stats table rows."""
+    if not rw["available"]:
+        return '<tr><td colspan="4">Remote write metrics not available (Prometheus 3.x). Data is flowing — check Mimir.</td></tr>'
+    return (
+        f'<tr>'
+        f'<td>Samples sent</td>'
+        f'<td>{fmt_count(rw["samples"])}</td>'
+        f'<td>Failed</td>'
+        f'<td>{fmt_count(rw["failed"])} ({rw["fail_pct"]:.2f}%)</td>'
+        f'</tr>\n'
+        f'<tr>'
+        f'<td>Queue depth</td>'
+        f'<td>{rw["pending"]}</td>'
+        f'<td>Data pushed</td>'
+        f'<td>{fmt_bytes(rw["bytes"])}</td>'
+        f'</tr>\n'
+        f'<tr>'
+        f'<td>Last sent</td>'
+        f'<td>{"<1s ago" if rw["last_sent_ago"] is not None and rw["last_sent_ago"] < 5 else "N/A"}</td>'
+        f'<td>Retries</td>'
+        f'<td>{fmt_count(rw["retries"])} ({rw["retry_pct"]:.2f}%)</td>'
+        f'</tr>'
+    )
 def render_alert_rows(alerts):
     if not alerts:
         return '<tr><td colspan="3">No active alerts.</td></tr>'
@@ -650,24 +687,7 @@ def render_html(nodes, services, certs, rw, pods, alerts, errors):
 
   <h2>REMOTE WRITE <span class="muted">(Prometheus → Mimir)</span></h2>
   <table>
-    <tr>
-      <td>Samples sent</td>
-      <td>{fmt_count(rw['samples'])}</td>
-      <td>Failed</td>
-      <td>{fmt_count(rw['failed'])} ({rw['fail_pct']:.2f}%)</td>
-    </tr>
-    <tr>
-      <td>Queue depth</td>
-      <td>{rw['pending']}</td>
-      <td>Data pushed</td>
-      <td>{fmt_bytes(rw['bytes'])}</td>
-    </tr>
-    <tr>
-      <td>Last sent</td>
-      <td>{f'<1s ago' if rw['last_sent_ago'] is not None and rw['last_sent_ago'] < 5 else 'N/A'}</td>
-      <td>Retries</td>
-      <td>{fmt_count(rw['retries'])} ({rw['retry_pct']:.2f}%)</td>
-    </tr>
+{render_rw_rows(rw)}
   </table>
 
   <h2>ACTIVE ALERTS</h2>
@@ -707,8 +727,10 @@ def main():
     certs = get_ssl_certs()
 
     rw = get_remote_write()
-    if rw["samples"] == 0:
-        errors.append("Remote write stats: no data from Prometheus.")
+    if rw["available"]:
+        if rw["samples"] == 0:
+            errors.append("Remote write configured but no samples pushed yet.")
+    # else: metrics not available — Prometheus 3.x doesn't expose these; skip silently
 
     pods = get_k8s_pods()
 
