@@ -292,9 +292,6 @@
       onnx_0 = {
         type = "onnx";
       };
-      onnx_1 = {
-        type = "onnx";
-      };
     };
     model = {
       # Downgrade: path = "/config/model_cache/yolov9-c-640.onnx"; model_type = "yolo-generic"; width = 640; height = 640; input_tensor = "nchw"; input_dtype = "float";
@@ -380,6 +377,8 @@ cp /nix-config.yml /config/config.yml.tpl
 # The env vars (NVR_USER, NVR_PASS, NVR_HOST) are provided by
 # the agenix secret via Podman's --env-file.
 /usr/local/bin/envsubst < /config/config.yml.tpl > /config/config.yml
+# Patch GenAI timeout from 60s to 180s (81200ms average inference time)
+sed -i 's/timeout: int=60)/timeout: int=180)/' /opt/frigate/frigate/genai/__init__.py
 # Start Frigate's init process.
 exec /init
 SCRIPT
