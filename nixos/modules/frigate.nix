@@ -45,18 +45,19 @@
   objectLabels = rec {
     all = [
       # People & Vehicles
-      "person" "car" "motorcycle" "bicycle" "truck" "bus" "school_bus" "boat"
+      "person" "car" "motorcycle" "bicycle" "school_bus" "boat"
       # Animals
       "bird" "cat" "dog" "deer" "horse" "bear" "cow" "fox" "raccoon"
       # Deliveries & Logos
       "face" "license_plate" "package" "amazon" "fedex" "ups" "usps"
       "dhl" "an_post" "purolator" "postnl" "nzpost" "postnord" "gls"
-      "dpd" "royal_mail" "canada_post" "other"
+      "dpd" "royal_mail" "canada_post"
       # Objects
-      "waste_bin" "bbq_grill" "robot_lawnmower" "umbrella"
+      "robot_lawnmower" "umbrella"
     ];
+    unused = [ "truck" "other" "bus" ];
     # dont need to ML label all cars
-    excludeFromDescribe = [ "car" ];
+    excludeFromDescribe = [ "car" "waste_bin" "bbq_grill" ];
     describe = lib.subtractLists excludeFromDescribe all;
   };
 
@@ -65,7 +66,9 @@
     base = ''
       Security camera analysis. You are looking at a chronological sequence of full camera frames — each shows the entire scene at a different moment. You may receive 1 to 10 frames from the tracked event.
 
-      Describe the full event from start to finish. Trace what happens across the frames: what enters, what exits, what changes. Where does the action begin and end? What path does the {label} take? Describe doors opening/closing, objects picked up or set down, and any other visible changes between frames.
+      FIRST: State exactly how many image frames you received. Example: "Frames received: 3".
+
+      Then describe the full event from start to finish. Trace what happens across the frames: what enters, what exits, what changes. Where does the action begin and end? What path does the {label} take? Describe doors opening/closing, objects picked up or set down, and any other visible changes between frames.
 
       The first-pass detector flagged a {label}. This is the primary subject — describe it in detail, but also note other people, animals, or objects visible in the scene. The {label} may or may not be in frame. If absent, say so and describe what IS visible.
 
@@ -142,6 +145,7 @@
       name = "Camera 2";
       channel = "02"; codec = "hevc";
       detectWidth = 1920; detectHeight = 1080;
+      audioEnabled = true;
       motionMask = [
         "0.401,0.023,0.323,0.27,0.28,0.419,0.295,0.464,0.308,0.475,0.315,0.516,0.312,0.56,0.301,0.567,0.277,0.57,0.252,0.576,0.233,0.59,0.205,0.636,0.163,0.704,0.118,0.842,0.1,0.993,0.595,0.999,0.597,0.89,0.59,0.856,0.575,0.836,0.559,0.817,0.548,0.785,0.541,0.757,0.538,0.732,0.534,0.705,0.526,0.688,0.515,0.682,0.502,0.67,0.496,0.661,0.491,0.652,0.486,0.641,0.482,0.627,0.478,0.608,0.475,0.583,0.472,0.563,0.471,0.544,0.458,0.523,0.454,0.503,0.453,0.481,0.45,0.456,0.45,0.403,0.45,0.369,0.452,0.342,0.455,0.32,0.46,0.295,0.462,0.271,0.462,0.256,0.461,0.239,0.448,0.217,0.425,0.189,0.419,0.073"
         "0.546,0.643,0.615,0.836,0.67,0.873,0.732,0.869,0.77,0.782,0.783,0.712,0.761,0.664,0.752,0.589,0.755,0.542,0.765,0.487,0.772,0.435,0.772,0.382,0.762,0.354,0.739,0.288,0.731,0.256,0.656,0.404,0.613,0.483,0.602,0.526,0.564,0.601"
@@ -172,6 +176,7 @@
       name = "Camera 4";
       channel = "04"; stream = "sub"; codec = "h264";
       detectWidth = 1920; detectHeight = 1080;
+      audioEnabled = true;
       motionMask = [
         "0.147,0.004,0.119,0.041,0.105,0.071,0.092,0.101,0.081,0.124,0.078,0.166,0.077,0.228,0.084,0.271,0.098,0.302,0.121,0.342,0.135,0.378,0.158,0.395,0.176,0.393,0.189,0.383,0.204,0.37,0.221,0.351,0.232,0.34,0.244,0.321,0.242,0.285,0.237,0.103,0.314,0.085,0.358,0.082,0.374,0.003"
         "0.112,0.322,0.001,0.411,0.001,0.175,0.063,0.158"
@@ -190,6 +195,7 @@
       name = "Camera 5";
       channel = "05"; stream = "sub"; codec = "h264";
       detectWidth = 2560; detectHeight = 1920;
+      audioEnabled = true;
       motionMask = [
         "0.607,0.339,0.592,0.32,0.563,0.325,0.532,0.331,0.517,0.34,0.489,0.362,0.477,0.387,0.472,0.44,0.483,0.476,0.503,0.506,0.53,0.519,0.576,0.518,0.604,0.509,0.616,0.485,0.625,0.462,0.627,0.431,0.614,0.375"
         "0.729,0.146,0.756,0.206,0.78,0.22,0.83,0.265,0.864,0.302,0.904,0.348,0.976,0.394,1,0.421,1,0,0.744,0.05"
@@ -216,6 +222,7 @@
       channel = "06"; codec = "hevc";
       detectWidth = 1920; detectHeight = 1080;
       lprQuality = true;
+      audioEnabled = true;
       motionMask = [
         "0.15,0.482,0.143,0.364,0.126,0.301,0.15,0.293,0.176,0.26,0.18,0.224,0.199,0.168,0.204,0.128,0.206,0.071,0.196,0.041,0.187,0.016,0.178,0.004,0,0.001,0.001,0.265,0.021,0.28,0.036,0.296,0.038,0.326,0.044,0.365,0.051,0.413,0.061,0.446,0.071,0.485,0.087,0.501,0.104,0.503,0.125,0.508"
         "0.245,0.022,0.244,0.104,0.257,0.168,0.277,0.214,0.3,0.228,0.323,0.197,0.343,0.174,0.363,0.163,0.382,0.163,0.392,0.183,0.406,0.192,0.429,0.192,0.448,0.187,0.469,0.179,0.486,0.169,0.506,0.165,0.519,0.159,0.531,0.168,0.543,0.182,0.553,0.194,0.57,0.206,0.586,0.224,0.595,0.229,0.608,0.227,0.62,0.215,0.631,0.198,0.663,0.078,0.647,0.037,0.622,0.007,0.247,0.001"
