@@ -104,6 +104,7 @@
     pythonEnv = pkgs.python3.withPackages (ps: [
       ps.paho-mqtt
       ps.google-genai
+      ps.openai
     ]);
   in pkgs.runCommand "frigate-genai-sidecar" {
     buildInputs = [ pkgs.makeWrapper ];
@@ -120,15 +121,11 @@
   frigateGenaiPromptsFile = pkgs.writeText "frigate-genai-prompts.json"
     (builtins.toJSON (genaiPrompts // { describe = objectLabels.describe; }));
 
-  # Provider configuration
+  # Provider configuration — routed through LiteLLM proxy
   frigateGenaiProviderFile = pkgs.writeText "frigate-genai-provider.json" (builtins.toJSON {
-    provider = "gemini";
-    model = "gemini-2.5-flash";
-    api_key_env = "FRIGATE_GEMINI_API_KEY";
-    # Switch to ollama when ready:
-    # provider = "ollama";
-    # model = "huihui_ai/qwen3-vl-abliterated:8b";
-    # base_url = "http://100.64.0.3:11434";
+    provider = "litellm";
+    model = "gemini/gemini-2.5-flash";
+    api_key_env = "LITELLM_FRIGATE_KEY";
   });
 
   # ── Camera definitions ────────────────────────────────────────────
@@ -438,12 +435,10 @@
     };
 
     genai = {
-      provider = "ollama";
-      base_url = "http://100.64.0.3:11434";
-      model = "huihui_ai/qwen3-vl-abliterated:8b";
-      # provider = "gemini";
-      # api_key = "\${FRIGATE_GEMINI_API_KEY}";
-      # model = "gemini-2.5-flash";
+      provider = "openai";
+      base_url = "https://llm.2143.me/v1";
+      model = "ollama/huihui_ai/qwen3-vl-abliterated:8b";
+      api_key = "\${LITELLM_FRIGATE_KEY}";
     };
     classification = {
       bird = {

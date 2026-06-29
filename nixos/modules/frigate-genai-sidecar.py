@@ -169,11 +169,76 @@ def call_gemini(
         log.error("Gemini call failed: %s", e)
         return None
 
+# ── LiteLLM provider ────────────────────────────────────────────────
+
+def call_litellm(
+    prompt_text: str,
+    images: list[bytes],
+    snapshot: bytes | None,
+    label: str,
+    provider_cfg: dict,
+) -> str | None:
+    """
+    Call LiteLLM (OpenAI-compatible) with images as base64 data URIs.
+    Content order: [prompt_text, frame1...frameN, transition_text, snapshot]
+    """
+    import base64
+    from openai import OpenAI
+
+    api_key = os.environ.get(provider_cfg.get("api_key_env", ""), "")
+    if not api_key:
+        log.error("LiteLLM API key not found in env var %s", provider_cfg.get("api_key_env"))
+        return None
+
+    model = provider_cfg.get("model", "gemini/gemini-2.5-flash")
+    client = OpenAI(api_key=api_key, base_url="https://llm.2143.me/v1")
+
+    content: list[dict] = [{"type": "text", "text": prompt_text}]
+
+    # Add all frames as image parts
+    for img in images:
+        b64 = base64.b64encode(img).decode()
+        content.append({
+            "type": "image_url",
+            "image_url": {"url": f"data:image/jpeg;base64,{b64}"},
+        })
+
+    # Add snapshot as detail close-up with transition text
+    if snapshot:
+        content.append({
+            "type": "text",
+            "text": (
+                f"The next image is a close-up of the {label}. "
+                "Use it for appearance detail (clothing, items, expression); "
+                "use the preceding full frames for scene context, movement, "
+                "and event progression."
+            ),
+        })
+        b64 = base64.b64encode(snapshot).decode()
+        content.append({
+            "type": "image_url",
+            "image_url": {"url": f"data:image/jpeg;base64,{b64}"},
+        })
+
+    log.info("Calling LiteLLM %s with %d images + 1 snapshot", model, len(images))
+
+    try:
+        response = client.chat.completions.create(
+            model=model,
+            messages=[{"role": "user", "content": content}],
+            timeout=600,
+        )
+        return response.choices[0].message.content
+    except Exception as e:
+        log.error("LiteLLM call failed: %s", e)
+        return None
+
 
 # ── provider dispatch ───────────────────────────────────────────────
 
 PROVIDERS = {
     "gemini": call_gemini,
+    "litellm": call_litellm,
 }
 
 
