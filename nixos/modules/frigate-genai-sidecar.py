@@ -515,11 +515,22 @@ def build_mqtt_client(processor: EventProcessor, event_queue: asyncio.Queue, loo
         try:
             payload = json.loads(msg.payload.decode())
             event_type = payload.get("type", "")
-            if event_type == "end":
-                after = payload.get("after", {})
-                if after.get("has_clip"):
-                    log.info("Received end event: %s (%s/%s)", after.get("id"), after.get("camera"), after.get("label"))
-                    # asyncio.Queue is NOT thread-safe — use run_coroutine_threadsafe
+            after = payload.get("after", {})
+            if not after.get("id"):
+                return
+            eid, camera, label = after["id"], after.get("camera"), after.get("label")
+
+            if event_type == "end" and after.get("has_clip"):
+                log.info("End event: %s (%s/%s)", eid, camera, label)
+                asyncio.run_coroutine_threadsafe(event_queue.put(after), loop)
+
+            elif event_type == "update":
+                before = payload.get("before", {})
+                def _desc(e):
+                    return ((e.get("data") or {}).get("description") or e.get("description") or "").strip().lower()
+                if _desc(after) == "redo" and _desc(before) != "redo":
+                    after["has_clip"] = True
+                    log.info("Redo trigger: %s (%s/%s)", eid, camera, label)
                     asyncio.run_coroutine_threadsafe(event_queue.put(after), loop)
         except json.JSONDecodeError:
             log.debug("Non-JSON MQTT message on %s", msg.topic)
