@@ -260,7 +260,9 @@ def call_litellm(
         return None
 
     model = provider_cfg.get("model", "gemini/gemini-2.5-flash")
-    client = OpenAI(api_key=api_key, base_url="https://llm.2143.me/v1")
+    base_url = provider_cfg.get("base_url", os.environ.get("OPENAI_BASE_URL", ""))
+    client = OpenAI(api_key=api_key, base_url=base_url)
+
 
     content: list[dict] = [{"type": "text", "text": prompt_text}]
 

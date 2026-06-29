@@ -126,6 +126,7 @@
     provider = "litellm";
     model = "gemini/gemini-2.5-flash";
     api_key_env = "LITELLM_FRIGATE_KEY";
+    base_url = "https://llm.2143.me/v1";
   });
 
   # ── Camera definitions ────────────────────────────────────────────
@@ -349,7 +350,7 @@
         track = objectLabels.all;
         genai = {
           debug_save_thumbnails = true;
-          enabled = true;  # Sidecar handles genai descriptions, but this is on for now
+          enabled = false;  # Sidecar handles genai descriptions
           objects = objectLabels.describe;
           prompt = lib.concatStringsSep " " [
             genaiPrompts.base
