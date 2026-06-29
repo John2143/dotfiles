@@ -285,6 +285,63 @@ in
               cost: { input: 1.25, output: 10.00, cacheRead: 0.03125, cacheWrite: 0 }
               contextWindow: 1048576
               maxTokens: 65536
+
+        # LiteLLM proxy — unified router for all providers. Every query logged
+        # in the dashboard at https://llm.2143.me/ui.
+        # Requires LITELLM_EDITOR_KEY (virtual key) in /run/agenix/llm-runtime-keys.
+        # Create via: https://llm.2143.me/ui/keys
+        litellm:
+          baseUrl: https://llm.2143.me/v1
+          api: openai-completions
+          apiKey: LITELLM_EDITOR_KEY
+          models:
+            - id: deepseek/deepseek-v4-flash
+              name: DeepSeek V4 Flash (LiteLLM)
+              reasoning: true
+              input: [text]
+              cost: { input: 0.14, output: 0.28, cacheRead: 0.014, cacheWrite: 0 }
+              contextWindow: 1000000
+              maxTokens: 65536
+
+            - id: deepseek/deepseek-v4-pro
+              name: DeepSeek V4 Pro (LiteLLM)
+              reasoning: true
+              input: [text]
+              cost: { input: 0.435, output: 0.87, cacheRead: 0.003625, cacheWrite: 0 }
+              contextWindow: 1000000
+              maxTokens: 65536
+
+            - id: gemini/gemini-2.5-flash
+              name: Gemini 2.5 Flash (LiteLLM)
+              reasoning: true
+              input: [text, image]
+              cost: { input: 0.30, output: 2.50, cacheRead: 0.03, cacheWrite: 0.08333 }
+              contextWindow: 1048576
+              maxTokens: 65536
+
+            - id: openrouter/anthropic/claude-sonnet-4-6
+              name: Claude Sonnet 4.6 (LiteLLM)
+              reasoning: true
+              input: [text]
+              cost: { input: 3.00, output: 15.00, cacheRead: 0.30, cacheWrite: 3.75 }
+              contextWindow: 1000000
+              maxTokens: 65536
+
+            - id: openrouter/anthropic/claude-haiku-4-5
+              name: Claude Haiku 4.5 (LiteLLM)
+              reasoning: true
+              input: [text]
+              cost: { input: 1.00, output: 5.00, cacheRead: 0.08, cacheWrite: 1.00 }
+              contextWindow: 200000
+              maxTokens: 65536
+
+            - id: openai/gpt-4.1-nano
+              name: GPT-4.1 Nano (LiteLLM)
+              reasoning: false
+              input: [text]
+              cost: { input: 0.10, output: 0.40, cacheRead: 0.0025, cacheWrite: 0 }
+              contextWindow: 1000000
+              maxTokens: 8192
     '';
 
     ".omp/agent/config.yml".text = ''
@@ -295,12 +352,13 @@ in
       shell: fish
       modelRoles:
         #default: vast-vllm/deepseek-v4-flash
-        default: deepseek/deepseek-v4-flash
+        default: litellm/deepseek/deepseek-v4-flash
         #smol: office-ollama-cpu/gemma4
-        smol: google/gemini-2.5-flash
-        slow: deepseek/deepseek-v4-pro
+        smol: litellm/gemini/gemini-2.5-flash
+        slow: litellm/deepseek/deepseek-v4-pro
 
       modelProviderOrder:
+        - litellm
         - vast-vllm
         - deepseek
         - openrouter
@@ -312,6 +370,7 @@ in
         - google
 
       enabledModels:
+        - "litellm/*"
         - "vast-vllm/*"
         - "deepseek/*"
         - "office-vllm/*"
@@ -333,7 +392,7 @@ in
             - "anthropic/claude-sonnet-4-6"
             #"office-ollama/qwen3.6:27b"  # disabled 2026-05-31
           smol:
-            - "google/gemini-2.5-flash-lite"
+            - "gemini/gemini-2.5-flash-lite"
             - "anthropic/claude-haiku-4-5"
 
       # Tools — enable setting-gated tools that ship disabled by default.
