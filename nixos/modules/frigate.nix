@@ -50,7 +50,6 @@
       "person" "car" "motorcycle" "bicycle" "school_bus" "boat"
       # Animals
       "bird" "cat" "dog" "deer" "horse" "bear" "cow" "fox" "raccoon"
-      # Deliveries & Logos
       "face" "license_plate" "package" "amazon" "fedex" "ups" "usps"
       "dhl" "an_post" "purolator" "postnl" "nzpost" "postnord" "gls"
       "dpd" "royal_mail" "canada_post"
@@ -420,7 +419,8 @@
 
       # 2026-04-15 base: plus://3468817eacc0ca053c0256a2113b1c04 (yolonas 640x640, generic)
       # 2026-06-28 fine-tuned: plus://1ca03994c082c07c73d984000135929d (640x640, 155 annotated images)
-      path = "plus://1ca03994c082c07c73d984000135929d";
+      # 2026-06-29 new models: 320px cd78e..., 640px 3e3c...
+      path = "plus://cd78e0b872a64b00af63bed9f4972ed9";
     };
     face_recognition = {
       enabled = true;
