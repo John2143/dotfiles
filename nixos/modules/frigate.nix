@@ -35,8 +35,10 @@
   ...
 }: let
   # ── MQTT (required for Home Assistant integration) ─────────────────
-  mqttHost = "home.ts.2143.me";
-  mqttPort = 1883;
+  mqttHost = "192.168.5.76";
+  mqttPort = 31883;
+  mqttUser = "frigate";
+  mqttPass = "pT2hmIXUXN4IkhdCGy3frXEmKYY";  # Mosquitto on argo/k8s — rotate via agenix later
 
   # ── NAS NFS mount for recordings + database ───────────────────────
   nasFrigatePath = "/mnt/nas/frigate";
@@ -95,6 +97,39 @@
       fox = "If a fox: note whether our pets (cats/dogs) are also visible. Describe: size, color, behavior, whether peering at the house, and any sign of limping.";
     };
   };
+  # ── GenAI sidecar package ─────────────────────────────────────────
+  # Runs alongside Frigate, listens to MQTT for completed events,
+  # extracts multi-frame clips + snapshot, calls Gemini, updates description.
+  frigateGenaiSidecarPkg = let
+    pythonEnv = pkgs.python3.withPackages (ps: [
+      ps.paho-mqtt
+      ps.google-genai
+    ]);
+  in pkgs.runCommand "frigate-genai-sidecar" {
+    buildInputs = [ pkgs.makeWrapper ];
+  } ''
+    mkdir -p $out/bin
+    cp ${./frigate-genai-sidecar.py} $out/bin/frigate-genai-sidecar.py
+    chmod +x $out/bin/frigate-genai-sidecar.py
+    makeWrapper "${pythonEnv}/bin/python" "$out/bin/frigate-genai-sidecar" \
+      --add-flags "$out/bin/frigate-genai-sidecar.py" \
+      --prefix PATH : "${pkgs.ffmpeg}/bin"
+  '';
+
+  # Prompt templates — derived from genaiPrompts above
+  frigateGenaiPromptsFile = pkgs.writeText "frigate-genai-prompts.json"
+    (builtins.toJSON genaiPrompts);
+
+  # Provider configuration
+  frigateGenaiProviderFile = pkgs.writeText "frigate-genai-provider.json" (builtins.toJSON {
+    provider = "gemini";
+    model = "gemini-2.5-flash";
+    api_key_env = "FRIGATE_GEMINI_API_KEY";
+    # Switch to ollama when ready:
+    # provider = "ollama";
+    # model = "huihui_ai/qwen3-vl-abliterated:8b";
+    # base_url = "http://100.64.0.3:11434";
+  });
 
   # ── Camera definitions ────────────────────────────────────────────
   # Edit names. Each pulls one RTSP stream from the Reolink NVR:
@@ -317,7 +352,7 @@
         track = objectLabels.all;
         genai = {
           debug_save_thumbnails = true;
-          enabled = true;
+          enabled = true;  # Sidecar handles genai descriptions, but this is on for now
           objects = objectLabels.describe;
           prompt = lib.concatStringsSep " " [
             genaiPrompts.base
@@ -365,6 +400,8 @@
     mqtt = {
       host = mqttHost;
       port = mqttPort;
+      user = mqttUser;
+      password = mqttPass;
     };
     logger = {
       default = "info";
@@ -401,12 +438,12 @@
     };
 
     genai = {
-      # provider = "ollama";
-      # base_url = "http://100.64.0.3:11434";
-      # model = "huihui_ai/qwen3-vl-abliterated:8b";
-      provider = "gemini";
-      api_key = "\${FRIGATE_GEMINI_API_KEY}";
-      model = "gemini-2.5-flash";
+      provider = "ollama";
+      base_url = "http://100.64.0.3:11434";
+      model = "huihui_ai/qwen3-vl-abliterated:8b";
+      # provider = "gemini";
+      # api_key = "\${FRIGATE_GEMINI_API_KEY}";
+      # model = "gemini-2.5-flash";
     };
     classification = {
       bird = {
@@ -628,6 +665,9 @@ in {
   systemd.tmpfiles.rules = [
     "d ${nasFrigatePath} 0755 1000 1000 -"
     "d /var/lib/frigate 0755 1000 1000 -"
+    "d /var/lib/frigate-genai-sidecar 0755 root root -"
+    "L+ /var/lib/frigate-genai-sidecar/prompts.json - - - - ${frigateGenaiPromptsFile}"
+    "L+ /var/lib/frigate-genai-sidecar/provider.json - - - - ${frigateGenaiProviderFile}"
   ];
 
   # ── NVIDIA Container Toolkit for GPU passthrough ──────────────────
@@ -690,6 +730,34 @@ in {
       ];
     };
   };
+  # ── GenAI sidecar service ────────────────────────────────────────
+  # Listens to MQTT for completed Frigate events, extracts multi-frame
+  # clips from recordings, calls Gemini for description, writes it back.
+  systemd.services.frigate-genai-sidecar = {
+    description = "Frigate GenAI Sidecar — multi-frame event descriptions";
+    wantedBy = ["multi-user.target"];
+    after = [ "podman-frigate.service" ];
+    requires = [ "podman-frigate.service" "network.target" ];
+    path = [ pkgs.ffmpeg ];
+    environment = {
+      FRIGATE_BASE_URL = "http://localhost:5000";
+      MQTT_HOST = mqttHost;
+      MQTT_PORT = toString mqttPort;
+      MQTT_USER = mqttUser;
+      MQTT_PASSWORD = mqttPass;
+    };
+    serviceConfig = {
+      Type = "simple";
+      ExecStart = "${frigateGenaiSidecarPkg}/bin/frigate-genai-sidecar";
+      Restart = "on-failure";
+      RestartSec = 10;
+      StateDirectory = "frigate-genai-sidecar";
+      EnvironmentFile = config.age.secrets.frigate-plus.path;
+      User = "root";
+      Group = "root";
+    };
+  };
+  # ── Sidecar config files ── appended to tmpfiles.rules below
   /*
   # ── Downgrade to YOLOv9 (uncomment all lines between START/END) ──
   systemd.services.build-frigate-model = {
