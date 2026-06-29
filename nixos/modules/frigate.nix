@@ -124,7 +124,10 @@
   # Provider configuration — routed through LiteLLM proxy
   frigateGenaiProviderFile = pkgs.writeText "frigate-genai-provider.json" (builtins.toJSON {
     provider = "litellm";
-    model = "gemini/gemini-2.5-flash";
+    model = [
+      "gemini/gemini-2.5-flash"
+      "huihui_ai/qwen3-vl-abliterated:8b"
+    ];
     api_key_env = "LITELLM_FRIGATE_KEY";
     base_url = "https://llm.2143.me/v1";
   });
@@ -438,7 +441,7 @@
     genai = {
       provider = "openai";
       base_url = "https://llm.2143.me/v1";
-      model = "ollama/huihui_ai/qwen3-vl-abliterated:8b";
+      model = "huihui_ai/qwen3-vl-abliterated:8b";
       api_key = "\${LITELLM_FRIGATE_KEY}";
     };
     classification = {

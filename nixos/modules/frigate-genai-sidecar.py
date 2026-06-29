@@ -260,6 +260,9 @@ def call_litellm(
         return None
 
     model = provider_cfg.get("model", "gemini/gemini-2.5-flash")
+    if isinstance(model, list):
+        import random
+        model = random.choice(model)
     base_url = provider_cfg.get("base_url", os.environ.get("OPENAI_BASE_URL", ""))
     client = OpenAI(api_key=api_key, base_url=base_url)
 
