@@ -63,14 +63,16 @@
   # ── GenAI prompt templates (composed per-camera + per-label) ─────
   genaiPrompts = rec {
     base = ''
-      Security camera analysis. You may receive a single image or a sequence spaced ~1 second apart. Describe only what is noteworthy: people, animals, vehicles, packages, or anything out of place.
+      Security camera analysis. You are looking at a chronological sequence of full camera frames — each shows the entire scene at a different moment. You may receive 1 to 10 frames from the tracked event.
 
-      The first-pass detector flagged a {label}, which may or may not be in frame. If absent, say so — the low-res detector can be wrong.
+      Describe the full event from start to finish. Trace what happens across the frames: what enters, what exits, what changes. Where does the action begin and end? What path does the {label} take? Describe doors opening/closing, objects picked up or set down, and any other visible changes between frames.
 
-      If you have multiple frames: describe actions and movement. You may infer clear intent (e.g., a person getting into a car, a cat sheltering from rain) but do not fabricate. If a cat is just walking, do not claim it is hunting. If you have only one frame: describe what is visible factually.
+      The first-pass detector flagged a {label}. This is the primary subject — describe it in detail, but also note other people, animals, or objects visible in the scene. The {label} may or may not be in frame. If absent, say so and describe what IS visible.
+
+      Describe the progression chronologically from first frame to last. You may infer clear intent (e.g., a person entering a car, a cat sheltering from rain) but do not fabricate events you cannot see.
     '';
     suffix = ''
-      Be concise. Use short factual sentences. Maximum 3 sentences per distinct object or event. Do not narrate, do not editorialize. Only what is visible.
+      Be concise but complete. Describe the full event. Do not editorialize. Only what is visible.
     '';
     camera = {
       cam01 = "This camera sits ~12 ft up, overlooking our front walkway, front gate, sidewalk, and street intersection. The fenced area is our yard — anything inside or approaching it is priority. The camera may pan/tilt to a different scene; note if the view is not the default front-gate angle.";
@@ -307,6 +309,7 @@
       objects = {
         track = objectLabels.all;
         genai = {
+          debug_save_thumbnails = true;
           enabled = true;
           objects = objectLabels.describe;
           prompt = lib.concatStringsSep " " [
@@ -355,6 +358,12 @@
     mqtt = {
       host = mqttHost;
       port = mqttPort;
+    };
+    logger = {
+      default = "info";
+      logs = {
+        "frigate.genai" = "debug";
+      };
     };
     detectors = {
       onnx_0 = {
@@ -569,6 +578,8 @@ cp /nix-config.yml /config/config.yml.tpl
 /usr/local/bin/envsubst < /config/config.yml.tpl > /config/config.yml
 # Patch GenAI timeout to 600s — requests queue behind each other with num_parallel=1
 sed -i 's/timeout: int = 120)/timeout: int = 600)/' /opt/frigate/frigate/genai/__init__.py
+# Patch object descriptions to send full frame (downscaled) instead of 500px crop
+sed -i 's/data\["thumbnail"\] = create_thumbnail(yuv_frame, data\["box"\])/frame = cv2.cvtColor(yuv_frame, cv2.COLOR_YUV2BGR_I420); h, w = frame.shape[:2]; scale = min(1280 \/ max(h, w), 1.0); frame = cv2.resize(frame, (int(w * scale), int(h * scale)), interpolation=cv2.INTER_AREA); _, jpg = cv2.imencode(".jpg", frame, [int(cv2.IMWRITE_JPEG_QUALITY), 85]); data["thumbnail"] = jpg.tobytes()/' /opt/frigate/frigate/data_processing/post/object_descriptions.py
 # Start Frigate's init process.
 exec /init
 SCRIPT
