@@ -619,6 +619,76 @@ cp /nix-config.yml /config/config.yml.tpl
 sed -i 's/timeout: int = 120)/timeout: int = 600)/' /opt/frigate/frigate/genai/__init__.py
 # Patch object descriptions to send full frame (downscaled) instead of 500px crop
 sed -i 's/data\["thumbnail"\] = create_thumbnail(yuv_frame, data\["box"\])/frame = cv2.cvtColor(yuv_frame, cv2.COLOR_YUV2BGR_I420); h, w = frame.shape[:2]; scale = min(1280 \/ max(h, w), 1.0); frame = cv2.resize(frame, (int(w * scale), int(h * scale)), interpolation=cv2.INTER_AREA); _, jpg = cv2.imencode(".jpg", frame, [int(cv2.IMWRITE_JPEG_QUALITY), 85]); data["thumbnail"] = jpg.tobytes()/' /opt/frigate/frigate/data_processing/post/object_descriptions.py
+# Inject reprocess button into Frigate UI
+cat > /opt/frigate/web/reprocess-button.js << 'JS_EOF'
+(function() {
+  var SIDECAR = "http://100.64.0.1:9090";
+  
+  function tryInject() {
+    // Find the sparkle "Regenerate" button
+    var btns = document.querySelectorAll('button[aria-label*="egenerate"]');
+    if (!btns.length) return false;
+    
+    // Check if we already injected next to THIS sparkle button
+    if (btns[0].parentElement.querySelector("#sidecar-reprocess")) return true;
+    
+    var sparkleBtn = btns[0];
+    var parent = sparkleBtn.closest('.flex.items-center.gap-3');
+    if (!parent) return false;
+
+    var btn = document.createElement("button");
+    btn.id = "sidecar-reprocess";
+    btn.textContent = "Reprocess";
+    btn.setAttribute("aria-label", "Reprocess with multi-frame analysis");
+    btn.className = sparkleBtn.className;
+    btn.onclick = async function() {
+      // Find event ID by looking at sibling images in the same dialog
+      var eventId = null;
+      // Method 1: Find the visible dialog snapshot (has object-contain class, visible in viewport)
+      var imgs = document.querySelectorAll('img.object-contain[src*="/api/events/"], img[src*="/api/events/"][alt]:not([alt=""]):not([alt="Allcameras"])');
+      for (var i = 0; i < imgs.length; i++) {
+        var rect = imgs[i].getBoundingClientRect();
+        if (rect.width > 100 && rect.height > 100) {
+          var m = imgs[i].src.match(/events\/([^/]+)/);
+          if (m) { eventId = m[1]; break; }
+        }
+      }
+      if (!eventId) return;
+      // Method 2: URL-based fallback
+      if (!eventId) { var m2 = location.pathname.match(/events\/([^/]+)/); if (m2) eventId = m2[1]; }
+      if (!eventId) return;
+      btn.textContent = "...";
+      btn.disabled = true;
+      try {
+        var r = await fetch(SIDECAR + "/reprocess/" + eventId, { method: "POST" });
+        if (r.ok) {
+          btn.textContent = "Sent!";
+          btn.style.color = "#4ade80";
+        } else {
+          btn.textContent = "Failed";
+          btn.style.color = "#f87171";
+        }
+      } catch(e) { 
+        btn.textContent = "Error"; 
+        btn.style.color = "#f87171";
+      }
+      setTimeout(function() { 
+        btn.textContent = "Reprocess"; 
+        btn.disabled = false; 
+        btn.style.color = "";
+      }, 4000);
+    };
+    parent.appendChild(btn);
+    return true;
+  }
+
+  // Keep trying every 1s — React re-renders destroy the button
+  setInterval(tryInject, 1000);
+  tryInject();
+})();
+JS_EOF
+sed -i 's|</head>|<script src="/reprocess-button.js"></script></head>|' /opt/frigate/web/index.html
+
 # Start Frigate's init process.
 exec /init
 SCRIPT
@@ -740,6 +810,7 @@ in {
       MQTT_PORT = toString mqttPort;
       MQTT_USER = mqttUser;
       MQTT_PASSWORD = mqttPass;
+      HTTP_HOST = "0.0.0.0";
     };
     serviceConfig = {
       Type = "simple";

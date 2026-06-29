@@ -34,6 +34,75 @@ import paho.mqtt.client as mqtt
 
 log = logging.getLogger("frigate-genai-sidecar")
 
+UI_HTML = r'''<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Frigate GenAI</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#0f0f1a;color:#d4d4d8;font:13px system-ui,sans-serif;padding:16px}
+h1{font-size:18px;font-weight:600;margin-bottom:12px;color:#fff}
+table{width:100%;border-collapse:collapse}
+th,td{padding:8px 10px;text-align:left;border-bottom:1px solid #1e1e32}
+th{font-weight:500;color:#888;font-size:11px;text-transform:uppercase}
+tr:hover{background:#1a1a2e}
+img{border-radius:4px;max-height:60px}
+.btn{background:#2d2d4a;color:#c8c8d0;border:1px solid #3d3d5e;padding:5px 12px;border-radius:5px;cursor:pointer;font-size:12px}
+.btn:hover{background:#3d3d5e}
+.btn:disabled{opacity:.4;cursor:default}
+.ok{color:#4ade80}
+.err{color:#f87171}
+.desc{max-width:400px;font-size:11px;color:#999;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.loading{text-align:center;padding:40px;color:#666}
+</style>
+</head>
+<body>
+<h1>Frigate GenAI Reprocess</h1>
+<div id="app" class="loading">Loading events...</div>
+<script>
+const SIDECAR = "";
+const DESCRIBE = ["person","dog","cat","package","face","fox","deer","bear","horse","cow","raccoon","bird","motorcycle","bicycle","school_bus","boat","robot_lawnmower","umbrella","amazon","fedex","ups","usps","dhl","an_post","purolator","postnl","nzpost","postnord","gls","dpd","royal_mail","canada_post"];
+async function load() {
+  try {
+    const r = await fetch("/api/events?limit=100");
+    const events = await r.json();
+    const filtered = events.filter(e => DESCRIBE.includes(e.label) && e.has_clip && e.end_time);
+    if (!filtered.length) { app.innerHTML = '<p>No eligible events found.</p>'; return; }
+    let html = '<table><tr><th>Snapshot</th><th>Camera</th><th>Label</th><th>Duration</th><th>Description</th><th></th></tr>';
+    for (const e of filtered) {
+      const dur = (e.end_time - e.start_time).toFixed(1) + "s";
+      const desc = (e.data?.description || "").substring(0, 120);
+      html += '<tr>';
+      html += '<td><img src="/api/events/' + e.id + '/snapshot.jpg" loading="lazy"></td>';
+      html += '<td>' + e.camera + '</td>';
+      html += '<td>' + e.label + '</td>';
+      html += '<td>' + dur + '</td>';
+      html += '<td class="desc" title="' + (e.data?.description || "").replace(/"/g,"&quot;") + '">' + (desc || "—") + '</td>';
+      html += '<td><button class="btn" onclick="reprocess(\'' + e.id + '\',this)">Reprocess</button></td>';
+      html += '</tr>';
+    }
+    html += '</table>';
+    app.innerHTML = html;
+  } catch(err) { app.innerHTML = '<p class="err">Failed to load: ' + err.message + '</p>'; }
+}
+
+async function reprocess(id, btn) {
+  btn.textContent = "..."; btn.disabled = true;
+  try {
+    const r = await fetch("/reprocess/" + id, { method: "POST" });
+    if (r.ok) { btn.textContent = "Sent!"; btn.classList.add("ok"); }
+    else { btn.textContent = "Failed"; btn.classList.add("err"); }
+  } catch(e) { btn.textContent = "Error"; btn.classList.add("err"); }
+  setTimeout(() => { btn.textContent = "Reprocess"; btn.classList.remove("ok","err"); btn.disabled = false; }, 5000);
+}
+
+load();
+</script>
+</body>
+</html>'''
+
 
 # ── config ──────────────────────────────────────────────────────────
 
@@ -263,11 +332,11 @@ def call_provider(
 def update_event_description(event_id: str, description: str) -> bool:
     """Write description back to Frigate's event."""
     base_url = os.environ.get("FRIGATE_BASE_URL", "http://localhost:5000")
-    url = f"{base_url}/api/events/{event_id}"
+    url = f"{base_url}/api/events/{event_id}/description"
     payload = json.dumps({"description": description}).encode()
     try:
         req = urllib.request.Request(
-            url, data=payload, method="PUT",
+            url, data=payload, method="POST",
             headers={"Content-Type": "application/json"},
         )
         with urllib.request.urlopen(req, timeout=10) as resp:
@@ -426,7 +495,7 @@ class EventProcessor:
 
 # ── MQTT ────────────────────────────────────────────────────────────
 
-def build_mqtt_client(processor: EventProcessor, event_queue: asyncio.Queue) -> mqtt.Client:
+def build_mqtt_client(processor: EventProcessor, event_queue: asyncio.Queue, loop: asyncio.AbstractEventLoop) -> mqtt.Client:
     """Create and configure the MQTT client with event callback."""
 
     def on_connect(client, userdata, flags, reason_code, properties=None):
@@ -437,17 +506,16 @@ def build_mqtt_client(processor: EventProcessor, event_queue: asyncio.Queue) -> 
             log.error("MQTT connection failed: rc=%d", reason_code)
 
     def on_message(client, userdata, msg):
+        log.debug("MQTT message on %s: %s", msg.topic, msg.payload[:200])
         try:
             payload = json.loads(msg.payload.decode())
             event_type = payload.get("type", "")
             if event_type == "end":
                 after = payload.get("after", {})
                 if after.get("has_clip"):
-                    # Put in queue for async processing
-                    try:
-                        event_queue.put_nowait(after)
-                    except asyncio.QueueFull:
-                        log.warning("Event queue full, dropping event %s", after.get("id"))
+                    log.info("Received end event: %s (%s/%s)", after.get("id"), after.get("camera"), after.get("label"))
+                    # asyncio.Queue is NOT thread-safe — use run_coroutine_threadsafe
+                    asyncio.run_coroutine_threadsafe(event_queue.put(after), loop)
         except json.JSONDecodeError:
             log.debug("Non-JSON MQTT message on %s", msg.topic)
         except Exception:
@@ -495,9 +563,100 @@ async def async_main(prompts_path: str, provider_path: str) -> None:
     event_queue: asyncio.Queue = asyncio.Queue(maxsize=100)
 
     # Start MQTT in background thread
-    client = build_mqtt_client(processor, event_queue)
+    client = build_mqtt_client(processor, event_queue, asyncio.get_running_loop())
 
     log.info("Frigate GenAI sidecar running, waiting for events...")
+    # Start HTTP server for manual reprocess triggers
+    import threading
+    from http.server import HTTPServer, BaseHTTPRequestHandler
+
+    class ReprocessHandler(BaseHTTPRequestHandler):
+        def log_message(self, fmt, *args):
+            log.debug("HTTP: %s", fmt % args)
+
+        def _cors(self):
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+            self.send_header("Access-Control-Allow-Headers", "Content-Type")
+
+        def do_OPTIONS(self):
+            self.send_response(200)
+            self._cors()
+            self.end_headers()
+
+        def do_GET(self):
+            if self.path == "/":
+                self.send_response(200)
+                self._cors()
+                self.send_header("Content-type", "text/html; charset=utf-8")
+                self.end_headers()
+                self.wfile.write(UI_HTML.encode())
+            elif self.path.startswith("/api/events/") and self.path.endswith("/snapshot.jpg"):
+                self._proxy("image/jpeg")
+            elif self.path.startswith("/api/events"):
+                self._proxy("application/json")
+            else:
+                self.send_response(404)
+                self.end_headers()
+
+        def _proxy(self, content_type):
+            base_url = os.environ.get("FRIGATE_BASE_URL", "http://localhost:5000")
+            try:
+                resp = urllib.request.urlopen(base_url + self.path, timeout=15)
+                self.send_response(resp.status)
+                self._cors()
+                self.send_header("Content-type", content_type)
+                self.end_headers()
+                self.wfile.write(resp.read())
+            except Exception as e:
+                self.send_response(502)
+                self._cors()
+                self.end_headers()
+                self.wfile.write(str(e).encode())
+
+        def do_POST(self):
+            if self.path.startswith("/reprocess/"):
+                event_id = self.path.split("/reprocess/", 1)[1]
+                base_url = os.environ.get("FRIGATE_BASE_URL", "http://localhost:5000")
+                try:
+                    resp = urllib.request.urlopen(f"{base_url}/api/events/{event_id}", timeout=10)
+                    event = json.loads(resp.read())
+                    mqtt_msg = json.dumps({
+                        "type": "end",
+                        "after": {
+                            "id": event["id"],
+                            "camera": event["camera"],
+                            "label": event["label"],
+                            "start_time": event["start_time"],
+                            "end_time": event["end_time"],
+                            "has_clip": event.get("has_clip", True),
+                            "has_snapshot": event.get("has_snapshot", True),
+                        }
+                    })
+                    client.publish("frigate/events", mqtt_msg)
+                    self.send_response(200)
+                    self._cors()
+                    self.send_header("Content-type", "text/plain")
+                    self.end_headers()
+                    msg = f"Reprocessing {event_id} ({event['camera']}/{event['label']})"
+                    self.wfile.write(msg.encode())
+                    log.info("HTTP reprocess: %s", msg)
+                except Exception as e:
+                    self.send_response(500)
+                    self._cors()
+                    self.end_headers()
+                    self.wfile.write(str(e).encode())
+            else:
+                self.send_response(404)
+                self.end_headers()
+
+    http_port = int(os.environ.get("HTTP_PORT", "9090"))
+    http_host = os.environ.get("HTTP_HOST", "127.0.0.1")
+    httpd = HTTPServer((http_host, http_port), ReprocessHandler)
+    thread = threading.Thread(target=httpd.serve_forever, daemon=True)
+    thread.start()
+    log.info("HTTP reprocess endpoint on http://%s:%d", http_host, http_port)
+
 
     try:
         while True:
