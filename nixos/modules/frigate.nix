@@ -124,8 +124,9 @@
   frigateGenaiProviderFile = pkgs.writeText "frigate-genai-provider.json" (builtins.toJSON {
     provider = "litellm";
     model = [
+
       "gemini/gemini-2.5-flash"
-      "ollama/qwen3-vl-128k"
+      "ollama/qwen3-vl-64k"
     ];
     api_key_env = "LITELLM_FRIGATE_KEY";
     base_url = "https://llm.2143.me/v1";
