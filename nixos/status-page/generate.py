@@ -706,7 +706,7 @@ def render_html(nodes, services, certs, rw, pods, alerts, errors):
   </table>
 
   <div class="links" style="margin-top:1.5em;">
-    <a href="https://grafana.ts.2143.me">Grafana</a>
+    <a href="https://grafana.john2143.com">Grafana</a>
     <a href="http://pite.local:9090">Prometheus</a>
     <a href="http://pite.local:9093">Alertmanager</a>
   </div>

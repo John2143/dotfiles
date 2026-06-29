@@ -117,6 +117,138 @@
      package = pkgs.ollama-rocm;
   };
 
+  # LiteLLM proxy — OpenAI-compatible API routing to all providers.
+  # API keys loaded from /run/agenix/llm-runtime-keys (decrypted by agenix).
+  # Admin UI at http://office:4000/ui
+  # Usage: curl http://office:4000/v1/models
+  services.litellm = {
+    enable = true;
+    host = "0.0.0.0";
+    port = 4000;
+    openFirewall = true;
+    environmentFile = "/run/agenix/llm-runtime-keys";
+    settings = {
+      general_settings = {
+        master_key = "os.environ/LITELLM_MASTER_KEY";
+      };
+      model_list = [
+        # ── Local Ollama ────────────────────────────────────────────
+        {
+          model_name = "ollama/qwen3.6";
+          litellm_params = {
+            model = "ollama/qwen3.6";
+            api_base = "http://localhost:11434";
+          };
+        }
+        {
+          model_name = "ollama/qwen3-vl";
+          litellm_params = {
+            model = "ollama/qwen3-vl";
+            api_base = "http://localhost:11434";
+          };
+        }
+        {
+          model_name = "ollama/*";
+          litellm_params = {
+            model = "ollama/*";
+            api_base = "http://localhost:11434";
+          };
+        }
+
+        # ── Google Gemini (direct API — cheaper than OpenRouter) ──
+        {
+          model_name = "gemini/gemini-2.5-flash-lite";
+          litellm_params = {
+            model = "gemini/gemini-2.5-flash-lite";
+            api_key = "os.environ/GEMINI_API_KEY";
+          };
+        }
+        {
+          model_name = "gemini/gemini-2.5-flash";
+          litellm_params = {
+            model = "gemini/gemini-2.5-flash";
+            api_key = "os.environ/GEMINI_API_KEY";
+          };
+        }
+        {
+          model_name = "gemini/gemini-2.5-pro";
+          litellm_params = {
+            model = "gemini/gemini-2.5-pro";
+            api_key = "os.environ/GEMINI_API_KEY";
+          };
+        }
+
+        # ── DeepSeek (primary agentic model) ────────────────────────
+        {
+          model_name = "deepseek/deepseek-chat";
+          litellm_params = {
+            model = "deepseek/deepseek-chat";
+            api_key = "os.environ/DEEPSEEK_API_KEY";
+          };
+        }
+        {
+          model_name = "deepseek/deepseek-reasoner";
+          litellm_params = {
+            model = "deepseek/deepseek-reasoner";
+            api_key = "os.environ/DEEPSEEK_API_KEY";
+          };
+        }
+
+        # ── Anthropic (Claude) ──────────────────────────────────────
+        {
+          model_name = "claude/claude-sonnet-4-6";
+          litellm_params = {
+            model = "claude/claude-sonnet-4-6";
+            api_key = "os.environ/ANTHROPIC_API_KEY";
+          };
+        }
+        {
+          model_name = "claude/claude-haiku-4-5";
+          litellm_params = {
+            model = "claude/claude-haiku-4-5";
+            api_key = "os.environ/ANTHROPIC_API_KEY";
+          };
+        }
+
+        # ── OpenAI (fallback smol classifier) ───────────────────────
+        {
+          model_name = "openai/gpt-4.1-nano";
+          litellm_params = {
+            model = "openai/gpt-4.1-nano";
+            api_key = "os.environ/OPENAI_API_KEY";
+          };
+        }
+        {
+          model_name = "openai/gpt-4o";
+          litellm_params = {
+            model = "openai/gpt-4o";
+            api_key = "os.environ/OPENAI_API_KEY";
+          };
+        }
+        {
+          model_name = "openai/gpt-4o-mini";
+          litellm_params = {
+            model = "openai/gpt-4o-mini";
+            api_key = "os.environ/OPENAI_API_KEY";
+          };
+        }
+
+        # ── OpenRouter (unified gateway for 300+ models) ────────────
+        {
+          model_name = "openrouter/*";
+          litellm_params = {
+            model = "openrouter/*";
+            api_key = "os.environ/OPENROUTER_API_KEY";
+          };
+        }
+      ];
+      litellm_settings = {
+        drop_params = true;
+        set_verbose = false;
+      };
+    };
+  };
+
   # Ollama (ROCm) for Frigate GenAI. Serves on :11434 via Tailscale + LAN.
 
   # drones
