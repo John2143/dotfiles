@@ -125,7 +125,7 @@
     provider = "litellm";
     model = [
       "gemini/gemini-2.5-flash"
-      "ollama/huihui_ai/qwen3-vl-abliterated:8b"
+      "ollama/qwen3-vl-128k"
     ];
     api_key_env = "LITELLM_FRIGATE_KEY";
     base_url = "https://llm.2143.me/v1";
@@ -441,7 +441,7 @@
     genai = {
       provider = "openai";
       base_url = "https://llm.2143.me/v1";
-      model = "ollama/huihui_ai/qwen3-vl-abliterated:8b";
+      model = "ollama/qwen3-vl-128k";
       api_key = "\${LITELLM_FRIGATE_KEY}";
     };
     classification = {

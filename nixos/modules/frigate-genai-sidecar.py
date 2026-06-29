@@ -403,7 +403,6 @@ class EventProcessor:
         self.provider_cfg = provider_cfg
         self.describe_labels: set[str] = set(prompts.get("describe", []))
         # Per-camera lock: only one active request per camera
-        self._camera_busy: dict[str, bool] = {}
 
     async def process(self, event: dict) -> None:
         """Process a single event (called from asyncio main loop)."""
@@ -425,16 +424,7 @@ class EventProcessor:
             log.debug("Event %s label=%s not in describe list, skipping", event_id, label)
             return
 
-        # ── rate-limit per camera ──
-        if self._camera_busy.get(camera):
-            log.info("Camera %s busy, skipping event %s", camera, event_id)
-            return
-        self._camera_busy[camera] = True
-
-        try:
-            await self._process_event(event_id, camera, label, start_time, end_time)
-        finally:
-            self._camera_busy[camera] = False
+        await self._process_event(event_id, camera, label, start_time, end_time)
 
     async def _process_event(
         self,
