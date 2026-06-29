@@ -118,7 +118,7 @@
 
   # Prompt templates — derived from genaiPrompts above
   frigateGenaiPromptsFile = pkgs.writeText "frigate-genai-prompts.json"
-    (builtins.toJSON genaiPrompts);
+    (builtins.toJSON (genaiPrompts // { describe = objectLabels.describe; }));
 
   # Provider configuration
   frigateGenaiProviderFile = pkgs.writeText "frigate-genai-provider.json" (builtins.toJSON {
