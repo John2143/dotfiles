@@ -44,6 +44,12 @@ UI_HTML = r'''<!DOCTYPE html>
 *{margin:0;padding:0;box-sizing:border-box}
 body{background:#0f0f1a;color:#d4d4d8;font:13px system-ui,sans-serif;padding:16px}
 h1{font-size:18px;font-weight:600;margin-bottom:12px;color:#fff}
+.stats{display:flex;gap:20px;margin-bottom:16px;padding:10px 14px;background:#14142a;border-radius:8px;font-size:12px}
+.stat{display:flex;flex-direction:column}
+.stat-label{color:#666;font-size:10px;text-transform:uppercase;letter-spacing:.5px}
+.stat-value{color:#d4d4d8;font-size:14px;font-weight:500}
+.stat-value.ok{color:#4ade80}
+.stat-value.off{color:#f87171}
 table{width:100%;border-collapse:collapse}
 th,td{padding:8px 10px;text-align:left;border-bottom:1px solid #1e1e32}
 th{font-weight:500;color:#888;font-size:11px;text-transform:uppercase}
@@ -60,6 +66,7 @@ img{border-radius:4px;max-height:60px}
 </head>
 <body>
 <h1>Frigate GenAI Reprocess</h1>
+<div id="stats" class="loading" style="margin-bottom:12px">Loading stats...</div>
 <div id="app" class="loading">Loading events...</div>
 <script>
 const SIDECAR = "";
@@ -97,7 +104,18 @@ async function reprocess(id, btn) {
   } catch(e) { btn.textContent = "Error"; btn.classList.add("err"); }
   setTimeout(() => { btn.textContent = "Reprocess"; btn.classList.remove("ok","err"); btn.disabled = false; }, 5000);
 }
-
+async function loadStats() {
+  try {
+    const r = await fetch("/api/stats");
+    const s = await r.json();
+    const mqtt = s.mqtt_connected ? '<span class="ok">OK</span>' : '<span class="off">Disconnected</span>';
+    const models = Object.entries(s.model_counts).map(([m,c]) => m.split("/").pop()+": "+c).join(" | ") || "—";
+    const statsEl = document.getElementById("stats");
+    statsEl.className = "stats";
+    statsEl.innerHTML = '<div class="stat"><span class="stat-label">MQTT</span><span class="stat-value">'+mqtt+'</span></div><div class="stat"><span class="stat-label">Processed</span><span class="stat-value">'+s.events_processed+'</span></div><div class="stat"><span class="stat-label">Last</span><span class="stat-value">'+(s.last_event||"—")+'</span></div><div class="stat"><span class="stat-label">Models</span><span class="stat-value">'+models+'</span></div>';
+  } catch(e) { /* stats will stay as loading */ }
+}
+loadStats();
 load();
 </script>
 </body>
@@ -233,10 +251,10 @@ def call_gemini(
             model=provider_cfg["model"],
             contents=contents,
         )
-        return response.text
+        return response.text, provider_cfg["model"]
     except Exception as e:
         log.error("Gemini call failed: %s", e)
-        return None
+        return None, None
 
 # ── LiteLLM provider ────────────────────────────────────────────────
 
@@ -302,10 +320,10 @@ def call_litellm(
             messages=[{"role": "user", "content": content}],
             timeout=600,
         )
-        return response.choices[0].message.content
+        return response.choices[0].message.content, model
     except Exception as e:
         log.error("LiteLLM call failed: %s", e)
-        return None
+        return None, None
 
 
 # ── provider dispatch ───────────────────────────────────────────────
@@ -322,13 +340,13 @@ def call_provider(
     snapshot: bytes | None,
     label: str,
     provider_cfg: dict,
-) -> str | None:
-    """Dispatch to the configured GenAI provider."""
+) -> tuple[str | None, str | None]:
+    """Dispatch to the configured GenAI provider. Returns (description, model_used)."""
     provider_name = provider_cfg.get("provider", "gemini")
     fn = PROVIDERS.get(provider_name)
     if fn is None:
         log.error("Unknown provider: %s", provider_name)
-        return None
+        return None, None
     return fn(prompt_text, images, snapshot, label, provider_cfg)
 
 
@@ -402,6 +420,18 @@ class EventProcessor:
         self.prompts = prompts
         self.provider_cfg = provider_cfg
         self.describe_labels: set[str] = set(prompts.get("describe", []))
+        self.stats = {
+            "events_processed": 0,
+            "model_counts": {},
+            "last_processed_time": None,
+            "last_event": None,
+            "total_genai_time": 0.0,
+            "avg_genai_time": 0.0,
+            "models_configured": provider_cfg.get("model", "unknown"),
+            "provider": provider_cfg.get("provider", "unknown"),
+            "started_at": __import__("time").strftime("%Y-%m-%dT%H:%M:%SZ", __import__("time").gmtime()),
+            "mqtt_connected": False,
+        }
         # Per-camera lock: only one active request per camera
 
     async def process(self, event: dict) -> None:
@@ -466,7 +496,7 @@ class EventProcessor:
 
         # 4. Call GenAI provider
         genai_start = time.monotonic()
-        description = await asyncio.to_thread(
+        description, model_used = await asyncio.to_thread(
             call_provider, prompt, frames, snapshot, label, self.provider_cfg,
         )
         genai_time = time.monotonic() - genai_start
@@ -479,6 +509,13 @@ class EventProcessor:
         # 5. Write description to Frigate
         ok = await asyncio.to_thread(update_event_description, event_id, description)
         if ok:
+            self.stats["events_processed"] += 1
+            self.stats["last_processed_time"] = __import__("time").strftime("%Y-%m-%dT%H:%M:%SZ", __import__("time").gmtime())
+            self.stats["last_event"] = f"{camera}/{label}/{event_id[:12]}"
+            self.stats["total_genai_time"] += genai_time
+            self.stats["avg_genai_time"] = self.stats["total_genai_time"] / self.stats["events_processed"]
+            if model_used:
+                self.stats["model_counts"][model_used] = self.stats["model_counts"].get(model_used, 0) + 1
             log.info(
                 "Updated event %s (%s/%s) — %.1fs total",
                 event_id, camera, label,
@@ -496,9 +533,14 @@ def build_mqtt_client(processor: EventProcessor, event_queue: asyncio.Queue, loo
     def on_connect(client, userdata, flags, reason_code, properties=None):
         if reason_code == 0:
             log.info("MQTT connected, subscribing to frigate/events")
+            processor.stats["mqtt_connected"] = True
             client.subscribe("frigate/events")
         else:
             log.error("MQTT connection failed: rc=%d", reason_code)
+    def on_disconnect(client, userdata, flags, reason_code, properties=None):
+        processor.stats["mqtt_connected"] = False
+        if reason_code != 0:
+            log.warning("MQTT disconnected: rc=%d", reason_code)
 
     def on_message(client, userdata, msg):
         log.debug("MQTT message on %s: %s", msg.topic, msg.payload[:200])
@@ -537,6 +579,7 @@ def build_mqtt_client(processor: EventProcessor, event_queue: asyncio.Queue, loo
         client.username_pw_set(mqtt_user, mqtt_pass)
     client.on_connect = on_connect
     client.on_message = on_message
+    client.on_disconnect = on_disconnect
 
     # Retry connection
     while True:
@@ -597,6 +640,12 @@ async def async_main(prompts_path: str, provider_path: str) -> None:
                 self.send_header("Content-type", "text/html; charset=utf-8")
                 self.end_headers()
                 self.wfile.write(UI_HTML.encode())
+            elif self.path == "/api/stats":
+                self.send_response(200)
+                self._cors()
+                self.send_header("Content-type", "application/json; charset=utf-8")
+                self.end_headers()
+                self.wfile.write(json.dumps(processor.stats).encode())
             elif self.path.startswith("/api/events/") and self.path.endswith("/snapshot.jpg"):
                 self._proxy("image/jpeg")
             elif self.path.startswith("/api/events"):

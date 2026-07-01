@@ -191,7 +191,6 @@
       motionThreshold = 32;
       motionContourArea = 10;
       improveContrast = true;
-      requiredZones = ["in_back_yard" "side_door" "in_court"];
       zones = {
         side_door = {
           friendly_name = "Side Door";
@@ -355,9 +354,9 @@
         };
       };
       motion = ({
-        threshold = cfg.motionThreshold or null;
-        contour_area = cfg.motionContourArea or null;
-        improve_contrast = cfg.improveContrast or false;
+        threshold = cfg.motionThreshold or 30;
+        contour_area = cfg.motionContourArea or 10;
+        improve_contrast = cfg.improveContrast or true;
       } // lib.optionalAttrs (cfg ? motionMask) {
         mask = cfg.motionMask;
       });
@@ -381,16 +380,12 @@
             ]
           ) genaiPrompts.label;
         };
-      } // lib.optionalAttrs (cfg ? personMask || cfg ? objectMasks || cfg ? requiredZones) {
-        filters = lib.recursiveUpdate
-          ((lib.optionalAttrs (cfg ? personMask) {
+      } // lib.optionalAttrs (cfg ? personMask || cfg ? objectMasks) {
+        filters =
+          (lib.optionalAttrs (cfg ? personMask) {
             person = { mask = cfg.personMask; };
-          }) // (cfg.objectMasks or {}))
-          (lib.optionalAttrs (cfg ? requiredZones)
-            (builtins.listToAttrs (map (label: {
-              name = label;
-              value = { required_zones = cfg.requiredZones; };
-            }) objectLabels.all)));
+          })
+          // (cfg.objectMasks or {});
       };
     lpr = {
       enabled = true;
