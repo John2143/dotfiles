@@ -124,8 +124,9 @@
   frigateGenaiProviderFile = pkgs.writeText "frigate-genai-provider.json" (builtins.toJSON {
     provider = "litellm";
     model = [
+
       "gemini/gemini-2.5-flash"
-      "ollama/qwen3-vl-128k"
+      "ollama/qwen3-vl-64k"
     ];
     api_key_env = "LITELLM_FRIGATE_KEY";
     base_url = "https://llm.2143.me/v1";
@@ -185,7 +186,11 @@
         "0.401,0.023,0.323,0.27,0.28,0.419,0.295,0.464,0.308,0.475,0.315,0.516,0.312,0.56,0.301,0.567,0.277,0.57,0.252,0.576,0.233,0.59,0.205,0.636,0.163,0.704,0.118,0.842,0.1,0.993,0.595,0.999,0.597,0.89,0.59,0.856,0.575,0.836,0.559,0.817,0.548,0.785,0.541,0.757,0.538,0.732,0.534,0.705,0.526,0.688,0.515,0.682,0.502,0.67,0.496,0.661,0.491,0.652,0.486,0.641,0.482,0.627,0.478,0.608,0.475,0.583,0.472,0.563,0.471,0.544,0.458,0.523,0.454,0.503,0.453,0.481,0.45,0.456,0.45,0.403,0.45,0.369,0.452,0.342,0.455,0.32,0.46,0.295,0.462,0.271,0.462,0.256,0.461,0.239,0.448,0.217,0.425,0.189,0.419,0.073"
         "0.546,0.643,0.615,0.836,0.67,0.873,0.732,0.869,0.77,0.782,0.783,0.712,0.761,0.664,0.752,0.589,0.755,0.542,0.765,0.487,0.772,0.435,0.772,0.382,0.762,0.354,0.739,0.288,0.731,0.256,0.656,0.404,0.613,0.483,0.602,0.526,0.564,0.601"
         "0.237,0.4,0.175,0.349,0.149,0.351,0.128,0.398,0.099,0.46,0.087,0.501,0.078,0.525,0.044,0.586,0.021,0.622,0.003,0.676,0.001,0.993,0.047,0.999,0.081,0.936,0.12,0.829,0.145,0.76,0.175,0.654,0.217,0.55,0.245,0.406"
+        "0.388,0.001,0.384,0.034,0.613,0.037,0.629,0.001"
       ];
+      motionThreshold = 32;
+      motionContourArea = 10;
+      improveContrast = true;
       zones = {
         side_door = {
           friendly_name = "Side Door";
@@ -205,7 +210,7 @@
       };
     };
     # Main: 2560x1440 H264 15fps  Sub: 640x360 H264 10fps
-    cam03 = {name = "Camera 3"; channel = "03"; stream = "sub";};
+    cam03 = {name = "Camera 3"; channel = "03"; stream = "sub"; motionMask = ["0.338,0.004,0.333,0.076,0.656,0.077,0.656,0.011" "0.606,0.366,0.573,0.49,0.45,0.461,0.432,0.521,0.628,0.701,0.706,0.701,0.739,0.583,0.78,0.541,0.696,0.365"]; motionThreshold = 54; motionContourArea = 10; improveContrast = true;};
     # Sideways (rotated 270°).  Main: 2160x7680 HEVC 25fps  Sub: 1536x432 H264 25fps
     cam04 = {
       name = "Camera 4";
@@ -218,6 +223,7 @@
         "0.497,0.511,0.363,0.714,0.386,0.866,0.405,0.899,0.419,0.914,0.454,0.922,0.491,0.909,0.518,0.866,0.54,0.829,0.557,0.79,0.571,0.745,0.578,0.69,0.577,0.639,0.569,0.592,0.554,0.573,0.541,0.559"
         "0.759,0.633,0.726,0.588,0.701,0.611,0.691,0.66,0.676,0.73,0.673,0.782,0.678,0.835,0.678,0.896,0.714,0.893,0.748,0.813"
         "0.666,0.258,0.784,0.361,0.825,0.199,0.91,0.257,0.948,0.132,0.958,0.125,0.937,0.038,0.896,0.113,0.879,0.09,0.859,0.071,0.843,0.092,0.842,0.11,0.831,0.103,0.814,0.083,0.803,0.07,0.797,0.053,0.795,0.037,0.796,0,0.711,0,0.707,0.095,0.677,0.121"
+        "0.381,0.023,0.381,0.089,0.621,0.087,0.621,0.028"
       ];
       objectMasks = {
         waste_bin = {
@@ -237,6 +243,8 @@
         "0.455,0.125,0.496,0.135,0.507,0.138,0.51,0.147,0.517,0.152,0.524,0.149,0.534,0.146,0.542,0.139,0.552,0.133,0.558,0.121,0.562,0.106,0.57,0.1,0.583,0.105,0.6,0.102,0.616,0.101,0.624,0.098,0.635,0.096,0.644,0.093,0.657,0.036,0.456,0.026"
         "0.66,0.322,0.61,0.331,0.595,0.324,0.587,0.294,0.592,0.268,0.608,0.191,0.63,0.167,0.655,0.162,0.703,0.173,0.733,0.211,0.736,0.29,0.738,0.315,0.755,0.318,0.776,0.326,0.794,0.341,0.806,0.374,0.814,0.41,0.833,0.464,0.823,0.522,0.809,0.548,0.791,0.547,0.765,0.523,0.73,0.505,0.725,0.476,0.713,0.425,0.706,0.394"
         "0.817,0.246,0.809,0.309,0.816,0.331,0.837,0.353,0.86,0.401,0.887,0.489,0.913,0.532,0.938,0.601,0.974,0.632,1,0.639,1,0.405"
+        "0.333,0.008,0.336,0.067,0.645,0.062,0.653,0.012"
+        "0.77,0.837,0.776,1,0.942,1,0.926,0.899"
       ];
       zones = {
         front_door = {
@@ -260,7 +268,7 @@
       audioEnabled = true;
       motionMask = [
         "0.15,0.482,0.143,0.364,0.126,0.301,0.15,0.293,0.176,0.26,0.18,0.224,0.199,0.168,0.204,0.128,0.206,0.071,0.196,0.041,0.187,0.016,0.178,0.004,0,0.001,0.001,0.265,0.021,0.28,0.036,0.296,0.038,0.326,0.044,0.365,0.051,0.413,0.061,0.446,0.071,0.485,0.087,0.501,0.104,0.503,0.125,0.508"
-        "0.245,0.022,0.244,0.104,0.257,0.168,0.277,0.214,0.3,0.228,0.323,0.197,0.343,0.174,0.363,0.163,0.382,0.163,0.392,0.183,0.406,0.192,0.429,0.192,0.448,0.187,0.469,0.179,0.486,0.169,0.506,0.165,0.519,0.159,0.531,0.168,0.543,0.182,0.553,0.194,0.57,0.206,0.586,0.224,0.595,0.229,0.608,0.227,0.62,0.215,0.631,0.198,0.663,0.078,0.647,0.037,0.622,0.007,0.247,0.001"
+        "0.246,0.022,0.245,0.104,0.258,0.168,0.278,0.214,0.301,0.228,0.324,0.197,0.344,0.174,0.364,0.163,0.383,0.163,0.393,0.183,0.407,0.192,0.43,0.192,0.449,0.187,0.47,0.179,0.487,0.169,0.507,0.165,0.52,0.159,0.532,0.168,0.544,0.182,0.554,0.194,0.571,0.206,0.587,0.224,0.596,0.229,0.609,0.227,0.621,0.215,0.722,0.245,0.74,0.14,0.756,0.096,0.726,0,0.666,0,0.625,0,0.248,0.001"
       ];
       zones = {
         house = {
@@ -281,7 +289,7 @@
       };
     };
     # cam08 is a direct RTSP camera (not routed through the Reolink NVR).
-    cam08 = {name = "Camera 8"; rtspPath = "rtsp://\${EUFY_USER}:\${EUFY_PASS}@192.168.5.59/live0"; detectWidth = 1920; detectHeight = 1080; detectFps = 1;};
+    cam08 = {name = "Camera 8"; rtspPath = "rtsp://\${EUFY_USER}:\${EUFY_PASS}@192.168.5.59/live0"; detectWidth = 1920; detectHeight = 1080; detectFps = 1; motionMask = ["0.56,0,0.466,0.023,0.467,0.172,0.602,0.235,0.625,0.129,0.619,0" "0.674,0.62,0.593,0.541,0.558,0.535,0.508,0.532,0.457,0.577,0.412,0.726,0.401,0.861,0.392,0.966,0.419,0.99,0.429,1,0.784,0.999" "0.712,0.005,0.715,0.066,0.995,0.07,0.997,0.002"]; motionThreshold = 49; motionContourArea = 10; improveContrast = true;};
 
 
 
@@ -345,9 +353,13 @@
           default = 30;
         };
       };
-      motion = {} // lib.optionalAttrs (cfg ? motionMask) {
+      motion = ({
+        threshold = cfg.motionThreshold or 30;
+        contour_area = cfg.motionContourArea or 10;
+        improve_contrast = cfg.improveContrast or true;
+      } // lib.optionalAttrs (cfg ? motionMask) {
         mask = cfg.motionMask;
-      };
+      });
       objects = {
         track = objectLabels.all;
         genai = {
@@ -374,7 +386,7 @@
             person = { mask = cfg.personMask; };
           })
           // (cfg.objectMasks or {});
-    };
+      };
     lpr = {
       enabled = true;
     };
@@ -438,136 +450,65 @@
       device = "GPU";
     };
 
-    genai = {
-      provider = "openai";
-      base_url = "https://llm.2143.me/v1";
-      model = "ollama/qwen3-vl-128k";
-      api_key = "\${LITELLM_FRIGATE_KEY}";
-    };
-    classification = {
-      bird = {
-        enabled = true;
-      };
-      custom = {
-        cam05_front_door = {
-          threshold = 0.8;
-          state_config = {
-            motion = true;
-            interval = 10;
-            cameras = {
-              cam05 = { crop = [0 0 100 100]; };  # PLACEHOLDER — draw in UI
-            };
-          };
-        };
-        cam03_garage_door_left = {
-          threshold = 0.8;
-          state_config = {
-            motion = true;
-            interval = 10;
-            cameras = {
-              cam03 = { crop = [0 0 100 100]; };  # PLACEHOLDER — draw in UI
-            };
-          };
-        };
-        cam03_garage_door_right = {
-          threshold = 0.8;
-          state_config = {
-            motion = true;
-            interval = 10;
-            cameras = {
-              cam03 = { crop = [0 0 100 100]; };  # PLACEHOLDER — draw in UI
-            };
-          };
-        };
-        cam06_front_gate = {
-          threshold = 0.8;
-          state_config = {
-            motion = true;
-            interval = 10;
-            cameras = {
-              cam06 = { crop = [0 0 100 100]; };  # PLACEHOLDER — draw in UI
-            };
-          };
-        };
-        cam06_fence_gate = {
-          threshold = 0.8;
-          state_config = {
-            motion = true;
-            interval = 10;
-            cameras = {
-              cam06 = { crop = [0 0 100 100]; };  # PLACEHOLDER — draw in UI
-            };
-          };
-        };
-        cam04_back_garage_door = {
-          threshold = 0.8;
-          state_config = {
-            motion = true;
-            interval = 10;
-            cameras = {
-              cam04 = { crop = [0 0 100 100]; };  # PLACEHOLDER — draw in UI
-            };
-          };
-        };
-        cam04_back_gate = {
-          threshold = 0.8;
-          state_config = {
-            motion = true;
-            interval = 10;
-            cameras = {
-              cam04 = { crop = [0 0 100 100]; };  # PLACEHOLDER — draw in UI
-            };
-          };
-        };
-        cam04_back_door = {
-          threshold = 0.8;
-          state_config = {
-            motion = true;
-            interval = 10;
-            cameras = {
-              cam04 = { crop = [0 0 100 100]; };  # PLACEHOLDER — draw in UI
-            };
-          };
-        };
-        cam04_french_doors = {
-          threshold = 0.8;
-          state_config = {
-            motion = true;
-            interval = 10;
-            cameras = {
-              cam04 = { crop = [0 0 100 100]; };  # PLACEHOLDER — draw in UI
-            };
-          };
-        };
-        cam02_side_door = {
-          threshold = 0.8;
-          state_config = {
-            motion = true;
-            interval = 10;
-            cameras = {
-              cam02 = { crop = [0 0 100 100]; };  # PLACEHOLDER — draw in UI
-            };
-          };
-        };
-        cam01_front_gate = {
-          threshold = 0.8;
-          state_config = {
-            motion = true;
-            interval = 10;
-            cameras = {
-              cam01 = { crop = [0 0 100 100]; };  # PLACEHOLDER — draw in UI
-            };
-          };
-        };
-        our_pets = {
-          threshold = 0.8;
-          object_config = {
-            objects = [ "dog" "cat" ];
-            classification_type = "attribute";
-          };
-        };
-      };
-    };
+    # genai = {
+    #   provider = "openai";
+    #   base_url = "https://llm.2143.me/v1";
+    #   model = "ollama/qwen3-vl-128k";
+    #   api_key = "\${LITELLM_FRIGATE_KEY}";
+    # };
+    # classification = {
+    #   bird = { enabled = true; };
+    #   custom = {
+    #     cam05_front_door = {
+    #       threshold = 0.8;
+    #       state_config = { motion = true; interval = 10; cameras = { cam05 = { crop = [0 0 100 100]; }; }; };
+    #     };
+    #     cam03_garage_door_left = {
+    #       threshold = 0.8;
+    #       state_config = { motion = true; interval = 10; cameras = { cam03 = { crop = [0 0 100 100]; }; }; };
+    #     };
+    #     cam03_garage_door_right = {
+    #       threshold = 0.8;
+    #       state_config = { motion = true; interval = 10; cameras = { cam03 = { crop = [0 0 100 100]; }; }; };
+    #     };
+    #     cam06_front_gate = {
+    #       threshold = 0.8;
+    #       state_config = { motion = true; interval = 10; cameras = { cam06 = { crop = [0 0 100 100]; }; }; };
+    #     };
+    #     cam06_fence_gate = {
+    #       threshold = 0.8;
+    #       state_config = { motion = true; interval = 10; cameras = { cam06 = { crop = [0 0 100 100]; }; }; };
+    #     };
+    #     cam04_back_garage_door = {
+    #       threshold = 0.8;
+    #       state_config = { motion = true; interval = 10; cameras = { cam04 = { crop = [0 0 100 100]; }; }; };
+    #     };
+    #     cam04_back_gate = {
+    #       threshold = 0.8;
+    #       state_config = { motion = true; interval = 10; cameras = { cam04 = { crop = [0 0 100 100]; }; }; };
+    #     };
+    #     cam04_back_door = {
+    #       threshold = 0.8;
+    #       state_config = { motion = true; interval = 10; cameras = { cam04 = { crop = [0 0 100 100]; }; }; };
+    #     };
+    #     cam04_french_doors = {
+    #       threshold = 0.8;
+    #       state_config = { motion = true; interval = 10; cameras = { cam04 = { crop = [0 0 100 100]; }; }; };
+    #     };
+    #     cam02_side_door = {
+    #       threshold = 0.8;
+    #       state_config = { motion = true; interval = 10; cameras = { cam02 = { crop = [0 0 100 100]; }; }; };
+    #     };
+    #     cam01_front_gate = {
+    #       threshold = 0.8;
+    #       state_config = { motion = true; interval = 10; cameras = { cam01 = { crop = [0 0 100 100]; }; }; };
+    #     };
+    #     our_pets = {
+    #       threshold = 0.8;
+    #       object_config = { objects = [ "dog" "cat" ]; classification_type = "attribute"; };
+    #     };
+    #   };
+    # };
     semantic_search = {
       enabled = true;
       model_size = "large";
