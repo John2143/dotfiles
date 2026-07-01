@@ -473,19 +473,35 @@ class EventProcessor:
             event_id, camera, label, duration, max_frames, fps,
         )
 
-        # 0. Brief delay for Frigate to finalize recording segments
-        await asyncio.sleep(2)
+        # 1. Extract frames (poll with backoff until recording is finalized, up to 5 min)
+        POLL_DELAYS = [2, 4, 8, 16, 32, 60]  # seconds between attempts, last value repeats
+        MAX_POLL = 300  # total budget in seconds
 
-        # 1. Extract frames from recording
-        start_ts = time.monotonic()
-        frames = await asyncio.to_thread(
-            extract_frames, camera, start_time, end_time, fps, max_frames,
-        )
-        extract_time = time.monotonic() - start_ts
-        log.info("Frame extraction took %.1fs", extract_time)
+        frames = []
+        poll_start = time.monotonic()
+        for attempt in range(99):
+            elapsed = time.monotonic() - poll_start
+            if elapsed >= MAX_POLL:
+                break
+
+            if attempt > 0:
+                delay_idx = min(attempt - 1, len(POLL_DELAYS) - 1)
+                delay = min(POLL_DELAYS[delay_idx], MAX_POLL - elapsed)
+                log.info("Recording not ready for %s, polling in %ds (attempt %d, %.0fs elapsed)",
+                         event_id, delay, attempt + 1, elapsed)
+                await asyncio.sleep(delay)
+
+            frames = await asyncio.to_thread(
+                extract_frames, camera, start_time, end_time, fps, max_frames,
+            )
+            if frames:
+                log.info("Extracted %d frames after %.1fs (attempt %d)",
+                         len(frames), time.monotonic() - poll_start, attempt + 1)
+                break
 
         if not frames:
-            log.error("No frames extracted for event %s", event_id)
+            log.error("No frames for event %s after %.0fs (%d attempts)",
+                      event_id, time.monotonic() - poll_start, attempt + 1)
             return
 
         # 2. Fetch snapshot (close-up detail)
