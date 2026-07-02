@@ -725,19 +725,13 @@ in {
         # Map container root to host user (NFS root_squash workaround)
         # Video group for /dev/dri/* (NVIDIA DRM)
         "--group-add=video"
+        # Share host network — needed for MQTT (k8s NodePort), RTSP, go2rtc
+        "--network=host"
       ];
 
       # Use our bootstrap script as the container entrypoint
       entrypoint = "/frigate-entrypoint.sh";
 
-      ports = [
-        "127.0.0.1:5000:5000"  # Frigate web UI — localhost
-        "100.64.0.1:5000:5000"  # Frigate web UI — Tailscale
-        "8554:8554"             # go2rtc TCP
-        "8554:8554/udp"         # go2rtc UDP
-        "8555:8555"             # go2rtc TCP
-        "8555:8555/udp"         # go2rtc UDP
-      ];
     };
   };
   # ── GenAI sidecar service ────────────────────────────────────────

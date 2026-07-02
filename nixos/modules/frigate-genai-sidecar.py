@@ -473,9 +473,9 @@ class EventProcessor:
             event_id, camera, label, duration, max_frames, fps,
         )
 
-        # 1. Extract frames (poll with backoff until recording is finalized, up to 5 min)
-        POLL_DELAYS = [2, 4, 8, 16, 32, 60]  # seconds between attempts, last value repeats
-        MAX_POLL = 300  # total budget in seconds
+        # 1. Extract frames (poll briefly — 404 after 15s means recording won't appear)
+        POLL_DELAYS = [2, 4, 8]  # seconds between attempts
+        MAX_POLL = 15  # total budget in seconds
 
         frames = []
         poll_start = time.monotonic()
@@ -535,7 +535,7 @@ class EventProcessor:
             log.info(
                 "Updated event %s (%s/%s) — %.1fs total",
                 event_id, camera, label,
-                time.monotonic() - start_ts,
+                time.monotonic() - poll_start,
             )
         else:
             log.error("Failed to update event %s", event_id)
