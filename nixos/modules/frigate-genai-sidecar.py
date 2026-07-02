@@ -500,9 +500,17 @@ class EventProcessor:
                 break
 
         if not frames:
+            msg = f"Failed: no frames available for this event"
+            await asyncio.to_thread(update_event_description, event_id, msg)
             log.error("No frames for event %s after %.0fs (%d attempts)",
                       event_id, time.monotonic() - poll_start, attempt + 1)
             return
+
+        # Patch: frames acquired
+        await asyncio.to_thread(
+            update_event_description, event_id,
+            f"Starting... extracting {len(frames)} frames from {duration:.1f}s clip on {camera}",
+        )
 
         # 2. Fetch snapshot (close-up detail)
         snapshot = await asyncio.to_thread(fetch_snapshot, event_id)
@@ -510,7 +518,13 @@ class EventProcessor:
         # 3. Compose prompt
         prompt = compose_prompt(self.prompts, camera, label, len(frames))
 
-        # 4. Call GenAI provider
+        # 4. Patch: about to call GenAI
+        await asyncio.to_thread(
+            update_event_description, event_id,
+            f"Generating description for {label} on {camera}...",
+        )
+
+        # 5. Call GenAI provider
         genai_start = time.monotonic()
         description, model_used = await asyncio.to_thread(
             call_provider, prompt, frames, snapshot, label, self.provider_cfg,
@@ -519,8 +533,11 @@ class EventProcessor:
         log.info("GenAI call took %.1fs", genai_time)
 
         if not description:
+            msg = f"Failed: GenAI returned no description"
+            await asyncio.to_thread(update_event_description, event_id, msg)
             log.error("No description returned for event %s", event_id)
             return
+
 
         # 5. Write description to Frigate
         ok = await asyncio.to_thread(update_event_description, event_id, description)
