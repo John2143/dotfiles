@@ -59,7 +59,7 @@ _SEARCH_LABEL = SearchAttributeKey.for_keyword("Label")
 _SEARCH_EVENT_ID = SearchAttributeKey.for_keyword("EventId")
 _SEARCH_DURATION = SearchAttributeKey.for_int("Duration")
 _SEARCH_COST = SearchAttributeKey.for_int("Cost")
-# ── stats (replaces EventProcessor.stats for the HTTP endpoint) ─────
+_SEARCH_MODEL = SearchAttributeKey.for_keyword("Model")
 
 _stats: dict = {
     "events_processed": 0,
@@ -959,6 +959,11 @@ class GenAIWorkflow:
                 retry_policy=_ACTIVITY_RETRY,
             )
             input_data["model"] = model
+        # Publish model as search attribute for filtering
+        workflow.upsert_search_attributes([
+            SearchAttributePair(_SEARCH_MODEL, model),
+        ])
+        workflow.logger.info("model=%s", model)
 
         skip_frames = input_data.get("skip_frames", False)
 
@@ -1223,15 +1228,14 @@ async def async_main(prompts_path: str, provider_path: str) -> None:
                     "EventId": IndexedValueType.INDEXED_VALUE_TYPE_KEYWORD,
                     "Duration": IndexedValueType.INDEXED_VALUE_TYPE_INT,
                     "Cost": IndexedValueType.INDEXED_VALUE_TYPE_INT,
+                    "Model": IndexedValueType.INDEXED_VALUE_TYPE_KEYWORD,
                 },
                 namespace="default",
             ),
         )
-        log.info("Search attributes registered: Camera, Label, EventId, Duration, Cost")
+        log.info("Search attributes registered: Camera, Label, EventId, Duration, Cost, Model")
     except Exception as e:
         log.debug("Search attribute registration skipped: %s", e)
-
-    # Main worker: workflows + non-GenAI activities
     main_worker = Worker(
         _temporal_client,
         task_queue=TASK_QUEUE,
