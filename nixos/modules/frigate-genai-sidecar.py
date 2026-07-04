@@ -32,6 +32,7 @@ import urllib.request
 from datetime import timedelta
 from pathlib import Path
 
+from PIL import Image, ImageOps
 import paho.mqtt.client as mqtt
 from temporalio import activity, workflow
 from temporalio.common import RetryPolicy, SearchAttributeKey, SearchAttributePair, TypedSearchAttributes
@@ -48,12 +49,16 @@ log = logging.getLogger("frigate-genai-sidecar")
 
 TASK_QUEUE = "genai-tasks"
 FFMPEG_TASK_QUEUE = "genai-tasks-ffmpeg"
+GEMINI_TASK_QUEUE = "genai-tasks-gemini"
+OLLAMA_TASK_QUEUE = "genai-tasks-ollama"
 FRAMES_DIR = Path("/var/lib/frigate-genai-sidecar/frames")
+AGENT_LOGS_DIR = Path("/var/lib/frigate-genai-sidecar/agent-logs")
 # Typed search attributes for Temporal workflows
 _SEARCH_CAMERA = SearchAttributeKey.for_keyword("Camera")
 _SEARCH_LABEL = SearchAttributeKey.for_keyword("Label")
 _SEARCH_EVENT_ID = SearchAttributeKey.for_keyword("EventId")
-
+_SEARCH_DURATION = SearchAttributeKey.for_int("Duration")
+_SEARCH_COST = SearchAttributeKey.for_int("Cost")
 # ── stats (replaces EventProcessor.stats for the HTTP endpoint) ─────
 
 _stats: dict = {
@@ -389,8 +394,87 @@ def compose_prompt(
             f"You are viewing {num_frames} chronological frames from a security camera, "
             f"at ~1-4 frames per second, plus one close-up detail image",
         )
-
     return prompt
+
+
+# ── Frame viewer helpers ─────────────────────────────────────────────
+
+
+def _resize_frame(img_bytes: bytes, max_width: int, quality: int = 60) -> bytes:
+    """Resize a JPEG frame to max_width, preserving aspect ratio. Returns JPEG bytes."""
+    from io import BytesIO
+    img = Image.open(BytesIO(img_bytes))
+    if img.mode != "RGB":
+        img = img.convert("RGB")
+    if img.width > max_width:
+        img = ImageOps.exif_transpose(img)
+        img.thumbnail((max_width, max_width))
+    buf = BytesIO()
+    img.save(buf, format="JPEG", quality=quality)
+    return buf.getvalue()
+
+
+def _load_frames(
+    frame_files: list[Path],
+    start: int,
+    end: int,
+    max_width: int | None = None,
+    quality: int = 60,
+) -> list[bytes]:
+    """Load and optionally resize frames [start, end] inclusive."""
+    result = []
+    for i in range(max(0, start), min(end + 1, len(frame_files))):
+        data = frame_files[i].read_bytes()
+        if max_width:
+            data = _resize_frame(data, max_width, quality)
+        result.append(data)
+    return result
+
+
+def _build_image_content(data: bytes) -> dict:
+    """Build an image_url content part for an OpenAI-compatible messages array."""
+    import base64
+    b64 = base64.b64encode(data).decode()
+    return {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{b64}"}}
+
+
+def _tool_view_frames_schema() -> dict:
+    return {
+        "type": "function",
+        "function": {
+            "name": "view_frames",
+            "description": (
+                "View frames from the recording by index range and resolution. "
+                "Use 'low' resolution to scan/overview, 'high' for close inspection. "
+                "Pass the same index for start and end to view a single frame."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "start": {"type": "integer", "description": "Frame index to start at (0-based, inclusive)"},
+                    "end": {"type": "integer", "description": "Frame index to end at (inclusive, same as start for single frame)"},
+                    "resolution": {
+                        "type": "string",
+                        "enum": ["low", "high"],
+                        "description": "'low' = 640px wide, 'high' = 1280px wide",
+                    },
+                },
+                "required": ["start", "end", "resolution"],
+            },
+        },
+    }
+
+
+def _tool_frame_count_schema() -> dict:
+    return {
+        "type": "function",
+        "function": {
+            "name": "frame_count",
+            "description": "Return the total number of extracted frames available for this recording.",
+            "parameters": {"type": "object", "properties": {}, "required": []},
+        },
+    }
+
 
 
 # ═════════════════════════════════════════════════════════════════════
@@ -422,13 +506,6 @@ async def select_model_activity(input_data: dict) -> str:
     if not isinstance(models, list):
         models = [models]
 
-    if os.path.exists("/tmp/pause-ollama"):
-        gemini_models = [m for m in models if m.startswith("gemini/")]
-        model = gemini_models[0] if gemini_models else "gemini/gemini-2.5-flash"
-        log.warning("Paused ollama — forcing gemini model: %s", model)
-    else:
-        model = random.choice(models)
-
     paused = input_data.get("paused-ollama", False)
     if paused:
         gemini_models = [m for m in models if m.startswith("gemini/")]
@@ -449,7 +526,7 @@ async def extract_frames_activity(input_data: dict) -> tuple[str, int]:
 
     duration = end_time - start_time
     fps = max(1, min(4, 4 / max(1, duration)))
-    max_frames = max(4, min(30, int(duration * fps)))
+    max_frames = max(4, min(300, int(duration * fps)))
 
     frames_dir = FRAMES_DIR / event_id
     frames_dir_str = str(frames_dir)
@@ -531,6 +608,301 @@ async def run_genai_activity(input_data: dict, frames_dir: str) -> str | None:
 
     return description
 
+@activity.defn(name="run_genai_agent")
+async def run_genai_agent_activity(input_data: dict, frames_dir: str) -> str | None:
+    """Agentic GenAI: model uses tool calls to explore frames selectively.
+
+    Works with any model. Models that don't call tools produce a single-turn
+    response (functionally equivalent to the dump-all path).
+    """
+    import base64
+    import json as _json
+    from openai import OpenAI
+
+    event_id = input_data["event_id"]
+    camera = input_data["camera"]
+    label = input_data["label"]
+    prompts_path = input_data["prompts_path"]
+    provider_path = input_data["provider_path"]
+    model = input_data.get("model", "gemini/gemini-2.5-flash")
+
+    frames_path = Path(frames_dir)
+    frame_files = sorted(frames_path.glob("frame_*.jpg"))
+    max_frames = len(frame_files)
+    log.info("Activity run_genai_agent: event=%s camera=%s label=%s frames=%d model=%s",
+             event_id, camera, label, max_frames, model)
+
+    # Load config
+    try:
+        prompts = load_json(prompts_path)
+        provider_cfg = load_json(provider_path)
+    except (OSError, _json.JSONDecodeError) as e:
+        log.error("Failed to load config in run_genai_agent: %s", e)
+        raise RuntimeError(f"Failed to load config: {e}") from e
+
+    # Build OpenAI client
+    api_key = os.environ.get(provider_cfg.get("api_key_env", ""), "")
+    if not api_key:
+        log.error("API key not found in env var %s", provider_cfg.get("api_key_env"))
+        raise RuntimeError("API key not configured")
+    base_url = provider_cfg.get("base_url", os.environ.get("OPENAI_BASE_URL", ""))
+    client = OpenAI(api_key=api_key, base_url=base_url, timeout=120.0)
+
+    # Snapshot (always present — fetch_snapshot_activity runs first)
+    snapshot_path = frames_path / "snapshot.jpg"
+    snapshot = snapshot_path.read_bytes() if snapshot_path.exists() else None
+
+    # System prompt with context caching
+    base_prompt = prompts.get("base", "Describe what is happening in these security camera frames.")
+    system_prompt = (
+        f"{base_prompt}\n\n"
+        f"You are an AI analyzing frames from a security camera. Camera: {camera}. "
+        f"Detected label: {label}. "
+        f"Use the view_frames(start, end, resolution) tool to explore frames. "
+        f"Use 'low' resolution (640px) to scan/overview large ranges. "
+        f"Use 'high' resolution (1280px) for close inspection of interesting frames. "
+        f"Use frame_count() to check how many frames are available. "
+        f"Aim to describe the event concisely — 1-3 sentences. "
+        f"Be specific: colors, vehicles, clothing, actions, direction of movement."
+    )
+
+    # Build initial messages with context caching
+    messages = [
+        {
+            "role": "system",
+            "content": system_prompt,
+            "cache_control": {"type": "ephemeral"},
+        },
+    ]
+
+    user_content = []
+    if snapshot:
+        user_content.append(_build_image_content(snapshot))
+    user_content.append({
+        "type": "text",
+        "text": (
+            f"Camera: {camera}. Detected: {label}. "
+            f"Recording has {max_frames} frames available (0-{max_frames - 1}). "
+            f"The image above is a close-up snapshot. "
+            f"Use view_frames to explore the full recording."
+        ),
+    })
+    messages.append({
+        "role": "user",
+        "content": user_content,
+        "cache_control": {"type": "ephemeral"},
+    })
+
+    tools = [_tool_view_frames_schema(), _tool_frame_count_schema()]
+
+    # Accumulators
+    total_cost = {"prompt": 0, "completion": 0, "cached": 0}
+    turns_low = 0
+    turns_high = 0
+    description = None
+
+    # Agent loop
+    for turn in range(15):
+        activity.heartbeat()
+
+        response = client.chat.completions.create(
+            model=model,
+            messages=messages,
+            tools=tools,
+            tool_choice="auto",
+        )
+        msg = response.choices[0].message
+        u = response.usage
+        prompt_tok = u.prompt_tokens
+        comp_tok = u.completion_tokens
+        cached_tok = getattr(u, "cached_tokens", 0) or 0
+        total_cost["prompt"] += prompt_tok
+        total_cost["completion"] += comp_tok
+        total_cost["cached"] += cached_tok
+        log.info("Agentic turn %d/%d: %d prompt, %d completion, %d cached",
+                 turn + 1, 15, prompt_tok, comp_tok, cached_tok)
+
+        # Text response — model is done
+        if not msg.tool_calls:
+            description = msg.content
+            log.info("Agentic: model done after %d turns", turn + 1)
+            break
+
+        # Process tool calls
+        messages.append(msg.model_dump(exclude_none=True))
+
+        for tc in msg.tool_calls:
+            func_name = tc.function.name
+            try:
+                args = _json.loads(tc.function.arguments)
+            except _json.JSONDecodeError:
+                tool_result = "Error: invalid JSON arguments"
+            else:
+                if func_name == "frame_count":
+                    tool_result = f"Total frames: {max_frames} (indices 0-{max_frames - 1})"
+                elif func_name == "view_frames":
+                    start = args.get("start", 0)
+                    end = args.get("end", start)
+                    resolution = args.get("resolution", "low")
+                    max_w = 640 if resolution == "low" else 1280
+                    q = 60 if resolution == "low" else 85
+                    frames = _load_frames(frame_files, start, end, max_w, q)
+                    if resolution == "low":
+                        turns_low += len(frames)
+                    else:
+                        turns_high += len(frames)
+                    tool_result = (
+                        f"Returned {len(frames)} frame(s) [{start}-{end}] at {resolution} resolution."
+                    )
+                    # Append frames as a user message
+                    img_content = [_build_image_content(f) for f in frames]
+                    img_content.append({
+                        "type": "text",
+                        "text": f"Frames {start}-{end} at {resolution} resolution.",
+                    })
+                    messages.append({"role": "user", "content": img_content})
+                else:
+                    tool_result = f"Unknown tool: {func_name}"
+
+            messages.append({
+                "role": "tool",
+                "tool_call_id": tc.id,
+                "content": tool_result,
+            })
+    else:
+        description = "Agentic failed: max turns (15) exceeded without final description"
+        log.warning("Agentic: max turns exceeded for event=%s", event_id)
+
+    # Agent summary — summarize the strategy/cost
+    if description:
+        summary = _summarize_agent(client, model, total_cost, turns_low, turns_high, turn + 1)
+        if summary:
+            description = f"{description}\n\n[{summary}]"
+
+    # Persist full conversation log
+    try:
+        AGENT_LOGS_DIR.mkdir(parents=True, exist_ok=True)
+        log_path = AGENT_LOGS_DIR / f"{event_id}.json"
+        _serializable = _serialize_for_log(messages, total_cost, event_id, camera, label, model, turn + 1, turns_low, turns_high)
+        log_path.write_text(_json.dumps(_serializable, default=str))
+        log.info("Agentic log saved: %s", log_path)
+    except Exception as e:
+        log.warning("Failed to write agent log: %s", e)
+
+    # Emit cost search attribute
+    workflow.upsert_search_attributes([
+        SearchAttributePair(_SEARCH_COST,
+                           total_cost["prompt"] + total_cost["completion"]),
+    ])
+
+    # Update stats
+    _stats["model_counts"][model] = _stats["model_counts"].get(model, 0) + 1
+    _stats["events_processed"] += 1
+    _stats["last_event"] = f"{camera}/{label}/{event_id[:12]}"
+
+    log.info("Agentic complete: %d turns, %d low/%d high, %d tokens, event=%s",
+             turn + 1, turns_low, turns_high,
+             total_cost["prompt"] + total_cost["completion"], event_id)
+    return description
+
+
+def _summarize_agent(
+    client,
+    model: str,
+    total_cost: dict,
+    turns_low: int,
+    turns_high: int,
+    num_turns: int,
+) -> str | None:
+    """Fire a second LLM call to summarize the agent's strategy."""
+    prompt = (
+        "Summarize the agent's frame-viewing strategy for this event in one sentence: "
+        f"model used ({model}), how many frames were viewed ({turns_low} low-res, "
+        f"{turns_high} high-res), how many turns it took ({num_turns}), and what it found. "
+        "Mention the search pattern (e.g. binary search, linear scan, focused region)."
+    )
+    try:
+        response = client.chat.completions.create(
+            model=model,
+            messages=[{"role": "user", "content": prompt}],
+            max_tokens=150,
+        )
+        summary = response.choices[0].message.content
+        if summary:
+            return f"Agent: {summary}"
+    except Exception as e:
+        log.warning("Agent summary call failed: %s", e)
+    return None
+
+
+def _serialize_for_log(
+    messages: list,
+    total_cost: dict,
+    event_id: str,
+    camera: str,
+    label: str,
+    model: str,
+    num_turns: int,
+    turns_low: int,
+    turns_high: int,
+) -> dict:
+    """Convert messages to a JSON-serializable structure with inline images."""
+    import base64 as _b64
+    result = {
+        "event_id": event_id,
+        "camera": camera,
+        "label": label,
+        "model": model,
+        "turns": num_turns,
+        "frames_viewed": {"low": turns_low, "high": turns_high},
+        "total_cost": total_cost,
+    }
+
+    serialized = []
+    for m in messages:
+        role = m.get("role", "unknown")
+        entry = {"role": role}
+
+        if "tool_calls" in m:
+            entry["tool_calls"] = [
+                {
+                    "id": tc.get("id"),
+                    "name": tc.get("function", {}).get("name", ""),
+                    "arguments": tc.get("function", {}).get("arguments", ""),
+                }
+                for tc in m.get("tool_calls", [])
+            ]
+        elif "tool_call_id" in m:
+            entry["tool_call_id"] = m.get("tool_call_id")
+            entry["content"] = m.get("content", "")
+        elif role == "assistant":
+            entry["content"] = m.get("content", "")
+        elif role == "user":
+            content = m.get("content", "")
+            if isinstance(content, list):
+                parts = []
+                for part in content:
+                    if isinstance(part, dict) and part.get("type") == "image_url":
+                        url = part.get("image_url", {}).get("url", "")
+                        if url.startswith("data:"):
+                            parts.append({"type": "image_url", "data": url})
+                        else:
+                            parts.append(part)
+                    else:
+                        parts.append(part)
+                entry["content"] = parts
+            else:
+                entry["content"] = content
+        else:
+            entry["content"] = str(m.get("content", ""))
+
+        serialized.append(entry)
+
+    result["messages"] = serialized
+    return result
+
+
+
 
 @activity.defn(name="update_description")
 async def update_description_activity(event_id: str, description: str) -> bool:
@@ -570,6 +942,8 @@ class GenAIWorkflow:
         event_id = input_data["event_id"]
         camera = input_data["camera"]
         label = input_data["label"]
+        start_time = input_data["start_time"]
+        end_time = input_data["end_time"]
 
         log_ctx = f"event={event_id} camera={camera} label={label}"
 
@@ -597,7 +971,7 @@ class GenAIWorkflow:
                 retry_policy=_ACTIVITY_RETRY,
             )
         else:
-            snapshot_dir, (ffmpeg_dir, _frame_count) = await asyncio.gather(
+            snapshot_dir, (ffmpeg_dir, frame_count) = await asyncio.gather(
                 workflow.execute_activity(
                     fetch_snapshot_activity,
                     input_data,
@@ -613,7 +987,19 @@ class GenAIWorkflow:
                     retry_policy=_EXTRACT_RETRY,
                 ),
             )
-            frames_dir = snapshot_dir  # both write to same dir; snapshot_dir == ffmpeg_dir
+            frames_dir = snapshot_dir
+
+            # Upsert duration + frame count as search attributes
+            dur_sec = int(end_time - start_time)
+            workflow.upsert_search_attributes([
+                SearchAttributePair(_SEARCH_DURATION, dur_sec),
+            ])
+            workflow.logger.info("duration=%ds frames=%d", dur_sec, frame_count)
+
+            # Force Gemini when we have many frames (larger context window)
+            if frame_count > 30:
+                workflow.logger.info("frame_count=%d > 30 — forcing gemini", frame_count)
+                input_data["model"] = "gemini/gemini-2.5-flash"
 
         # Step 2: progress patch
         await workflow.execute_activity(
@@ -624,9 +1010,17 @@ class GenAIWorkflow:
         )
 
         # Step 3: run GenAI (reads frames + snapshot from disk)
+        # Route to model-specific task queue; pick activity based on agentic flag
+        model = input_data.get("model", "gemini/gemini-2.5-flash")
+        genai_queue = GEMINI_TASK_QUEUE if model.startswith("gemini/") else OLLAMA_TASK_QUEUE
+        if input_data.get("agentic"):
+            genai_activity = run_genai_agent_activity
+        else:
+            genai_activity = run_genai_activity
         description = await workflow.execute_activity(
-            run_genai_activity,
+            genai_activity,
             args=[input_data, frames_dir],
+            task_queue=genai_queue,
             start_to_close_timeout=timedelta(seconds=600),
             heartbeat_timeout=timedelta(seconds=30),
             retry_policy=_ACTIVITY_RETRY,
@@ -693,8 +1087,8 @@ def _start_workflow_sync(event: dict) -> None:
                     SearchAttributePair(_SEARCH_CAMERA, camera),
                     SearchAttributePair(_SEARCH_LABEL, label),
                 ]),
-                memo={"event_id": event_id, "camera": camera, "label": label},
-            )
+                memo={"event_id": event_id, "camera": camera, "label": label,
+                      "duration": int(event.get("end_time", event.get("start_time", 0)) - event.get("start_time", 0))})
             log.info("Workflow started: genai-%s (%s/%s)", event_id, camera, label)
         except Exception as e:
             if "already" in str(e).lower() or "started" in str(e).lower():
@@ -718,6 +1112,7 @@ def _build_workflow_input(event: dict) -> dict:
         "prompts_path": "/var/lib/frigate-genai-sidecar/prompts.json",
         "provider_path": "/var/lib/frigate-genai-sidecar/provider.json",
         "paused-ollama": os.path.exists("/tmp/pause-ollama"),
+        "agentic": True,
     }
     # Cars: snapshot-only, gemini-only, make/model prompt
     if label == "car":
@@ -826,27 +1221,29 @@ async def async_main(prompts_path: str, provider_path: str) -> None:
                     "Camera": IndexedValueType.INDEXED_VALUE_TYPE_KEYWORD,
                     "Label": IndexedValueType.INDEXED_VALUE_TYPE_KEYWORD,
                     "EventId": IndexedValueType.INDEXED_VALUE_TYPE_KEYWORD,
+                    "Duration": IndexedValueType.INDEXED_VALUE_TYPE_INT,
+                    "Cost": IndexedValueType.INDEXED_VALUE_TYPE_INT,
                 },
                 namespace="default",
             ),
         )
-        log.info("Search attributes registered: Camera, Label, EventId")
+        log.info("Search attributes registered: Camera, Label, EventId, Duration, Cost")
     except Exception as e:
-        # Already registered or no permission — non-fatal
         log.debug("Search attribute registration skipped: %s", e)
 
+    # Main worker: workflows + non-GenAI activities
     main_worker = Worker(
         _temporal_client,
         task_queue=TASK_QUEUE,
         workflows=[GenAIWorkflow],
         activities=[
             select_model_activity,
-            run_genai_activity,
             update_description_activity,
             fetch_snapshot_activity,
         ],
     )
 
+    # FFmpeg worker: frame extraction only (spiky CPU/disk, rate-limited)
     ffmpeg_worker = Worker(
         _temporal_client,
         task_queue=FFMPEG_TASK_QUEUE,
@@ -854,9 +1251,29 @@ async def async_main(prompts_path: str, provider_path: str) -> None:
         max_concurrent_activities=int(os.environ.get("TEMPORAL_MAX_FFMPEG", "3")),
     )
 
+    # Gemini GenAI worker: handles both run_genai + run_genai_agent for gemini models
+    gemini_worker = Worker(
+        _temporal_client,
+        task_queue=GEMINI_TASK_QUEUE,
+        activities=[run_genai_activity, run_genai_agent_activity],
+        max_concurrent_activities=int(os.environ.get("TEMPORAL_MAX_GEMINI_GENAI", "5")),
+    )
+
+    # Ollama GenAI worker: handles both run_genai + run_genai_agent for ollama models
+    # Max 1 concurrent — Ollama cannot parallelize vision inference
+    ollama_worker = Worker(
+        _temporal_client,
+        task_queue=OLLAMA_TASK_QUEUE,
+        activities=[run_genai_activity, run_genai_agent_activity],
+        max_concurrent_activities=int(os.environ.get("TEMPORAL_MAX_OLLAMA_GENAI", "1")),
+    )
+
     main_task = asyncio.create_task(main_worker.run())
     ffmpeg_task = asyncio.create_task(ffmpeg_worker.run())
-    log.info("Temporal workers started on '%s' + '%s'", TASK_QUEUE, FFMPEG_TASK_QUEUE)
+    gemini_task = asyncio.create_task(gemini_worker.run())
+    ollama_task = asyncio.create_task(ollama_worker.run())
+    log.info("Temporal workers started: %s + %s + %s + %s",
+             TASK_QUEUE, FFMPEG_TASK_QUEUE, GEMINI_TASK_QUEUE, OLLAMA_TASK_QUEUE)
 
     # ── MQTT — starts workflows via Temporal client ─────────────────
     client_mqtt = build_mqtt_client(asyncio.get_running_loop())
@@ -889,8 +1306,8 @@ async def async_main(prompts_path: str, provider_path: str) -> None:
                 SearchAttributePair(_SEARCH_CAMERA, camera),
                 SearchAttributePair(_SEARCH_LABEL, label),
             ]),
-            memo={"event_id": event_id, "camera": camera, "label": label},
-        )
+            memo={"event_id": event_id, "camera": camera, "label": label,
+                  "duration": int(event.get("end_time", event.get("start_time", 0)) - event.get("start_time", 0))})
         return f"Reprocessing {event_id} ({event.get('camera', '')}/{event.get('label', '')})"
 
     class ReprocessHandler(BaseHTTPRequestHandler):
