@@ -490,7 +490,18 @@
       esac
     '';
   };
-  # Named workspace icons
+  temporal-status = pkgs.writeShellApplication {
+    name = "temporal-status";
+    runtimeInputs = [ pkgs.coreutils ];
+    text = ''
+      if timeout 1 bash -c "exec 3<>/dev/tcp/192.168.5.10/32682" 2>/dev/null; then
+        ${pkgs.jq}/bin/jq -nc '{text: "T", class: "connected", tooltip: "Temporal: connected (192.168.5.10:32682)"}'
+      else
+        ${pkgs.jq}/bin/jq -nc '{text: "T", class: "disconnected", tooltip: "Temporal: unreachable (192.168.5.10:32682)"}'
+      fi
+    '';
+  };
+
   ws-icons = {
     "ts" = "󰍬";
     "disc" = "";
@@ -530,6 +541,7 @@ in {
             [
               "custom/privacy"
               "custom/tailscale"
+              "custom/temporal"
               "custom/voxtype"
               "group/hardware"
               "group/clock"
@@ -679,6 +691,17 @@ in {
               pkill -RTMIN+14 waybar
             '";
             tooltip = true;
+          };
+
+          # ---- Temporal ----
+          "custom/temporal" = {
+            exec = "${temporal-status}/bin/temporal-status";
+            return-type = "json";
+            interval = 30;
+            signal = 16;
+            format = "{}";
+            tooltip = true;
+            on-click = "xdg-open https://temporal.ts.2143.me:8443";
           };
 
           # ---- Voxtype status ----

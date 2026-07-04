@@ -223,6 +223,7 @@ window#waybar > box {
 #custom-autoclicker,
 #custom-privacy,
 #custom-tailscale,
+#custom-temporal,
 #custom-eww-hello,
 #group-hardware {
     background: @surface0;
@@ -413,4 +414,12 @@ window#waybar > box {
 @keyframes pulse-voxtype {
     from { opacity: 1; }
     to   { opacity: 0.5; }
+}
+
+/* ---- Temporal ---- */
+#custom-temporal.connected {
+    color: @green;
+}
+#custom-temporal.disconnected {
+    color: @overlay0;
 }

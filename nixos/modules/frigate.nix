@@ -122,6 +122,7 @@
       ps.paho-mqtt
       ps.google-genai
       ps.openai
+      ps.temporalio
     ]);
   in pkgs.runCommand "frigate-genai-sidecar" {
     buildInputs = [ pkgs.makeWrapper ];
@@ -696,6 +697,7 @@ in {
     "d /var/lib/frigate-genai-sidecar 0755 root root -"
     "L+ /var/lib/frigate-genai-sidecar/prompts.json - - - - ${frigateGenaiPromptsFile}"
     "L+ /var/lib/frigate-genai-sidecar/provider.json - - - - ${frigateGenaiProviderFile}"
+    "d /var/lib/frigate-genai-sidecar/frames 0755 root root 1h -"
   ];
 
   # ── NVIDIA Container Toolkit for GPU passthrough ──────────────────
@@ -768,6 +770,7 @@ in {
       MQTT_USER = mqttUser;
       MQTT_PASSWORD = mqttPass;
       HTTP_HOST = "0.0.0.0";
+      TEMPORAL_ADDRESS = "192.168.5.10:32682";
     };
     serviceConfig = {
       Type = "simple";
