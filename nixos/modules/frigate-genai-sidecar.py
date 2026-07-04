@@ -62,10 +62,19 @@ img{border-radius:4px;max-height:60px}
 .err{color:#f87171}
 .desc{max-width:400px;font-size:11px;color:#999;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .loading{text-align:center;padding:40px;color:#666}
+.toggle-wrap{display:flex;align-items:center;gap:8px;margin-bottom:16px}
+.toggle{position:relative;width:40px;height:22px;background:#2d2d4a;border-radius:11px;cursor:pointer;border:1px solid #3d3d5e;transition:background .2s}
+.toggle.on{background:#4ade80;border-color:#4ade80}
+.toggle::after{content:'';position:absolute;width:16px;height:16px;border-radius:50%;background:#d4d4d8;top:2px;left:2px;transition:transform .2s}
+.toggle.on::after{transform:translateX(18px);background:#0f0f1a}
+.toggle-label{font-size:12px;color:#888}
+.toggle-label.on{color:#4ade80}
 </style>
+<softwrap>Input too long; using last 4096 characters
 </head>
 <body>
 <h1>Frigate GenAI Reprocess</h1>
+<div class="toggle-wrap"><span id="toggle-btn" class="toggle" onclick="togglePause()"></span><span id="toggle-label" class="toggle-label">Ollama on</span></div>
 <div id="stats" class="loading" style="margin-bottom:12px">Loading stats...</div>
 <div id="app" class="loading">Loading events...</div>
 <script>
@@ -115,6 +124,29 @@ async function loadStats() {
     statsEl.innerHTML = '<div class="stat"><span class="stat-label">MQTT</span><span class="stat-value">'+mqtt+'</span></div><div class="stat"><span class="stat-label">Processed</span><span class="stat-value">'+s.events_processed+'</span></div><div class="stat"><span class="stat-label">Last</span><span class="stat-value">'+(s.last_event||"—")+'</span></div><div class="stat"><span class="stat-label">Models</span><span class="stat-value">'+models+'</span></div>';
   } catch(e) { /* stats will stay as loading */ }
 }
+async function loadPause() {
+  try {
+    const r = await fetch("/api/pause");
+    const d = await r.json();
+    if (d.paused) { setPause(true); }
+  } catch(e) {}
+}
+
+async function togglePause() {
+  const r = await fetch("/api/pause", {method:"POST"});
+  const d = await r.json();
+  setPause(d.paused);
+}
+
+function setPause(paused) {
+  const btn = document.getElementById("toggle-btn");
+  const lbl = document.getElementById("toggle-label");
+  btn.className = "toggle" + (paused ? "" : " on");
+  lbl.textContent = paused ? "Ollama off" : "Ollama on";
+  lbl.className = "toggle-label" + (paused ? "" : " on");
+}
+
+loadPause();
 loadStats();
 load();
 </script>
@@ -524,14 +556,22 @@ class EventProcessor:
             f"Generating description for {label} on {camera}...",
         )
 
-        # 5. Call GenAI provider
+        # 5. Call GenAI provider (skip Ollama if pause file exists)
+        cfg = self.provider_cfg
+        pause_file = "/tmp/pause-ollama"
+        if os.path.exists(pause_file) and isinstance(cfg.get("model"), list):
+            filtered = [m for m in cfg["model"] if "ollama" not in m]
+            if filtered:
+                log.info("Pause file detected — Ollama disabled, using: %s", filtered)
+                cfg = {**cfg, "model": filtered}
+            else:
+                log.warning("Pause file exists but no non-Ollama models configured")
         genai_start = time.monotonic()
         description, model_used = await asyncio.to_thread(
-            call_provider, prompt, frames, snapshot, label, self.provider_cfg,
+            call_provider, prompt, frames, snapshot, label, cfg,
         )
         genai_time = time.monotonic() - genai_start
         log.info("GenAI call took %.1fs", genai_time)
-
         if not description:
             msg = f"Failed: GenAI returned no description"
             await asyncio.to_thread(update_event_description, event_id, msg)
@@ -683,6 +723,13 @@ async def async_main(prompts_path: str, provider_path: str) -> None:
                 self._proxy("image/jpeg")
             elif self.path.startswith("/api/events"):
                 self._proxy("application/json")
+            elif self.path == "/api/pause":
+                paused = os.path.exists("/tmp/pause-ollama")
+                self.send_response(200)
+                self._cors()
+                self.send_header("Content-type", "application/json")
+                self.end_headers()
+                self.wfile.write(json.dumps({"paused": paused}).encode())
             else:
                 self.send_response(404)
                 self.end_headers()
@@ -734,6 +781,20 @@ async def async_main(prompts_path: str, provider_path: str) -> None:
                     self._cors()
                     self.end_headers()
                     self.wfile.write(str(e).encode())
+            elif self.path == "/api/pause":
+                pause_file = "/tmp/pause-ollama"
+                if os.path.exists(pause_file):
+                    os.remove(pause_file)
+                    paused = False
+                else:
+                    open(pause_file, "w").close()
+                    paused = True
+                self.send_response(200)
+                self._cors()
+                self.send_header("Content-type", "application/json")
+                self.end_headers()
+                self.wfile.write(json.dumps({"paused": paused}).encode())
+                log.info("Ollama pause toggled: %s", "ON" if paused else "OFF")
             else:
                 self.send_response(404)
                 self.end_headers()
