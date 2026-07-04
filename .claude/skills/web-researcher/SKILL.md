@@ -26,7 +26,7 @@ The primary research question must be quoted. Everything after the closing quote
 Parse `$ARGUMENTS` by running the deterministic parser script — do NOT manually reason about quote positions:
 
 ```bash
-eval "$(.claude/skills/web-researcher/parse-args.py << 'ARGSEOF'
+eval "$(dotfiles/.claude/skills/web-researcher/parse-args.py << 'ARGSEOF'
 <paste the raw $ARGUMENTS string here exactly as you received it>
 ARGSEOF
 )"
