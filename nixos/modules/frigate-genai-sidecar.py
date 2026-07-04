@@ -34,6 +34,7 @@ from pathlib import Path
 
 import paho.mqtt.client as mqtt
 from temporalio import activity, workflow
+from temporalio.common import RetryPolicy
 from temporalio.client import Client
 from temporalio.worker import Worker
 
@@ -274,7 +275,7 @@ def call_gemini(
         log.error("Gemini API key not found in env var %s", provider_cfg.get("api_key_env"))
         return None, None
 
-    client = genai.Client(api_key=api_key)
+    client = genai.Client(api_key=api_key, http_options={"timeout": 120000})
 
     contents: list = [prompt_text]
 
@@ -326,7 +327,7 @@ def call_litellm(
         import random
         model = random.choice(model)
     base_url = provider_cfg.get("base_url", os.environ.get("OPENAI_BASE_URL", ""))
-    client = OpenAI(api_key=api_key, base_url=base_url)
+    client = OpenAI(api_key=api_key, base_url=base_url, timeout=120.0)
 
     content: list[dict] = [{"type": "text", "text": prompt_text}]
 
@@ -359,7 +360,6 @@ def call_litellm(
         response = client.chat.completions.create(
             model=model,
             messages=[{"role": "user", "content": content}],
-            timeout=600,
         )
         return response.choices[0].message.content, model
     except Exception as e:
@@ -452,9 +452,23 @@ def compose_prompt(
 # Temporal Activities
 # ═════════════════════════════════════════════════════════════════════
 
+
+async def _run_with_heartbeat(func, *args, interval: float = 5.0):
+    """Run a sync function in a thread, heartbeating every `interval` seconds.
+
+    Prevents Temporal from cancelling the activity while the thread is busy
+    (e.g. waiting for a slow LLM).
+    """
+    task = asyncio.create_task(asyncio.to_thread(func, *args))
+    while not task.done():
+        try:
+            await asyncio.wait_for(asyncio.shield(task), timeout=interval)
+        except TimeoutError:
+            activity.heartbeat()
+    return task.result()
 @activity.defn(name="extract_frames")
-async def extract_frames_activity(input_data: dict) -> list[str]:
-    """Extract frames via ffmpeg, poll for recording availability, save to disk."""
+async def extract_frames_activity(input_data: dict) -> tuple[str, int]:
+    """Extract frames via ffmpeg, fetch snapshot, save all to disk. Returns (frames_dir, frame_count)."""
     camera = input_data["camera"]
     start_time = input_data["start_time"]
     end_time = input_data["end_time"]
@@ -473,6 +487,7 @@ async def extract_frames_activity(input_data: dict) -> list[str]:
     MAX_POLL = 15
 
     frames = []
+    snapshot_bytes = None
     poll_start = time.monotonic()
     for attempt in range(99):
         elapsed = time.monotonic() - poll_start
@@ -488,7 +503,7 @@ async def extract_frames_activity(input_data: dict) -> list[str]:
 
         activity.heartbeat()
 
-        frames = await asyncio.to_thread(
+        frames = await _run_with_heartbeat(
             extract_frames, camera, start_time, end_time, fps, max_frames,
         )
         if frames:
@@ -499,55 +514,57 @@ async def extract_frames_activity(input_data: dict) -> list[str]:
     if not frames:
         log.error("No frames for event %s after %.0fs (%d attempts)",
                   event_id, time.monotonic() - poll_start, attempt + 1)
-        return []
+        return "", 0
 
-    # Write frames to persistent directory for access by later activities
+    # Write frames + snapshot to persistent directory
     frames_dir = FRAMES_DIR / event_id
+    frames_dir_str = str(frames_dir)
     frames_dir.mkdir(parents=True, exist_ok=True)
-    paths = []
     for i, frame_bytes in enumerate(frames):
-        path = frames_dir / f"frame_{i:03d}.jpg"
-        path.write_bytes(frame_bytes)
-        paths.append(str(path))
+        (frames_dir / f"frame_{i:03d}.jpg").write_bytes(frame_bytes)
 
-    log.info("Saved %d frames to %s", len(paths), frames_dir)
-    return paths
+    # Fetch and save snapshot alongside frames
+    snapshot_bytes = await _run_with_heartbeat(fetch_snapshot, event_id)
+    if snapshot_bytes:
+        (frames_dir / "snapshot.jpg").write_bytes(snapshot_bytes)
+    elif not any(frames_dir.iterdir()):
+        return frames_dir_str, 0
 
-
-@activity.defn(name="fetch_snapshot")
-async def fetch_snapshot_activity(event_id: str) -> bytes | None:
-    """Fetch event snapshot from Frigate API. Returns JPEG bytes."""
-    log.info("Activity fetch_snapshot: event=%s", event_id)
-    return await asyncio.to_thread(fetch_snapshot, event_id)
+    log.info("Saved %d frames + snapshot to %s", len(frames), frames_dir)
+    return frames_dir_str, len(frames)
 
 
 @activity.defn(name="run_genai")
-async def run_genai_activity(
-    input_data: dict,
-    frame_paths: list[str],
-    snapshot: bytes | None,
-) -> str | None:
-    """Load frames from disk, compose prompt, call GenAI provider."""
+async def run_genai_activity(input_data: dict, frames_dir: str) -> str | None:
+    """Load frames and snapshot from disk, compose prompt, call GenAI provider."""
     event_id = input_data["event_id"]
     camera = input_data["camera"]
     label = input_data["label"]
     prompts_path = input_data["prompts_path"]
     provider_path = input_data["provider_path"]
 
-    log.info("Activity run_genai: event=%s camera=%s label=%s frames=%d snapshot=%s",
-             event_id, camera, label, len(frame_paths), snapshot is not None)
+    frames_path = Path(frames_dir)
+    frame_files = sorted(frames_path.glob("frame_*.jpg"))
+    log.info("Activity run_genai: event=%s camera=%s label=%s frames=%d",
+             event_id, camera, label, len(frame_files))
 
-    prompts = load_json(prompts_path)
-    provider_cfg = load_json(provider_path)
+    try:
+        prompts = load_json(prompts_path)
+        provider_cfg = load_json(provider_path)
+    except (OSError, json.JSONDecodeError) as e:
+        log.error("Failed to load config in run_genai: %s", e)
+        raise RuntimeError(f"Failed to load config: {e}") from e
 
-    # Read frame bytes from disk
+    # Read frames + snapshot from disk
     frames = []
-    for fp in frame_paths:
-        frames.append(Path(fp).read_bytes())
+    for fp in frame_files:
+        frames.append(fp.read_bytes())
+    snapshot_path = frames_path / "snapshot.jpg"
+    snapshot = snapshot_path.read_bytes() if snapshot_path.exists() else None
 
     prompt_text = compose_prompt(prompts, camera, label, len(frames))
 
-    description, model_used = await asyncio.to_thread(
+    description, model_used = await _run_with_heartbeat(
         call_provider, prompt_text, frames, snapshot, label, provider_cfg,
     )
 
@@ -573,6 +590,13 @@ async def update_description_activity(event_id: str, description: str) -> bool:
 # Temporal Workflow
 # ═════════════════════════════════════════════════════════════════════
 
+# Shared RetryPolicy — limits retries with backoff instead of infinite
+_ACTIVITY_RETRY = RetryPolicy(
+    maximum_attempts=3,
+    initial_interval=timedelta(seconds=2),
+    maximum_interval=timedelta(seconds=30),
+    backoff_coefficient=2.0,
+)
 @workflow.defn
 class GenAIWorkflow:
     """Orchestrates GenAI event processing: extract, genai, describe."""
@@ -587,43 +611,40 @@ class GenAIWorkflow:
 
         workflow.logger.info("GenAI workflow started: %s", log_ctx)
 
-        # Step 1: extract_frames + fetch_snapshot (parallel)
-        frames_task = workflow.execute_activity(
+        # Step 1: extract frames + snapshot (saves to disk)
+        frames_dir, frame_count = await workflow.execute_activity(
             extract_frames_activity,
             input_data,
             start_to_close_timeout=timedelta(seconds=90),
             heartbeat_timeout=timedelta(seconds=10),
+            retry_policy=_ACTIVITY_RETRY,
         )
-        snapshot_task = workflow.execute_activity(
-            fetch_snapshot_activity,
-            event_id,
-            start_to_close_timeout=timedelta(seconds=15),
-        )
-
-        frame_paths, snapshot = await asyncio.gather(frames_task, snapshot_task)
 
         # Step 2: progress patch
         await workflow.execute_activity(
             update_description_activity,
             args=[event_id, f"Processing {label} on {camera}..."],
-            start_to_close_timeout=timedelta(seconds=10),
+            start_to_close_timeout=timedelta(seconds=15),
+            retry_policy=_ACTIVITY_RETRY,
         )
 
-        if not frame_paths:
+        if frame_count == 0:
             workflow.logger.error("No frames extracted: %s", log_ctx)
             await workflow.execute_activity(
                 update_description_activity,
                 args=[event_id, "Failed: no frames available for this event"],
-                start_to_close_timeout=timedelta(seconds=10),
+                start_to_close_timeout=timedelta(seconds=15),
+                retry_policy=_ACTIVITY_RETRY,
             )
             return
 
-        # Step 3: run GenAI
+        # Step 3: run GenAI (reads frames + snapshot from disk)
         description = await workflow.execute_activity(
             run_genai_activity,
-            args=[input_data, frame_paths, snapshot],
+            args=[input_data, frames_dir],
             start_to_close_timeout=timedelta(seconds=600),
             heartbeat_timeout=timedelta(seconds=30),
+            retry_policy=_ACTIVITY_RETRY,
         )
 
         # Step 4: final result
@@ -632,14 +653,16 @@ class GenAIWorkflow:
             await workflow.execute_activity(
                 update_description_activity,
                 args=[event_id, "Failed: GenAI returned no description"],
-                start_to_close_timeout=timedelta(seconds=10),
+                start_to_close_timeout=timedelta(seconds=15),
+                retry_policy=_ACTIVITY_RETRY,
             )
             return
 
         await workflow.execute_activity(
             update_description_activity,
             args=[event_id, description],
-            start_to_close_timeout=timedelta(seconds=10),
+            start_to_close_timeout=timedelta(seconds=15),
+            retry_policy=_ACTIVITY_RETRY,
         )
 
         workflow.logger.info("GenAI workflow completed: %s", log_ctx)
@@ -803,7 +826,6 @@ async def async_main(prompts_path: str, provider_path: str) -> None:
         workflows=[GenAIWorkflow],
         activities=[
             extract_frames_activity,
-            fetch_snapshot_activity,
             run_genai_activity,
             update_description_activity,
         ],
