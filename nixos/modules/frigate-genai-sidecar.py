@@ -274,24 +274,6 @@ def fetch_snapshot(event_id: str) -> bytes | None:
 
 
 
-def _pick_model(provider_cfg: dict) -> str:
-    """Select the LLM model to use, respecting pause-ollama override."""
-    import random
-
-    if os.path.exists("/tmp/pause-ollama"):
-        model = provider_cfg.get("model", "gemini/gemini-2.5-flash")
-        if isinstance(model, list):
-            gemini_models = [m for m in model if m.startswith("gemini/")]
-            model = gemini_models[0] if gemini_models else "gemini/gemini-2.5-flash"
-        elif not isinstance(model, str) or not model.startswith("gemini/"):
-            model = "gemini/gemini-2.5-flash"
-        log.warning("Paused ollama — forcing gemini model: %s", model)
-        return model
-
-    model = provider_cfg.get("model", "gemini/gemini-2.5-flash")
-    if isinstance(model, list):
-        model = random.choice(model)
-    return model
 
 # ── LiteLLM provider ────────────────────────────────────────────────
 
@@ -429,9 +411,37 @@ async def _run_with_heartbeat(func, *args, interval: float = 5.0):
         except TimeoutError:
             activity.heartbeat()
     return task.result()
+@activity.defn(name="select_model")
+async def select_model_activity(input_data: dict) -> str:
+    """Select the LLM model for this workflow. Activity so it's visible
+    in Temporal history and can run on any worker (distributed-safe)."""
+    import random
+    provider_cfg = load_json(input_data.get("provider_path",
+        "/var/lib/frigate-genai-sidecar/provider.json"))
+    models = provider_cfg.get("model", ["gemini/gemini-2.5-flash"])
+    if not isinstance(models, list):
+        models = [models]
+
+    if os.path.exists("/tmp/pause-ollama"):
+        gemini_models = [m for m in models if m.startswith("gemini/")]
+        model = gemini_models[0] if gemini_models else "gemini/gemini-2.5-flash"
+        log.warning("Paused ollama — forcing gemini model: %s", model)
+    else:
+        model = random.choice(models)
+
+    paused = input_data.get("paused-ollama", False)
+    if paused:
+        gemini_models = [m for m in models if m.startswith("gemini/")]
+        model = gemini_models[0] if gemini_models else "gemini/gemini-2.5-flash"
+        log.warning("Paused ollama — forcing gemini model: %s", model)
+    else:
+        model = random.choice(models)
+
+    log.info("Selected model %s (paused=%s)", model, paused)
+    return model
 @activity.defn(name="extract_frames")
 async def extract_frames_activity(input_data: dict) -> tuple[str, int]:
-    """Extract frames via ffmpeg, fetch snapshot, save all to disk. Returns (frames_dir, frame_count)."""
+    """Extract frames via ffmpeg, save to disk. Returns (frames_dir, frame_count)."""
     camera = input_data["camera"]
     start_time = input_data["start_time"]
     end_time = input_data["end_time"]
@@ -441,8 +451,8 @@ async def extract_frames_activity(input_data: dict) -> tuple[str, int]:
     fps = max(1, min(4, 4 / max(1, duration)))
     max_frames = max(4, min(30, int(duration * fps)))
 
-
     frames_dir = FRAMES_DIR / event_id
+    frames_dir_str = str(frames_dir)
     log.info(
         "Activity extract_frames: event=%s camera=%s duration=%.1fs max_frames=%d dir=%s",
         event_id, camera, duration, max_frames, frames_dir,
@@ -456,25 +466,24 @@ async def extract_frames_activity(input_data: dict) -> tuple[str, int]:
             f"Recording not ready for {event_id}", non_retryable=False,
         )
 
-    log.info("Extracted %d frames", len(frames))
-
-
-    # Write frames + snapshot to persistent directory
-    frames_dir = FRAMES_DIR / event_id
-    frames_dir_str = str(frames_dir)
     frames_dir.mkdir(parents=True, exist_ok=True)
     for i, frame_bytes in enumerate(frames):
         (frames_dir / f"frame_{i:03d}.jpg").write_bytes(frame_bytes)
 
-    # Fetch and save snapshot alongside frames
+    log.info("Extracted %d ffmpeg frames to %s", len(frames), frames_dir)
+    return frames_dir_str, len(frames)
+
+@activity.defn(name="fetch_snapshot")
+async def fetch_snapshot_activity(input_data: dict) -> str:
+    """Fetch the snapshot from Frigate API, save to disk. Returns frames_dir."""
+    event_id = input_data["event_id"]
+    frames_dir = FRAMES_DIR / event_id
+    frames_dir.mkdir(parents=True, exist_ok=True)
+    log.info("frames_dir=%s", frames_dir)
     snapshot_bytes = await _run_with_heartbeat(fetch_snapshot, event_id)
     if snapshot_bytes:
         (frames_dir / "snapshot.jpg").write_bytes(snapshot_bytes)
-    elif not any(frames_dir.iterdir()):
-        return frames_dir_str, 0
-
-    log.info("Saved %d frames + snapshot to %s", len(frames), frames_dir)
-    return frames_dir_str, len(frames)
+    return str(frames_dir)
 
 
 @activity.defn(name="run_genai")
@@ -506,7 +515,10 @@ async def run_genai_activity(input_data: dict, frames_dir: str) -> str | None:
     snapshot_path = frames_path / "snapshot.jpg"
     snapshot = snapshot_path.read_bytes() if snapshot_path.exists() else None
 
-    prompt_text = compose_prompt(prompts, camera, label, len(frames))
+    if input_data.get("skip_frames"):
+        prompt_text = prompts.get("car", prompts.get("base", "Identify this vehicle.")).replace("{label}", label)
+    else:
+        prompt_text = compose_prompt(prompts, camera, label, len(frames))
 
     description, model_used = await _run_with_heartbeat(
         call_litellm, prompt_text, frames, snapshot, label, provider_cfg, model,
@@ -563,15 +575,45 @@ class GenAIWorkflow:
 
         workflow.logger.info("GenAI workflow started: %s", log_ctx)
 
-        # Step 1: extract frames + snapshot (saves to disk)
-        frames_dir, frame_count = await workflow.execute_activity(
-            extract_frames_activity,
-            input_data,
-            task_queue=FFMPEG_TASK_QUEUE,
-            start_to_close_timeout=timedelta(seconds=60),
-            heartbeat_timeout=timedelta(seconds=10),
-            retry_policy=_EXTRACT_RETRY,
-        )
+        # Step 0: select model (car override is in input_data already)
+        model = input_data.get("model")
+        if model is None:
+            model = await workflow.execute_activity(
+                select_model_activity,
+                input_data,
+                start_to_close_timeout=timedelta(seconds=10),
+                retry_policy=_ACTIVITY_RETRY,
+            )
+            input_data["model"] = model
+
+        skip_frames = input_data.get("skip_frames", False)
+
+        # Step 1: fetch snapshot + extract ffmpeg frames (parallel)
+        if skip_frames:
+            frames_dir = await workflow.execute_activity(
+                fetch_snapshot_activity,
+                input_data,
+                start_to_close_timeout=timedelta(seconds=30),
+                retry_policy=_ACTIVITY_RETRY,
+            )
+        else:
+            snapshot_dir, (ffmpeg_dir, _frame_count) = await asyncio.gather(
+                workflow.execute_activity(
+                    fetch_snapshot_activity,
+                    input_data,
+                    start_to_close_timeout=timedelta(seconds=30),
+                    retry_policy=_ACTIVITY_RETRY,
+                ),
+                workflow.execute_activity(
+                    extract_frames_activity,
+                    input_data,
+                    task_queue=FFMPEG_TASK_QUEUE,
+                    start_to_close_timeout=timedelta(seconds=60),
+                    heartbeat_timeout=timedelta(seconds=10),
+                    retry_policy=_EXTRACT_RETRY,
+                ),
+            )
+            frames_dir = snapshot_dir  # both write to same dir; snapshot_dir == ffmpeg_dir
 
         # Step 2: progress patch
         await workflow.execute_activity(
@@ -580,16 +622,6 @@ class GenAIWorkflow:
             start_to_close_timeout=timedelta(seconds=15),
             retry_policy=_ACTIVITY_RETRY,
         )
-
-        if frame_count == 0:
-            workflow.logger.error("No frames extracted: %s", log_ctx)
-            await workflow.execute_activity(
-                update_description_activity,
-                args=[event_id, "Failed: no frames available for this event"],
-                start_to_close_timeout=timedelta(seconds=15),
-                retry_policy=_ACTIVITY_RETRY,
-            )
-            return
 
         # Step 3: run GenAI (reads frames + snapshot from disk)
         description = await workflow.execute_activity(
@@ -639,6 +671,7 @@ def _start_workflow_sync(event: dict) -> None:
     camera = event.get("camera", "")
     label = event.get("label", "")
 
+
     loop = _main_event_loop
     if loop is None:
         log.warning("Event loop not yet initialized, dropping event %s", event_id)
@@ -673,19 +706,24 @@ def _start_workflow_sync(event: dict) -> None:
 
 
 def _build_workflow_input(event: dict) -> dict:
-    """Build the workflow input dict from an MQTT event. Includes pre-selected model."""
-    provider_cfg = load_json("/var/lib/frigate-genai-sidecar/provider.json")
-    model = _pick_model(provider_cfg) if provider_cfg else "gemini/gemini-2.5-flash"
-    return {
+    """Build the workflow input dict from an MQTT event. Model selection
+    happens in the Temporal workflow via select_model_activity."""
+    label = event.get("label", "")
+    input_data = {
         "event_id": event["id"],
         "camera": event.get("camera", ""),
-        "label": event.get("label", ""),
+        "label": label,
         "start_time": event.get("start_time", 0),
         "end_time": event.get("end_time", event.get("start_time", 0)),
         "prompts_path": "/var/lib/frigate-genai-sidecar/prompts.json",
         "provider_path": "/var/lib/frigate-genai-sidecar/provider.json",
-        "model": model,
+        "paused-ollama": os.path.exists("/tmp/pause-ollama"),
     }
+    # Cars: snapshot-only, gemini-only, make/model prompt
+    if label == "car":
+        input_data["skip_frames"] = True
+        input_data["model"] = "gemini/gemini-2.5-flash"
+    return input_data
 
 
 def build_mqtt_client(loop: asyncio.AbstractEventLoop) -> mqtt.Client:
@@ -802,8 +840,10 @@ async def async_main(prompts_path: str, provider_path: str) -> None:
         task_queue=TASK_QUEUE,
         workflows=[GenAIWorkflow],
         activities=[
+            select_model_activity,
             run_genai_activity,
             update_description_activity,
+            fetch_snapshot_activity,
         ],
     )
 

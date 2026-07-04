@@ -92,6 +92,17 @@
       Do not describe the camera characteristics (like height), but you may
       describe angle or zoom for a "PTZ" camera.
     '';
+    car = ''
+      You are a vehicle identification tool. You will see one snapshot of a
+      vehicle detected by a security camera. The bounding box labels it as a car.
+
+      Identify the make, model, approximate year, and color of the vehicle.
+      If the vehicle is not clearly visible or the image is too blurry, say so.
+
+      Format: "Make Model (~year), color. [Additional visible details]"
+      Be concise. One sentence. If multiple vehicles are visible, describe the
+      one in the bounding box.
+    '';
     suffix = ''
       Be concise but complete. Describe the full event. Do not editorialize. Only what is visible.
       Remember: Our first pass model may be inaccurate. Do not make assumptions about if a {label} is actually present.
