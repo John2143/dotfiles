@@ -774,26 +774,28 @@ async def run_genai_agent_activity(input_data: dict, frames_dir: str) -> str | N
         log.warning("Agentic: max turns exceeded for event=%s", event_id)
 
     # Agent summary — summarize the strategy/cost
+    summary = None
     if description:
         summary = _summarize_agent(client, model, total_cost, turns_low, turns_high, turn + 1)
         if summary:
             description = f"{description}\n\n[{summary}]"
 
-    # Persist full conversation log
+    # Persist full conversation log + summary
     try:
         AGENT_LOGS_DIR.mkdir(parents=True, exist_ok=True)
         log_path = AGENT_LOGS_DIR / f"{event_id}.json"
-        _serializable = _serialize_for_log(messages, total_cost, event_id, camera, label, model, turn + 1, turns_low, turns_high)
+        _serializable = _serialize_for_log(messages, total_cost, event_id, camera, label,
+                                           model, turn + 1, turns_low, turns_high, summary)
         log_path.write_text(_json.dumps(_serializable, default=str))
         log.info("Agentic log saved: %s", log_path)
+        if summary:
+            (AGENT_LOGS_DIR / f"{event_id}-summary.txt").write_text(summary)
     except Exception as e:
         log.warning("Failed to write agent log: %s", e)
 
-    # Emit cost search attribute
-    workflow.upsert_search_attributes([
-        SearchAttributePair(_SEARCH_COST,
-                           total_cost["prompt"] + total_cost["completion"]),
-    ])
+    # Cost logged here (workflow.upsert_search_attributes can't be called
+    # from activities — cost is in log file + agent summary instead).
+    total_tokens = total_cost["prompt"] + total_cost["completion"]
 
     # Update stats
     _stats["model_counts"][model] = _stats["model_counts"].get(model, 0) + 1
@@ -801,8 +803,7 @@ async def run_genai_agent_activity(input_data: dict, frames_dir: str) -> str | N
     _stats["last_event"] = f"{camera}/{label}/{event_id[:12]}"
 
     log.info("Agentic complete: %d turns, %d low/%d high, %d tokens, event=%s",
-             turn + 1, turns_low, turns_high,
-             total_cost["prompt"] + total_cost["completion"], event_id)
+             turn + 1, turns_low, turns_high, total_tokens, event_id)
     return description
 
 
@@ -845,6 +846,7 @@ def _serialize_for_log(
     num_turns: int,
     turns_low: int,
     turns_high: int,
+    summary: str | None = None,
 ) -> dict:
     """Convert messages to a JSON-serializable structure with inline images."""
     import base64 as _b64
@@ -857,6 +859,8 @@ def _serialize_for_log(
         "frames_viewed": {"low": turns_low, "high": turns_high},
         "total_cost": total_cost,
     }
+    if summary:
+        result["summary"] = summary
 
     serialized = []
     for m in messages:
