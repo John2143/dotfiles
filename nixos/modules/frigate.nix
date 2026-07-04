@@ -120,7 +120,6 @@
   frigateGenaiSidecarPkg = let
     pythonEnv = pkgs.python3.withPackages (ps: [
       ps.paho-mqtt
-      ps.google-genai
       ps.openai
       ps.temporalio
     ]);
@@ -771,6 +770,7 @@ in {
       MQTT_PASSWORD = mqttPass;
       HTTP_HOST = "0.0.0.0";
       TEMPORAL_ADDRESS = "192.168.5.10:32682";
+      TEMPORAL_MAX_FFMPEG = "3";
     };
     serviceConfig = {
       Type = "simple";

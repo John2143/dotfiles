@@ -34,16 +34,25 @@ from pathlib import Path
 
 import paho.mqtt.client as mqtt
 from temporalio import activity, workflow
-from temporalio.common import RetryPolicy
+from temporalio.common import RetryPolicy, SearchAttributeKey, SearchAttributePair, TypedSearchAttributes
 from temporalio.client import Client
 from temporalio.worker import Worker
+from temporalio.exceptions import ApplicationError
+from temporalio.api.enums.v1 import IndexedValueType
+from temporalio.api.operatorservice.v1 import AddSearchAttributesRequest
+
 
 log = logging.getLogger("frigate-genai-sidecar")
 
 # ── constants ───────────────────────────────────────────────────────
 
 TASK_QUEUE = "genai-tasks"
+FFMPEG_TASK_QUEUE = "genai-tasks-ffmpeg"
 FRAMES_DIR = Path("/var/lib/frigate-genai-sidecar/frames")
+# Typed search attributes for Temporal workflows
+_SEARCH_CAMERA = SearchAttributeKey.for_keyword("Camera")
+_SEARCH_LABEL = SearchAttributeKey.for_keyword("Label")
+_SEARCH_EVENT_ID = SearchAttributeKey.for_keyword("EventId")
 
 # ── stats (replaces EventProcessor.stats for the HTTP endpoint) ─────
 
@@ -224,9 +233,16 @@ def extract_frames(
             f"{tmp}/frame_%03d.jpg",
         ]
         try:
-            subprocess.run(cmd, check=True, timeout=60)
+            result = subprocess.run(
+                cmd, check=True, timeout=60, capture_output=True, text=True,
+            )
         except subprocess.CalledProcessError as e:
-            log.error("ffmpeg failed: %s", e)
+            stderr = (e.stderr or "").strip()
+            # 404 is expected when recording isn't ready — the activity retries
+            if "404 Not Found" in stderr or "Connection refused" in stderr:
+                log.debug("ffmpeg: recording not ready for %s", hls_url)
+            else:
+                log.error("ffmpeg failed: %s", stderr)
             return []
         except subprocess.TimeoutExpired:
             log.error("ffmpeg timed out extracting frames")
@@ -257,52 +273,25 @@ def fetch_snapshot(event_id: str) -> bytes | None:
         return None
 
 
-# ── Gemini provider ─────────────────────────────────────────────────
 
-def call_gemini(
-    prompt_text: str,
-    images: list[bytes],
-    snapshot: bytes | None,
-    label: str,
-    provider_cfg: dict,
-) -> tuple[str | None, str | None]:
-    """Call Gemini with sequential contents: prompt, frames, snapshot."""
-    from google import genai
-    from google.genai import types
+def _pick_model(provider_cfg: dict) -> str:
+    """Select the LLM model to use, respecting pause-ollama override."""
+    import random
 
-    api_key = os.environ.get(provider_cfg.get("api_key_env", ""), "")
-    if not api_key:
-        log.error("Gemini API key not found in env var %s", provider_cfg.get("api_key_env"))
-        return None, None
+    if os.path.exists("/tmp/pause-ollama"):
+        model = provider_cfg.get("model", "gemini/gemini-2.5-flash")
+        if isinstance(model, list):
+            gemini_models = [m for m in model if m.startswith("gemini/")]
+            model = gemini_models[0] if gemini_models else "gemini/gemini-2.5-flash"
+        elif not isinstance(model, str) or not model.startswith("gemini/"):
+            model = "gemini/gemini-2.5-flash"
+        log.warning("Paused ollama — forcing gemini model: %s", model)
+        return model
 
-    client = genai.Client(api_key=api_key, http_options={"timeout": 120000})
-
-    contents: list = [prompt_text]
-
-    for img in images:
-        contents.append(types.Part.from_bytes(data=img, mime_type="image/jpeg"))
-
-    if snapshot:
-        contents.append(
-            f"The next image is a close-up of the {label}. "
-            "Use it for appearance detail (clothing, items, expression); "
-            "use the preceding full frames for scene context, movement, "
-            "and event progression."
-        )
-        contents.append(types.Part.from_bytes(data=snapshot, mime_type="image/jpeg"))
-
-    log.info("Calling %s with %d images + 1 snapshot", provider_cfg["model"], len(images))
-
-    try:
-        response = client.models.generate_content(
-            model=provider_cfg["model"],
-            contents=contents,
-        )
-        return response.text, provider_cfg["model"]
-    except Exception as e:
-        log.error("Gemini call failed: %s", e)
-        return None, None
-
+    model = provider_cfg.get("model", "gemini/gemini-2.5-flash")
+    if isinstance(model, list):
+        model = random.choice(model)
+    return model
 
 # ── LiteLLM provider ────────────────────────────────────────────────
 
@@ -312,6 +301,7 @@ def call_litellm(
     snapshot: bytes | None,
     label: str,
     provider_cfg: dict,
+    model: str,
 ) -> tuple[str | None, str | None]:
     """Call LiteLLM (OpenAI-compatible) with images as base64 data URIs."""
     import base64
@@ -321,11 +311,6 @@ def call_litellm(
     if not api_key:
         log.error("LiteLLM API key not found in env var %s", provider_cfg.get("api_key_env"))
         return None, None
-
-    model = provider_cfg.get("model", "gemini/gemini-2.5-flash")
-    if isinstance(model, list):
-        import random
-        model = random.choice(model)
     base_url = provider_cfg.get("base_url", os.environ.get("OPENAI_BASE_URL", ""))
     client = OpenAI(api_key=api_key, base_url=base_url, timeout=120.0)
 
@@ -367,28 +352,6 @@ def call_litellm(
         return None, None
 
 
-# ── provider dispatch ───────────────────────────────────────────────
-
-PROVIDERS = {
-    "gemini": call_gemini,
-    "litellm": call_litellm,
-}
-
-
-def call_provider(
-    prompt_text: str,
-    images: list[bytes],
-    snapshot: bytes | None,
-    label: str,
-    provider_cfg: dict,
-) -> tuple[str | None, str | None]:
-    """Dispatch to the configured GenAI provider. Returns (description, model_used)."""
-    provider_name = provider_cfg.get("provider", "gemini")
-    fn = PROVIDERS.get(provider_name)
-    if fn is None:
-        log.error("Unknown provider: %s", provider_name)
-        return None, None
-    return fn(prompt_text, images, snapshot, label, provider_cfg)
 
 
 # ── Frigate API ─────────────────────────────────────────────────────
@@ -478,43 +441,23 @@ async def extract_frames_activity(input_data: dict) -> tuple[str, int]:
     fps = max(1, min(4, 4 / max(1, duration)))
     max_frames = max(4, min(30, int(duration * fps)))
 
+
+    frames_dir = FRAMES_DIR / event_id
     log.info(
-        "Activity extract_frames: event=%s camera=%s duration=%.1fs max_frames=%d",
-        event_id, camera, duration, max_frames,
+        "Activity extract_frames: event=%s camera=%s duration=%.1fs max_frames=%d dir=%s",
+        event_id, camera, duration, max_frames, frames_dir,
     )
 
-    POLL_DELAYS = [2, 4, 8]
-    MAX_POLL = 15
-
-    frames = []
-    snapshot_bytes = None
-    poll_start = time.monotonic()
-    for attempt in range(99):
-        elapsed = time.monotonic() - poll_start
-        if elapsed >= MAX_POLL:
-            break
-
-        if attempt > 0:
-            delay_idx = min(attempt - 1, len(POLL_DELAYS) - 1)
-            delay = min(POLL_DELAYS[delay_idx], MAX_POLL - elapsed)
-            log.info("Recording not ready for %s, polling in %ds (attempt %d, %.0fs elapsed)",
-                     event_id, delay, attempt + 1, elapsed)
-            await asyncio.sleep(delay)
-
-        activity.heartbeat()
-
-        frames = await _run_with_heartbeat(
-            extract_frames, camera, start_time, end_time, fps, max_frames,
-        )
-        if frames:
-            log.info("Extracted %d frames after %.1fs (attempt %d)",
-                     len(frames), time.monotonic() - poll_start, attempt + 1)
-            break
-
+    frames = await _run_with_heartbeat(
+        extract_frames, camera, start_time, end_time, fps, max_frames,
+    )
     if not frames:
-        log.error("No frames for event %s after %.0fs (%d attempts)",
-                  event_id, time.monotonic() - poll_start, attempt + 1)
-        return "", 0
+        raise ApplicationError(
+            f"Recording not ready for {event_id}", non_retryable=False,
+        )
+
+    log.info("Extracted %d frames", len(frames))
+
 
     # Write frames + snapshot to persistent directory
     frames_dir = FRAMES_DIR / event_id
@@ -542,6 +485,7 @@ async def run_genai_activity(input_data: dict, frames_dir: str) -> str | None:
     label = input_data["label"]
     prompts_path = input_data["prompts_path"]
     provider_path = input_data["provider_path"]
+    model = input_data.get("model", "gemini/gemini-2.5-flash")
 
     frames_path = Path(frames_dir)
     frame_files = sorted(frames_path.glob("frame_*.jpg"))
@@ -565,7 +509,7 @@ async def run_genai_activity(input_data: dict, frames_dir: str) -> str | None:
     prompt_text = compose_prompt(prompts, camera, label, len(frames))
 
     description, model_used = await _run_with_heartbeat(
-        call_provider, prompt_text, frames, snapshot, label, provider_cfg,
+        call_litellm, prompt_text, frames, snapshot, label, provider_cfg, model,
     )
 
     if model_used:
@@ -580,7 +524,7 @@ async def run_genai_activity(input_data: dict, frames_dir: str) -> str | None:
 async def update_description_activity(event_id: str, description: str) -> bool:
     """Update Frigate event description via API."""
     log.info("Activity update_description: event=%s", event_id)
-    ok = await asyncio.to_thread(update_event_description, event_id, description)
+    ok = await _run_with_heartbeat(update_event_description, event_id, description)
     if not ok:
         raise RuntimeError(f"Failed to update description for event {event_id}")
     return True
@@ -597,6 +541,14 @@ _ACTIVITY_RETRY = RetryPolicy(
     maximum_interval=timedelta(seconds=30),
     backoff_coefficient=2.0,
 )
+# Extract retry policy — polls for recording readiness up to ~180s
+_EXTRACT_RETRY = RetryPolicy(
+    maximum_attempts=12,
+    initial_interval=timedelta(seconds=2),
+    maximum_interval=timedelta(seconds=20),
+    backoff_coefficient=2.0,
+)
+
 @workflow.defn
 class GenAIWorkflow:
     """Orchestrates GenAI event processing: extract, genai, describe."""
@@ -615,9 +567,10 @@ class GenAIWorkflow:
         frames_dir, frame_count = await workflow.execute_activity(
             extract_frames_activity,
             input_data,
-            start_to_close_timeout=timedelta(seconds=90),
+            task_queue=FFMPEG_TASK_QUEUE,
+            start_to_close_timeout=timedelta(seconds=60),
             heartbeat_timeout=timedelta(seconds=10),
-            retry_policy=_ACTIVITY_RETRY,
+            retry_policy=_EXTRACT_RETRY,
         )
 
         # Step 2: progress patch
@@ -703,6 +656,11 @@ def _start_workflow_sync(event: dict) -> None:
                 _build_workflow_input(event),
                 id=f"genai-{event_id}",
                 task_queue=TASK_QUEUE,
+                search_attributes=TypedSearchAttributes([
+                    SearchAttributePair(_SEARCH_CAMERA, camera),
+                    SearchAttributePair(_SEARCH_LABEL, label),
+                ]),
+                memo={"event_id": event_id, "camera": camera, "label": label},
             )
             log.info("Workflow started: genai-%s (%s/%s)", event_id, camera, label)
         except Exception as e:
@@ -715,7 +673,9 @@ def _start_workflow_sync(event: dict) -> None:
 
 
 def _build_workflow_input(event: dict) -> dict:
-    """Build the workflow input dict from an MQTT event."""
+    """Build the workflow input dict from an MQTT event. Includes pre-selected model."""
+    provider_cfg = load_json("/var/lib/frigate-genai-sidecar/provider.json")
+    model = _pick_model(provider_cfg) if provider_cfg else "gemini/gemini-2.5-flash"
     return {
         "event_id": event["id"],
         "camera": event.get("camera", ""),
@@ -724,6 +684,7 @@ def _build_workflow_input(event: dict) -> dict:
         "end_time": event.get("end_time", event.get("start_time", 0)),
         "prompts_path": "/var/lib/frigate-genai-sidecar/prompts.json",
         "provider_path": "/var/lib/frigate-genai-sidecar/provider.json",
+        "model": model,
     }
 
 
@@ -819,21 +780,43 @@ async def async_main(prompts_path: str, provider_path: str) -> None:
 
     _temporal_client = await Client.connect(temporal_address, namespace="default")
     _stats["temporal_connected"] = True
+    # Register search attributes for workflow filtering (idempotent)
+    try:
+        await _temporal_client.operator_service.add_search_attributes(
+            AddSearchAttributesRequest(
+                search_attributes={
+                    "Camera": IndexedValueType.INDEXED_VALUE_TYPE_KEYWORD,
+                    "Label": IndexedValueType.INDEXED_VALUE_TYPE_KEYWORD,
+                    "EventId": IndexedValueType.INDEXED_VALUE_TYPE_KEYWORD,
+                },
+                namespace="default",
+            ),
+        )
+        log.info("Search attributes registered: Camera, Label, EventId")
+    except Exception as e:
+        # Already registered or no permission — non-fatal
+        log.debug("Search attribute registration skipped: %s", e)
 
-    worker_node = Worker(
+    main_worker = Worker(
         _temporal_client,
         task_queue=TASK_QUEUE,
         workflows=[GenAIWorkflow],
         activities=[
-            extract_frames_activity,
             run_genai_activity,
             update_description_activity,
         ],
     )
 
-    # Start worker in background — it polls Temporal for tasks
-    worker_task = asyncio.create_task(worker_node.run())
-    log.info("Temporal worker started on task queue '%s'", TASK_QUEUE)
+    ffmpeg_worker = Worker(
+        _temporal_client,
+        task_queue=FFMPEG_TASK_QUEUE,
+        activities=[extract_frames_activity],
+        max_concurrent_activities=int(os.environ.get("TEMPORAL_MAX_FFMPEG", "3")),
+    )
+
+    main_task = asyncio.create_task(main_worker.run())
+    ffmpeg_task = asyncio.create_task(ffmpeg_worker.run())
+    log.info("Temporal workers started on '%s' + '%s'", TASK_QUEUE, FFMPEG_TASK_QUEUE)
 
     # ── MQTT — starts workflows via Temporal client ─────────────────
     client_mqtt = build_mqtt_client(asyncio.get_running_loop())
@@ -855,11 +838,18 @@ async def async_main(prompts_path: str, provider_path: str) -> None:
         except Exception:
             log.debug("No existing workflow %s to terminate", workflow_id)
 
+        camera = event.get("camera", "")
+        label = event.get("label", "")
         await _temporal_client.start_workflow(
             "GenAIWorkflow",
             _build_workflow_input(event),
             id=workflow_id,
             task_queue=TASK_QUEUE,
+            search_attributes=TypedSearchAttributes([
+                SearchAttributePair(_SEARCH_CAMERA, camera),
+                SearchAttributePair(_SEARCH_LABEL, label),
+            ]),
+            memo={"event_id": event_id, "camera": camera, "label": label},
         )
         return f"Reprocessing {event_id} ({event.get('camera', '')}/{event.get('label', '')})"
 
@@ -987,9 +977,9 @@ async def async_main(prompts_path: str, provider_path: str) -> None:
     thread.start()
     log.info("HTTP reprocess endpoint on http://%s:%d", http_host, http_port)
 
-    # ── Run worker (blocks forever; crash propagates, systemd restarts)
+    # ── Run workers (block forever; crash propagates, systemd restarts)
     try:
-        await worker_task
+        await asyncio.gather(main_task, ffmpeg_task)
     finally:
         client_mqtt.loop_stop()
         client_mqtt.disconnect()
