@@ -221,6 +221,7 @@
       motionThreshold = 32;
       motionContourArea = 10;
       improveContrast = true;
+      requiredZones = ["in_court" "actual_side_door"];
       zones = {
         side_door = {
           friendly_name = "Side Door";
@@ -236,6 +237,11 @@
           friendly_name = "In Back Yard";
           loitering_time = 0;
           coordinates = "0.405,0.027,0.317,0.303,0.242,0.579,0.177,0.807,0.135,0.99,0.229,0.998,0.282,0.996,0.354,0.991,0.382,0.756,0.387,0.595,0.423,0.56,0.48,0.557,0.519,0.519,0.542,0.437,0.528,0.34,0.511,0.212,0.488,0.14,0.501,0.083,0.512,0.045,0.516,0.019,0.519,0.002";
+        };
+        actual_side_door = {
+          friendly_name = "Actual Side Door";
+          loitering_time = 0;
+          coordinates = "0.943,0.093,0.634,0.839,0.661,1,0.998,0.997,0.999,0.114";
         };
       };
     };
@@ -391,7 +397,22 @@
       } // lib.optionalAttrs (cfg ? motionMask) {
         mask = cfg.motionMask;
       });
-      objects = {
+      objects = let
+        zoneFilters =
+          if cfg ? requiredZones
+          then builtins.listToAttrs (map (label: {
+            name = label;
+            value = { required_zones = cfg.requiredZones; };
+          }) objectLabels.all)
+          else {};
+        maskFilters =
+          (lib.optionalAttrs (cfg ? personMask) {
+            person = { mask = cfg.personMask; };
+          })
+          // (cfg.objectMasks or {});
+        combinedFilters = lib.recursiveUpdate zoneFilters maskFilters;
+        hasFilters = combinedFilters != {};
+      in {
         track = objectLabels.all;
         genai = {
           debug_save_thumbnails = true;
@@ -411,12 +432,8 @@
             ]
           ) genaiPrompts.label;
         };
-      } // lib.optionalAttrs (cfg ? personMask || cfg ? objectMasks) {
-        filters =
-          (lib.optionalAttrs (cfg ? personMask) {
-            person = { mask = cfg.personMask; };
-          })
-          // (cfg.objectMasks or {});
+      } // lib.optionalAttrs hasFilters {
+        filters = combinedFilters;
       };
     lpr = {
       enabled = true;
