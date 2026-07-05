@@ -51,16 +51,16 @@ TASK_QUEUE = "genai-tasks"
 FFMPEG_TASK_QUEUE = "genai-tasks-ffmpeg"
 GEMINI_TASK_QUEUE = "genai-tasks-gemini"
 OLLAMA_TASK_QUEUE = "genai-tasks-ollama"
-FRAMES_DIR = Path("/var/lib/frigate-genai-sidecar/frames")
-AGENT_LOGS_DIR = Path("/var/lib/frigate-genai-sidecar/agent-logs")
-# Typed search attributes for Temporal workflows
+BASE_DIR = Path(os.environ.get("FRAMES_BASE_DIR", "/var/lib/frigate-genai-sidecar"))
+FRAMES_DIR = BASE_DIR / "frames"
+AGENT_LOGS_DIR = BASE_DIR / "agent-logs"
 _SEARCH_CAMERA = SearchAttributeKey.for_keyword("Camera")
 _SEARCH_LABEL = SearchAttributeKey.for_keyword("Label")
 _SEARCH_EVENT_ID = SearchAttributeKey.for_keyword("EventId")
 _SEARCH_DURATION = SearchAttributeKey.for_int("Duration")
 _SEARCH_COST = SearchAttributeKey.for_int("Cost")
 _SEARCH_MODEL = SearchAttributeKey.for_keyword("Model")
-
+_SEARCH_CONFIDENCE = SearchAttributeKey.for_keyword("Confidence")
 _stats: dict = {
     "events_processed": 0,
     "model_counts": {},
@@ -196,6 +196,27 @@ def load_json(path: str) -> dict:
     with open(path) as f:
         return json.load(f)
 
+def cleanup_old_files(base_dir: Path, subdir: str, max_age_minutes: int) -> int:
+    """Delete files and dirs older than max_age_minutes in base_dir/subdir.
+    Returns count of removed items."""
+    import shutil
+
+    target = base_dir / subdir
+    if not target.exists():
+        return 0
+    cutoff = time.time() - (max_age_minutes * 60)
+    removed = 0
+    for entry in target.iterdir():
+        try:
+            if entry.stat().st_mtime < cutoff:
+                if entry.is_dir():
+                    shutil.rmtree(entry)
+                else:
+                    entry.unlink()
+                removed += 1
+        except OSError:
+            pass
+    return removed
 
 # ── frame extraction ────────────────────────────────────────────────
 
@@ -205,11 +226,9 @@ def extract_frames(
     end_time: float,
     fps: float,
     max_frames: int = 30,
-    max_width: int = 1280,
-    jpg_quality: int = 85,
 ) -> list[bytes]:
     """
-    Extract JPEG frames from Frigate recording via HLS.
+    Extract JPEG frames at source resolution from Frigate recording via HLS.
 
     Returns list of JPEG byte strings, chronologically ordered.
     """
@@ -232,9 +251,9 @@ def extract_frames(
             "-y",
             "-loglevel", "error",
             "-i", hls_url,
-            "-vf", f"fps={fps},scale=1280:-2",
+            "-vf", f"fps={fps}",
             "-frames:v", str(max_frames),
-            "-q:v", str(max(1, min(31, int(31 - 31 * jpg_quality / 100)))),
+            "-q:v", "3",
             f"{tmp}/frame_%03d.jpg",
         ]
         try:
@@ -418,10 +437,19 @@ def _load_frames(
     frame_files: list[Path],
     start: int,
     end: int,
-    max_width: int | None = None,
-    quality: int = 60,
+    resolution: str = "low",
 ) -> list[bytes]:
-    """Load and optionally resize frames [start, end] inclusive."""
+    """Load and optionally resize frames [start, end] inclusive.
+    resolution: 'low'=640, 'high'=1280, 'max'=source (no resize)."""
+    if resolution == "max":
+        max_width = None
+        quality = 85
+    elif resolution == "high":
+        max_width = 1280
+        quality = 85
+    else:
+        max_width = 640
+        quality = 60
     result = []
     for i in range(max(0, start), min(end + 1, len(frame_files))):
         data = frame_files[i].read_bytes()
@@ -438,15 +466,18 @@ def _build_image_content(data: bytes) -> dict:
     return {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{b64}"}}
 
 
-def _tool_view_frames_schema() -> dict:
+
+def _tool_get_frames_schema() -> dict:
     return {
         "type": "function",
         "function": {
-            "name": "view_frames",
+            "name": "get_frames",
             "description": (
                 "View frames from the recording by index range and resolution. "
-                "Use 'low' resolution to scan/overview, 'high' for close inspection. "
-                "Pass the same index for start and end to view a single frame."
+                "Use 'low' (640px, ~200 tokens/frame) to quickly scan/survey. "
+                "Use 'high' (1280px, ~300 tokens/frame) for detail. "
+                "Use 'max' (source resolution, ~500 tokens/frame) for fine detail. "
+                "Pass same index for start and end to view a single frame."
             ),
             "parameters": {
                 "type": "object",
@@ -455,8 +486,8 @@ def _tool_view_frames_schema() -> dict:
                     "end": {"type": "integer", "description": "Frame index to end at (inclusive, same as start for single frame)"},
                     "resolution": {
                         "type": "string",
-                        "enum": ["low", "high"],
-                        "description": "'low' = 640px wide, 'high' = 1280px wide",
+                        "enum": ["low", "high", "max"],
+                        "description": "low=640px (~200tok/frame), high=1280px (~300tok/frame), max=source (~500tok/frame)",
                     },
                 },
                 "required": ["start", "end", "resolution"],
@@ -465,38 +496,80 @@ def _tool_view_frames_schema() -> dict:
     }
 
 
-
 def _tool_transcode_schema() -> dict:
     return {
         "type": "function",
         "function": {
             "name": "transcode",
             "description": (
-                "Re-extract frames from the recording at a higher frame rate "
-                "between two frame indices. Use when you need finer temporal "
-                "detail than the pre-extracted 1fps frames provide. "
-                "Example: transcode(18, 22, 5) extracts frames between index "
-                "18 and 22 at 5fps for smooth motion."
+                "Re-extract ALL frames from the recording between two frame indices "
+                "at native frame rate, full HD quality. Use when you need dense temporal "
+                "detail between specific moments. Cost: ~500 tokens/frame. "
+                "Example: transcode(18, 22) returns every frame the VOD has between indices 18-22."
             ),
             "parameters": {
                 "type": "object",
                 "properties": {
                     "start": {"type": "integer", "description": "Frame index to start at (0-based, inclusive)"},
                     "end": {"type": "integer", "description": "Frame index to end at (inclusive)"},
-                    "fps": {"type": "integer", "description": "Frames per second to extract (max 10)"},
                 },
-                "required": ["start", "end", "fps"],
+                "required": ["start", "end"],
             },
         },
     }
 
 
-def _tool_frame_count_schema() -> dict:
+def _tool_get_snapshot_schema() -> dict:
     return {
         "type": "function",
         "function": {
-            "name": "frame_count",
-            "description": "Return the total number of extracted frames available for this recording.",
+            "name": "get_snapshot",
+            "description": (
+                "Return the close-up snapshot of the detected object from Frigate. "
+                "Use this first to understand what was detected. Cost: ~500 tokens."
+            ),
+            "parameters": {"type": "object", "properties": {}, "required": []},
+        },
+    }
+
+
+def _tool_set_description_schema() -> dict:
+    return {
+        "type": "function",
+        "function": {
+            "name": "set_description",
+            "description": (
+                "Submit your final analysis. Sets the description AND confidence level. "
+                "Confidence: 'high' (certain), 'medium' (probable), 'low' (guess), "
+                "'nothing_found' (searched, nothing notable), 'wrong_tag' (clearly a "
+                "different object than the detected label)."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "description": {"type": "string", "description": "1-3 sentence description of what you observed."},
+                    "confidence": {
+                        "type": "string",
+                        "enum": ["high", "medium", "low", "nothing_found", "wrong_tag"],
+                        "description": "How confident you are in this analysis.",
+                    },
+                },
+                "required": ["description", "confidence"],
+            },
+        },
+    }
+
+
+def _tool_compact_schema() -> dict:
+    return {
+        "type": "function",
+        "function": {
+            "name": "compact",
+            "description": (
+                "Drop all image data from previous turns to free context tokens. "
+                "Your findings are summarized and preserved as text. "
+                "Call after bulk scanning to make room for high-res exploration."
+            ),
             "parameters": {"type": "object", "properties": {}, "required": []},
         },
     }
@@ -509,10 +582,8 @@ def _transcode_frames(
     frame_start: int,
     frame_end: int,
     max_frames: int,
-    fps: int = 5,
-    max_width: int = 640,
 ) -> list[bytes]:
-    """On-demand ffmpeg: extract frames at higher fps from a sub-range."""
+    """On-demand ffmpeg: extract all frames at source resolution from a sub-range."""
     import math as _math
     clip_duration = end_time - start_time
     # Map frame indices to seconds (linear interpolation across the clip)
@@ -533,10 +604,9 @@ def _transcode_frames(
         cmd = [
             "ffmpeg",
             "-v", "error",
-            "-ss", str(offset_start),
-            "-to", str(offset_end),
+            "-ss", "0",
+            "-to", f"{offset_end - offset_start:.3f}",
             "-i", hls_url,
-            "-vf", f"fps={min(fps, 10)},scale={max_width}:-1",
             "-q:v", "3",
             out_pattern,
         ]
@@ -724,32 +794,42 @@ async def run_genai_agent_activity(input_data: dict, frames_dir: str) -> dict | 
     # Snapshot (always present — fetch_snapshot_activity runs first)
     snapshot_path = frames_path / "snapshot.jpg"
     snapshot = snapshot_path.read_bytes() if snapshot_path.exists() else None
-    # System prompt with context caching
+    # System prompt: static text first (cached), dynamic data at end
+    camera_desc = prompts.get("camera", {}).get(camera, "")
+    label_hint = prompts.get("label", {}).get(label, "")
+    thinking_mode = os.environ.get("GENAI_THINKING", "1") != "0"
+
     if label == "car":
         car_prompt = prompts.get("car", "Identify this vehicle: make, model, year, color.")
         system_prompt = (
             f"{car_prompt}\n\n"
-            "You have tools to explore frames. The first image is a close-up "
-            "snapshot. Use view_frames() if you need broader context — different "
-            "angles, lighting, or to see the vehicle in motion. "
+            "You have tools to explore frames. Use get_snapshot() first, then "
+            "get_frames() for context. When done, call set_description(description, confidence).\n"
             f"Camera: {camera}."
         )
     else:
         system_prompt = (
-            "You are a security camera analyst. Your tools let you explore "
-            "recording frames selectively.\n\n"
+            "You are a security camera analyst. Use your tools to explore the "
+            "recording and produce a detailed description.\n\n"
             "Workflow:\n"
-            "1. Unless the snapshot is obviously sufficient, call frame_count() "
-            "then view_frames() to survey the recording.\n"
-            "2. If unsure or nothing visible in the first range, view more frames "
-            "until you have context.\n"
-            "3. Produce a 1-3 sentence description. Be specific about colors, "
-            "clothing, vehicles, animals, objects, actions, and direction of "
-            "movement. If the detected label is absent, say so.\n\n"
+            "1. get_snapshot() — see what was detected (~500 tokens)\n"
+            "2. get_frames(start, end, 'low') — scan frames (~200 tok/frame)\n"
+            "3. If you find a person or animal, inspect at 'high' (~300) or "
+            "'max' (~500) resolution for identification detail.\n"
+            "4. transcode(start, end) — all source frames between indices at "
+            "native fps (~500 tok/frame).\n"
+            "5. compact() — free context after bulk scanning.\n"
+            "6. set_description(description, confidence) to finish.\n\n"
+            "Confidence: 'high', 'medium', 'low', 'nothing_found', 'wrong_tag'.\n"
+            "Always end with set_description() — you MUST call it to finish.\n\n"
             f"Camera: {camera}. Detected label: {label}."
         )
+        if camera_desc:
+            system_prompt += f"\n\n{camera_desc}"
+        if label_hint:
+            system_prompt += f"\n\n{label_hint}"
 
-    # Build initial messages with context caching
+    # Build initial messages — only system has cache_control
     messages = [
         {
             "role": "system",
@@ -758,42 +838,40 @@ async def run_genai_agent_activity(input_data: dict, frames_dir: str) -> dict | 
         },
     ]
 
-    user_content = []
-    if snapshot:
-        user_content.append(_build_image_content(snapshot))
-    user_content.append({
-        "type": "text",
-        "text": (
-            f"Camera: {camera}. Detected: {label}. "
-            f"Recording has {max_frames} frames available (0-{max_frames - 1}). "
-            f"The image above is a close-up snapshot. "
-            f"Use view_frames to explore the full recording."
-        ),
-    })
-    messages.append({
-        "role": "user",
-        "content": user_content,
-        "cache_control": {"type": "ephemeral"},
-    })
+    # Initial user message: text only, no images, no cache_control
+    user_text = (
+        f"Camera: {camera}. Label: {label}. "
+        f"Recording has {max_frames} frames available (indices 0-{max_frames - 1}). "
+        f"Start with get_snapshot() to see the close-up, then explore with get_frames()."
+    )
+    messages.append({"role": "user", "content": user_text})
 
-    tools = [_tool_view_frames_schema(), _tool_frame_count_schema(), _tool_transcode_schema()]
+    tools = [_tool_get_snapshot_schema(), _tool_get_frames_schema(), _tool_transcode_schema(), _tool_compact_schema(), _tool_set_description_schema()]
 
     # Accumulators
     total_cost = {"prompt": 0, "completion": 0, "cached": 0}
     turns_low = 0
     turns_high = 0
+    turns_max = 0
+    turns_transcode = 0
     description = None
-    trace_lines = []
+    confidence = None
+    trace_entries: list[dict] = []
 
     # Agent loop
     for turn in range(15):
         activity.heartbeat()
+
+        extra_body = {}
+        if thinking_mode and model.startswith("gemini/"):
+            extra_body["thinking_enabled"] = True
 
         response = client.chat.completions.create(
             model=model,
             messages=messages,
             tools=tools,
             tool_choice="auto",
+            extra_body=extra_body if extra_body else None,
         )
         msg = response.choices[0].message
         u = response.usage
@@ -803,19 +881,27 @@ async def run_genai_agent_activity(input_data: dict, frames_dir: str) -> dict | 
         total_cost["prompt"] += prompt_tok
         total_cost["completion"] += comp_tok
         total_cost["cached"] += cached_tok
-        log.info("Agentic turn %d/%d: %d prompt, %d completion, %d cached",
-                 turn + 1, 15, prompt_tok, comp_tok, cached_tok)
-        trace_lines.append(
-            f"Turn {turn+1}: {prompt_tok}+{comp_tok} tokens "
-            f"({('cached' if cached_tok else 'full')} prompt)"
-        )
+        log.info("Agentic turn %d/15: %d prompt, %d completion, %d cached",
+                 turn + 1, prompt_tok, comp_tok, cached_tok)
+        trace_entries.append({
+            "type": "turn",
+            "turn": turn + 1,
+            "prompt_tokens": prompt_tok,
+            "completion_tokens": comp_tok,
+            "cached": cached_tok > 0,
+        })
 
-        # Text response — model is done
+        # Text-only response — nudge to call tools (v2: MUST call set_description)
         if not msg.tool_calls:
-            description = msg.content
-            trace_lines.append(f"  -> Final: {description}")
-            log.info("Agentic: model done after %d turns", turn + 1)
-            break
+            log.info("Agentic: text-only response on turn %d — nudging", turn + 1)
+            messages.append({"role": "assistant", "content": msg.content})
+            messages.append({
+                "role": "user",
+                "content": "You must call set_description(description, confidence) to finish. "
+                           "Use tools to explore more if needed, then submit your analysis.",
+            })
+            trace_entries.append({"type": "nudge", "reason": "no_tool_call"})
+            continue
 
         # Process tool calls
         messages.append(msg.model_dump(exclude_none=True))
@@ -826,73 +912,192 @@ async def run_genai_agent_activity(input_data: dict, frames_dir: str) -> dict | 
                 args = _json.loads(tc.function.arguments)
             except _json.JSONDecodeError:
                 tool_result = "Error: invalid JSON arguments"
-                trace_lines.append(f"  -> {func_name}(JSON parse error)")
+                trace_entries.append({"type": "tool_call", "name": func_name, "error": "JSON parse error"})
             else:
-                if func_name == "frame_count":
-                    tool_result = f"Total frames: {max_frames} (indices 0-{max_frames - 1})"
-                    trace_lines.append(f"  -> frame_count()")
-                elif func_name == "view_frames":
+                te = {"type": "tool_call", "name": func_name, "args": args}
+
+                if func_name == "get_snapshot":
+                    if snapshot is None:
+                        tool_result = "No snapshot available for this event."
+                    else:
+                        tool_result = "Snapshot of detected object."
+                        img_content = [_build_image_content(snapshot)]
+                        img_content.append({"type": "text", "text": "Close-up snapshot."})
+                        messages.append({"role": "user", "content": img_content})
+                    te["frames_returned"] = 1 if snapshot else 0
+
+                elif func_name == "get_frames":
                     start = args.get("start", 0)
                     end = args.get("end", start)
                     resolution = args.get("resolution", "low")
-                    max_w = 640 if resolution == "low" else 1280
-                    q = 60 if resolution == "low" else 85
-                    frames = _load_frames(frame_files, start, end, max_w, q)
+                    frames = _load_frames(frame_files, start, end, resolution)
                     if resolution == "low":
                         turns_low += len(frames)
-                    else:
+                    elif resolution == "high":
                         turns_high += len(frames)
+                    else:
+                        turns_max += len(frames)
+                    te["resolution"] = resolution
+                    te["frames_returned"] = len(frames)
                     tool_result = (
                         f"Returned {len(frames)} frame(s) [{start}-{end}] at {resolution} resolution."
-                    )
-                    trace_lines.append(
-                        f"  -> view_frames({start}-{end}, {resolution}): "
-                        f"{len(frames)} frames returned"
-                    )
-                    # Append frames as a user message
-                    img_content = [_build_image_content(f) for f in frames]
-                    img_content.append({
-                        "type": "text",
-                        "text": f"Frames {start}-{end} at {resolution} resolution.",
-                    })
-                    messages.append({"role": "user", "content": img_content})
-                elif func_name == "transcode":
-                    start = args.get("start", 0)
-                    end = args.get("end", start)
-                    fps = min(args.get("fps", 5), 10)
-                    frames = await asyncio.to_thread(
-                        _transcode_frames,
-                        camera, start_time, end_time,
-                        start, end, max_frames, fps,
-                    )
-                    trace_lines.append(
-                        f"  -> transcode({start}-{end}, {fps}fps): "
-                        f"{len(frames)} frames returned"
-                    )
-                    tool_result = (
-                        f"Transcoded {len(frames)} frames [{start}-{end}] at {fps}fps."
                     )
                     if frames:
                         img_content = [_build_image_content(f) for f in frames]
                         img_content.append({
                             "type": "text",
-                            "text": f"Transcoded frames {start}-{end} at {fps}fps.",
+                            "text": f"Frames {start}-{end} at {resolution} resolution.",
                         })
                         messages.append({"role": "user", "content": img_content})
+
+                elif func_name == "transcode":
+                    start = args.get("start", 0)
+                    end = args.get("end", start)
+                    frames = await asyncio.to_thread(
+                        _transcode_frames,
+                        camera, start_time, end_time,
+                        start, end, max_frames,
+                    )
+                    turns_transcode += len(frames)
+                    te["frames_returned"] = len(frames)
+                    tool_result = (
+                        f"Transcoded {len(frames)} frames [{start}-{end}] at source resolution."
+                    )
+                    if frames:
+                        img_content = [_build_image_content(f) for f in frames]
+                        img_content.append({
+                            "type": "text",
+                            "text": f"Transcoded frames {start}-{end} at source resolution.",
+                        })
+                        messages.append({"role": "user", "content": img_content})
+
+                elif func_name == "compact":
+                    # Build summary from trace_entries
+                    summary_parts = ["Exploration so far:"]
+                    tools_used: dict[str, list] = {}
+                    for e in trace_entries:
+                        if e.get("type") == "tool_call" and not e.get("error"):
+                            n = e["name"]
+                            if n not in tools_used:
+                                tools_used[n] = []
+                            tools_used[n].append(e.get("args", {}))
+                    for tname, calls in tools_used.items():
+                        if tname == "get_frames":
+                            for c in calls:
+                                summary_parts.append(
+                                    f"  get_frames({c.get('start')}-{c.get('end')}, {c.get('resolution')})"
+                                )
+                        elif tname == "transcode":
+                            for c in calls:
+                                summary_parts.append(
+                                    f"  transcode({c.get('start')}-{c.get('end')})"
+                                )
+                        elif tname == "get_snapshot":
+                            summary_parts.append("  get_snapshot()")
+                    summary_text = "\n".join(summary_parts)
+                    messages.append({"role": "user", "content": summary_text})
+                    # Strip image_url parts from all earlier user messages
+                    for mi in range(len(messages) - 1):
+                        if messages[mi].get("role") == "user":
+                            content = messages[mi].get("content")
+                            if isinstance(content, list):
+                                messages[mi]["content"] = [
+                                    p for p in content
+                                    if isinstance(p, dict) and p.get("type") != "image_url"
+                                ]
+                    tool_result = (
+                        "Context compacted. Images from previous turns removed. "
+                        "Findings summary above. Continue exploring."
+                    )
+
+                elif func_name == "set_description":
+                    description = args.get("description", "")
+                    confidence = args.get("confidence", "medium")
+                    valid_conf = {"high", "medium", "low", "nothing_found", "wrong_tag"}
+                    if confidence not in valid_conf:
+                        tool_result = (
+                            f"Invalid confidence '{confidence}'. "
+                            f"Must be one of: {', '.join(sorted(valid_conf))}."
+                        )
+                        te["error"] = f"invalid_confidence: {confidence}"
+                    else:
+                        tool_result = f"Description set. Confidence: {confidence}."
+                        te["description"] = description
+                        te["confidence"] = confidence
+                        trace_entries.append(te)
+                        messages.append({
+                            "role": "tool",
+                            "tool_call_id": tc.id,
+                            "content": tool_result,
+                        })
+                        log.info("Agentic: set_description called (turn %d, confidence=%s)", turn + 1, confidence)
+                        break
+
                 else:
                     tool_result = f"Unknown tool: {func_name}"
-                    trace_lines.append(f"  -> {func_name}() — unknown")
+                    te["error"] = "unknown_tool"
+
+                trace_entries.append(te)
 
             messages.append({
                 "role": "tool",
                 "tool_call_id": tc.id,
                 "content": tool_result,
             })
+
+        if description is not None:
+            break
     else:
-        description = "Agentic failed: max turns (15) exceeded without final description"
+        description = "Agentic failed: max turns (15) exceeded without set_description"
+        confidence = "low"
         log.warning("Agentic: max turns exceeded for event=%s", event_id)
 
-    # Build stats for summary activity (runs in workflow, not here)
+    # Format trace for readability
+    def _format_trace(entries: list[dict]) -> str:
+        lines = []
+        for e in entries:
+            if e["type"] == "turn":
+                prefix = "(cached) " if e.get("cached") else ""
+                lines.append(
+                    f"Turn {e['turn']}: {e['prompt_tokens']}+{e['completion_tokens']} tokens {prefix}"
+                )
+            elif e["type"] == "tool_call":
+                n = e["name"]
+                a = e.get("args", {})
+                fr = e.get("frames_returned", "?")
+                if n == "get_snapshot":
+                    lines.append("  -> get_snapshot()")
+                elif n == "get_frames":
+                    lines.append(
+                        f"  -> get_frames({a.get('start')}-{a.get('end')}, {a.get('resolution')}): "
+                        f"{fr} frames"
+                    )
+                elif n == "transcode":
+                    lines.append(
+                        f"  -> transcode({a.get('start')}-{a.get('end')}): {fr} frames"
+                    )
+                elif n == "compact":
+                    lines.append("  -> compact()")
+                elif n == "set_description":
+                    lines.append(
+                        f"  -> set_description(confidence={e.get('confidence')}): "
+                        f"{e.get('description', '')[:120]}"
+                    )
+                else:
+                    lines.append(f"  -> {n}()")
+                if e.get("error"):
+                    lines.append(f"    ERROR: {e['error']}")
+            elif e["type"] == "nudge":
+                lines.append(f"  [nudge] {e['reason']}")
+        return "\n".join(lines)
+
+    trace_text = _format_trace(trace_entries)
+    trace_text += (
+        f"\n\nTotal: {turn+1} turns, {turns_low} L/{turns_high} H/{turns_max} M/{turns_transcode} T, "
+        f"{total_cost['prompt']}+{total_cost['completion']} tokens"
+    )
+
+    # Build stats
     stats = {
         "event_id": event_id,
         "camera": camera,
@@ -902,7 +1107,10 @@ async def run_genai_agent_activity(input_data: dict, frames_dir: str) -> dict | 
         "turns": turn + 1,
         "turns_low": turns_low,
         "turns_high": turns_high,
+        "turns_max": turns_max,
+        "turns_transcode": turns_transcode,
         "total_cost": total_cost,
+        "confidence": confidence,
     }
 
     # Persist full conversation log + trace (summary appended by workflow)
@@ -910,22 +1118,17 @@ async def run_genai_agent_activity(input_data: dict, frames_dir: str) -> dict | 
         AGENT_LOGS_DIR.mkdir(parents=True, exist_ok=True)
         log_path = AGENT_LOGS_DIR / f"{event_id}.json"
         _serializable = _serialize_for_log(messages, total_cost, event_id, camera, label,
-                                           model, turn + 1, turns_low, turns_high)
+                                           model, turn + 1, turns_low, turns_high, turns_max, turns_transcode)
         log_path.write_text(_json.dumps(_serializable, default=str))
         log.info("Agentic log saved: %s", log_path)
         trace_path = AGENT_LOGS_DIR / f"{event_id}-trace.txt"
         header = f"Event: {event_id}  Camera: {camera}  Label: {label}  Model: {model}\n"
-        header += f"Frames available: {max_frames}  Snapshot: {'yes' if snapshot else 'no'}\n\n"
-        trace_text = header + "\n".join(trace_lines)
-        trace_text += (
-            f"\n\nTotal: {turn+1} turns, {turns_low} low-res, {turns_high} high-res, "
-            f"{total_cost['prompt']}+{total_cost['completion']} tokens"
-        )
-        trace_path.write_text(trace_text)
+        header += f"Frames available: {max_frames}  Snapshot: {'yes' if snapshot else 'no'}\n"
+        header += f"Confidence: {confidence or 'N/A'}\n\n"
+        trace_path.write_text(header + trace_text)
         log.info("Agentic trace saved: %s", trace_path)
-
         # Include trace in result so workflow can upsert into Temporal UI
-        stats["trace"] = trace_text
+        stats["trace"] = header + trace_text
     except Exception as e:
         log.warning("Failed to write agent log: %s", e)
 
@@ -934,9 +1137,9 @@ async def run_genai_agent_activity(input_data: dict, frames_dir: str) -> dict | 
     _stats["events_processed"] += 1
     _stats["last_event"] = f"{camera}/{label}/{event_id[:12]}"
 
-    log.info("Agentic complete: %d turns, %d low/%d high, %d tokens, event=%s",
-             turn + 1, turns_low, turns_high,
-             total_cost["prompt"] + total_cost["completion"], event_id)
+    log.info("Agentic complete: %d turns, L=%d H=%d M=%d T=%d, %d tokens, conf=%s, event=%s",
+             turn + 1, turns_low, turns_high, turns_max, turns_transcode,
+             total_cost["prompt"] + total_cost["completion"], confidence, event_id)
     return {"description": description, "stats": stats}
 
 
@@ -964,7 +1167,8 @@ async def summarize_agent_activity(stats: dict) -> str | None:
 
     prompt = (
         f"Answer in one sentence: model {model}, "
-        f"viewed {stats['turns_low']} low-res + {stats['turns_high']} high-res "
+        f"viewed {stats['turns_low']} low-res + {stats['turns_high']} high-res + "
+        f"{stats.get('turns_max', 0)} max-res + {stats.get('turns_transcode', 0)} transcoded "
         f"frames in {stats['turns']} turns. "
         "What the agent found, what search pattern it used."
     )
@@ -1003,6 +1207,8 @@ def _serialize_for_log(
     num_turns: int,
     turns_low: int,
     turns_high: int,
+    turns_max: int = 0,
+    turns_transcode: int = 0,
     summary: str | None = None,
 ) -> dict:
     """Convert messages to a JSON-serializable structure with inline images."""
@@ -1013,7 +1219,10 @@ def _serialize_for_log(
         "label": label,
         "model": model,
         "turns": num_turns,
-        "frames_viewed": {"low": turns_low, "high": turns_high},
+        "frames_viewed": {
+            "low": turns_low, "high": turns_high,
+            "max": turns_max, "transcode": turns_transcode,
+        },
         "total_cost": total_cost,
     }
     if summary:
@@ -1197,8 +1406,14 @@ class GenAIWorkflow:
             description = genai_result.get("description")
             stats = genai_result.get("stats", {})
             trace_text = stats.get("trace", "")
+            confidence = stats.get("confidence", "")
             if trace_text:
                 workflow.set_current_details(trace_text)
+            # Upsert Confidence search attribute
+            if confidence:
+                workflow.upsert_search_attributes([
+                    SearchAttributePair(_SEARCH_CONFIDENCE, confidence),
+                ])
             summary = await workflow.execute_activity(
                 summarize_agent_activity,
                 args=[stats],
@@ -1404,11 +1619,12 @@ async def async_main(prompts_path: str, provider_path: str) -> None:
                     "Duration": IndexedValueType.INDEXED_VALUE_TYPE_INT,
                     "Cost": IndexedValueType.INDEXED_VALUE_TYPE_INT,
                     "Model": IndexedValueType.INDEXED_VALUE_TYPE_KEYWORD,
+                    "Confidence": IndexedValueType.INDEXED_VALUE_TYPE_KEYWORD,
                 },
                 namespace="default",
             ),
         )
-        log.info("Search attributes registered: Camera, Label, EventId, Duration, Cost, Model")
+        log.info("Search attributes registered: Camera, Label, EventId, Duration, Cost, Model, Confidence")
     except Exception as e:
         log.debug("Search attribute registration skipped: %s", e)
     main_worker = Worker(
@@ -1631,7 +1847,17 @@ def main():
         "--provider", default="/var/lib/frigate-genai-sidecar/provider.json",
         help="Path to provider JSON file",
     )
+    parser.add_argument(
+        "--cleanup", action="store_true",
+        help="Run cleanup of old frames/agent-logs and exit",
+    )
     args = parser.parse_args()
+    if args.cleanup:
+        logging.basicConfig(level=logging.INFO, format="%(asctime)s [cleanup] %(levelname)s: %(message)s")
+        f_removed = cleanup_old_files(BASE_DIR, "frames", 30)
+        a_removed = cleanup_old_files(BASE_DIR, "agent-logs", 24 * 60)
+        log.info("Cleanup: frames=%d, agent-logs=%d removed", f_removed, a_removed)
+        return
     asyncio.run(async_main(args.prompts, args.provider))
 
 

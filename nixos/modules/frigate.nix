@@ -708,8 +708,8 @@ in {
     "d /var/lib/frigate-genai-sidecar 0755 root root -"
     "L+ /var/lib/frigate-genai-sidecar/prompts.json - - - - ${frigateGenaiPromptsFile}"
     "L+ /var/lib/frigate-genai-sidecar/provider.json - - - - ${frigateGenaiProviderFile}"
-    "d /var/lib/frigate-genai-sidecar/frames 0755 root root 1h -"
-    "d /var/lib/frigate-genai-sidecar/agent-logs 0755 root root 1h -"
+    "d /var/lib/frigate-genai-sidecar/frames 0755 root root 30m -"
+    "d /var/lib/frigate-genai-sidecar/agent-logs 0755 root root 24h -"
   ];
 
   # ── NVIDIA Container Toolkit for GPU passthrough ──────────────────
@@ -796,6 +796,25 @@ in {
       EnvironmentFile = config.age.secrets.frigate-plus.path;
       User = "root";
       Group = "root";
+    };
+  };
+
+  # ── GenAI frame cleanup: frames 30min, logs 24h ─────────────────
+  systemd.services.frigate-genai-cleanup = {
+    description = "Cleanup old Frigate GenAI frames and agent logs";
+    serviceConfig = {
+      Type = "oneshot";
+      ExecStart = "${frigateGenaiSidecarPkg}/bin/frigate-genai-sidecar --cleanup";
+      User = "root";
+    };
+  };
+  systemd.timers.frigate-genai-cleanup = {
+    description = "Timer for Frigate GenAI frame/log cleanup";
+    wantedBy = ["timers.target"];
+    timerConfig = {
+      OnBootSec = "5min";
+      OnUnitActiveSec = "15min";
+      RandomizedDelaySec = "60";
     };
   };
   # ── Sidecar config files ── appended to tmpfiles.rules below
