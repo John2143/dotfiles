@@ -262,14 +262,14 @@ def transcode_into_parts(
             "-q:v", "3",
             f"{tmp}/frame_%03d.jpg",
         ]
-        # Dual output: simultaneously produce H.264 proxy MP4 on first extraction
+        # Dual output: simultaneously produce H.264 proxy MP4 via GPU (nvenc)
         if proxy_path:
             cmd += [
                 "-map", "0:v",
                 "-vf", f"fps={fps},scale='min(1920,iw)':-2,format=yuv420p",
-                "-c:v", "libx264",
-                "-preset", "ultrafast",
-                "-crf", "23",
+                "-c:v", "h264_nvenc",
+                "-preset", "p1",
+                "-cq", "23",
                 "-an",
                 proxy_path,
             ]
@@ -636,6 +636,7 @@ def _transcode_frames(
         out_pattern = os.path.join(tmpdir, "frame_%d.jpg")
         cmd = [
             "ffmpeg",
+            "-hwaccel", "cuda",
             "-v", "error",
             "-ss", f"{seek_start:.3f}",
             "-to", f"{seek_duration:.3f}",
