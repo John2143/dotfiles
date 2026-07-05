@@ -540,18 +540,17 @@ def _tool_transcode_schema() -> dict:
         "function": {
             "name": "transcode",
             "description": (
-                "Re-extract ALL frames from the recording between two frame indices "
-                "at native frame rate, full HD quality. Use when you need dense temporal "
-                "detail between specific moments. Cost: ~500 tokens/frame. "
-                "Example: transcode(18, 22) returns every frame the VOD has between indices 18-22."
+                "Re-extract the next 24 frames from the recording starting at the given "
+                "frame index, at native frame rate, full HD quality. Use when you need dense temporal "
+                "detail at a specific moment. Cost: ~500 tokens/frame, ~12K tokens total. "
+                "Example: transcode(18) returns frames 18-41 from the VOD."
             ),
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "start": {"type": "integer", "description": "Frame index to start at (0-based, inclusive)"},
-                    "end": {"type": "integer", "description": "Frame index to end at (inclusive)"},
+                    "start": {"type": "integer", "description": "Frame index to start at (0-based, inclusive). Returns start..start+23."},
                 },
-                "required": ["start", "end"],
+                "required": ["start"],
             },
         },
     }
@@ -1117,10 +1116,10 @@ async def save_tool_result_activity(save_arg: dict) -> dict | None:
             img_content.append({"type": "image_url", "image_url": {"url": ref}})
         img_content.append({
             "type": "text",
-            "text": f"Transcoded frames {tool_args.get('start')}-{tool_args.get('end')} at source resolution.",
+            "text": f"Transcoded frames {tool_args.get('start', 0)}-{tool_args.get('start', 0) + len(frames) - 1} at source resolution.",
         })
         state["messages"].append({"role": "user", "content": img_content})
-        tool_result = f"Transcoded {len(frames)} frames [{tool_args.get('start')}-{tool_args.get('end')}] at source resolution."
+        tool_result = f"Transcoded {len(frames)} frames [{tool_args.get('start', 0)}-{tool_args.get('start', 0) + len(frames) - 1}] at source resolution."
 
     elif tool_name == "compact":
         summary_parts = ["Exploration so far:"]
@@ -1597,7 +1596,7 @@ class GenAIWorkflow:
                                 "camera": camera, "start_time": start_time,
                                 "end_time": end_time,
                                 "frame_start": tc["args"].get("start", 0),
-                                "frame_end": tc["args"].get("end", tc["args"].get("start", 0)),
+                                "frame_end": min(tc["args"]["start"] + 24, max_frames - 1),
                                 "max_frames": max_frames,
                                 "proxy_path": proxy_path,
                                 "event_id": event_id,
