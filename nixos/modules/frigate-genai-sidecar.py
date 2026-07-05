@@ -627,15 +627,20 @@ async def _run_with_heartbeat(func, *args, interval: float = 5.0):
     """Run a sync function in a thread, heartbeating every `interval` seconds.
 
     Prevents Temporal from cancelling the activity while the thread is busy
-    (e.g. waiting for a slow LLM).
+    (e.g. waiting for a slow LLM). On cancellation the inner task is also
+    cancelled to avoid orphaning the thread.
     """
     task = asyncio.create_task(asyncio.to_thread(func, *args))
-    while not task.done():
-        try:
-            await asyncio.wait_for(asyncio.shield(task), timeout=interval)
-        except TimeoutError:
-            activity.heartbeat()
-    return task.result()
+    try:
+        while not task.done():
+            try:
+                await asyncio.wait_for(asyncio.shield(task), timeout=interval)
+            except TimeoutError:
+                activity.heartbeat()
+        return task.result()
+    except asyncio.CancelledError:
+        task.cancel()
+        raise
 @activity.defn(name="select_model")
 async def select_model_activity(input_data: dict) -> str:
     """Select the LLM model for this workflow. Activity so it's visible
@@ -1172,17 +1177,20 @@ async def summarize_agent_activity(stats: dict) -> str | None:
         f"frames in {stats['turns']} turns. "
         "What the agent found, what search pattern it used."
     )
-    try:
+
+    def _call_summarize() -> str | None:
         response = client.chat.completions.create(
             model=model,
             messages=[{"role": "user", "content": prompt}],
             temperature=0.0,
         )
-        summary = response.choices[0].message.content
+        return response.choices[0].message.content
+
+    try:
+        summary = await _run_with_heartbeat(_call_summarize)
         if summary:
             summary = f"Agent: {summary}"
             log.info("Agent summary for %s: %s", event_id, summary)
-            # Write summary + update trace
             try:
                 AGENT_LOGS_DIR.mkdir(parents=True, exist_ok=True)
                 (AGENT_LOGS_DIR / f"{event_id}-summary.txt").write_text(summary)
@@ -1284,6 +1292,29 @@ async def update_description_activity(event_id: str, description: str) -> bool:
     return True
 
 
+@activity.defn(name="cleanup_cancelled")
+async def cleanup_cancelled_activity(input_data: dict) -> None:
+    """Clean up persisted data for a cancelled workflow: remove frames,
+    agent logs, and post cancellation notice to Frigate."""
+    import shutil
+
+    event_id = input_data["event_id"]
+    log.info("Cleanup cancelled: event=%s", event_id)
+
+    # Remove persisted frames
+    frames_dir = FRAMES_DIR / event_id
+    if frames_dir.exists():
+        shutil.rmtree(frames_dir)
+        log.info("Removed frames: %s", frames_dir)
+
+    # Remove agent logs
+    for suffix in [".json", "-trace.txt", "-summary.txt"]:
+        log_path = AGENT_LOGS_DIR / f"{event_id}{suffix}"
+        if log_path.exists():
+            log_path.unlink()
+            log.info("Removed log: %s", log_path)
+    # Post cancellation notice to Frigate (run in thread via heartbeat to avoid blocking)
+    await _run_with_heartbeat(update_event_description, event_id, "Cancelled")
 # ═════════════════════════════════════════════════════════════════════
 # Temporal Workflow
 # ═════════════════════════════════════════════════════════════════════
@@ -1309,143 +1340,169 @@ class GenAIWorkflow:
 
     @workflow.run
     async def run(self, input_data: dict) -> None:
-        event_id = input_data["event_id"]
-        camera = input_data["camera"]
-        label = input_data["label"]
-        start_time = input_data["start_time"]
-        end_time = input_data["end_time"]
 
-        log_ctx = f"event={event_id} camera={camera} label={label}"
+        try:
+            event_id = input_data["event_id"]
+            camera = input_data["camera"]
+            label = input_data["label"]
+            start_time = input_data["start_time"]
+            end_time = input_data["end_time"]
 
-        workflow.logger.info("GenAI workflow started: %s", log_ctx)
+            log_ctx = f"event={event_id} camera={camera} label={label}"
 
-        # Step 0: select model (car override is in input_data already)
-        model = input_data.get("model")
-        if model is None:
-            model = await workflow.execute_activity(
-                select_model_activity,
-                input_data,
-                start_to_close_timeout=timedelta(seconds=10),
-                retry_policy=_ACTIVITY_RETRY,
-            )
-            input_data["model"] = model
-        # Publish model as search attribute for filtering
-        workflow.upsert_search_attributes([
-            SearchAttributePair(_SEARCH_MODEL, model),
-        ])
-        workflow.logger.info("model=%s", model)
+            workflow.logger.info("GenAI workflow started: %s", log_ctx)
 
-        skip_frames = input_data.get("skip_frames", False)
+            # Step 0: select model (car override is in input_data already)
+            model = input_data.get("model")
+            if model is None:
+                model = await workflow.execute_activity(
+                    select_model_activity,
+                    input_data,
+                    start_to_close_timeout=timedelta(seconds=10),
+                    retry_policy=_ACTIVITY_RETRY,
+                )
+                input_data["model"] = model
+            # Publish model as search attribute for filtering
+            workflow.upsert_search_attributes([
+                SearchAttributePair(_SEARCH_MODEL, model),
+            ])
+            workflow.logger.info("model=%s", model)
 
-        # Step 1: fetch snapshot + extract ffmpeg frames (parallel)
-        if skip_frames:
-            frames_dir = await workflow.execute_activity(
-                fetch_snapshot_activity,
-                input_data,
-                start_to_close_timeout=timedelta(seconds=30),
-                retry_policy=_ACTIVITY_RETRY,
-            )
-        else:
-            snapshot_dir, (ffmpeg_dir, frame_count) = await asyncio.gather(
-                workflow.execute_activity(
+            skip_frames = input_data.get("skip_frames", False)
+
+            # Step 1: fetch snapshot + extract ffmpeg frames (parallel)
+            if skip_frames:
+                frames_dir = await workflow.execute_activity(
                     fetch_snapshot_activity,
                     input_data,
                     start_to_close_timeout=timedelta(seconds=30),
                     retry_policy=_ACTIVITY_RETRY,
-                ),
-                workflow.execute_activity(
-                    extract_frames_activity,
-                    input_data,
-                    task_queue=FFMPEG_TASK_QUEUE,
-                    start_to_close_timeout=timedelta(seconds=60),
-                    heartbeat_timeout=timedelta(seconds=10),
-                    retry_policy=_EXTRACT_RETRY,
-                ),
-            )
-            frames_dir = snapshot_dir
+                )
+            else:
+                snapshot_dir, (ffmpeg_dir, frame_count) = await asyncio.gather(
+                    workflow.execute_activity(
+                        fetch_snapshot_activity,
+                        input_data,
+                        start_to_close_timeout=timedelta(seconds=30),
+                        retry_policy=_ACTIVITY_RETRY,
+                    ),
+                    workflow.execute_activity(
+                        extract_frames_activity,
+                        input_data,
+                        task_queue=FFMPEG_TASK_QUEUE,
+                        start_to_close_timeout=timedelta(seconds=60),
+                        heartbeat_timeout=timedelta(seconds=10),
+                        retry_policy=_EXTRACT_RETRY,
+                    ),
+                )
+                frames_dir = snapshot_dir
 
-            # Upsert duration + frame count as search attributes
-            dur_sec = int(end_time - start_time)
-            workflow.upsert_search_attributes([
-                SearchAttributePair(_SEARCH_DURATION, dur_sec),
-            ])
-            workflow.logger.info("duration=%ds frames=%d", dur_sec, frame_count)
-
-            # Force Gemini when we have many frames (larger context window)
-            if frame_count > 30:
-                workflow.logger.info("frame_count=%d > 30 — forcing gemini", frame_count)
-                input_data["model"] = "gemini/gemini-2.5-flash"
-
-        # Step 2: progress patch
-        await workflow.execute_activity(
-            update_description_activity,
-            args=[event_id, f"Processing {label} on {camera}..."],
-            start_to_close_timeout=timedelta(seconds=15),
-            retry_policy=_ACTIVITY_RETRY,
-        )
-
-        # Step 3: run GenAI (reads frames + snapshot from disk)
-        # Route to model-specific task queue; pick activity based on agentic flag
-        model = input_data.get("model", "gemini/gemini-2.5-flash")
-        genai_queue = GEMINI_TASK_QUEUE if model.startswith("gemini/") else OLLAMA_TASK_QUEUE
-        if input_data.get("agentic"):
-            genai_activity = run_genai_agent_activity
-        else:
-            genai_activity = run_genai_activity
-        genai_result = await workflow.execute_activity(
-            genai_activity,
-            args=[input_data, frames_dir],
-            task_queue=genai_queue,
-            start_to_close_timeout=timedelta(seconds=600),
-            heartbeat_timeout=timedelta(seconds=30),
-            retry_policy=_ACTIVITY_RETRY,
-        )
-
-        # Agentic path: result is {description, stats}, run summary as separate activity
-        if input_data.get("agentic") and isinstance(genai_result, dict):
-            description = genai_result.get("description")
-            stats = genai_result.get("stats", {})
-            trace_text = stats.get("trace", "")
-            confidence = stats.get("confidence", "")
-            if trace_text:
-                workflow.set_current_details(trace_text)
-            # Upsert Confidence search attribute
-            if confidence:
+                # Upsert duration + frame count as search attributes
+                dur_sec = int(end_time - start_time)
                 workflow.upsert_search_attributes([
-                    SearchAttributePair(_SEARCH_CONFIDENCE, confidence),
+                    SearchAttributePair(_SEARCH_DURATION, dur_sec),
                 ])
-            summary = await workflow.execute_activity(
-                summarize_agent_activity,
-                args=[stats],
-                task_queue=genai_queue,
-                start_to_close_timeout=timedelta(seconds=30),
-                retry_policy=_ACTIVITY_RETRY,
-            )
-            if summary:
-                description = f"{description}\n\n[{summary}]"
-        else:
-            description = genai_result
+                workflow.logger.info("duration=%ds frames=%d", dur_sec, frame_count)
 
-        # Step 4: final result
-        if not description:
-            workflow.logger.error("No description from GenAI: %s", log_ctx)
+                # Force Gemini when we have many frames (larger context window)
+                if frame_count > 30:
+                    workflow.logger.info("frame_count=%d > 30 — forcing gemini", frame_count)
+                    input_data["model"] = "gemini/gemini-2.5-flash"
+
+            # Step 2: progress patch
             await workflow.execute_activity(
                 update_description_activity,
-                args=[event_id, "Failed: GenAI returned no description"],
+                args=[event_id, f"Processing {label} on {camera}..."],
                 start_to_close_timeout=timedelta(seconds=15),
                 retry_policy=_ACTIVITY_RETRY,
             )
-            return
 
-        await workflow.execute_activity(
-            update_description_activity,
-            args=[event_id, description],
-            start_to_close_timeout=timedelta(seconds=15),
-            retry_policy=_ACTIVITY_RETRY,
-        )
+            # Step 3: run GenAI (reads frames + snapshot from disk)
+            # Route to model-specific task queue; pick activity based on agentic flag
+            model = input_data.get("model", "gemini/gemini-2.5-flash")
+            genai_queue = GEMINI_TASK_QUEUE if model.startswith("gemini/") else OLLAMA_TASK_QUEUE
+            if input_data.get("agentic"):
+                genai_activity = run_genai_agent_activity
+            else:
+                genai_activity = run_genai_activity
+            genai_result = await workflow.execute_activity(
+                genai_activity,
+                args=[input_data, frames_dir],
+                task_queue=genai_queue,
+                start_to_close_timeout=timedelta(seconds=600),
+                heartbeat_timeout=timedelta(seconds=30),
+                retry_policy=_ACTIVITY_RETRY,
+            )
 
-        workflow.logger.info("GenAI workflow completed: %s", log_ctx)
+            # Agentic path: result is {description, stats}, run summary as separate activity
+            if input_data.get("agentic") and isinstance(genai_result, dict):
+                description = genai_result.get("description")
+                stats = genai_result.get("stats", {})
+                trace_text = stats.get("trace", "")
+                confidence = stats.get("confidence", "")
+                if trace_text:
+                    workflow.set_current_details(trace_text)
+                    # Persist structured trace to memo (visible in "Memo" tab after completion)
+                    workflow.upsert_memo({
+                        "AgentSummary": trace_text,
+                        "AgentTokens": (
+                            f"in={stats['total_cost']['prompt']} "
+                            f"out={stats['total_cost']['completion']} "
+                            f"cached={stats['total_cost'].get('cached', 0)}"
+                        ),
+                        "AgentTurns": (
+                            f"turns={stats['turns']} "
+                            f"low={stats['turns_low']} "
+                            f"high={stats['turns_high']} "
+                            f"max={stats.get('turns_max', 0)} "
+                            f"transcode={stats.get('turns_transcode', 0)}"
+                        ),
+                        "AgentConfidence": confidence or "N/A",
+                    })
+                # Upsert Confidence search attribute
+                if confidence:
+                    workflow.upsert_search_attributes([
+                        SearchAttributePair(_SEARCH_CONFIDENCE, confidence),
+                    ])
+                summary = await workflow.execute_activity(
+                    summarize_agent_activity,
+                    args=[stats],
+                    task_queue=genai_queue,
+                    start_to_close_timeout=timedelta(seconds=30),
+                    retry_policy=_ACTIVITY_RETRY,
+                )
+                if summary:
+                    description = f"{description}\n\n[{summary}]"
+            else:
+                description = genai_result
 
+            # Step 4: final result
+            if not description:
+                workflow.logger.error("No description from GenAI: %s", log_ctx)
+                await workflow.execute_activity(
+                    update_description_activity,
+                    args=[event_id, "Failed: GenAI returned no description"],
+                    start_to_close_timeout=timedelta(seconds=15),
+                    retry_policy=_ACTIVITY_RETRY,
+                )
+                return
+
+            await workflow.execute_activity(
+                update_description_activity,
+                args=[event_id, description],
+                start_to_close_timeout=timedelta(seconds=15),
+                retry_policy=_ACTIVITY_RETRY,
+            )
+
+            workflow.logger.info("GenAI workflow completed: %s", log_ctx)
+        except asyncio.CancelledError:
+            workflow.logger.info("GenAI workflow cancelled, cleaning up: %s", log_ctx)
+            await workflow.execute_activity(
+                cleanup_cancelled_activity,
+                input_data,
+                start_to_close_timeout=timedelta(seconds=30),
+            )
+            raise
 # ═════════════════════════════════════════════════════════════════════
 # Temporal client reference & event loop (set by async_main)
 # ═════════════════════════════════════════════════════════════════════
@@ -1635,6 +1692,7 @@ async def async_main(prompts_path: str, provider_path: str) -> None:
             select_model_activity,
             update_description_activity,
             fetch_snapshot_activity,
+            cleanup_cancelled_activity,
         ],
     )
 
@@ -1681,15 +1739,15 @@ async def async_main(prompts_path: str, provider_path: str) -> None:
     from http.server import HTTPServer, BaseHTTPRequestHandler
 
     async def _do_reprocess(event_id: str, event: dict) -> str:
-        """Terminate old workflow and start a fresh one. Called via asyncio.run from HTTP handler."""
+        """Cancel old workflow and start a fresh one. Called via asyncio.run from HTTP handler."""
         workflow_id = f"genai-{event_id}"
         try:
             handle = _temporal_client.get_workflow_handle(workflow_id)
-            await handle.terminate()
-            log.info("Terminated old workflow %s for reprocess", workflow_id)
-        except Exception:
-            log.debug("No existing workflow %s to terminate", workflow_id)
+            await handle.cancel()
+            log.info("Cancelled old workflow %s for reprocess", workflow_id)
 
+        except Exception:
+            log.debug("No existing workflow %s to cancel", workflow_id)
         camera = event.get("camera", "")
         label = event.get("label", "")
         await _temporal_client.start_workflow(
