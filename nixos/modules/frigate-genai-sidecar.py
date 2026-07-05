@@ -709,9 +709,18 @@ async def select_model_activity(input_data: dict) -> str:
         model = gemini_models[0] if gemini_models else "gemini/gemini-2.5-flash"
         log.warning("Paused ollama — forcing gemini model: %s", model)
     else:
-        model = random.choice(models)
+        ollama_models = [m for m in models if not m.startswith("gemini/")]
+        gemini_models = [m for m in models if m.startswith("gemini/")]
+        ratio = float(os.environ.get("GENAI_OLLAMA_RATIO", "0.3"))
+        if ollama_models and random.random() < ratio:
+            model = random.choice(ollama_models)
+        elif gemini_models:
+            model = random.choice(gemini_models)
+        else:
+            model = "gemini/gemini-2.5-flash"
 
-    log.info("Selected model %s (paused=%s)", model, paused)
+    log.info("Selected model %s (paused=%s, ratio=%.2f)", model, paused,
+             float(os.environ.get("GENAI_OLLAMA_RATIO", "0.3")))
     return model
 @activity.defn(name="transcode_into_parts")
 async def transcode_into_parts_activity(input_data: dict) -> tuple[str, int]:
