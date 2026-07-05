@@ -111,6 +111,7 @@ img{border-radius:4px;max-height:60px}
 <body>
 <h1>Frigate GenAI Reprocess</h1>
 <div class="toggle-wrap"><span id="toggle-btn" class="toggle" onclick="togglePause()"></span><span id="toggle-label" class="toggle-label">Ollama on</span></div>
+<div class="toggle-wrap"><span id="genai-toggle-btn" class="toggle" onclick="toggleGenaiPause()"></span><span id="genai-toggle-label" class="toggle-label">GenAI running</span></div>
 <div id="stats" class="loading" style="margin-bottom:12px">Loading stats...</div>
 <div id="app" class="loading">Loading events...</div>
 <script>
@@ -182,7 +183,27 @@ function setPause(paused) {
   lbl.className = "toggle-label" + (paused ? "" : " on");
 }
 
+async function loadGenaiPause() {
+  try {
+    const r = await fetch("/api/genai-pause");
+    const d = await r.json();
+    setGenaiPause(d.global);
+  } catch(e) {}
+}
+async function toggleGenaiPause() {
+  const r = await fetch("/api/genai-pause", {method:"POST"});
+  const d = await r.json();
+  setGenaiPause(d.paused);
+}
+function setGenaiPause(paused) {
+  const btn = document.getElementById("genai-toggle-btn");
+  const lbl = document.getElementById("genai-toggle-label");
+  btn.className = "toggle" + (paused ? "" : " on");
+  lbl.textContent = paused ? "GenAI paused" : "GenAI running";
+  lbl.className = "toggle-label" + (paused ? "" : " on");
+}
 loadPause();
+loadGenaiPause();
 loadStats();
 load();
 </script>
