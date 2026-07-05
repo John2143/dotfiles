@@ -1775,9 +1775,12 @@ def _start_workflow_sync(event: dict) -> None:
             return
 
         try:
+            input_data = _build_workflow_input(event)
+            if input_data is None:
+                return  # event paused
             await client.start_workflow(
                 "GenAIWorkflow",
-                _build_workflow_input(event),
+                input_data,
                 id=f"genai-{event_id}",
                 task_queue=TASK_QUEUE,
                 search_attributes=TypedSearchAttributes([
@@ -1796,10 +1799,18 @@ def _start_workflow_sync(event: dict) -> None:
     asyncio.run_coroutine_threadsafe(_start(), loop)
 
 
-def _build_workflow_input(event: dict) -> dict:
+def _build_workflow_input(event: dict) -> dict | None:
     """Build the workflow input dict from an MQTT event. Model selection
-    happens in the Temporal workflow via select_model_activity."""
+    happens in the Temporal workflow via select_model_activity.
+    Returns None if the event should be skipped (paused globally or per-label).
+    """
     label = event.get("label", "")
+    if os.path.exists("/tmp/pause-frigate-genai"):
+        log.info("Global pause active, skipping event %s (%s/%s)", event.get("id"), event.get("camera"), label)
+        return None
+    if label and os.path.exists(f"/tmp/pause-frigate-genai-{label}"):
+        log.info("Label pause active for '%s', skipping event %s", label, event.get("id"))
+        return None
     input_data = {
         "event_id": event["id"],
         "camera": event.get("camera", ""),
@@ -2060,6 +2071,19 @@ async def async_main(prompts_path: str, provider_path: str) -> None:
                 self.send_header("Content-type", "application/json")
                 self.end_headers()
                 self.wfile.write(json.dumps({"paused": paused}).encode())
+            elif self.path == "/api/genai-pause":
+                paused_global = os.path.exists("/tmp/pause-frigate-genai")
+                paused_labels = {}
+                for f in Path("/tmp").glob("pause-frigate-genai-*"):
+                    paused_labels[f.name[len("pause-frigate-genai-"):]] = True
+                self.send_response(200)
+                self._cors()
+                self.send_header("Content-type", "application/json")
+                self.end_headers()
+                self.wfile.write(json.dumps({
+                    "global": paused_global,
+                    "labels": paused_labels,
+                }).encode())
             else:
                 self.send_response(404)
                 self.end_headers()
@@ -2123,6 +2147,33 @@ async def async_main(prompts_path: str, provider_path: str) -> None:
                 self.end_headers()
                 self.wfile.write(json.dumps({"paused": paused}).encode())
                 log.info("Ollama pause toggled: %s", "ON" if paused else "OFF")
+            elif self.path == "/api/genai-pause":
+                # Toggle global genai pause; optional body {"label": "car"} for per-label
+                body_len = int(self.headers.get("Content-Length", 0))
+                body_raw = self.rfile.read(body_len) if body_len > 0 else b"{}"
+                try:
+                    body = json.loads(body_raw or b"{}")
+                except json.JSONDecodeError:
+                    body = {}
+                label = body.get("label", "")
+                if label:
+                    pause_file = f"/tmp/pause-frigate-genai-{label}"
+                else:
+                    pause_file = "/tmp/pause-frigate-genai"
+                if os.path.exists(pause_file):
+                    os.remove(pause_file)
+                    paused = False
+                else:
+                    open(pause_file, "w").close()
+                    paused = True
+                self.send_response(200)
+                self._cors()
+                self.send_header("Content-type", "application/json")
+                self.end_headers()
+                self.wfile.write(json.dumps({
+                    "paused": paused, "file": pause_file,
+                }).encode())
+                log.info("GenAI pause toggled (%s): %s", label or "global", "ON" if paused else "OFF")
             else:
                 self.send_response(404)
                 self.end_headers()
