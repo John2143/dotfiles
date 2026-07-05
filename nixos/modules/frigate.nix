@@ -397,22 +397,7 @@
       } // lib.optionalAttrs (cfg ? motionMask) {
         mask = cfg.motionMask;
       });
-      objects = let
-        zoneFilters =
-          if cfg ? requiredZones
-          then builtins.listToAttrs (map (label: {
-            name = label;
-            value = { required_zones = cfg.requiredZones; };
-          }) objectLabels.all)
-          else {};
-        maskFilters =
-          (lib.optionalAttrs (cfg ? personMask) {
-            person = { mask = cfg.personMask; };
-          })
-          // (cfg.objectMasks or {});
-        combinedFilters = lib.recursiveUpdate zoneFilters maskFilters;
-        hasFilters = combinedFilters != {};
-      in {
+      objects = {
         track = objectLabels.all;
         genai = {
           debug_save_thumbnails = true;
@@ -432,8 +417,12 @@
             ]
           ) genaiPrompts.label;
         };
-      } // lib.optionalAttrs hasFilters {
-        filters = combinedFilters;
+      } // lib.optionalAttrs (cfg ? personMask || cfg ? objectMasks) {
+        filters =
+          (lib.optionalAttrs (cfg ? personMask) {
+            person = { mask = cfg.personMask; };
+          })
+          // (cfg.objectMasks or {});
       };
     lpr = {
       enabled = true;
@@ -445,6 +434,15 @@
     audio = {
       enabled = true;
       listen = ["bark" "scream" "speech" "yell"];
+    };
+  } // lib.optionalAttrs (cfg ? requiredZones) {
+    review = {
+      alerts = {
+        required_zones = cfg.requiredZones;
+      };
+      detections = {
+        required_zones = cfg.requiredZones;
+      };
     };
   };
 

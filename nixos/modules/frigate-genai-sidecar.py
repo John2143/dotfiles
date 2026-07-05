@@ -848,25 +848,34 @@ async def run_genai_turn_activity(turn_arg: dict) -> dict:
         log.error("Failed to load provider config: %s", e)
         raise RuntimeError(f"Failed to load provider config: {e}") from e
 
-    api_key = os.environ.get(provider_cfg.get("api_key_env", ""), "")
-    if not api_key:
-        raise RuntimeError("API key not configured")
-    base_url = provider_cfg.get("base_url", os.environ.get("OPENAI_BASE_URL", ""))
-    client = OpenAI(api_key=api_key, base_url=base_url, timeout=120.0)
+    extra_body = {}
+    is_ollama = model.startswith("ollama/")
 
+    if is_ollama:
+        base_url = provider_cfg.get("ollama_base_url", "http://office.ts.2143.me:11434/v1")
+        api_key = os.environ.get("OLLAMA_API_KEY", "ollama")
+        model_name = model[len("ollama/"):]
+        extra_body["reasoning_effort"] = "none"
+    else:
+        base_url = provider_cfg.get("base_url", os.environ.get("OPENAI_BASE_URL", ""))
+        api_key = os.environ.get(provider_cfg.get("api_key_env", ""), "")
+        if not api_key:
+            raise RuntimeError("API key not configured")
+        model_name = model
+        thinking_mode = os.environ.get("GENAI_THINKING", "1") != "0"
+        if thinking_mode and model.startswith("gemini/"):
+            extra_body["thinking_enabled"] = True
+
+    client = OpenAI(api_key=api_key, base_url=base_url, timeout=120.0)
     tools = [
         _tool_get_snapshot_schema(), _tool_get_frames_schema(),
         _tool_transcode_schema(), _tool_compact_schema(), _tool_set_description_schema(),
     ]
 
-    thinking_mode = os.environ.get("GENAI_THINKING", "1") != "0"
-    extra_body = {}
-    if thinking_mode and model.startswith("gemini/"):
-        extra_body["thinking_enabled"] = True
 
     activity.heartbeat()
     response = client.chat.completions.create(
-        model=model,
+        model=model_name,
         messages=messages_with_images,
         tools=tools,
         tool_choice="auto",
@@ -1190,11 +1199,18 @@ async def summarize_agent_activity(stats: dict) -> str | None:
         log.error("Failed to load provider config in summarize_agent: %s", e)
         raise RuntimeError(f"Failed to load config: {e}") from e
 
-    api_key = os.environ.get(provider_cfg.get("api_key_env", ""), "")
-    if not api_key:
-        log.error("API key not found in env var %s", provider_cfg.get("api_key_env"))
-        raise RuntimeError("API key not configured")
-    base_url = provider_cfg.get("base_url", os.environ.get("OPENAI_BASE_URL", ""))
+    is_ollama = model.startswith("ollama/")
+    if is_ollama:
+        base_url = provider_cfg.get("ollama_base_url", "http://office.ts.2143.me:11434/v1")
+        api_key = os.environ.get("OLLAMA_API_KEY", "ollama")
+        model_name = model[len("ollama/"):]
+    else:
+        base_url = provider_cfg.get("base_url", os.environ.get("OPENAI_BASE_URL", ""))
+        api_key = os.environ.get(provider_cfg.get("api_key_env", ""), "")
+        if not api_key:
+            log.error("API key not found in env var %s", provider_cfg.get("api_key_env"))
+            raise RuntimeError("API key not configured")
+        model_name = model
     client = OpenAI(api_key=api_key, base_url=base_url, timeout=30.0)
 
     prompt = (
@@ -1207,7 +1223,7 @@ async def summarize_agent_activity(stats: dict) -> str | None:
 
     def _call_summarize() -> str | None:
         response = client.chat.completions.create(
-            model=model,
+            model=model_name,
             messages=[{"role": "user", "content": prompt}],
             temperature=0.0,
         )
