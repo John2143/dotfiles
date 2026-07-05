@@ -789,55 +789,126 @@ async def run_genai_activity(input_data: dict, frames_dir: str) -> str | None:
 
     return description
 
-@activity.defn(name="run_genai_agent")
-async def run_genai_agent_activity(input_data: dict, frames_dir: str) -> dict | None:
-    """Agentic GenAI: model uses tool calls to explore frames selectively.
-
-    Works with any model. Models that don't call tools produce a single-turn
-    response (functionally equivalent to the dump-all path).
+@activity.defn(name="run_genai_turn")
+async def run_genai_turn_activity(turn_arg: dict) -> dict:
+    """Single-turn LLM call. Loads messages.json, deserializes agent:// refs,
+    calls LLM, returns tool_calls + assistant_message + optional description.
     """
     import base64
     import json as _json
     from openai import OpenAI
 
-    event_id = input_data["event_id"]
-    camera = input_data["camera"]
-    label = input_data["label"]
-    start_time = input_data["start_time"]
-    end_time = input_data["end_time"]
-    prompts_path = input_data["prompts_path"]
-    provider_path = input_data["provider_path"]
-    model = input_data.get("model", "gemini/gemini-2.5-flash")
+    msg_path = turn_arg["msg_path"]
+    provider_path = turn_arg["provider_path"]
+    model = turn_arg["model"]
+    event_id = turn_arg["event_id"]
+    camera = turn_arg["camera"]
+    label = turn_arg["label"]
 
-    frames_path = Path(frames_dir)
-    frame_files = sorted(frames_path.glob("frame_*.jpg"))
-    max_frames = len(frame_files)
-    log.info("Activity run_genai_agent: event=%s camera=%s label=%s frames=%d model=%s",
-             event_id, camera, label, max_frames, model)
+    # Load state from disk
+    with open(msg_path) as f:
+        state = _json.load(f)
+    agent_dir = state["agent_dir"]
+    messages = state["messages"]
 
-    # Load config
+    # Deserialize agent:// refs → base64 data URIs for LLM call
+    messages_with_images = _deserialize_messages(messages, agent_dir)
+
+    # Load provider config
     try:
-        prompts = load_json(prompts_path)
         provider_cfg = load_json(provider_path)
     except (OSError, _json.JSONDecodeError) as e:
-        log.error("Failed to load config in run_genai_agent: %s", e)
-        raise RuntimeError(f"Failed to load config: {e}") from e
+        log.error("Failed to load provider config: %s", e)
+        raise RuntimeError(f"Failed to load provider config: {e}") from e
 
-    # Build OpenAI client
     api_key = os.environ.get(provider_cfg.get("api_key_env", ""), "")
     if not api_key:
-        log.error("API key not found in env var %s", provider_cfg.get("api_key_env"))
         raise RuntimeError("API key not configured")
     base_url = provider_cfg.get("base_url", os.environ.get("OPENAI_BASE_URL", ""))
     client = OpenAI(api_key=api_key, base_url=base_url, timeout=120.0)
 
-    # Snapshot (always present — fetch_snapshot_activity runs first)
-    snapshot_path = frames_path / "snapshot.jpg"
-    snapshot = snapshot_path.read_bytes() if snapshot_path.exists() else None
-    # System prompt: static text first (cached), dynamic data at end
+    tools = [
+        _tool_get_snapshot_schema(), _tool_get_frames_schema(),
+        _tool_transcode_schema(), _tool_compact_schema(), _tool_set_description_schema(),
+    ]
+
+    thinking_mode = os.environ.get("GENAI_THINKING", "1") != "0"
+    extra_body = {}
+    if thinking_mode and model.startswith("gemini/"):
+        extra_body["thinking_enabled"] = True
+
+    activity.heartbeat()
+    response = client.chat.completions.create(
+        model=model,
+        messages=messages_with_images,
+        tools=tools,
+        tool_choice="auto",
+        extra_body=extra_body if extra_body else None,
+    )
+    msg = response.choices[0].message
+
+    prompt_tok = response.usage.prompt_tokens
+    comp_tok = response.usage.completion_tokens
+    cached_tok = getattr(response.usage, "cached_tokens", 0) or 0
+    log.info("GenAI turn: event=%s prompt=%d comp=%d cached=%d",
+             event_id, prompt_tok, comp_tok, cached_tok)
+
+    result = {
+        "prompt_tokens": prompt_tok,
+        "completion_tokens": comp_tok,
+        "cached_tokens": cached_tok,
+    }
+
+    # Text-only response → nudge
+    if not msg.tool_calls:
+        result["assistant_message"] = msg.model_dump(exclude_none=True)
+        result["text_only"] = True
+        return result
+
+    assistant_msg = msg.model_dump(exclude_none=True)
+    result["assistant_message"] = assistant_msg
+
+    # Parse tool calls
+    tool_calls = []
+    for tc in msg.tool_calls:
+        try:
+            args = _json.loads(tc.function.arguments)
+        except _json.JSONDecodeError:
+            args = {}
+        tc_entry = {
+            "id": tc.id,
+            "name": tc.function.name,
+            "args": args,
+        }
+        if tc.function.name == "set_description":
+            confidence = args.get("confidence", "medium")
+            valid_conf = {"high", "medium", "low", "nothing_found", "wrong_tag"}
+            if confidence not in valid_conf:
+                tc_entry["error"] = f"invalid_confidence: {confidence}"
+            else:
+                result["description"] = args.get("description", "")
+                result["confidence"] = confidence
+        tool_calls.append(tc_entry)
+
+    result["tool_calls"] = tool_calls
+    return result
+
+
+@activity.defn(name="init_agent_state")
+async def init_agent_state_activity(init_arg: dict) -> dict:
+    """Initialize agent state on disk: loads prompts, composes system prompt,
+    writes messages.json. All disk I/O stays in the activity.
+    Returns {msg_path, system_prompt, max_frames, proxy_path}.
+    """
+    import json as _json
+    event_id = init_arg["event_id"]
+    camera = init_arg["camera"]
+    label = init_arg["label"]
+    frames_dir = init_arg["frames_dir"]
+
+    prompts = load_json(init_arg["prompts_path"])
     camera_desc = prompts.get("camera", {}).get(camera, "")
     label_hint = prompts.get("label", {}).get(label, "")
-    thinking_mode = os.environ.get("GENAI_THINKING", "1") != "0"
 
     if label == "car":
         car_prompt = prompts.get("car", "Identify this vehicle: make, model, year, color.")
@@ -869,319 +940,213 @@ async def run_genai_agent_activity(input_data: dict, frames_dir: str) -> dict | 
         if label_hint:
             system_prompt += f"\n\n{label_hint}"
 
-    # Build initial messages — only system has cache_control
-    messages = [
-        {
-            "role": "system",
-            "content": system_prompt,
-            "cache_control": {"type": "ephemeral"},
-        },
-    ]
-
-    # Initial user message: text only, no images, no cache_control
+    frame_files = sorted(Path(frames_dir).glob("frame_*.jpg"))
+    max_frames = len(frame_files)
     user_text = (
         f"Camera: {camera}. Label: {label}. "
         f"Recording has {max_frames} frames available (indices 0-{max_frames - 1}). "
         f"Start with get_snapshot() to see the close-up, then explore with get_frames()."
     )
-    messages.append({"role": "user", "content": user_text})
 
-    tools = [_tool_get_snapshot_schema(), _tool_get_frames_schema(), _tool_transcode_schema(), _tool_compact_schema(), _tool_set_description_schema()]
+    agent_dir = Path(frames_dir) / "agent"
+    agent_dir.mkdir(parents=True, exist_ok=True)
+    msg_path = str(agent_dir / "messages.json")
 
-    # Accumulators
-    total_cost = {"prompt": 0, "completion": 0, "cached": 0}
-    turns_low = 0
-    turns_high = 0
-    turns_max = 0
-    turns_transcode = 0
-    description = None
-    confidence = None
-    trace_entries: list[dict] = []
-
-    # Agent loop
-    for turn in range(15):
-        activity.heartbeat()
-
-        extra_body = {}
-        if thinking_mode and model.startswith("gemini/"):
-            extra_body["thinking_enabled"] = True
-
-        response = client.chat.completions.create(
-            model=model,
-            messages=messages,
-            tools=tools,
-            tool_choice="auto",
-            extra_body=extra_body if extra_body else None,
-        )
-        msg = response.choices[0].message
-        u = response.usage
-        prompt_tok = u.prompt_tokens
-        comp_tok = u.completion_tokens
-        cached_tok = getattr(u, "cached_tokens", 0) or 0
-        total_cost["prompt"] += prompt_tok
-        total_cost["completion"] += comp_tok
-        total_cost["cached"] += cached_tok
-        log.info("Agentic turn %d/15: %d prompt, %d completion, %d cached",
-                 turn + 1, prompt_tok, comp_tok, cached_tok)
-        trace_entries.append({
-            "type": "turn",
-            "turn": turn + 1,
-            "prompt_tokens": prompt_tok,
-            "completion_tokens": comp_tok,
-            "cached": cached_tok > 0,
-        })
-
-        # Text-only response — nudge to call tools (v2: MUST call set_description)
-        if not msg.tool_calls:
-            log.info("Agentic: text-only response on turn %d — nudging", turn + 1)
-            messages.append({"role": "assistant", "content": msg.content})
-            messages.append({
-                "role": "user",
-                "content": "You must call set_description(description, confidence) to finish. "
-                           "Use tools to explore more if needed, then submit your analysis.",
-            })
-            trace_entries.append({"type": "nudge", "reason": "no_tool_call"})
-            continue
-
-        # Process tool calls
-        messages.append(msg.model_dump(exclude_none=True))
-
-        for tc in msg.tool_calls:
-            func_name = tc.function.name
-            try:
-                args = _json.loads(tc.function.arguments)
-            except _json.JSONDecodeError:
-                tool_result = "Error: invalid JSON arguments"
-                trace_entries.append({"type": "tool_call", "name": func_name, "error": "JSON parse error"})
-            else:
-                te = {"type": "tool_call", "name": func_name, "args": args}
-
-                if func_name == "get_snapshot":
-                    if snapshot is None:
-                        tool_result = "No snapshot available for this event."
-                    else:
-                        tool_result = "Snapshot of detected object."
-                        img_content = [_build_image_content(snapshot)]
-                        img_content.append({"type": "text", "text": "Close-up snapshot."})
-                        messages.append({"role": "user", "content": img_content})
-                    te["frames_returned"] = 1 if snapshot else 0
-
-                elif func_name == "get_frames":
-                    start = args.get("start", 0)
-                    end = args.get("end", start)
-                    resolution = args.get("resolution", "low")
-                    frames = _load_frames(frame_files, start, end, resolution)
-                    if resolution == "low":
-                        turns_low += len(frames)
-                    elif resolution == "high":
-                        turns_high += len(frames)
-                    else:
-                        turns_max += len(frames)
-                    te["resolution"] = resolution
-                    te["frames_returned"] = len(frames)
-                    tool_result = (
-                        f"Returned {len(frames)} frame(s) [{start}-{end}] at {resolution} resolution."
-                    )
-                    if frames:
-                        img_content = [_build_image_content(f) for f in frames]
-                        img_content.append({
-                            "type": "text",
-                            "text": f"Frames {start}-{end} at {resolution} resolution.",
-                        })
-                        messages.append({"role": "user", "content": img_content})
-
-                elif func_name == "transcode":
-                    start = args.get("start", 0)
-                    end = args.get("end", start)
-                    frames = await asyncio.to_thread(
-                        _transcode_frames,
-                        camera, start_time, end_time,
-                        start, end, max_frames,
-                        str(frames_path / "proxy.mp4"),
-                    )
-                    turns_transcode += len(frames)
-                    te["frames_returned"] = len(frames)
-                    tool_result = (
-                        f"Transcoded {len(frames)} frames [{start}-{end}] at source resolution."
-                    )
-                    if frames:
-                        img_content = [_build_image_content(f) for f in frames]
-                        img_content.append({
-                            "type": "text",
-                            "text": f"Transcoded frames {start}-{end} at source resolution.",
-                        })
-                        messages.append({"role": "user", "content": img_content})
-
-                elif func_name == "compact":
-                    # Build summary from trace_entries
-                    summary_parts = ["Exploration so far:"]
-                    tools_used: dict[str, list] = {}
-                    for e in trace_entries:
-                        if e.get("type") == "tool_call" and not e.get("error"):
-                            n = e["name"]
-                            if n not in tools_used:
-                                tools_used[n] = []
-                            tools_used[n].append(e.get("args", {}))
-                    for tname, calls in tools_used.items():
-                        if tname == "get_frames":
-                            for c in calls:
-                                summary_parts.append(
-                                    f"  get_frames({c.get('start')}-{c.get('end')}, {c.get('resolution')})"
-                                )
-                        elif tname == "transcode":
-                            for c in calls:
-                                summary_parts.append(
-                                    f"  transcode({c.get('start')}-{c.get('end')})"
-                                )
-                        elif tname == "get_snapshot":
-                            summary_parts.append("  get_snapshot()")
-                    summary_text = "\n".join(summary_parts)
-                    messages.append({"role": "user", "content": summary_text})
-                    # Strip image_url parts from all earlier user messages
-                    for mi in range(len(messages) - 1):
-                        if messages[mi].get("role") == "user":
-                            content = messages[mi].get("content")
-                            if isinstance(content, list):
-                                messages[mi]["content"] = [
-                                    p for p in content
-                                    if isinstance(p, dict) and p.get("type") != "image_url"
-                                ]
-                    tool_result = (
-                        "Context compacted. Images from previous turns removed. "
-                        "Findings summary above. Continue exploring."
-                    )
-
-                elif func_name == "set_description":
-                    description = args.get("description", "")
-                    confidence = args.get("confidence", "medium")
-                    valid_conf = {"high", "medium", "low", "nothing_found", "wrong_tag"}
-                    if confidence not in valid_conf:
-                        tool_result = (
-                            f"Invalid confidence '{confidence}'. "
-                            f"Must be one of: {', '.join(sorted(valid_conf))}."
-                        )
-                        te["error"] = f"invalid_confidence: {confidence}"
-                    else:
-                        tool_result = f"Description set. Confidence: {confidence}."
-                        te["description"] = description
-                        te["confidence"] = confidence
-                        trace_entries.append(te)
-                        messages.append({
-                            "role": "tool",
-                            "tool_call_id": tc.id,
-                            "content": tool_result,
-                        })
-                        log.info("Agentic: set_description called (turn %d, confidence=%s)", turn + 1, confidence)
-                        break
-
-                else:
-                    tool_result = f"Unknown tool: {func_name}"
-                    te["error"] = "unknown_tool"
-
-                trace_entries.append(te)
-
-            messages.append({
-                "role": "tool",
-                "tool_call_id": tc.id,
-                "content": tool_result,
-            })
-
-        if description is not None:
-            break
-    else:
-        description = "Agentic failed: max turns (15) exceeded without set_description"
-        confidence = "low"
-        log.warning("Agentic: max turns exceeded for event=%s", event_id)
-
-    # Format trace for readability
-    def _format_trace(entries: list[dict]) -> str:
-        lines = []
-        for e in entries:
-            if e["type"] == "turn":
-                prefix = "(cached) " if e.get("cached") else ""
-                lines.append(
-                    f"Turn {e['turn']}: {e['prompt_tokens']}+{e['completion_tokens']} tokens {prefix}"
-                )
-            elif e["type"] == "tool_call":
-                n = e["name"]
-                a = e.get("args", {})
-                fr = e.get("frames_returned", "?")
-                if n == "get_snapshot":
-                    lines.append("  -> get_snapshot()")
-                elif n == "get_frames":
-                    lines.append(
-                        f"  -> get_frames({a.get('start')}-{a.get('end')}, {a.get('resolution')}): "
-                        f"{fr} frames"
-                    )
-                elif n == "transcode":
-                    lines.append(
-                        f"  -> transcode({a.get('start')}-{a.get('end')}): {fr} frames"
-                    )
-                elif n == "compact":
-                    lines.append("  -> compact()")
-                elif n == "set_description":
-                    lines.append(
-                        f"  -> set_description(confidence={e.get('confidence')}): "
-                        f"{e.get('description', '')[:120]}"
-                    )
-                else:
-                    lines.append(f"  -> {n}()")
-                if e.get("error"):
-                    lines.append(f"    ERROR: {e['error']}")
-            elif e["type"] == "nudge":
-                lines.append(f"  [nudge] {e['reason']}")
-        return "\n".join(lines)
-
-    trace_text = _format_trace(trace_entries)
-    trace_text += (
-        f"\n\nTotal: {turn+1} turns, {turns_low} L/{turns_high} H/{turns_max} M/{turns_transcode} T, "
-        f"{total_cost['prompt']}+{total_cost['completion']} tokens"
-    )
-
-    # Build stats
-    stats = {
-        "event_id": event_id,
-        "camera": camera,
-        "label": label,
-        "model": model,
-        "provider_path": provider_path,
-        "turns": turn + 1,
-        "turns_low": turns_low,
-        "turns_high": turns_high,
-        "turns_max": turns_max,
-        "turns_transcode": turns_transcode,
-        "total_cost": total_cost,
-        "confidence": confidence,
+    init_state = {
+        "messages": [
+            {"role": "system", "content": system_prompt, "cache_control": {"type": "ephemeral"}},
+            {"role": "user", "content": user_text},
+        ],
+        "agent_dir": str(agent_dir),
+        "trace": [],
+        "stats": {"turns_low": 0, "turns_high": 0, "turns_max": 0, "turns_transcode": 0},
     }
+    _atomic_write(msg_path, init_state)
 
-    # Persist full conversation log + trace (summary appended by workflow)
+    proxy_path = str(Path(frames_dir) / "proxy.mp4")
+    log.info("init_agent_state: event=%s frames=%d msg_path=%s", event_id, max_frames, msg_path)
+
+    return {"msg_path": msg_path, "max_frames": max_frames, "proxy_path": proxy_path}
+
+
+@activity.defn(name="save_agent_log")
+async def save_agent_log_activity(log_arg: dict) -> None:
+    """Write agent trace log to disk. Activity to avoid sandbox restrictions."""
+    event_id = log_arg["event_id"]
+    trace_text = log_arg["trace_text"]
     try:
         AGENT_LOGS_DIR.mkdir(parents=True, exist_ok=True)
-        log_path = AGENT_LOGS_DIR / f"{event_id}.json"
-        _serializable = _serialize_for_log(messages, total_cost, event_id, camera, label,
-                                           model, turn + 1, turns_low, turns_high, turns_max, turns_transcode)
-        log_path.write_text(_json.dumps(_serializable, default=str))
-        log.info("Agentic log saved: %s", log_path)
-        trace_path = AGENT_LOGS_DIR / f"{event_id}-trace.txt"
-        header = f"Event: {event_id}  Camera: {camera}  Label: {label}  Model: {model}\n"
-        header += f"Frames available: {max_frames}  Snapshot: {'yes' if snapshot else 'no'}\n"
-        header += f"Confidence: {confidence or 'N/A'}\n\n"
-        trace_path.write_text(header + trace_text)
-        log.info("Agentic trace saved: %s", trace_path)
-        # Include trace in result so workflow can upsert into Temporal UI
-        stats["trace"] = header + trace_text
+        (AGENT_LOGS_DIR / f"{event_id}-trace.txt").write_text(trace_text)
+        log.info("Agent trace saved: %s", AGENT_LOGS_DIR / f"{event_id}-trace.txt")
     except Exception as e:
         log.warning("Failed to write agent log: %s", e)
 
-    # Update stats
-    _stats["model_counts"][model] = _stats["model_counts"].get(model, 0) + 1
-    _stats["events_processed"] += 1
-    _stats["last_event"] = f"{camera}/{label}/{event_id[:12]}"
+@activity.defn(name="transcode_frames")
+async def transcode_frames_activity(tc_arg: dict) -> list[bytes]:
+    """Wraps _transcode_frames as a visible Temporal activity on the FFMPEG queue."""
+    frames = await activity.run_in_executor(
+        lambda: _transcode_frames(
+            tc_arg["camera"], tc_arg["start_time"], tc_arg["end_time"],
+            tc_arg["frame_start"], tc_arg["frame_end"], tc_arg["max_frames"],
+            tc_arg.get("proxy_path", ""),
+        )
+    )
+    log.info("transcode_frames: event=%s frames=%d [%d-%d]",
+             tc_arg["event_id"], len(frames), tc_arg["frame_start"], tc_arg["frame_end"])
+    return frames
 
-    log.info("Agentic complete: %d turns, L=%d H=%d M=%d T=%d, %d tokens, conf=%s, event=%s",
-             turn + 1, turns_low, turns_high, turns_max, turns_transcode,
-             total_cost["prompt"] + total_cost["completion"], confidence, event_id)
-    return {"description": description, "stats": stats}
+
+@activity.defn(name="save_assistant_message")
+async def save_assistant_message_activity(save_arg: dict) -> None:
+    """Persist assistant message (tool_calls) to messages.json BEFORE tool results."""
+    import json as _json
+    msg_path = save_arg["msg_path"]
+    assistant_message = save_arg["assistant_message"]
+
+    with open(msg_path) as f:
+        state = _json.load(f)
+
+    state["messages"].append(assistant_message)
+
+    _atomic_write(msg_path, state)
+    log.debug("save_assistant_message: appended assistant message to %s", msg_path)
+
+
+@activity.defn(name="save_tool_result")
+async def save_tool_result_activity(save_arg: dict) -> dict | None:
+    """Execute tool call results, write images to agent_dir, append to messages.json.
+
+    Returns {'description': ..., 'confidence': ...} if set_description was called.
+    """
+    import json as _json
+    msg_path = save_arg["msg_path"]
+    tool_name = save_arg["tool_name"]
+    tool_args = save_arg.get("args", {})
+    event_id = save_arg.get("event_id", "")
+
+    with open(msg_path) as f:
+        state = _json.load(f)
+    agent_dir = state["agent_dir"]
+    frames_dir = str(Path(agent_dir).parent)
+    agent_path = Path(agent_dir)
+    agent_path.mkdir(parents=True, exist_ok=True)
+
+    # Build tool call lookup from the most recent assistant message
+    assistant_msg = state["messages"][-1]
+    tc_id = None
+    tc_name = tool_name
+    for tc in assistant_msg.get("tool_calls", []):
+        if tc.get("function", {}).get("name") == tool_name:
+            tc_id = tc.get("id")
+            break
+
+    if tool_name == "get_snapshot":
+        snapshot_path = Path(frames_dir) / "snapshot.jpg"
+        if snapshot_path.exists():
+            raw = snapshot_path.read_bytes()
+            fname = "snapshot.jpg"
+            (agent_path / fname).write_bytes(raw)
+            ref = f"agent://{fname}"
+            img_content = [{"type": "image_url", "image_url": {"url": ref}}]
+            img_content.append({"type": "text", "text": "Close-up snapshot."})
+            state["messages"].append({"role": "user", "content": img_content})
+            tool_result = "Snapshot of detected object."
+        else:
+            state["messages"].append({
+                "role": "tool", "tool_call_id": tc_id,
+                "content": "No snapshot available.",
+            })
+            tool_result = None
+
+    elif tool_name == "get_frames":
+        start = tool_args.get("start", 0)
+        end = tool_args.get("end", start)
+        resolution = tool_args.get("resolution", "low")
+        frame_files = sorted(Path(frames_dir).glob("frame_*.jpg"))
+        frames = _load_frames(frame_files, start, end, resolution)
+        if frames:
+            img_counter = len(list(agent_path.glob("tool_*.jpg")))
+            img_content = []
+            for f in frames:
+                img_counter += 1
+                fname = f"tool_{img_counter:03d}.jpg"
+                (agent_path / fname).write_bytes(f)
+                ref = f"agent://{fname}"
+                img_content.append({"type": "image_url", "image_url": {"url": ref}})
+            img_content.append({
+                "type": "text",
+                "text": f"Frames {start}-{end} at {resolution} resolution.",
+            })
+            state["messages"].append({"role": "user", "content": img_content})
+            tool_result = f"Returned {len(frames)} frame(s) [{start}-{end}] at {resolution} resolution."
+        else:
+            tool_result = "No frames in range."
+
+    elif tool_name == "transcode":
+        frames = save_arg.get("frames", [])
+        img_counter = len(list(agent_path.glob("tool_*.jpg")))
+        img_content = []
+        for f in frames:
+            img_counter += 1
+            fname = f"tool_{img_counter:03d}.jpg"
+            (agent_path / fname).write_bytes(f)
+            ref = f"agent://{fname}"
+            img_content.append({"type": "image_url", "image_url": {"url": ref}})
+        img_content.append({
+            "type": "text",
+            "text": f"Transcoded frames {tool_args.get('start')}-{tool_args.get('end')} at source resolution.",
+        })
+        state["messages"].append({"role": "user", "content": img_content})
+        tool_result = f"Transcoded {len(frames)} frames [{tool_args.get('start')}-{tool_args.get('end')}] at source resolution."
+
+    elif tool_name == "compact":
+        summary_parts = ["Exploration so far:"]
+        for m in state["messages"]:
+            if m.get("role") == "user" and isinstance(m.get("content"), list):
+                text_parts = [
+                    p["text"] for p in m["content"]
+                    if isinstance(p, dict) and p.get("type") == "text"
+                ]
+                for t in text_parts:
+                    summary_parts.append(f"  {t}")
+        summary_text = "\n".join(summary_parts)
+        state["messages"].append({"role": "user", "content": summary_text})
+        # Strip image_url parts from all earlier user messages
+        for mi in range(len(state["messages"]) - 1):
+            if state["messages"][mi].get("role") == "user":
+                content = state["messages"][mi].get("content")
+                if isinstance(content, list):
+                    state["messages"][mi]["content"] = [
+                        p for p in content
+                        if isinstance(p, dict) and p.get("type") != "image_url"
+                    ]
+        tool_result = (
+            "Context compacted. Images from previous turns removed. "
+            "Findings summary above. Continue exploring."
+        )
+        # Also append as tool message
+        state["messages"].append({
+            "role": "tool", "tool_call_id": tc_id, "content": tool_result,
+        })
+
+    elif tool_name == "set_description":
+        description = save_arg.get("description", "")
+        confidence = save_arg.get("confidence", "medium")
+        tool_result = f"Description set. Confidence: {confidence}."
+        if tc_id:
+            state["messages"].append({
+                "role": "tool", "tool_call_id": tc_id, "content": tool_result,
+            })
+
+    else:
+        tool_result = f"Unknown tool: {tool_name}"
+        if tc_id:
+            state["messages"].append({
+                "role": "tool", "tool_call_id": tc_id, "content": tool_result,
+            })
+
+    _atomic_write(msg_path, state)
+    return None
 
 
 @activity.defn(name="summarize_agent")
@@ -1313,6 +1278,67 @@ def _serialize_for_log(
         serialized.append(entry)
 
     result["messages"] = serialized
+    return result
+
+def _atomic_write(path: str, data: dict) -> None:
+    """Write JSON to disk atomically via .tmp → rename."""
+    import json as _json
+    tmp = path + ".tmp"
+    with open(tmp, "w") as f:
+        _json.dump(data, f, default=str)
+    os.replace(tmp, path)
+
+def _serialize_messages(messages: list, agent_dir: str) -> list:
+    """Convert base64 data URIs in messages to agent:// refs.
+    Writes image bytes to agent_dir. Mutates messages in place.
+    Returns the modified messages list.
+    """
+    import base64 as _b64
+    import json as _json
+    agent_path = Path(agent_dir)
+    agent_path.mkdir(parents=True, exist_ok=True)
+    img_counter = [0]
+
+    def _save_image(b64_data: str) -> str:
+        """Save base64 data to agent_dir, return agent:// ref."""
+        img_counter[0] += 1
+        fname = f"tool_{img_counter[0]:03d}.jpg"
+        raw = _b64.b64decode(b64_data)
+        (agent_path / fname).write_bytes(raw)
+        return f"agent://{fname}"
+
+    for m in messages:
+        content = m.get("content")
+        if isinstance(content, list):
+            for part in content:
+                if isinstance(part, dict) and part.get("type") == "image_url":
+                    url = part.get("image_url", {}).get("url", "")
+                    if url.startswith("data:image/jpeg;base64,"):
+                        b64 = url[len("data:image/jpeg;base64,"):]
+                        part["image_url"]["url"] = _save_image(b64)
+    return messages
+
+def _deserialize_messages(messages: list, agent_dir: str) -> list:
+    """Convert agent:// refs in messages to base64 data URIs.
+    Reads image bytes from agent_dir. Does NOT mutate — returns new list.
+    """
+    import base64 as _b64
+    import json as _json
+    agent_path = Path(agent_dir)
+    result = _json.loads(_json.dumps(messages, default=str))
+    for m in result:
+        content = m.get("content")
+        if isinstance(content, list):
+            for part in content:
+                if isinstance(part, dict) and part.get("type") == "image_url":
+                    url = part.get("image_url", {}).get("url", "")
+                    if url.startswith("agent://"):
+                        fname = url[len("agent://"):]
+                        img_path = agent_path / fname
+                        if img_path.exists():
+                            raw = img_path.read_bytes()
+                            b64 = _b64.b64encode(raw).decode("ascii")
+                            part["image_url"]["url"] = f"data:image/jpeg;base64,{b64}"
     return result
 
 
@@ -1453,64 +1479,242 @@ class GenAIWorkflow:
                 retry_policy=_ACTIVITY_RETRY,
             )
 
-            # Step 3: run GenAI (reads frames + snapshot from disk)
-            # Route to model-specific task queue; pick activity based on agentic flag
-            model = input_data.get("model", "gemini/gemini-2.5-flash")
+            # Step 3: initialize agent state on disk (activity — sandboxed in workflow)
             genai_queue = GEMINI_TASK_QUEUE if model.startswith("gemini/") else OLLAMA_TASK_QUEUE
-            if input_data.get("agentic"):
-                genai_activity = run_genai_agent_activity
-            else:
-                genai_activity = run_genai_activity
-            genai_result = await workflow.execute_activity(
-                genai_activity,
-                args=[input_data, frames_dir],
+            init_result = await workflow.execute_activity(
+                init_agent_state_activity,
+                arg={
+                    "event_id": event_id, "camera": camera, "label": label,
+                    "frames_dir": frames_dir, "prompts_path": input_data["prompts_path"],
+                },
                 task_queue=genai_queue,
-                start_to_close_timeout=timedelta(seconds=600),
-                heartbeat_timeout=timedelta(seconds=30),
+                start_to_close_timeout=timedelta(seconds=10),
                 retry_policy=_ACTIVITY_RETRY,
             )
+            msg_path = init_result["msg_path"]
+            max_frames = init_result["max_frames"]
+            proxy_path = init_result["proxy_path"]
 
-            # Agentic path: result is {description, stats}, run summary as separate activity
-            if input_data.get("agentic") and isinstance(genai_result, dict):
-                description = genai_result.get("description")
-                stats = genai_result.get("stats", {})
-                trace_text = stats.get("trace", "")
-                confidence = stats.get("confidence", "")
-                if trace_text:
-                    workflow.set_current_details(trace_text)
-                    # Persist structured trace to memo (visible in "Memo" tab after completion)
-                    workflow.upsert_memo({
-                        "AgentSummary": trace_text,
-                        "AgentTokens": (
-                            f"in={stats['total_cost']['prompt']} "
-                            f"out={stats['total_cost']['completion']} "
-                            f"cached={stats['total_cost'].get('cached', 0)}"
-                        ),
-                        "AgentTurns": (
-                            f"turns={stats['turns']} "
-                            f"low={stats['turns_low']} "
-                            f"high={stats['turns_high']} "
-                            f"max={stats.get('turns_max', 0)} "
-                            f"transcode={stats.get('turns_transcode', 0)}"
-                        ),
-                        "AgentConfidence": confidence or "N/A",
-                    })
-                # Upsert Confidence search attribute
-                if confidence:
-                    workflow.upsert_search_attributes([
-                        SearchAttributePair(_SEARCH_CONFIDENCE, confidence),
-                    ])
-                summary = await workflow.execute_activity(
-                    summarize_agent_activity,
-                    args=[stats],
+            turn_arg = {
+                "msg_path": msg_path,
+                "provider_path": input_data["provider_path"],
+                "model": model,
+                "event_id": event_id,
+                "camera": camera,
+                "label": label,
+            }
+
+            # Accumulators for stats
+            total_cost = {"prompt": 0, "completion": 0, "cached": 0}
+            turns_low = 0
+            turns_high = 0
+            turns_max = 0
+            turns_transcode = 0
+            trace_entries: list[dict] = []
+            description = None
+            confidence = None
+
+            for turn in range(15):
+                result = await workflow.execute_activity(
+                    run_genai_turn_activity,
+                    arg=turn_arg,
                     task_queue=genai_queue,
-                    start_to_close_timeout=timedelta(seconds=30),
+                    start_to_close_timeout=timedelta(seconds=120),
+                    heartbeat_timeout=timedelta(seconds=10),
                     retry_policy=_ACTIVITY_RETRY,
                 )
-                if summary:
-                    description = f"{description}\n\n[{summary}]"
-            else:
-                description = genai_result
+
+                pt = result.get("prompt_tokens", 0)
+                ct = result.get("completion_tokens", 0)
+                cached = result.get("cached_tokens", 0)
+                total_cost["prompt"] += pt
+                total_cost["completion"] += ct
+                total_cost["cached"] += cached
+                trace_entries.append({
+                    "type": "turn", "turn": turn + 1,
+                    "prompt_tokens": pt, "completion_tokens": ct,
+                    "cached": cached > 0,
+                })
+
+                if result.get("description"):
+                    description = result["description"]
+                    confidence = result.get("confidence", "medium")
+                    trace_entries.append({
+                        "type": "tool_call", "name": "set_description",
+                        "confidence": confidence,
+                        "description": description[:200],
+                    })
+                    break
+
+                if result.get("text_only"):
+                    # Text-only response — nudge
+                    await workflow.execute_activity(
+                        save_assistant_message_activity,
+                        arg={"msg_path": msg_path, "assistant_message": result["assistant_message"]},
+                        task_queue=genai_queue,
+                        start_to_close_timeout=timedelta(seconds=10),
+                    )
+                    trace_entries.append({"type": "nudge", "reason": "no_tool_call"})
+                    continue
+
+                # Persist assistant message BEFORE tool results
+                await workflow.execute_activity(
+                    save_assistant_message_activity,
+                    arg={"msg_path": msg_path, "assistant_message": result["assistant_message"]},
+                    task_queue=genai_queue,
+                    start_to_close_timeout=timedelta(seconds=10),
+                )
+
+                for tc in result.get("tool_calls", []):
+                    te = {"type": "tool_call", "name": tc["name"], "args": tc.get("args", {})}
+                    if tc["name"] == "transcode":
+                        frames = await workflow.execute_activity(
+                            transcode_frames_activity,
+                            arg={
+                                "camera": camera, "start_time": start_time,
+                                "end_time": end_time,
+                                "frame_start": tc["args"].get("start", 0),
+                                "frame_end": tc["args"].get("end", tc["args"].get("start", 0)),
+                                "max_frames": max_frames,
+                                "proxy_path": proxy_path,
+                                "event_id": event_id,
+                            },
+                            task_queue=FFMPEG_TASK_QUEUE,
+                            start_to_close_timeout=timedelta(seconds=30),
+                            retry_policy=_ACTIVITY_RETRY,
+                        )
+                        turns_transcode += len(frames)
+                        te["frames_returned"] = len(frames)
+                        await workflow.execute_activity(
+                            save_tool_result_activity,
+                            arg={"msg_path": msg_path, "tool_name": "transcode",
+                                 "args": tc["args"], "frames": frames,
+                                 "event_id": event_id},
+                            task_queue=genai_queue,
+                            start_to_close_timeout=timedelta(seconds=10),
+                        )
+                    elif tc["name"] == "get_frames":
+                        resolution = tc["args"].get("resolution", "low")
+                        if resolution == "low":
+                            turns_low += 1
+                        elif resolution == "high":
+                            turns_high += 1
+                        else:
+                            turns_max += 1
+                        te["resolution"] = resolution
+                        await workflow.execute_activity(
+                            save_tool_result_activity,
+                            arg={"msg_path": msg_path, "tool_name": "get_frames",
+                                 "args": tc["args"], "event_id": event_id},
+                            task_queue=genai_queue,
+                            start_to_close_timeout=timedelta(seconds=10),
+                        )
+                    elif tc["name"] in ("get_snapshot", "compact", "set_description"):
+                        await workflow.execute_activity(
+                            save_tool_result_activity,
+                            arg={"msg_path": msg_path, "tool_name": tc["name"],
+                                 "args": tc["args"], "event_id": event_id},
+                            task_queue=genai_queue,
+                            start_to_close_timeout=timedelta(seconds=10),
+                        )
+                    trace_entries.append(te)
+
+            if not description:
+                description = "Agentic failed: max turns (15) exceeded without set_description"
+                confidence = "low"
+                workflow.logger.warning("Agent: max turns exceeded for %s", event_id)
+
+            # Format trace for UI + memo
+            def _format_trace(entries: list[dict]) -> str:
+                lines = []
+                for e in entries:
+                    if e["type"] == "turn":
+                        prefix = "(cached) " if e.get("cached") else ""
+                        lines.append(
+                            f"Turn {e['turn']}: {e['prompt_tokens']}+{e['completion_tokens']} tokens {prefix}"
+                        )
+                    elif e["type"] == "tool_call":
+                        n = e["name"]
+                        a = e.get("args", {})
+                        fr = e.get("frames_returned", "?")
+                        if n == "get_snapshot":
+                            lines.append("  -> get_snapshot()")
+                        elif n == "get_frames":
+                            lines.append(
+                                f"  -> get_frames({a.get('start')}-{a.get('end')}, {a.get('resolution')}): {fr} frames"
+                            )
+                        elif n == "transcode":
+                            lines.append(f"  -> transcode({a.get('start')}-{a.get('end')}): {fr} frames")
+                        elif n == "compact":
+                            lines.append("  -> compact()")
+                        elif n == "set_description":
+                            lines.append(
+                                f"  -> set_description(confidence={e.get('confidence')}): {e.get('description', '')[:120]}"
+                            )
+                        else:
+                            lines.append(f"  -> {n}()")
+                        if e.get("error"):
+                            lines.append(f"    ERROR: {e['error']}")
+                    elif e["type"] == "nudge":
+                        lines.append(f"  [nudge] {e['reason']}")
+                return "\n".join(lines)
+
+            trace_text = _format_trace(trace_entries)
+            trace_text += (
+                f"\n\nTotal: {turn+1} turns, {turns_low} L/{turns_high} H/{turns_max} M/{turns_transcode} T, "
+                f"{total_cost['prompt']}+{total_cost['completion']} tokens"
+            )
+
+            workflow.set_current_details(trace_text)
+            workflow.upsert_memo({
+                "AgentSummary": trace_text,
+                "AgentTokens": (
+                    f"in={total_cost['prompt']} "
+                    f"out={total_cost['completion']} "
+                    f"cached={total_cost.get('cached', 0)}"
+                ),
+                "AgentTurns": (
+                    f"turns={turn+1} "
+                    f"low={turns_low} "
+                    f"high={turns_high} "
+                    f"max={turns_max} "
+                    f"transcode={turns_transcode}"
+                ),
+                "AgentConfidence": confidence or "N/A",
+            })
+            if confidence:
+                workflow.upsert_search_attributes([
+                    SearchAttributePair(_SEARCH_CONFIDENCE, confidence),
+                ])
+
+            # Persist agent logs (fire-and-forget activity)
+            trace_header = f"Event: {event_id}  Camera: {camera}  Label: {label}  Model: {model}\n"
+            trace_header += f"Frames available: {max_frames}  Snapshot: yes\n"
+            trace_header += f"Confidence: {confidence or 'N/A'}\n\n"
+            await workflow.execute_activity(
+                save_agent_log_activity,
+                arg={"event_id": event_id, "trace_text": trace_header + trace_text},
+                task_queue=genai_queue,
+                start_to_close_timeout=timedelta(seconds=10),
+            )
+
+            stats = {
+                "event_id": event_id, "camera": camera, "label": label, "model": model,
+                "provider_path": input_data["provider_path"],
+                "turns": turn + 1, "turns_low": turns_low, "turns_high": turns_high,
+                "turns_max": turns_max, "turns_transcode": turns_transcode,
+                "total_cost": total_cost, "confidence": confidence,
+                "trace": trace_header + trace_text,
+            }
+            summary = await workflow.execute_activity(
+                summarize_agent_activity,
+                args=[stats],
+                task_queue=genai_queue,
+                start_to_close_timeout=timedelta(seconds=30),
+                retry_policy=_ACTIVITY_RETRY,
+            )
+            if summary:
+                description = f"{description}\n\n[{summary}]"
 
             # Step 4: final result
             if not description:
@@ -1736,24 +1940,30 @@ async def async_main(prompts_path: str, provider_path: str) -> None:
     ffmpeg_worker = Worker(
         _temporal_client,
         task_queue=FFMPEG_TASK_QUEUE,
-        activities=[transcode_into_parts_activity],
+        activities=[transcode_into_parts_activity, transcode_frames_activity],
         max_concurrent_activities=int(os.environ.get("TEMPORAL_MAX_FFMPEG", "3")),
     )
 
-    # Gemini GenAI worker: handles both run_genai + run_genai_agent for gemini models
+    # Gemini GenAI worker: handles turn + tool result activities for gemini models
     gemini_worker = Worker(
         _temporal_client,
         task_queue=GEMINI_TASK_QUEUE,
-        activities=[run_genai_activity, run_genai_agent_activity, summarize_agent_activity],
+        activities=[run_genai_activity, run_genai_turn_activity,
+                    init_agent_state_activity, save_assistant_message_activity,
+                    save_tool_result_activity, save_agent_log_activity,
+                    summarize_agent_activity],
         max_concurrent_activities=int(os.environ.get("TEMPORAL_MAX_GEMINI_GENAI", "5")),
     )
 
-    # Ollama GenAI worker: handles both run_genai + run_genai_agent for ollama models
+    # Ollama GenAI worker: handles turn + tool result activities for ollama models
     # Max 1 concurrent — Ollama cannot parallelize vision inference
     ollama_worker = Worker(
         _temporal_client,
         task_queue=OLLAMA_TASK_QUEUE,
-        activities=[run_genai_activity, run_genai_agent_activity, summarize_agent_activity],
+        activities=[run_genai_activity, run_genai_turn_activity,
+                    init_agent_state_activity, save_assistant_message_activity,
+                    save_tool_result_activity, save_agent_log_activity,
+                    summarize_agent_activity],
         max_concurrent_activities=int(os.environ.get("TEMPORAL_MAX_OLLAMA_GENAI", "1")),
     )
 
