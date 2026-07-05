@@ -1941,7 +1941,7 @@ async def async_main(prompts_path: str, provider_path: str) -> None:
         _temporal_client,
         task_queue=FFMPEG_TASK_QUEUE,
         activities=[transcode_into_parts_activity, transcode_frames_activity],
-        max_concurrent_activities=int(os.environ.get("TEMPORAL_MAX_FFMPEG", "3")),
+        max_concurrent_activities=int(os.environ.get("TEMPORAL_MAX_FFMPEG", "1")),
     )
 
     # Gemini GenAI worker: handles turn + tool result activities for gemini models
