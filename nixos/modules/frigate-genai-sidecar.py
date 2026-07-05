@@ -733,6 +733,7 @@ async def transcode_into_parts_activity(input_data: dict) -> tuple[str, int]:
     frames_dir = FRAMES_DIR / event_id
     frames_dir_str = str(frames_dir)
     proxy_path = str(frames_dir / "proxy.mp4")
+    frames_dir.mkdir(parents=True, exist_ok=True)
     log.info(
         "Activity transcode_into_parts: event=%s camera=%s duration=%.1fs max_frames=%d dir=%s",
         event_id, camera, duration, max_frames, frames_dir,
@@ -746,7 +747,6 @@ async def transcode_into_parts_activity(input_data: dict) -> tuple[str, int]:
             f"Recording not ready for {event_id}", non_retryable=False,
         )
 
-    frames_dir.mkdir(parents=True, exist_ok=True)
     for i, frame_bytes in enumerate(frames):
         (frames_dir / f"frame_{i:03d}.jpg").write_bytes(frame_bytes)
 
@@ -1510,7 +1510,7 @@ class GenAIWorkflow:
                     "event_id": event_id, "camera": camera, "label": label,
                     "frames_dir": frames_dir, "prompts_path": input_data["prompts_path"],
                 },
-                task_queue=genai_queue,
+                task_queue=TASK_QUEUE,
                 start_to_close_timeout=timedelta(seconds=10),
                 retry_policy=_ACTIVITY_RETRY,
             )
@@ -1971,6 +1971,7 @@ async def async_main(prompts_path: str, provider_path: str) -> None:
             update_description_activity,
             fetch_snapshot_activity,
             cleanup_cancelled_activity,
+            init_agent_state_activity,
         ],
     )
 
@@ -1987,7 +1988,7 @@ async def async_main(prompts_path: str, provider_path: str) -> None:
         _temporal_client,
         task_queue=GEMINI_TASK_QUEUE,
         activities=[run_genai_activity, run_genai_turn_activity,
-                    init_agent_state_activity, save_assistant_message_activity,
+                    save_assistant_message_activity,
                     save_tool_result_activity, save_agent_log_activity,
                     summarize_agent_activity],
         max_concurrent_activities=int(os.environ.get("TEMPORAL_MAX_GEMINI_GENAI", "5")),
@@ -1999,7 +2000,7 @@ async def async_main(prompts_path: str, provider_path: str) -> None:
         _temporal_client,
         task_queue=OLLAMA_TASK_QUEUE,
         activities=[run_genai_activity, run_genai_turn_activity,
-                    init_agent_state_activity, save_assistant_message_activity,
+                    save_assistant_message_activity,
                     save_tool_result_activity, save_agent_log_activity,
                     summarize_agent_activity],
         max_concurrent_activities=int(os.environ.get("TEMPORAL_MAX_OLLAMA_GENAI", "1")),
