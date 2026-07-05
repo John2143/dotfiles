@@ -298,18 +298,14 @@ def transcode_into_parts(
             log.info("Producing proxy MP4 at %s", proxy_path)
         try:
             result = subprocess.run(
-                cmd, check=True, timeout=90, capture_output=True, text=True,
+                cmd, check=True, capture_output=True, text=True,
             )
         except subprocess.CalledProcessError as e:
             stderr = (e.stderr or "").strip()
-            # 404 is expected when recording isn't ready — the activity retries
             if "404 Not Found" in stderr or "Connection refused" in stderr:
                 log.debug("ffmpeg: recording not ready for %s", hls_url)
             else:
                 log.error("ffmpeg failed: %s", stderr)
-            return []
-        except subprocess.TimeoutExpired:
-            log.error("ffmpeg timed out extracting frames")
             return []
 
         frames = []
@@ -1191,7 +1187,7 @@ async def summarize_agent_activity(stats: dict) -> str | None:
         log.error("API key not found in env var %s", provider_cfg.get("api_key_env"))
         raise RuntimeError("API key not configured")
     base_url = provider_cfg.get("base_url", os.environ.get("OPENAI_BASE_URL", ""))
-    client = OpenAI(api_key=api_key, base_url=base_url, timeout=120.0)
+    client = OpenAI(api_key=api_key, base_url=base_url, timeout=30.0)
 
     prompt = (
         f"Answer in one sentence: model {model}, "
@@ -1474,7 +1470,7 @@ class GenAIWorkflow:
                         transcode_into_parts_activity,
                         input_data,
                         task_queue=FFMPEG_TASK_QUEUE,
-                        start_to_close_timeout=timedelta(seconds=60),
+                        start_to_close_timeout=timedelta(hours=1),
                         heartbeat_timeout=timedelta(seconds=10),
                         retry_policy=_EXTRACT_RETRY,
                     ),
@@ -1735,7 +1731,7 @@ class GenAIWorkflow:
                 summarize_agent_activity,
                 args=[stats],
                 task_queue=genai_queue,
-                start_to_close_timeout=timedelta(seconds=30),
+                start_to_close_timeout=timedelta(seconds=120),
                 retry_policy=_ACTIVITY_RETRY,
             )
             if summary:
