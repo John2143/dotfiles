@@ -61,6 +61,7 @@ _SEARCH_DURATION = SearchAttributeKey.for_int("Duration")
 _SEARCH_COST = SearchAttributeKey.for_int("Cost")
 _SEARCH_MODEL = SearchAttributeKey.for_keyword("Model")
 _SEARCH_CONFIDENCE = SearchAttributeKey.for_keyword("Confidence")
+_SEARCH_TRANSCODE = SearchAttributeKey.for_bool("Transcode")
 _stats: dict = {
     "events_processed": 0,
     "model_counts": {},
@@ -1708,6 +1709,9 @@ class GenAIWorkflow:
                 workflow.upsert_search_attributes([
                     SearchAttributePair(_SEARCH_CONFIDENCE, confidence),
                 ])
+            workflow.upsert_search_attributes([
+                SearchAttributePair(_SEARCH_TRANSCODE, turns_transcode > 0),
+            ])
 
             # Persist agent logs (fire-and-forget activity)
             trace_header = f"Event: {event_id}  Camera: {camera}  Label: {label}  Model: {model}\n"
@@ -1950,6 +1954,7 @@ async def async_main(prompts_path: str, provider_path: str) -> None:
                     "Cost": IndexedValueType.INDEXED_VALUE_TYPE_INT,
                     "Model": IndexedValueType.INDEXED_VALUE_TYPE_KEYWORD,
                     "Confidence": IndexedValueType.INDEXED_VALUE_TYPE_KEYWORD,
+                    "Transcode": IndexedValueType.INDEXED_VALUE_TYPE_BOOL,
                 },
                 namespace="default",
             ),
