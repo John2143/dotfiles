@@ -784,7 +784,7 @@ in {
       MQTT_PASSWORD = mqttPass;
       HTTP_HOST = "0.0.0.0";
       TEMPORAL_ADDRESS = "192.168.5.10:32682";
-      TEMPORAL_MAX_FFMPEG = "3";
+      TEMPORAL_MAX_FFMPEG = "2";
       TEMPORAL_MAX_GEMINI_GENAI = "5";
       TEMPORAL_MAX_OLLAMA_GENAI = "1";
     };
@@ -794,10 +794,12 @@ in {
       Restart = "on-failure";
       RestartSec = 10;
       StateDirectory = "frigate-genai-sidecar";
-      EnvironmentFile = config.age.secrets.frigate-plus.path;
+      EnvironmentFile = [
+        config.age.secrets.frigate-plus.path
+        "-/var/lib/frigate-genai-sidecar/runtime.env"
+      ];
       User = "root";
       Group = "root";
-    };
   };
 
   # ── GenAI frame cleanup: frames 30min, logs 24h ─────────────────
