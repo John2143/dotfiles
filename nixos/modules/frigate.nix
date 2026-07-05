@@ -264,8 +264,9 @@
     # Main: 2560x1920 H264 25fps  Sub: 640x480 H264 10fps
     cam05 = {
       name = "Camera 5";
-      channel = "05"; stream = "sub"; codec = "h264";
-      detectWidth = 2560; detectHeight = 1920;
+      lprQuality = true;                              # dual-stream: sub=detect, main=record
+      channel = "05"; codec = "h264";
+      detectWidth = 640; detectHeight = 480;          # match sub native res
       audioEnabled = true;
       motionMask = [
         "0.607,0.339,0.592,0.32,0.563,0.325,0.532,0.331,0.517,0.34,0.489,0.362,0.477,0.387,0.472,0.44,0.483,0.476,0.503,0.506,0.53,0.519,0.576,0.518,0.604,0.509,0.616,0.485,0.625,0.462,0.627,0.431,0.614,0.375"
