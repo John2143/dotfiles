@@ -800,6 +800,7 @@ in {
       ];
       User = "root";
       Group = "root";
+    };
   };
 
   # ── GenAI frame cleanup: frames 30min, logs 24h ─────────────────
