@@ -1021,14 +1021,15 @@ async def init_agent_state_activity(init_arg: dict) -> dict:
     agent_dir.mkdir(parents=True, exist_ok=True)
     msg_path = str(agent_dir / "messages.json")
 
-    # Seed with a real tool cycle: assistant calls show_frame → snapshot image as result
+    # Seed with a completed tool cycle. Bridge user message satisfies Gemini's
+    # requirement that function calls come after a user or function response turn.
     snapshot_path = Path(frames_dir) / "snapshot.jpg"
     if snapshot_path.exists():
-        # Save snapshot as display_001.jpg (consistent with show_frame handler naming)
-        display_name = f"display_001.jpg"
+        display_name = "display_001.jpg"
         (agent_dir / display_name).write_bytes(snapshot_path.read_bytes())
         init_messages = [
             {"role": "system", "content": system_prompt},
+            {"role": "user", "content": "A new detection was recorded. Inspect the snapshot."},
             {"role": "assistant", "content": None, "tool_calls": [
                 {"id": "seed_snap", "type": "function", "function": {
                     "name": "show_frame", "arguments": '{"source": "snapshot://"}',

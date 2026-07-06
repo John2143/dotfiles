@@ -105,6 +105,9 @@ in
 
       upsmon = {
         enable = true;
+        settings = {
+          NOTIFYFLAGS = "EXEC";
+        };
         monitor.main = {
           system = "main@localhost";
           user = "monitor";
@@ -144,10 +147,8 @@ in
         ''}
         PIPEFN /run/nut/upssched.pipe
         LOCKFN /run/nut/upssched.lock
-        AT ONBATT * START-TIMER onbattery 6
-        AT ONLINE * CANCEL-TIMER onbattery
-        AT ONLINE * EXECUTE online
         AT ONBATT * EXECUTE onbattery
+        AT ONLINE * EXECUTE online
         AT LOWBATT * EXECUTE lowbattery
       '')}";
     };
