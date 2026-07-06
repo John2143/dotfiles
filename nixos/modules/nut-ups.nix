@@ -44,15 +44,16 @@ let
   '';
 
   k3sDrain = lib.optionalString cfg.k3sDrain ''
-    ${pkgs.k3s}/bin/k3s kubectl drain ${compName} --ignore-daemonsets --delete-emptydir-data --grace-period=90 --timeout=150s 2>/dev/null || true
+    sudo ${pkgs.k3s}/bin/k3s kubectl drain ${compName} --ignore-daemonsets --delete-emptydir-data --grace-period=90 --timeout=150s 2>/dev/null || true
   '';
 
-  extraCmds = lib.concatMapStringsSep "\n" (cmd: "    ${cmd} || true") cfg.extraShutdownCommands;
+  extraCmds = lib.concatMapStringsSep "\n" (cmd: "    sudo ${cmd} || true") cfg.extraShutdownCommands;
 
   lowbatteryWall = lib.optionalString cfg.k3sDrain ''
-      ${pkgs.util-linux}/bin/wall "UPS battery critical — draining k3s node and shutting down NOW" || true'';
+      sudo ${pkgs.util-linux}/bin/wall "UPS battery critical — draining k3s node and shutting down NOW" || true'';
+
   lowbatteryWallSimple = lib.optionalString (!cfg.k3sDrain) ''
-      ${pkgs.util-linux}/bin/wall "UPS battery critical — shutting down NOW" || true'';
+      sudo ${pkgs.util-linux}/bin/wall "UPS battery critical — shutting down NOW" || true'';
 in
 {
   options.custom.nut-ups = {
@@ -83,7 +84,19 @@ in
     age.secrets.hass-webhooks = lib.mkIf cfg.haWebhooks {
       file = ../../secrets/hass-webhooks.age;
       owner = "root";
+      mode = "0444";
     };
+
+    users.users.nutmon.extraGroups = lib.mkIf (cfg.haWebhooks || cfg.desktopNotifications || cfg.k3sDrain) [ "tty" ];
+
+    # nutmon runs the event handler via upsmon's NOTIFYCMD. wall, k3s drain,
+    # and systemctl poweroff all need root — grant passwordless sudo.
+    security.sudo.extraRules = lib.mkIf cfg.enable [
+      {
+        users = ["nutmon"];
+        commands = [{ command = "ALL"; options = ["NOPASSWD"]; }];
+      }
+    ];
 
     power.ups = {
       enable = true;
@@ -122,12 +135,12 @@ in
           event_type="$1"
           case "$event_type" in
             onbattery)
-              ${pkgs.util-linux}/bin/wall "UPS on battery — ${compName} shutting down when critical" || true
+              sudo ${pkgs.util-linux}/bin/wall "UPS on battery — ${compName} shutting down when critical" || true
   ${onbatteryNotify}
   ${haOnbattery}
               ;;
             online)
-              ${pkgs.util-linux}/bin/wall "UPS power restored on ${compName}" || true
+              sudo ${pkgs.util-linux}/bin/wall "UPS power restored on ${compName}" || true
   ${onlineNotify}
   ${haOffbattery}
               ;;
@@ -138,7 +151,7 @@ in
   ${k3sDrain}
   ${extraCmds}
               sleep 5
-              ${pkgs.systemd}/bin/systemctl poweroff ${cfg.poweroffArgs}
+              sudo ${pkgs.systemd}/bin/systemctl poweroff ${cfg.poweroffArgs}
               ;;
             *)
               logger -t nut-event-handler "Unknown event: $event_type"
