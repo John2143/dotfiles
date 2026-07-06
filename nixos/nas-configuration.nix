@@ -114,6 +114,7 @@
     ./nas-hardware-configuration.nix
     ./modules/user-john.nix
     ./modules/disko_nas.nix
+    ./modules/nut-ups.nix
   ];
   fileSystems."/".neededForBoot = lib.mkForce true;
   home-manager.users."john" = import ./home-cli.nix;
@@ -446,89 +447,16 @@
     };
   };
 
-  # ── NUT UPS monitoring (Goldenmate LiFePO4) ───────────────────────
-  # Replaces services.apcupsd. USB-connected Goldenmate uses usbhid-ups.
-  # NUT v2.8.5+ has native support via idowell-hid subdriver.
-  # Events: upsmon → upssched → nut-event-handler shell script.
-  age.secrets.hass-webhooks = {
-    file = ../secrets/hass-webhooks.age;
-    owner = "root";
-  };
-  age.secrets.nut-ups-password = {
-    file = ../secrets/nut-ups-password.age;
-    owner = "nutmon";
-    group = "nutmon";
-    mode = "0400";
-  };
-
-  power.ups = {
+  # ── NUT UPS monitoring ────────────────────────────────────────────
+  # power.ups handles usbhid-ups auto-detect, webhooks, and k3s drain.
+  # See modules/nut-ups.nix for the shared config.
+  custom.nut-ups = {
     enable = true;
-    mode = "standalone";
-    maxStartDelay = 15;
-
-    ups.main = {
-      driver = "usbhid-ups";
-      port = "auto";
-      description = "USB UPS (auto-detect)";
-    };
-
-    users.monitor = {
-      passwordFile = config.age.secrets.nut-ups-password.path;
-      actions = [ "SET" "FSD" ];
-      instcmds = [ "ALL" ];
-      upsmon = "primary";
-    };
-
-    upsmon = {
-      enable = true;
-      monitor.main = {
-        system = "main@localhost";
-        user = "monitor";
-        powerValue = 1;
-        type = "master";
-      };
-    };
-
-    schedulerRules = pkgs.writeText "upssched.conf" (''
-      CMDSCRIPT ${pkgs.writeShellScript "nut-event-handler" ''
-        set -a; source /run/agenix/hass-webhooks; set +a
-        event_type="$1"
-        case "$event_type" in
-          onbattery)
-            ${pkgs.util-linux}/bin/wall "UPS on battery — NAS shutting down when critical"
-            ${pkgs.curl}/bin/curl -s -X POST "$NAS_ONBATTERY_URL" || true
-            ;;
-          online)
-            ${pkgs.util-linux}/bin/wall "UPS power restored on NAS"
-            ${pkgs.curl}/bin/curl -s -X POST "$NAS_OFFBATTERY_URL" || true
-            ;;
-          lowbattery)
-            ${pkgs.util-linux}/bin/wall "UPS battery critical — draining k3s node, stopping atticd, and shutting down NOW"
-            # Drain k3s node so Longhorn promotes replicas elsewhere
-            ${pkgs.k3s}/bin/k3s kubectl drain ${compName} --ignore-daemonsets --delete-emptydir-data --grace-period=90 --timeout=150s 2>/dev/null || true
-            # Graceful atticd stop — SIGTERM gives SQLite time to checkpoint WAL
-            ${pkgs.systemd}/bin/systemctl stop atticd || true
-            sleep 5
-            # No -f — systemd runs orderly shutdown, giving all services TimeoutStopSec
-            ${pkgs.systemd}/bin/systemctl poweroff
-            ;;
-          *)
-            logger -t nut-event-handler "Unknown event: $event_type"
-            ;;
-        esac
-      ''}
-      PIPEFN /run/nut/upssched.pipe
-      LOCKFN /run/nut/upssched.lock
-      # 6s delay before firing onbattery (matches old ONBATTERYDELAY).
-      # Cancelled if power returns. Then fire onbattery immediately
-      # (timer already expired, explicit AT catches edge cases).
-      AT ONBATT * START-TIMER onbattery 6
-      AT ONLINE * CANCEL-TIMER onbattery
-      AT ONLINE * EXECUTE online
-      AT ONBATT * EXECUTE onbattery
-      AT LOWBATT * EXECUTE lowbattery
-    '');
+    haWebhooks = true;
+    k3sDrain = true;
+    extraShutdownCommands = ["systemctl stop atticd"];
   };
+
   # ====================
   # === Attic Cache ===
   # ====================
