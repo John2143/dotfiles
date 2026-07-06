@@ -162,6 +162,11 @@ in {
   #   NAS_ONBATTERY_URL=http://192.168.5.XX:8123/api/webhook/ups_nas_lost_power
   #   NAS_OFFBATTERY_URL=http://192.168.5.XX:8123/api/webhook/ups_nas_power_returned
   "hass-webhooks.age".publicKeys = [closet nas office arch];
+  # NUT UPS monitor user password — decryptable by every machine with power.ups enabled.
+  # The monitor user authenticates upsmon to upsd (localhost in standalone mode).
+  # Create: echo -n "nut-monitor-2143nas" | agenix -e nut-ups-password.age -i ~/.ssh/age
+  # Then add the .age file to git and list the decrypting hosts below.
+  "nut-ups-password.age".publicKeys = [closet nas office arch];
   "reolink-nvr.age".publicKeys = [office arch closet];
 
   "frigate-plus.age".publicKeys = [arch];
