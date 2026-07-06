@@ -151,6 +151,11 @@ in
         enable = true;
         settings = {
           NOTIFYCMD = "${nutEventHandler}";
+          NOTIFYFLAG = [
+            [ "ONBATT" "SYSLOG+WALL+EXEC" ]
+            [ "ONLINE" "SYSLOG+WALL+EXEC" ]
+            [ "LOWBATT" "SYSLOG+WALL+EXEC" ]
+          ];
         };
         monitor.main = {
           system = "main@localhost";

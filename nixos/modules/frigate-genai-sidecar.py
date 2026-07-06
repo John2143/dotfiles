@@ -46,6 +46,8 @@ from temporalio.api.operatorservice.v1 import AddSearchAttributesRequest
 
 log = logging.getLogger("frigate-genai-sidecar")
 
+MAX_TURNS = 100
+
 # ── constants ───────────────────────────────────────────────────────
 
 TASK_QUEUE = "genai-tasks"
@@ -881,6 +883,19 @@ async def run_genai_turn_activity(turn_arg: dict) -> dict:
     agent_dir = state["agent_dir"]
     messages = state["messages"]
 
+    # Turn-limit warnings: at 25 remaining, and urgency in nudge within 10
+    turn_num = turn_arg.get("turn_num", 1)
+    max_turns = turn_arg.get("max_turns", 100)
+    if turn_num == max_turns - 25:
+        messages.append({
+            "role": "user",
+            "content": (
+                f"Turn {turn_num} of {max_turns}. "
+                f"25 turns remaining. Start concluding — call set_description() soon."
+            ),
+        })
+        _atomic_write(msg_path, state)
+
     # Deserialize [[filename]] refs → base64 data URIs for LLM call
     messages_with_images = _deserialize_messages(messages, agent_dir)
 
@@ -938,15 +953,36 @@ async def run_genai_turn_activity(turn_arg: dict) -> dict:
         "cached_tokens": cached_tok,
     }
 
-    # Text-only response → nudge
+    # Text-only response → persist it, then demand a function call
     if not msg.tool_calls:
-        result["assistant_message"] = msg.model_dump(exclude_none=True)
+        assistant_msg = msg.model_dump(exclude_none=True)
+        result["assistant_message"] = assistant_msg
         result["text_only"] = True
+        state["messages"].append(assistant_msg)
+        remaining = max_turns - turn_num
+        if remaining <= 10:
+            urgency = f"Only {remaining} turns remaining! "
+        else:
+            urgency = ""
+        state["messages"].append({
+            "role": "user",
+            "content": (
+                f"{urgency}You must call a function. You cannot output plain text. "
+                "Use show_frame(), crop(), transcode(), compact(), or set_description(). "
+                "Do not describe what you see — use tools to investigate, then "
+                "call set_description() with your final analysis."
+            ),
+        })
+        _atomic_write(msg_path, state)
         return result
 
     assistant_msg = msg.model_dump(exclude_none=True)
     result["assistant_message"] = assistant_msg
 
+    # Persist assistant message so tool activities can find their tc_id
+    state["messages"].append(assistant_msg)
+    _atomic_write(msg_path, state)
+    log.debug("run_genai_turn: appended assistant message (tool_calls=%d)", len(msg.tool_calls))
     # Parse tool calls
     tool_calls = []
     for tc in msg.tool_calls:
@@ -1082,20 +1118,6 @@ async def save_agent_log_activity(log_arg: dict) -> None:
 # TOOL_REGISTRY (defined after these) maps tool_name → (activity_fn, task_queue).
 
 
-@activity.defn(name="save_assistant_message")
-async def save_assistant_message_activity(save_arg: dict) -> None:
-    """Persist assistant message (tool_calls) to messages.json BEFORE tool results."""
-    import json as _json
-    msg_path = save_arg["msg_path"]
-    assistant_message = save_arg["assistant_message"]
-
-    with open(msg_path) as f:
-        state = _json.load(f)
-
-    state["messages"].append(assistant_message)
-
-    _atomic_write(msg_path, state)
-    log.debug("save_assistant_message: appended assistant message to %s", msg_path)
 
 @activity.defn(name="tool_get_snapshot")
 async def tool_get_snapshot_activity(arg: dict) -> None:
@@ -1847,7 +1869,9 @@ class GenAIWorkflow:
             description = None
             confidence = None
 
-            for turn in range(15):
+            for turn in range(MAX_TURNS):
+                turn_arg["turn_num"] = turn + 1
+                turn_arg["max_turns"] = MAX_TURNS
                 result = await workflow.execute_activity(
                     run_genai_turn_activity,
                     arg=turn_arg,
@@ -1881,22 +1905,9 @@ class GenAIWorkflow:
 
                 if result.get("text_only"):
                     # Text-only response — nudge
-                    await workflow.execute_activity(
-                        save_assistant_message_activity,
-                        arg={"msg_path": msg_path, "assistant_message": result["assistant_message"]},
-                        task_queue=genai_queue,
-                        start_to_close_timeout=timedelta(seconds=30),
-                    )
                     trace_entries.append({"type": "nudge", "reason": "no_tool_call"})
                     continue
 
-                # Persist assistant message BEFORE tool results
-                await workflow.execute_activity(
-                    save_assistant_message_activity,
-                    arg={"msg_path": msg_path, "assistant_message": result["assistant_message"]},
-                    task_queue=genai_queue,
-                    start_to_close_timeout=timedelta(seconds=30),
-                )
 
                 for tc in result.get("tool_calls", []):
                     te = {"type": "tool_call", "name": tc["name"], "args": tc.get("args", {})}
@@ -1934,7 +1945,7 @@ class GenAIWorkflow:
                     trace_entries.append(te)
 
             if not description:
-                description = "Agentic failed: max turns (15) exceeded without set_description"
+                description = f"Agentic failed: max turns ({MAX_TURNS}) exceeded without set_description"
                 confidence = "low"
                 workflow.logger.warning("Agent: max turns exceeded for %s", event_id)
 
@@ -2281,7 +2292,6 @@ async def async_main(prompts_path: str, provider_path: str) -> None:
         _temporal_client,
         task_queue=GEMINI_TASK_QUEUE,
         activities=[run_genai_activity, run_genai_turn_activity,
-                    save_assistant_message_activity,
                     tool_get_snapshot_activity, tool_show_frame_activity,
                     tool_crop_activity, tool_compact_activity,
                     tool_set_description_activity, summarize_agent_activity,
@@ -2295,7 +2305,6 @@ async def async_main(prompts_path: str, provider_path: str) -> None:
         _temporal_client,
         task_queue=OLLAMA_TASK_QUEUE,
         activities=[run_genai_activity, run_genai_turn_activity,
-                    save_assistant_message_activity,
                     tool_get_snapshot_activity, tool_show_frame_activity,
                     tool_crop_activity, tool_compact_activity,
                     tool_set_description_activity, summarize_agent_activity,

@@ -149,6 +149,7 @@
     amdgpu_top # gpu stats
     kicad # PCB Hardware Layout
     blender
+    openscad # parametric 3D CAD
     #wine-wayland # wine
   ];
 
