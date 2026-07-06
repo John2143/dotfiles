@@ -186,41 +186,85 @@
     { from = 30000; to = 32767; } # Kubernetes NodePort range
   ];
 
-  # ── APC UPS monitoring ────────────────────────────────────────────
-  # Gracefully shuts down at low battery. Fires HA webhooks on power events.
+  # ── NUT UPS monitoring (Goldenmate LiFePO4) ───────────────────────
+  # Replaces services.apcupsd. USB-connected Goldenmate uses usbhid-ups.
+  # NUT v2.8.5+ has native support via idowell-hid subdriver.
   age.secrets.hass-webhooks = {
     file = ../secrets/hass-webhooks.age;
     owner = "root";
   };
-  services.apcupsd = {
+  age.secrets.nut-ups-password = {
+    file = ../secrets/nut-ups-password.age;
+    owner = "nutmon";
+    group = "nutmon";
+    mode = "0400";
+  };
+
+  power.ups = {
     enable = true;
-    configText = ''
-      UPSCABLE usb
-      UPSTYPE usb
-      DEVICE
-      ONBATTERYDELAY 6
-      BATTERYLEVEL 50
-      MINUTES 5
-    '';
-    hooks = {
-      onbattery = ''
-        set -a; source /run/agenix/hass-webhooks; set +a
-        ${pkgs.curl}/bin/curl -s -X POST "$CLOSET_ONBATTERY_URL"
-        ${pkgs.util-linux}/bin/wall 'UPS on battery — shutting down when critical'
-      '';
-      offbattery = ''
-        set -a; source /run/agenix/hass-webhooks; set +a
-        ${pkgs.curl}/bin/curl -s -X POST "$CLOSET_OFFBATTERY_URL"
-        ${pkgs.util-linux}/bin/wall 'UPS power restored'
-      '';
-      doshutdown = ''
-        ${pkgs.util-linux}/bin/wall 'UPS battery critical — draining k3s node and shutting down NOW'
-        # Drain this k3s node before poweroff — gives Longhorn time to
-        # promote replicas and avoids the 5-minute iSCSI timeout delay.
-        ${pkgs.k3s}/bin/k3s kubectl drain ${compName} --ignore-daemonsets --delete-emptydir-data --grace-period=90 --timeout=150s 2>/dev/null || true
-        ${pkgs.systemd}/bin/systemctl poweroff -f
-      '';
+    mode = "standalone";
+    maxStartDelay = 15;
+
+    ups.goldenmate = {
+      driver = "usbhid-ups";
+      port = "auto";
+      description = "Goldenmate LiFePO4 1500VA UPS";
+      directives = [
+        "vendorid = 075D"
+        "productid = 0300"
+      ];
     };
+
+    users.monitor = {
+      passwordFile = config.age.secrets.nut-ups-password.path;
+      actions = [ "SET" "FSD" ];
+      instcmds = [ "ALL" ];
+      upsmon = "primary";
+    };
+
+    upsmon = {
+      enable = true;
+      monitor.goldenmate = {
+        system = "goldenmate@localhost";
+        user = "monitor";
+        powerValue = 1;
+        type = "master";
+      };
+    };
+
+    schedulerRules = pkgs.writeText "upssched.conf" (''
+      CMDSCRIPT ${pkgs.writeShellScript "nut-event-handler" ''
+        set -a; source /run/agenix/hass-webhooks; set +a
+        event_type="$1"
+        case "$event_type" in
+          onbattery)
+            ${pkgs.util-linux}/bin/wall "UPS on battery — shutting down when critical"
+            ${pkgs.curl}/bin/curl -s -X POST "$CLOSET_ONBATTERY_URL" || true
+            ;;
+          online)
+            ${pkgs.util-linux}/bin/wall "UPS power restored"
+            ${pkgs.curl}/bin/curl -s -X POST "$CLOSET_OFFBATTERY_URL" || true
+            ;;
+          lowbattery)
+            ${pkgs.util-linux}/bin/wall "UPS battery critical — draining k3s node and shutting down NOW"
+            # Drain this k3s node before poweroff — gives Longhorn time to
+            # promote replicas and avoids the 5-minute iSCSI timeout delay.
+            ${pkgs.k3s}/bin/k3s kubectl drain ${compName} --ignore-daemonsets --delete-emptydir-data --grace-period=90 --timeout=150s 2>/dev/null || true
+            ${pkgs.systemd}/bin/systemctl poweroff -f
+            ;;
+          *)
+            logger -t nut-event-handler "Unknown event: $event_type"
+            ;;
+        esac
+      ''}
+      PIPEFN /run/nut/upssched.pipe
+      LOCKFN /run/nut/upssched.lock
+      AT ONBATT * START-TIMER onbattery 6
+      AT ONLINE * CANCEL-TIMER onbattery
+      AT ONLINE * EXECUTE online
+      AT ONBATT * EXECUTE onbattery
+      AT LOWBATT * EXECUTE lowbattery
+    '');
   };
   # Do NOT change this value unless you have manually inspected all the changes it would make to your configuration,
   # and migrated your data accordingly.
