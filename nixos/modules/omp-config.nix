@@ -342,6 +342,28 @@ in
               cost: { input: 0.10, output: 0.40, cacheRead: 0.0025, cacheWrite: 0 }
               contextWindow: 1000000
               maxTokens: 8192
+
+            # Yunwu Claude Fable 5 — official tier
+            - id: yunwu/official/claude-fable-5
+              name: Claude Fable 5 (Yunwu Official)
+              reasoning: true
+              input: [text]
+              cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }
+              contextWindow: 200000
+              maxTokens: 65536
+              compat:
+                supportsToolChoice: true
+
+            # Yunwu Claude Fable 5 — fast tier
+            - id: yunwu/fast/claude-fable-5
+              name: Claude Fable 5 (Yunwu Fast)
+              reasoning: true
+              input: [text]
+              cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }
+              contextWindow: 200000
+              maxTokens: 65536
+              compat:
+                supportsToolChoice: true
     '';
 
     ".omp/agent/config.yml".text = ''

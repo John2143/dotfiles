@@ -54,6 +54,37 @@ let
 
   lowbatteryWallSimple = lib.optionalString (!cfg.k3sDrain) ''
       sudo ${pkgs.util-linux}/bin/wall "UPS battery critical — shutting down NOW" || true'';
+
+  # Full event handler script — called directly by upsmon's NOTIFYCMD.
+  # Receives the NOTIFYTYPE as $1 (ONBATT, ONLINE, LOWBATT, etc.).
+  nutEventHandler = pkgs.writeShellScript "nut-event-handler" ''
+    ${haSource}
+    event_type="$1"
+    case "$event_type" in
+      ONBATT)
+        sudo ${pkgs.util-linux}/bin/wall "UPS on battery — ${compName} shutting down when critical" || true
+        ${onbatteryNotify}
+        ${haOnbattery}
+        ;;
+      ONLINE)
+        sudo ${pkgs.util-linux}/bin/wall "UPS power restored on ${compName}" || true
+        ${onlineNotify}
+        ${haOffbattery}
+        ;;
+      LOWBATT)
+        ${lowbatteryWall}
+        ${lowbatteryWallSimple}
+        ${lowbatteryNotify}
+        ${k3sDrain}
+        ${extraCmds}
+        sleep 5
+        sudo ${pkgs.systemd}/bin/systemctl poweroff ${cfg.poweroffArgs}
+        ;;
+      *)
+        logger -t nut-event-handler "Unknown event: $event_type"
+        ;;
+    esac
+  '';
 in
 {
   options.custom.nut-ups = {
@@ -119,15 +150,7 @@ in
       upsmon = {
         enable = true;
         settings = {
-          NOTIFYFLAG = [
-            [ "ONBATT" "SYSLOG+WALL+EXEC" ]
-            [ "ONLINE" "SYSLOG+WALL+EXEC" ]
-            [ "LOWBATT" "SYSLOG+WALL+EXEC" ]
-            [ "REPLBATT" "SYSLOG+WALL+EXEC" ]
-            [ "NOCOMM" "SYSLOG+WALL+EXEC" ]
-            [ "FSD" "SYSLOG+WALL+EXEC" ]
-            [ "SHUTDOWN" "SYSLOG+WALL+EXEC" ]
-          ];
+          NOTIFYCMD = "${nutEventHandler}";
         };
         monitor.main = {
           system = "main@localhost";
@@ -137,41 +160,8 @@ in
         };
       };
 
-      schedulerRules = "${pkgs.writeText "upssched.conf" (''
-        CMDSCRIPT ${pkgs.writeShellScript "nut-event-handler" ''
-  ${haSource}
-          event_type="$1"
-          case "$event_type" in
-            onbattery)
-              sudo ${pkgs.util-linux}/bin/wall "UPS on battery — ${compName} shutting down when critical" || true
-  ${onbatteryNotify}
-  ${haOnbattery}
-              ;;
-            online)
-              sudo ${pkgs.util-linux}/bin/wall "UPS power restored on ${compName}" || true
-  ${onlineNotify}
-  ${haOffbattery}
-              ;;
-            lowbattery)
-  ${lowbatteryWall}
-  ${lowbatteryWallSimple}
-  ${lowbatteryNotify}
-  ${k3sDrain}
-  ${extraCmds}
-              sleep 5
-              sudo ${pkgs.systemd}/bin/systemctl poweroff ${cfg.poweroffArgs}
-              ;;
-            *)
-              logger -t nut-event-handler "Unknown event: $event_type"
-              ;;
-          esac
-        ''}
-        PIPEFN /run/nut/upssched.pipe
-        LOCKFN /run/nut/upssched.lock
-        AT ONBATT * EXECUTE onbattery
-        AT ONLINE * EXECUTE online
-        AT LOWBATT * EXECUTE lowbattery
-      '')}";
+
+
     };
   };
 }

@@ -1290,15 +1290,16 @@ def tool_transcode_activity(arg: dict) -> int:
 
     tc_id = _find_tc_id(state, "transcode")
     batch_start = tool_args.get("start", 0)
-    max_frames = state.get("max_frames", 0)
+    max_frames = arg.get("max_frames", state.get("max_frames", 0))
     batch_end = min(batch_start + 24, max_frames - 1)
 
     frames = _transcode_frames(
-        state.get("camera", ""), state.get("start_time", 0),
-        state.get("end_time", 0), batch_start, batch_end,
-        max_frames, str(Path(frames_dir) / "proxy.mp4"),
+        arg.get("camera", state.get("camera", "")),
+        arg.get("start_time", state.get("start_time", 0)),
+        arg.get("end_time", state.get("end_time", 0)),
+        batch_start, batch_end,
+        max_frames, arg.get("proxy_path", str(Path(frames_dir) / "proxy.mp4")),
     )
-
     for i, f in enumerate(frames):
         fname = f"transcode_{batch_start:03d}_{i:03d}.jpg"
         (agent_path / fname).write_bytes(f)
@@ -1911,8 +1912,16 @@ class GenAIWorkflow:
 
                     outcome = await workflow.execute_activity(
                         activity_fn,
-                        arg={"msg_path": msg_path, "args": tc.get("args", {}),
-                             "event_id": event_id},
+                        arg={
+                            "msg_path": msg_path,
+                            "args": tc.get("args", {}),
+                            "event_id": event_id,
+                            "max_frames": max_frames,
+                            "camera": camera,
+                            "start_time": start_time,
+                            "end_time": end_time,
+                            "proxy_path": proxy_path,
+                        },
                         task_queue=task_queue,
                         start_to_close_timeout=timeout,
                         retry_policy=retry,
