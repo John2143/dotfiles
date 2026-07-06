@@ -371,6 +371,75 @@ in
   # Copy the NixOS configuration file and link it from the resulting system
   # (/run/current-system/configuration.nix). This is useful in case you
   # accidentally delete configuration.nix.
+  # ── NUT UPS monitoring ────────────────────────────────────────────
+  # USB-connected UPS via usbhid-ups (auto-detect: Goldenmate, APC, etc.).
+  # Desktop machine — notify-send on events, simple poweroff on critical.
+  age.secrets.nut-ups-password = {
+    file = ../secrets/nut-ups-password.age;
+    owner = "nutmon";
+    group = "nutmon";
+    mode = "0400";
+  };
+
+  power.ups = {
+    enable = true;
+    mode = "standalone";
+    maxStartDelay = 15;
+
+    ups.main = {
+      driver = "usbhid-ups";
+      port = "auto";
+      description = "USB UPS (auto-detect)";
+    };
+
+    users.monitor = {
+      passwordFile = config.age.secrets.nut-ups-password.path;
+      actions = [ "SET" "FSD" ];
+      instcmds = [ "ALL" ];
+      upsmon = "primary";
+    };
+
+    upsmon = {
+      enable = true;
+      monitor.main = {
+        system = "main@localhost";
+        user = "monitor";
+        powerValue = 1;
+        type = "master";
+      };
+    };
+
+    schedulerRules = pkgs.writeText "upssched.conf" (''
+      CMDSCRIPT ${pkgs.writeShellScript "nut-event-handler" ''
+        event_type="$1"
+        case "$event_type" in
+          onbattery)
+            ${pkgs.libnotify}/bin/notify-send -u critical "UPS" "On battery power" || true
+            ${pkgs.util-linux}/bin/wall "UPS on battery — arch shutting down when critical" || true
+            ;;
+          online)
+            ${pkgs.libnotify}/bin/notify-send -u normal "UPS" "Power restored" || true
+            ${pkgs.util-linux}/bin/wall "UPS power restored on arch" || true
+            ;;
+          lowbattery)
+            ${pkgs.libnotify}/bin/notify-send -u critical "UPS" "Battery critical — shutting down NOW" || true
+            ${pkgs.util-linux}/bin/wall "UPS battery critical — shutting down NOW" || true
+            ${pkgs.systemd}/bin/systemctl poweroff
+            ;;
+          *)
+            logger -t nut-event-handler "Unknown event: $event_type"
+            ;;
+        esac
+      ''}
+      PIPEFN /run/nut/upssched.pipe
+      LOCKFN /run/nut/upssched.lock
+      AT ONBATT * START-TIMER onbattery 6
+      AT ONLINE * CANCEL-TIMER onbattery
+      AT ONLINE * EXECUTE online
+      AT ONBATT * EXECUTE onbattery
+      AT LOWBATT * EXECUTE lowbattery
+    '');
+  };
   # system.copySystemConfiguration = true;
 
   # This option defines the first version of NixOS you have installed on this particular machine,

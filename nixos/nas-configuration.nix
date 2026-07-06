@@ -466,14 +466,10 @@
     mode = "standalone";
     maxStartDelay = 15;
 
-    ups.goldenmate = {
+    ups.main = {
       driver = "usbhid-ups";
       port = "auto";
-      description = "Goldenmate LiFePO4 1500VA UPS";
-      directives = [
-        "vendorid = 075D"
-        "productid = 0300"
-      ];
+      description = "USB UPS (auto-detect)";
     };
 
     users.monitor = {
@@ -485,8 +481,8 @@
 
     upsmon = {
       enable = true;
-      monitor.goldenmate = {
-        system = "goldenmate@localhost";
+      monitor.main = {
+        system = "main@localhost";
         user = "monitor";
         powerValue = 1;
         type = "master";
