@@ -59,6 +59,7 @@ let
   # Receives the NOTIFYTYPE as $1 (ONBATT, ONLINE, LOWBATT, etc.).
   nutEventHandler = pkgs.writeShellScript "nut-event-handler" ''
     ${haSource}
+    logger -t nut-event-handler "Event: $*"
     event_type="$1"
     case "$event_type" in
       ONBATT)
@@ -152,9 +153,9 @@ in
         settings = {
           NOTIFYCMD = "${nutEventHandler}";
           NOTIFYFLAG = [
-            [ "ONBATT" "SYSLOG+WALL+EXEC" ]
-            [ "ONLINE" "SYSLOG+WALL+EXEC" ]
-            [ "LOWBATT" "SYSLOG+WALL+EXEC" ]
+            [ "ONBATT" "EXEC+SYSLOG+WALL" ]
+            [ "ONLINE" "EXEC+SYSLOG+WALL" ]
+            [ "LOWBATT" "EXEC+SYSLOG+WALL" ]
           ];
         };
         monitor.main = {

@@ -530,10 +530,11 @@ def _tool_show_frame_schema() -> dict:
         "function": {
             "name": "show_frame",
             "description": (
-                "View recording frames or transcode results. Use 'frame://N' for a single frame "
-                "(defaults to @max for 1 frame, @high for 2-9, @low for 10+). Use 'frame://N-M' "
-                "for a range. Append @low/@high/@max to override. Also supports 'transcode://batch/frame', "
-                "'crop://N', and 'snapshot://'. ~200-500 tokens per frame."
+                "Display recording frames to your vision. frame://N jumps to any keyframe instantly "
+                "(free, fast). frame://N-M@low does a low-res scan of a range. "
+                "transcode://batch/frame shows a high-res frame from a transcode batch. "
+                "crop://N re-shows a crop. snapshot:// shows the detection snapshot. "
+                "Cost: ~200-500 tokens per frame."
             ),
             "parameters": {
                 "type": "object",
@@ -555,9 +556,10 @@ def _tool_transcode_schema() -> dict:
         "function": {
             "name": "transcode",
             "description": (
-                "Re-extract 24 HD frames at native fps. Returns TEXT POINTERS — frames saved "
-                "as transcode://{start}/0 through transcode://{start}/23. "
-                "Use show_frame() or crop() to inspect individual frames. ~500 tok/frame when viewed."
+                "Extract 24 HD frames at native fps starting at frame N. "
+                "SLOW (~2s). Only call after scanning with show_frame() found something "
+                "worth close inspection. Frames saved as transcode://N/0 through "
+                "transcode://N/23. Use show_frame() or crop() to view them."
             ),
             "parameters": {
                 "type": "object",
@@ -617,9 +619,10 @@ def _tool_compact_schema() -> dict:
         "function": {
             "name": "compact",
             "description": (
-                "Drop all image data from previous turns to free context tokens. "
-                "Your findings are summarized and preserved as text. "
-                "Call after bulk scanning to make room for high-res exploration."
+                "FREE CONTEXT. Drops all image data from previous turns. "
+                "Your text findings and crop addresses are preserved. "
+                "Call after bulk scanning to make room for detailed inspection. "
+                "Call early, call often."
             ),
             "parameters": {"type": "object", "properties": {}, "required": []},
         },
@@ -632,11 +635,10 @@ def _tool_crop_schema() -> dict:
         "function": {
             "name": "crop",
             "description": (
-                "Crop a region from a frame at full resolution (~200-500 tokens). "
-                "Cheaper than loading the full frame. Coordinates 0.0-1.0 normalized. "
-                "Sources: frame://N, transcode://batch/frame, crop://N (no ranges). "
-                "Example: crop('frame://0', 0.6, 0.15, 0.8, 0.3). "
-                "If you miss context, re-crop with wider bounds."
+                "Deep zoom into a region at full resolution. Coordinates 0.0-1.0 normalized. "
+                "Use after show_frame() identifies something worth closer inspection. "
+                "Keep crops narrow for clarity — widen bounds if you miss context. "
+                "Sources: frame://N, transcode://batch/frame, crop://N (single frame only)."
             ),
             "parameters": {
                 "type": "object",
@@ -1032,15 +1034,27 @@ async def init_agent_state_activity(init_arg: dict) -> dict:
 
     if label == "car":
         system_prompt = (
-            "You are a meticulous vehicle analyst. Identify make, model, color, and distinctive "
-            "features. Use crop to zoom into details. Track movement across frames. "
-            "Always end with set_description()."
+            "You are a meticulous vehicle analyst. Identify make, model, color, license plate, "
+            "and distinctive features. Scan every angle. Track movement across frames. "
+            "\n\n"
+            "STRATEGY. show_frame() displays frames to your vision. Use frame://N for any "
+            "keyframe index — instant and free. Use snapshot:// for the detection snapshot. "
+            "transcode() is slow (~2s) — extract 24 HD frames only after scanning found "
+            "something worth inspecting. crop() zooms into details at max resolution. "
+            "compact() frees context by dropping images but keeping text findings — call "
+            "it after every 3-4 images. Always end with set_description()."
         )
     else:
         system_prompt = (
             "You are a meticulous security camera analyst. Inspect every clip thoroughly. "
-            "Use your tools to crop for detail, scan frames for context, and investigate. "
-            "Be curious. Always end with set_description()."
+            "Scan freely. Hunt for evidence. Build a timeline of what happened. "
+            "\n\n"
+            "STRATEGY. show_frame() displays frames to your vision. Use frame://N for any "
+            "keyframe index — instant and free. Use snapshot:// for the detection snapshot. "
+            "transcode() is slow (~2s) — extract 24 HD frames only after scanning found "
+            "something worth inspecting. crop() zooms into details at max resolution. "
+            "compact() frees context by dropping images but keeping text findings — call "
+            "it after every 3-4 images. Always end with set_description()."
         )
     if camera_desc:
         system_prompt += f"\n\n{camera_desc}"
@@ -1120,7 +1134,7 @@ async def save_agent_log_activity(log_arg: dict) -> None:
 
 
 @activity.defn(name="tool_get_snapshot")
-async def tool_get_snapshot_activity(arg: dict) -> None:
+async def tool_get_snapshot_activity(arg: dict) -> dict:
     """Copy snapshot.jpg into agent_dir and append image reference to messages."""
     import json as _json
     msg_path = arg["msg_path"]
@@ -1146,10 +1160,12 @@ async def tool_get_snapshot_activity(arg: dict) -> None:
                 "content": "No snapshot available.",
             })
     _atomic_write(msg_path, state)
+    return {"snapshot_available": snapshot_path.exists()}
+
 
 
 @activity.defn(name="tool_show_frame")
-async def tool_show_frame_activity(arg: dict) -> None:
+async def tool_show_frame_activity(arg: dict) -> dict:
     """Load, resize, and display a frame/crop/transcode source image to the model."""
     import json as _json
     msg_path = arg["msg_path"]
@@ -1294,11 +1310,12 @@ async def tool_show_frame_activity(arg: dict) -> None:
                 img_content.append({"type": "text", "text": label_text})
                 state["messages"].append({"role": "user", "content": img_content})
 
+    frames_shown = len(img_content) - 1 if img_content else 0  # subtract label text
     _atomic_write(msg_path, state)
-
+    return {"frames_shown": frames_shown, "resolution": resolution}
 
 @activity.defn(name="tool_transcode")
-def tool_transcode_activity(arg: dict) -> int:
+def tool_transcode_activity(arg: dict) -> dict:
     """Extract frames via ffmpeg (CPU-heavy, sync in thread pool), save to agent_dir."""
     import json as _json
     msg_path = arg["msg_path"]
@@ -1341,11 +1358,11 @@ def tool_transcode_activity(arg: dict) -> int:
     _atomic_write(msg_path, state)
     log.info("tool_transcode: event=%s frames=%d [%d-%d]",
              event_id, n_frames, batch_start, batch_start + n_frames - 1)
-    return n_frames
+    return {"frames_extracted": n_frames, "batch_start": batch_start, "batch_end": batch_start + n_frames - 1}
 
 
 @activity.defn(name="tool_crop")
-async def tool_crop_activity(arg: dict) -> None:
+async def tool_crop_activity(arg: dict) -> dict:
     """Crop a region from a source image and save the result to agent_dir."""
     import json as _json
     msg_path = arg["msg_path"]
@@ -1421,10 +1438,11 @@ async def tool_crop_activity(arg: dict) -> None:
                 })
 
     _atomic_write(msg_path, state)
+    return {"crop_id": crop_id, "source": source, "crop_region": [x1, y1, x2, y2]}
 
 
 @activity.defn(name="tool_compact")
-async def tool_compact_activity(arg: dict) -> None:
+async def tool_compact_activity(arg: dict) -> dict:
     """Compact context: collect text findings, preserve crop addresses, strip old images."""
     import json as _json
     msg_path = arg["msg_path"]
@@ -1463,10 +1481,11 @@ async def tool_compact_activity(arg: dict) -> None:
         "role": "tool", "tool_call_id": tc_id, "content": tool_result,
     })
     _atomic_write(msg_path, state)
+    return {"crops_preserved": len(crop_files)}
 
 
 @activity.defn(name="tool_set_description")
-async def tool_set_description_activity(arg: dict) -> None:
+async def tool_set_description_activity(arg: dict) -> dict:
     """Append the final description/confidence to messages.json."""
     import json as _json
     msg_path = arg["msg_path"]
@@ -1494,6 +1513,7 @@ async def tool_set_description_activity(arg: dict) -> None:
             break
 
     _atomic_write(msg_path, state)
+    return {"description_set": True, "confidence": confidence}
 
 
 @activity.defn(name="summarize_agent")
@@ -1938,10 +1958,11 @@ class GenAIWorkflow:
                         retry_policy=retry,
                     )
 
-                    if tc["name"] == "transcode" and isinstance(outcome, int):
-                        turns_transcode += outcome
-                        te["frames_returned"] = outcome
-
+                    if tc["name"] == "transcode" and isinstance(outcome, dict):
+                        n = outcome.get("frames_extracted", 0)
+                        turns_transcode += n
+                    if isinstance(outcome, dict):
+                        te.update(outcome)
                     trace_entries.append(te)
 
             if not description:
