@@ -377,7 +377,7 @@ in
   # Desktop k3s node — notify-send, wall, k3s drain, then poweroff.
   # See modules/nut-ups.nix for the shared config.
   custom.nut-ups = {
-    enable = true;
+    enable = false;  # TODO: true once Goldenmate UPS arrives
     k3sDrain = true;
     desktopNotifications = true;
   };

@@ -113,7 +113,7 @@ in
         };
       };
 
-      schedulerRules = pkgs.writeText "upssched.conf" (''
+      schedulerRules = "${pkgs.writeText "upssched.conf" (''
         CMDSCRIPT ${pkgs.writeShellScript "nut-event-handler" ''
   ${haSource}
           event_type="$1"
@@ -149,7 +149,7 @@ in
         AT ONLINE * EXECUTE online
         AT ONBATT * EXECUTE onbattery
         AT LOWBATT * EXECUTE lowbattery
-      '');
+      '')}";
     };
   };
 }
