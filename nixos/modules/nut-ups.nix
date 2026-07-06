@@ -119,7 +119,15 @@ in
       upsmon = {
         enable = true;
         settings = {
-          NOTIFYFLAGS = "EXEC";
+          NOTIFYFLAG = [
+            [ "ONBATT" "SYSLOG+WALL+EXEC" ]
+            [ "ONLINE" "SYSLOG+WALL+EXEC" ]
+            [ "LOWBATT" "SYSLOG+WALL+EXEC" ]
+            [ "REPLBATT" "SYSLOG+WALL+EXEC" ]
+            [ "NOCOMM" "SYSLOG+WALL+EXEC" ]
+            [ "FSD" "SYSLOG+WALL+EXEC" ]
+            [ "SHUTDOWN" "SYSLOG+WALL+EXEC" ]
+          ];
         };
         monitor.main = {
           system = "main@localhost";

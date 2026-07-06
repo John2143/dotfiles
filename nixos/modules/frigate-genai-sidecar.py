@@ -25,6 +25,7 @@ import math
 import os
 import subprocess
 import sys
+from concurrent.futures import ThreadPoolExecutor
 import tempfile
 import threading
 import time
@@ -1076,19 +1077,9 @@ async def save_agent_log_activity(log_arg: dict) -> None:
     except Exception as e:
         log.warning("Failed to write agent log: %s", e)
 
-@activity.defn(name="transcode_frames")
-async def transcode_frames_activity(tc_arg: dict) -> list[bytes]:
-    """Wraps _transcode_frames as a visible Temporal activity on the FFMPEG queue."""
-    frames = await activity.run_in_executor(
-        lambda: _transcode_frames(
-            tc_arg["camera"], tc_arg["start_time"], tc_arg["end_time"],
-            tc_arg["frame_start"], tc_arg["frame_end"], tc_arg["max_frames"],
-            tc_arg.get("proxy_path", ""),
-        )
-    )
-    log.info("transcode_frames: event=%s frames=%d [%d-%d]",
-             tc_arg["event_id"], len(frames), tc_arg["frame_start"], tc_arg["frame_end"])
-    return frames
+# ── Tool activities ───────────────────────────────────────────────────
+# Each tool is its own activity, registered on the appropriate queue.
+# TOOL_REGISTRY (defined after these) maps tool_name → (activity_fn, task_queue).
 
 
 @activity.defn(name="save_assistant_message")
@@ -1106,76 +1097,71 @@ async def save_assistant_message_activity(save_arg: dict) -> None:
     _atomic_write(msg_path, state)
     log.debug("save_assistant_message: appended assistant message to %s", msg_path)
 
-
-@activity.defn(name="save_tool_result")
-async def save_tool_result_activity(save_arg: dict) -> dict | None:
-    """Execute tool call results, write images to agent_dir, append to messages.json.
-
-    Returns {'description': ..., 'confidence': ...} if set_description was called.
-    """
+@activity.defn(name="tool_get_snapshot")
+async def tool_get_snapshot_activity(arg: dict) -> None:
+    """Copy snapshot.jpg into agent_dir and append image reference to messages."""
     import json as _json
-    msg_path = save_arg["msg_path"]
-    tool_name = save_arg["tool_name"]
-    tool_args = save_arg.get("args", {})
-    event_id = save_arg.get("event_id", "")
-
-    with open(msg_path) as f:
-        state = _json.load(f)
-    agent_dir = state["agent_dir"]
+    msg_path = arg["msg_path"]
+    state, agent_dir = _load_state(msg_path)
     frames_dir = str(Path(agent_dir).parent)
     agent_path = Path(agent_dir)
     agent_path.mkdir(parents=True, exist_ok=True)
 
-    # Build tool call lookup from the most recent assistant message
-    assistant_msg = state["messages"][-1]
-    tc_id = None
-    tc_name = tool_name
-    for tc in assistant_msg.get("tool_calls", []):
-        if tc.get("function", {}).get("name") == tool_name:
-            tc_id = tc.get("id")
-            break
+    tc_id = _find_tc_id(state, "get_snapshot")
+    snapshot_path = Path(frames_dir) / "snapshot.jpg"
+    if snapshot_path.exists():
+        raw = snapshot_path.read_bytes()
+        fname = "snapshot.jpg"
+        (agent_path / fname).write_bytes(raw)
+        ref = f"[[{fname}]]"
+        img_content = [{"type": "image_url", "image_url": {"url": ref}}]
+        img_content.append({"type": "text", "text": "Detection snapshot."})
+        state["messages"].append({"role": "user", "content": img_content})
+    else:
+        if tc_id:
+            state["messages"].append({
+                "role": "tool", "tool_call_id": tc_id,
+                "content": "No snapshot available.",
+            })
+    _atomic_write(msg_path, state)
 
-    if tool_name == "get_snapshot":
-        snapshot_path = Path(frames_dir) / "snapshot.jpg"
-        if snapshot_path.exists():
-            raw = snapshot_path.read_bytes()
-            fname = "snapshot.jpg"
-            (agent_path / fname).write_bytes(raw)
-            ref = f"[[{fname}]]"
-            img_content = [{"type": "image_url", "image_url": {"url": ref}}]
-            img_content.append({"type": "text", "text": "Detection snapshot."})
-            state["messages"].append({"role": "user", "content": img_content})
-        else:
-            if tc_id:
-                state["messages"].append({
-                    "role": "tool", "tool_call_id": tc_id,
-                    "content": "No snapshot available.",
-                })
 
-    elif tool_name == "show_frame":
-        source = tool_args.get("source", "snapshot://")
-        # Parse resolution suffix: @low, @high, @max
-        resolution = None
-        base_source = source
-        if "@" in source:
-            base_source, res_str = source.rsplit("@", 1)
-            if res_str in ("low", "high", "max"):
-                resolution = res_str
-        # Parse source type and frame spec
-        if base_source.startswith("frame://"):
-            frame_spec = base_source[len("frame://"):]
-            src_type = "frame"
-        elif base_source.startswith("transcode://"):
-            frame_spec = base_source[len("transcode://"):]
-            src_type = "transcode"
-        elif base_source.startswith("crop://"):
-            frame_spec = base_source[len("crop://"):]
-            src_type = "crop"
+@activity.defn(name="tool_show_frame")
+async def tool_show_frame_activity(arg: dict) -> None:
+    """Load, resize, and display a frame/crop/transcode source image to the model."""
+    import json as _json
+    msg_path = arg["msg_path"]
+    tool_args = arg.get("args", {})
+    state, agent_dir = _load_state(msg_path)
+    frames_dir = str(Path(agent_dir).parent)
+    agent_path = Path(agent_dir)
+    agent_path.mkdir(parents=True, exist_ok=True)
+
+    tc_id = _find_tc_id(state, "show_frame")
+    source = tool_args.get("source", "snapshot://")
+
+    # Parse resolution suffix: @low, @high, @max
+    resolution = None
+    base_source = source
+    if "@" in source:
+        base_source, res_str = source.rsplit("@", 1)
+        if res_str in ("low", "high", "max"):
+            resolution = res_str
+
+    # Parse source type and frame spec
+    if base_source.startswith("frame://"):
+        frame_spec = base_source[len("frame://"):]
+        src_type = "frame"
+    elif base_source.startswith("transcode://"):
+        frame_spec = base_source[len("transcode://"):]
+        src_type = "transcode"
+    elif base_source.startswith("crop://"):
+        frame_spec = base_source[len("crop://"):]
+        src_type = "crop"
     else:
         src_type = "snapshot"
         frame_spec = ""
 
-    # Handle snapshot specially — no index parsing needed
     if src_type == "snapshot":
         img_path = Path(frames_dir) / "snapshot.jpg"
         if img_path.exists():
@@ -1197,13 +1183,12 @@ async def save_tool_result_activity(save_arg: dict) -> dict | None:
                     "role": "tool", "tool_call_id": tc_id,
                     "content": "No snapshot available.",
                 })
-    elif src_type != "snapshot":
+    else:
         # Determine if range (N-M) or single (N)
         frames_list = []
         if "-" in frame_spec:
-            range_parts = frame_spec.split("-")
             try:
-                f_start, f_end = int(range_parts[0]), int(range_parts[1])
+                f_start, f_end = int(frame_spec.split("-")[0]), int(frame_spec.split("-")[1])
                 frames_list = list(range(f_start, f_end + 1))
             except (ValueError, IndexError):
                 frames_list = []
@@ -1214,6 +1199,7 @@ async def save_tool_result_activity(save_arg: dict) -> dict | None:
                 frames_list = []
 
         # For transcode source, frame_spec is "batch/frame_idx" or "batch/start-end"
+        batch = 0
         if src_type == "transcode":
             parts = frame_spec.split("/")
             if len(parts) >= 2:
@@ -1246,7 +1232,6 @@ async def save_tool_result_activity(save_arg: dict) -> dict | None:
             img_content = []
             img_counter = len(list(agent_path.glob("display_*.jpg")))
             for fi in frames_list:
-                # Build file path
                 if src_type == "frame":
                     img_path = Path(frames_dir) / f"frame_{fi:03d}.jpg"
                 elif src_type == "transcode":
@@ -1257,30 +1242,17 @@ async def save_tool_result_activity(save_arg: dict) -> dict | None:
                     img_path = Path(frames_dir) / "snapshot.jpg"
                 if not img_path.exists():
                     if src_type == "transcode":
-                        # On-demand transcode
-                        log.warning("transcode batch %d not found, extracting on demand", batch)
-                        camera = state.get("camera", "")
-                        st = state.get("start_time", 0)
-                        et = state.get("end_time", 0)
-                        mf = state.get("max_frames", 0)
-                        proxy = str(Path(frames_dir) / "proxy.mp4")
-                        try:
-                            tcframes = _transcode_frames(camera, st, et, batch, min(batch + 24, mf - 1), mf, proxy)
-                            tci = 0
-                            for tcdata in tcframes:
-                                tci += 1
-                                tfname = f"transcode_{batch:03d}_{tci:03d}.jpg"
-                                (agent_path / tfname).write_bytes(tcdata)
-                            img_path = agent_path / f"transcode_{batch:03d}_{fi:03d}.jpg"
-                        except Exception as e:
-                            log.exception("On-demand transcode failed")
-                            continue
+                        msg = (
+                            f"Transcode batch {batch} not found. "
+                            f"Call transcode(start={batch}) first to generate this batch."
+                        )
                     else:
                         msg = f"Source not found: {source}"
-                        if tc_id:
-                            state["messages"].append({"role": "tool", "tool_call_id": tc_id, "content": msg})
-                        continue
-                # Load and re-encode
+                    if tc_id:
+                        state["messages"].append({
+                            "role": "tool", "tool_call_id": tc_id, "content": msg,
+                        })
+                    continue
                 try:
                     img = Image.open(img_path)
                     tw, th = _resolution_pixels(resolution, img.size)
@@ -1300,138 +1272,205 @@ async def save_tool_result_activity(save_arg: dict) -> dict | None:
                 img_content.append({"type": "text", "text": label_text})
                 state["messages"].append({"role": "user", "content": img_content})
 
-    elif tool_name == "transcode":
-        frames = save_arg.get("frames", [])
-        batch_start = tool_args.get("start", 0)
-        for i, f in enumerate(frames):
-            fname = f"transcode_{batch_start:03d}_{i:03d}.jpg"
-            (agent_path / fname).write_bytes(f)
-        n_frames = len(frames)
+    _atomic_write(msg_path, state)
+
+
+@activity.defn(name="tool_transcode")
+def tool_transcode_activity(arg: dict) -> int:
+    """Extract frames via ffmpeg (CPU-heavy, sync in thread pool), save to agent_dir."""
+    import json as _json
+    msg_path = arg["msg_path"]
+    tool_args = arg.get("args", {})
+    event_id = arg.get("event_id", "")
+
+    state, agent_dir = _load_state(msg_path)
+    agent_path = Path(agent_dir)
+    agent_path.mkdir(parents=True, exist_ok=True)
+    frames_dir = str(agent_path.parent)
+
+    tc_id = _find_tc_id(state, "transcode")
+    batch_start = tool_args.get("start", 0)
+    max_frames = state.get("max_frames", 0)
+    batch_end = min(batch_start + 24, max_frames - 1)
+
+    frames = _transcode_frames(
+        state.get("camera", ""), state.get("start_time", 0),
+        state.get("end_time", 0), batch_start, batch_end,
+        max_frames, str(Path(frames_dir) / "proxy.mp4"),
+    )
+
+    for i, f in enumerate(frames):
+        fname = f"transcode_{batch_start:03d}_{i:03d}.jpg"
+        (agent_path / fname).write_bytes(f)
+
+    n_frames = len(frames)
+    if tc_id:
+        state["messages"].append({
+            "role": "tool", "tool_call_id": tc_id,
+            "content": (
+                f"Transcoded {n_frames} frames [{batch_start}-{batch_start + n_frames - 1}] "
+                f"at source resolution. Available: transcode://{batch_start}/0 through "
+                f"transcode://{batch_start}/{n_frames - 1}. "
+                f"Use show_frame() or crop() to inspect individual frames."
+            ),
+        })
+
+    _atomic_write(msg_path, state)
+    log.info("tool_transcode: event=%s frames=%d [%d-%d]",
+             event_id, n_frames, batch_start, batch_start + n_frames - 1)
+    return n_frames
+
+
+@activity.defn(name="tool_crop")
+async def tool_crop_activity(arg: dict) -> None:
+    """Crop a region from a source image and save the result to agent_dir."""
+    import json as _json
+    msg_path = arg["msg_path"]
+    tool_args = arg.get("args", {})
+    state, agent_dir = _load_state(msg_path)
+    frames_dir = str(Path(agent_dir).parent)
+    agent_path = Path(agent_dir)
+    agent_path.mkdir(parents=True, exist_ok=True)
+
+    tc_id = _find_tc_id(state, "crop")
+    source = tool_args.get("source", "")
+    x1 = max(0.0, min(1.0, float(tool_args.get("x1", 0))))
+    y1 = max(0.0, min(1.0, float(tool_args.get("y1", 0))))
+    x2 = max(0.0, min(1.0, float(tool_args.get("x2", 1))))
+    y2 = max(0.0, min(1.0, float(tool_args.get("y2", 1))))
+
+    if x1 >= x2 or y1 >= y2:
         if tc_id:
             state["messages"].append({
                 "role": "tool", "tool_call_id": tc_id,
-                "content": (
-                    f"Transcoded {n_frames} frames [{batch_start}-{batch_start + n_frames - 1}] "
-                    f"at source resolution. Available: transcode://{batch_start}/0 through "
-                    f"transcode://{batch_start}/{n_frames - 1}. "
-                    f"Use show_frame() or crop() to inspect individual frames."
-                ),
+                "content": f"Invalid crop region ({x1},{y1})-({x2},{y2})",
             })
-
-    elif tool_name == "crop":
-        source = tool_args.get("source", "")
-        x1 = max(0.0, min(1.0, float(tool_args.get("x1", 0))))
-        y1 = max(0.0, min(1.0, float(tool_args.get("y1", 0))))
-        x2 = max(0.0, min(1.0, float(tool_args.get("x2", 1))))
-        y2 = max(0.0, min(1.0, float(tool_args.get("y2", 1))))
-        if x1 >= x2 or y1 >= y2:
-            if tc_id:
-                state["messages"].append({
-                    "role": "tool", "tool_call_id": tc_id,
-                    "content": f"Invalid crop region ({x1},{y1})-({x2},{y2})",
-                })
+    else:
+        base_source = source
+        if "@" in source:
+            base_source = source.rsplit("@", 1)[0]
+        img_path = None
+        if base_source.startswith("frame://"):
+            idx = int(base_source[len("frame://"):])
+            img_path = Path(frames_dir) / f"frame_{idx:03d}.jpg"
+        elif base_source.startswith("transcode://"):
+            parts = base_source[len("transcode://"):].split("/")
+            batch = int(parts[0])
+            fi = int(parts[1])
+            img_path = agent_path / f"transcode_{batch:03d}_{fi:03d}.jpg"
+        elif base_source.startswith("crop://"):
+            idx = int(base_source[len("crop://"):])
+            img_path = agent_path / f"crop_{idx:03d}.jpg"
         else:
-            # Resolve source to file path (same as show_frame but single only)
-            base_source = source
-            if "@" in source:
-                base_source = source.rsplit("@", 1)[0]
-            img_path = None
-            if base_source.startswith("frame://"):
-                idx = int(base_source[len("frame://"):])
-                img_path = Path(frames_dir) / f"frame_{idx:03d}.jpg"
-            elif base_source.startswith("transcode://"):
-                parts = base_source[len("transcode://"):].split("/")
-                batch = int(parts[0])
-                fi = int(parts[1])
-                img_path = agent_path / f"transcode_{batch:03d}_{fi:03d}.jpg"
-            elif base_source.startswith("crop://"):
-                idx = int(base_source[len("crop://"):])
-                img_path = agent_path / f"crop_{idx:03d}.jpg"
-            else:
-                img_path = Path(frames_dir) / "snapshot.jpg"
-            if img_path and img_path.exists():
-                try:
-                    img = Image.open(img_path)
-                    w, h = img.size
-                    crop_box = (int(x1 * w), int(y1 * h), int(x2 * w), int(y2 * h))
-                    cropped = img.crop(crop_box)
-                    img_counter = len(list(agent_path.glob("crop_*.jpg")))
-                    crop_id = img_counter + 1
-                    fname = f"crop_{crop_id:03d}.jpg"
-                    cropped.save(agent_path / fname, "JPEG", quality=95)
-                    ref = f"[[{fname}]]"
-                    state["messages"].append({
-                        "role": "user",
-                        "content": [
-                            {"type": "image_url", "image_url": {"url": ref}},
-                            {"type": "text", "text": f"Cropped ({x1:.2f},{y1:.2f})-({x2:.2f},{y2:.2f}) from {base_source}. Stored as crop://{crop_id}."},
-                        ],
-                    })
-                except Exception as e:
-                    if tc_id:
-                        state["messages"].append({
-                            "role": "tool", "tool_call_id": tc_id,
-                            "content": f"Failed to crop: {e}",
-                        })
-            else:
+            img_path = Path(frames_dir) / "snapshot.jpg"
+        if img_path and img_path.exists():
+            try:
+                img = Image.open(img_path)
+                w, h = img.size
+                crop_box = (int(x1 * w), int(y1 * h), int(x2 * w), int(y2 * h))
+                cropped = img.crop(crop_box)
+                img_counter = len(list(agent_path.glob("crop_*.jpg")))
+                crop_id = img_counter + 1
+                fname = f"crop_{crop_id:03d}.jpg"
+                cropped.save(agent_path / fname, "JPEG", quality=95)
+                ref = f"[[{fname}]]"
+                state["messages"].append({
+                    "role": "user",
+                    "content": [
+                        {"type": "image_url", "image_url": {"url": ref}},
+                        {"type": "text", "text": (
+                            f"Cropped ({x1:.2f},{y1:.2f})-({x2:.2f},{y2:.2f}) "
+                            f"from {base_source}. Stored as crop://{crop_id}."
+                        )},
+                    ],
+                })
+            except Exception as e:
                 if tc_id:
                     state["messages"].append({
                         "role": "tool", "tool_call_id": tc_id,
-                        "content": f"Source not found: {source}",
+                        "content": f"Failed to crop: {e}",
                     })
-    elif tool_name == "compact":
-        # Collect text findings
-        summary_parts = ["Exploration so far:"]
-        for m in state["messages"]:
-            if m.get("role") == "user" and isinstance(m.get("content"), list):
-                text_parts = [
-                    p["text"] for p in m["content"]
-                    if isinstance(p, dict) and p.get("type") == "text"
-                ]
-                for t in text_parts:
-                    summary_parts.append(f"  {t}")
-        # Preserve crop addresses
-        crop_files = sorted(Path(state["agent_dir"]).glob("crop_*.jpg"))
-        if crop_files:
-            crop_lines = ["\nCrops available:"]
-            for cf in crop_files:
-                crop_id = cf.stem.replace("crop_", "")
-                crop_lines.append(f"  crop://{int(crop_id)}: {cf.name}")
-            summary_parts.append("\n".join(crop_lines))
-        summary_text = "\n".join(summary_parts)
-        state["messages"].append({"role": "user", "content": summary_text})
-        # Strip image_url parts from all earlier user messages
-        for mi in range(len(state["messages"]) - 1):
-            if state["messages"][mi].get("role") == "user":
-                content = state["messages"][mi].get("content")
-                if isinstance(content, list):
-                    state["messages"][mi]["content"] = [
-                        p for p in content
-                        if isinstance(p, dict) and p.get("type") != "image_url"
-                    ]
-        tool_result = "Context compacted. Images removed, crop addresses preserved."
-        state["messages"].append({
-            "role": "tool", "tool_call_id": tc_id, "content": tool_result,
-        })
-
-    elif tool_name == "set_description":
-        description = save_arg.get("description", "")
-        confidence = save_arg.get("confidence", "medium")
-        tool_result = f"Description set. Confidence: {confidence}."
-        if tc_id:
-            state["messages"].append({
-                "role": "tool", "tool_call_id": tc_id, "content": tool_result,
-            })
-
-    else:
-        tool_result = f"Unknown tool: {tool_name}"
-        if tc_id:
-            state["messages"].append({
-                "role": "tool", "tool_call_id": tc_id, "content": tool_result,
-            })
+        else:
+            if tc_id:
+                state["messages"].append({
+                    "role": "tool", "tool_call_id": tc_id,
+                    "content": f"Source not found: {source}",
+                })
 
     _atomic_write(msg_path, state)
-    return None
+
+
+@activity.defn(name="tool_compact")
+async def tool_compact_activity(arg: dict) -> None:
+    """Compact context: collect text findings, preserve crop addresses, strip old images."""
+    import json as _json
+    msg_path = arg["msg_path"]
+    state, agent_dir = _load_state(msg_path)
+
+    tc_id = _find_tc_id(state, "compact")
+    summary_parts = ["Exploration so far:"]
+    for m in state["messages"]:
+        if m.get("role") == "user" and isinstance(m.get("content"), list):
+            text_parts = [
+                p["text"] for p in m["content"]
+                if isinstance(p, dict) and p.get("type") == "text"
+            ]
+            for t in text_parts:
+                summary_parts.append(f"  {t}")
+    crop_files = sorted(Path(agent_dir).glob("crop_*.jpg"))
+    if crop_files:
+        crop_lines = ["\nCrops available:"]
+        for cf in crop_files:
+            crop_id = cf.stem.replace("crop_", "")
+            crop_lines.append(f"  crop://{int(crop_id)}: {cf.name}")
+        summary_parts.append("\n".join(crop_lines))
+    summary_text = "\n".join(summary_parts)
+    state["messages"].append({"role": "user", "content": summary_text})
+    # Strip image_url parts from all earlier user messages
+    for mi in range(len(state["messages"]) - 1):
+        if state["messages"][mi].get("role") == "user":
+            content = state["messages"][mi].get("content")
+            if isinstance(content, list):
+                state["messages"][mi]["content"] = [
+                    p for p in content
+                    if isinstance(p, dict) and p.get("type") != "image_url"
+                ]
+    tool_result = "Context compacted. Images removed, crop addresses preserved."
+    state["messages"].append({
+        "role": "tool", "tool_call_id": tc_id, "content": tool_result,
+    })
+    _atomic_write(msg_path, state)
+
+
+@activity.defn(name="tool_set_description")
+async def tool_set_description_activity(arg: dict) -> None:
+    """Append the final description/confidence to messages.json."""
+    import json as _json
+    msg_path = arg["msg_path"]
+    state, agent_dir = _load_state(msg_path)
+
+    # description and confidence are pre-validated in run_genai_turn_activity
+    # and passed through the workflow — re-extract from state for safety
+    assistant_msg = state["messages"][-1]
+    for tc in assistant_msg.get("tool_calls", []):
+        if tc.get("function", {}).get("name") == "set_description":
+            args = tc.get("function", {}).get("arguments", {})
+            if isinstance(args, str):
+                try:
+                    args = _json.loads(args)
+                except _json.JSONDecodeError:
+                    args = {}
+            description = args.get("description", "")
+            confidence = args.get("confidence", "medium")
+            tc_id = tc.get("id")
+            tool_result = f"Description set. Confidence: {confidence}."
+            if tc_id:
+                state["messages"].append({
+                    "role": "tool", "tool_call_id": tc_id, "content": tool_result,
+                })
+            break
+
+    _atomic_write(msg_path, state)
 
 
 @activity.defn(name="summarize_agent")
@@ -1581,6 +1620,23 @@ def _atomic_write(path: str, data: dict) -> None:
     os.replace(tmp, path)
 
 
+def _load_state(msg_path: str) -> tuple[dict, str]:
+    """Read messages.json and return (state, agent_dir)."""
+    import json as _json
+    with open(msg_path) as f:
+        state = _json.load(f)
+    return state, state["agent_dir"]
+
+
+def _find_tc_id(state: dict, tool_name: str) -> str | None:
+    """Find the tool_call_id in the most recent assistant message matching tool_name."""
+    assistant_msg = state["messages"][-1]
+    for tc in assistant_msg.get("tool_calls", []):
+        if tc.get("function", {}).get("name") == tool_name:
+            return tc.get("id")
+    return None
+
+
 def _deserialize_messages(messages: list, agent_dir: str) -> list:
     """Convert [[filename]] refs in messages to base64 data URIs.
     Reads image bytes from agent_dir. Does NOT mutate — returns new list.
@@ -1658,6 +1714,19 @@ _EXTRACT_RETRY = RetryPolicy(
     maximum_interval=timedelta(seconds=20),
     backoff_coefficient=2.0,
 )
+
+# ── Tool registry ──────────────────────────────────────────────────────
+# Maps tool_name → (activity_fn, task_queue).
+# Workflow uses this for queue-routed dispatch instead of switch/case.
+# Add GPU tools here with a new task_queue — no dispatch code changes needed.
+TOOL_REGISTRY: dict[str, tuple[object, str]] = {
+    "get_snapshot":    (tool_get_snapshot_activity,     GEMINI_TASK_QUEUE),
+    "show_frame":      (tool_show_frame_activity,       GEMINI_TASK_QUEUE),
+    "transcode":       (tool_transcode_activity,        FFMPEG_TASK_QUEUE),
+    "crop":            (tool_crop_activity,             GEMINI_TASK_QUEUE),
+    "compact":         (tool_compact_activity,          GEMINI_TASK_QUEUE),
+    "set_description": (tool_set_description_activity,  GEMINI_TASK_QUEUE),
+}
 
 @workflow.defn
 class GenAIWorkflow:
@@ -1830,48 +1899,29 @@ class GenAIWorkflow:
 
                 for tc in result.get("tool_calls", []):
                     te = {"type": "tool_call", "name": tc["name"], "args": tc.get("args", {})}
-                    if tc["name"] == "transcode":
-                        frames = await workflow.execute_activity(
-                            transcode_frames_activity,
-                            arg={
-                                "camera": camera, "start_time": start_time,
-                                "end_time": end_time,
-                                "frame_start": tc["args"].get("start", 0),
-                                "frame_end": min(tc["args"]["start"] + 24, max_frames - 1),
-                                "max_frames": max_frames,
-                                "proxy_path": proxy_path,
-                                "event_id": event_id,
-                            },
-                            task_queue=FFMPEG_TASK_QUEUE,
-                            start_to_close_timeout=timedelta(seconds=30),
-                            retry_policy=_ACTIVITY_RETRY,
-                        )
-                        turns_transcode += len(frames)
-                        te["frames_returned"] = len(frames)
-                        await workflow.execute_activity(
-                            save_tool_result_activity,
-                            arg={"msg_path": msg_path, "tool_name": "transcode",
-                                 "args": tc["args"], "frames": frames,
-                                 "event_id": event_id},
-                            task_queue=genai_queue,
-                            start_to_close_timeout=timedelta(seconds=30),
-                        )
-                    elif tc["name"] == "show_frame":
-                        await workflow.execute_activity(
-                            save_tool_result_activity,
-                            arg={"msg_path": msg_path, "tool_name": "show_frame",
-                                 "args": tc["args"], "event_id": event_id},
-                            task_queue=genai_queue,
-                            start_to_close_timeout=timedelta(seconds=30),
-                        )
-                    elif tc["name"] in ("crop", "get_snapshot", "compact", "set_description"):
-                        await workflow.execute_activity(
-                            save_tool_result_activity,
-                            arg={"msg_path": msg_path, "tool_name": tc["name"],
-                                 "args": tc["args"], "event_id": event_id},
-                            task_queue=genai_queue,
-                            start_to_close_timeout=timedelta(seconds=30),
-                        )
+                    if tc["name"] not in TOOL_REGISTRY:
+                        log.warning("Unknown tool: %s", tc["name"])
+                        te["error"] = f"Unknown tool: {tc['name']}"
+                        trace_entries.append(te)
+                        continue
+
+                    activity_fn, task_queue = TOOL_REGISTRY[tc["name"]]
+                    retry = _ACTIVITY_RETRY if tc["name"] == "transcode" else None
+                    timeout = timedelta(seconds=60) if tc["name"] == "transcode" else timedelta(seconds=30)
+
+                    outcome = await workflow.execute_activity(
+                        activity_fn,
+                        arg={"msg_path": msg_path, "args": tc.get("args", {}),
+                             "event_id": event_id},
+                        task_queue=task_queue,
+                        start_to_close_timeout=timeout,
+                        retry_policy=retry,
+                    )
+
+                    if tc["name"] == "transcode" and isinstance(outcome, int):
+                        turns_transcode += outcome
+                        te["frames_returned"] = outcome
+
                     trace_entries.append(te)
 
             if not description:
@@ -2212,7 +2262,8 @@ async def async_main(prompts_path: str, provider_path: str) -> None:
     ffmpeg_worker = Worker(
         _temporal_client,
         task_queue=FFMPEG_TASK_QUEUE,
-        activities=[transcode_into_parts_activity, transcode_frames_activity],
+        activities=[transcode_into_parts_activity, tool_transcode_activity],
+        activity_executor=ThreadPoolExecutor(max_workers=2),
         max_concurrent_activities=int(os.environ.get("TEMPORAL_MAX_FFMPEG", "2")),
     )
 
@@ -2222,8 +2273,10 @@ async def async_main(prompts_path: str, provider_path: str) -> None:
         task_queue=GEMINI_TASK_QUEUE,
         activities=[run_genai_activity, run_genai_turn_activity,
                     save_assistant_message_activity,
-                    save_tool_result_activity, save_agent_log_activity,
-                    summarize_agent_activity],
+                    tool_get_snapshot_activity, tool_show_frame_activity,
+                    tool_crop_activity, tool_compact_activity,
+                    tool_set_description_activity, summarize_agent_activity,
+                    save_agent_log_activity],
         max_concurrent_activities=int(os.environ.get("TEMPORAL_MAX_GEMINI_GENAI", "5")),
     )
 
@@ -2234,8 +2287,10 @@ async def async_main(prompts_path: str, provider_path: str) -> None:
         task_queue=OLLAMA_TASK_QUEUE,
         activities=[run_genai_activity, run_genai_turn_activity,
                     save_assistant_message_activity,
-                    save_tool_result_activity, save_agent_log_activity,
-                    summarize_agent_activity],
+                    tool_get_snapshot_activity, tool_show_frame_activity,
+                    tool_crop_activity, tool_compact_activity,
+                    tool_set_description_activity, summarize_agent_activity,
+                    save_agent_log_activity],
         max_concurrent_activities=int(os.environ.get("TEMPORAL_MAX_OLLAMA_GENAI", "1")),
     )
 
