@@ -74,14 +74,14 @@ in
 
   config = lib.mkIf cfg.enable {
     age.secrets.nut-ups-password = {
-      file = ../secrets/nut-ups-password.age;
+      file = ../../secrets/nut-ups-password.age;
       owner = "nutmon";
       group = "nutmon";
       mode = "0400";
     };
 
     age.secrets.hass-webhooks = lib.mkIf cfg.haWebhooks {
-      file = ../secrets/hass-webhooks.age;
+      file = ../../secrets/hass-webhooks.age;
       owner = "root";
     };
 
