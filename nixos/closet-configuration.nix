@@ -32,6 +32,7 @@
       size = 8192;
     }
   ];
+  zramSwap.enable = true;
   virtualisation.podman = {
     enable = true;
     dockerCompat = true;

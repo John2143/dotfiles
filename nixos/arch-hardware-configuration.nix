@@ -346,6 +346,10 @@ in {
   boot.kernelParams = [
     "video=DP-1:2560x1440@120"
     "video=HDMI-A-2:2560x1440@120"
+    "zswap.enabled=1"
+    "zswap.compressor=zstd"
+    "zswap.zpool=zsmalloc"
+    "zswap.max_pool_percent=30"
   ];
   boot.extraModulePackages = [];
   boot.extraModprobeConfig = '''';

@@ -298,6 +298,20 @@
           ./nixos/modules/remote-builders.nix
         ];
       })
+      // (mkHost {
+        name = "big";
+        modules = [
+          ./nixos/shared-cli-configuration.nix
+          ./nixos/big-configuration.nix
+          ./nixos/modules/k3s-agent.nix
+          ./nixos/modules/restic-backup.nix
+          ./nixos/tailscale.nix
+
+          ./nixos/modules/attic.nix
+
+          ./nixos/modules/remote-builders.nix
+        ];
+      })
       // {
         installer = nixpkgs.lib.nixosSystem {
           inherit system;
