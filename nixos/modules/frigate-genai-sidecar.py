@@ -493,6 +493,26 @@ def _load_frames(
     return result
 
 
+def _resolution_pixels(resolution: str, size: tuple[int, int]) -> tuple[int, int]:
+    """Compute target pixel dimensions for a given resolution."""
+    w, h = size
+    if resolution == "max":
+        return w, h
+    elif resolution == "high":
+        tw = min(w, 1280)
+        return tw, int(tw * h / w)
+    else:
+        tw = min(w, 640)
+        return tw, int(tw * h / w)
+
+
+def _resize_to(img: Image.Image, target_width: int) -> Image.Image:
+    """Resize PIL image to target width, preserving aspect ratio."""
+    if img.width <= target_width:
+        return img.copy()
+    ratio = target_width / img.width
+    new_h = int(img.height * ratio)
+    return img.resize((target_width, new_h), Image.LANCZOS)
 def _build_image_content(data: bytes) -> dict:
     """Build an image_url content part for an OpenAI-compatible messages array."""
     import base64
@@ -501,30 +521,26 @@ def _build_image_content(data: bytes) -> dict:
 
 
 
-def _tool_get_frames_schema() -> dict:
+def _tool_show_frame_schema() -> dict:
     return {
         "type": "function",
         "function": {
-            "name": "get_frames",
+            "name": "show_frame",
             "description": (
-                "View frames from the recording by index range and resolution. "
-                "Use 'low' (640px, ~200 tokens/frame) to quickly scan/survey. "
-                "Use 'high' (1280px, ~300 tokens/frame) for detail. "
-                "Use 'max' (source resolution, ~500 tokens/frame) for fine detail. "
-                "Pass same index for start and end to view a single frame."
+                "View recording frames or transcode results. Use 'frame://N' for a single frame "
+                "(defaults to @max for 1 frame, @high for 2-9, @low for 10+). Use 'frame://N-M' "
+                "for a range. Append @low/@high/@max to override. Also supports 'transcode://batch/frame', "
+                "'crop://N', and 'snapshot://'. ~200-500 tokens per frame."
             ),
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "start": {"type": "integer", "description": "Frame index to start at (0-based, inclusive)"},
-                    "end": {"type": "integer", "description": "Frame index to end at (inclusive, same as start for single frame)"},
-                    "resolution": {
+                    "source": {
                         "type": "string",
-                        "enum": ["low", "high", "max"],
-                        "description": "low=640px (~200tok/frame), high=1280px (~300tok/frame), max=source (~500tok/frame)",
+                        "description": "Frame URL: frame://N, frame://N-M@res, transcode://batch/frame, crop://N, or snapshot://"
                     },
                 },
-                "required": ["start", "end", "resolution"],
+                "required": ["source"],
             },
         },
     }
@@ -536,15 +552,14 @@ def _tool_transcode_schema() -> dict:
         "function": {
             "name": "transcode",
             "description": (
-                "Re-extract the next 24 frames from the recording starting at the given "
-                "frame index, at native frame rate, full HD quality. Use when you need dense temporal "
-                "detail at a specific moment. Cost: ~500 tokens/frame, ~12K tokens total. "
-                "Example: transcode(18) returns frames 18-41 from the VOD."
+                "Re-extract 24 HD frames at native fps. Returns TEXT POINTERS — frames saved "
+                "as transcode://{start}/0 through transcode://{start}/23. "
+                "Use show_frame() or crop() to inspect individual frames. ~500 tok/frame when viewed."
             ),
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "start": {"type": "integer", "description": "Frame index to start at (0-based, inclusive). Returns start..start+23."},
+                    "start": {"type": "integer", "description": "Frame index to start at (0-based). Returns start..start+23."},
                 },
                 "required": ["start"],
             },
@@ -604,6 +619,33 @@ def _tool_compact_schema() -> dict:
                 "Call after bulk scanning to make room for high-res exploration."
             ),
             "parameters": {"type": "object", "properties": {}, "required": []},
+        },
+    }
+
+
+def _tool_crop_schema() -> dict:
+    return {
+        "type": "function",
+        "function": {
+            "name": "crop",
+            "description": (
+                "Crop a region from a frame at full resolution (~200-500 tokens). "
+                "Cheaper than loading the full frame. Coordinates 0.0-1.0 normalized. "
+                "Sources: frame://N, transcode://batch/frame, crop://N (no ranges). "
+                "Example: crop('frame://0', 0.6, 0.15, 0.8, 0.3). "
+                "If you miss context, re-crop with wider bounds."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "source": {"type": "string", "description": "Frame URL (single frame only)"},
+                    "x1": {"type": "number", "description": "Left edge 0.0-1.0"},
+                    "y1": {"type": "number", "description": "Top edge 0.0-1.0"},
+                    "x2": {"type": "number", "description": "Right edge 0.0-1.0"},
+                    "y2": {"type": "number", "description": "Bottom edge 0.0-1.0"},
+                },
+                "required": ["source", "x1", "y1", "x2", "y2"],
+            },
         },
     }
 
@@ -818,7 +860,7 @@ async def run_genai_activity(input_data: dict, frames_dir: str) -> str | None:
 
 @activity.defn(name="run_genai_turn")
 async def run_genai_turn_activity(turn_arg: dict) -> dict:
-    """Single-turn LLM call. Loads messages.json, deserializes agent:// refs,
+    """Single-turn LLM call. Loads messages.json, deserializes [[ ]] refs,
     calls LLM, returns tool_calls + assistant_message + optional description.
     """
     import base64
@@ -838,7 +880,7 @@ async def run_genai_turn_activity(turn_arg: dict) -> dict:
     agent_dir = state["agent_dir"]
     messages = state["messages"]
 
-    # Deserialize agent:// refs → base64 data URIs for LLM call
+    # Deserialize [[filename]] refs → base64 data URIs for LLM call
     messages_with_images = _deserialize_messages(messages, agent_dir)
 
     # Load provider config
@@ -868,7 +910,7 @@ async def run_genai_turn_activity(turn_arg: dict) -> dict:
 
     client = OpenAI(api_key=api_key, base_url=base_url, timeout=120.0)
     tools = [
-        _tool_get_snapshot_schema(), _tool_get_frames_schema(),
+        _tool_get_snapshot_schema(), _tool_show_frame_schema(), _tool_crop_schema(),
         _tool_transcode_schema(), _tool_compact_schema(), _tool_set_description_schema(),
     ]
 
@@ -946,53 +988,71 @@ async def init_agent_state_activity(init_arg: dict) -> dict:
     camera_desc = prompts.get("camera", {}).get(camera, "")
     label_hint = prompts.get("label", {}).get(label, "")
 
+    data_box = init_arg.get("data_box")
+    box_text = ""
+    if data_box and len(data_box) == 4:
+        box_text = f"Detected at left={data_box[0]:.2f} top={data_box[1]:.2f} width={data_box[2]:.2f} height={data_box[3]:.2f}."
+
     if label == "car":
-        car_prompt = prompts.get("car", "Identify this vehicle: make, model, year, color.")
         system_prompt = (
-            f"{car_prompt}\n\n"
-            "You have tools to explore frames. Use get_snapshot() first, then "
-            "get_frames() for context. When done, call set_description(description, confidence).\n"
-            f"Camera: {camera}."
+            "You are a meticulous vehicle analyst. Identify make, model, color, and distinctive "
+            "features. Use crop to zoom into details. Track movement across frames. "
+            "Always end with set_description()."
         )
     else:
         system_prompt = (
-            "You are a security camera analyst. Use your tools to explore the "
-            "recording and produce a detailed description.\n\n"
-            "Workflow:\n"
-            "1. get_snapshot() — see what was detected (~500 tokens)\n"
-            "2. get_frames(start, end, 'low') — scan frames (~200 tok/frame)\n"
-            "3. If you find a person or animal, inspect at 'high' (~300) or "
-            "'max' (~500) resolution for identification detail.\n"
-            "4. transcode(start) — re-extract 24 source frames at native fps (~500 tok/frame).\n"
-            "5. compact() — free context after bulk scanning.\n"
-            "6. set_description(description, confidence) to finish.\n\n"
-            "Confidence: 'high', 'medium', 'low', 'nothing_found', 'wrong_tag'.\n"
-            "Always end with set_description() — you MUST call it to finish.\n\n"
-            f"Camera: {camera}. Detected label: {label}."
+            "You are a meticulous security camera analyst. Inspect every clip thoroughly. "
+            "Use your tools to crop for detail, scan frames for context, and investigate. "
+            "Be curious. Always end with set_description()."
         )
-        if camera_desc:
-            system_prompt += f"\n\n{camera_desc}"
-        if label_hint:
-            system_prompt += f"\n\n{label_hint}"
+    if camera_desc:
+        system_prompt += f"\n\n{camera_desc}"
+    if label_hint:
+        system_prompt += f"\n\n{label_hint}"
 
     frame_files = sorted(Path(frames_dir).glob("frame_*.jpg"))
     max_frames = len(frame_files)
     user_text = (
-        f"Camera: {camera}. Label: {label}. "
-        f"Recording has {max_frames} frames available (indices 0-{max_frames - 1}). "
-        f"Start with get_snapshot() to see the close-up, then explore with get_frames()."
+        f"{label} on {camera}. {max_frames} recording frames (indices 0-{max_frames - 1}). "
+        f"{box_text}"
     )
 
     agent_dir = Path(frames_dir) / "agent"
     agent_dir.mkdir(parents=True, exist_ok=True)
     msg_path = str(agent_dir / "messages.json")
 
-    init_state = {
-        "messages": [
-            {"role": "system", "content": system_prompt, "cache_control": {"type": "ephemeral"}},
+    # Seed with a real tool cycle: assistant calls show_frame → snapshot image as result
+    snapshot_path = Path(frames_dir) / "snapshot.jpg"
+    if snapshot_path.exists():
+        # Save snapshot as display_001.jpg (consistent with show_frame handler naming)
+        display_name = f"display_001.jpg"
+        (agent_dir / display_name).write_bytes(snapshot_path.read_bytes())
+        init_messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "assistant", "content": None, "tool_calls": [
+                {"id": "seed_snap", "type": "function", "function": {
+                    "name": "show_frame", "arguments": '{"source": "snapshot://"}',
+                }},
+            ]},
+            {"role": "user", "content": [
+                {"type": "image_url", "image_url": {"url": f"[[{display_name}]]"}},
+                {"type": "text", "text": f"Detection snapshot.\n\n{user_text}"},
+            ]},
+        ]
+    else:
+        init_messages = [
+            {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_text},
-        ],
+        ]
+
+    init_state = {
+        "messages": init_messages,
         "agent_dir": str(agent_dir),
+        "camera": camera,
+        "start_time": init_arg.get("start_time", 0),
+        "end_time": init_arg.get("end_time", 0),
+        "max_frames": max_frames,
+        "data_box": data_box,
         "trace": [],
         "stats": {"turns_low": 0, "turns_high": 0, "turns_max": 0, "turns_transcode": 0},
     }
@@ -1000,7 +1060,6 @@ async def init_agent_state_activity(init_arg: dict) -> dict:
 
     proxy_path = str(Path(frames_dir) / "proxy.mp4")
     log.info("init_agent_state: event=%s frames=%d msg_path=%s", event_id, max_frames, msg_path)
-
     return {"msg_path": msg_path, "max_frames": max_frames, "proxy_path": proxy_path}
 
 
@@ -1081,60 +1140,246 @@ async def save_tool_result_activity(save_arg: dict) -> dict | None:
             raw = snapshot_path.read_bytes()
             fname = "snapshot.jpg"
             (agent_path / fname).write_bytes(raw)
-            ref = f"agent://{fname}"
+            ref = f"[[{fname}]]"
             img_content = [{"type": "image_url", "image_url": {"url": ref}}]
-            img_content.append({"type": "text", "text": "Close-up snapshot."})
+            img_content.append({"type": "text", "text": "Detection snapshot."})
             state["messages"].append({"role": "user", "content": img_content})
-            tool_result = "Snapshot of detected object."
         else:
-            state["messages"].append({
-                "role": "tool", "tool_call_id": tc_id,
-                "content": "No snapshot available.",
-            })
-            tool_result = None
+            if tc_id:
+                state["messages"].append({
+                    "role": "tool", "tool_call_id": tc_id,
+                    "content": "No snapshot available.",
+                })
 
-    elif tool_name == "get_frames":
-        start = tool_args.get("start", 0)
-        end = tool_args.get("end", start)
-        resolution = tool_args.get("resolution", "low")
-        frame_files = sorted(Path(frames_dir).glob("frame_*.jpg"))
-        frames = _load_frames(frame_files, start, end, resolution)
-        if frames:
-            img_counter = len(list(agent_path.glob("tool_*.jpg")))
-            img_content = []
-            for f in frames:
-                img_counter += 1
-                fname = f"tool_{img_counter:03d}.jpg"
-                (agent_path / fname).write_bytes(f)
-                ref = f"agent://{fname}"
-                img_content.append({"type": "image_url", "image_url": {"url": ref}})
-            img_content.append({
-                "type": "text",
-                "text": f"Frames {start}-{end} at {resolution} resolution.",
+    elif tool_name == "show_frame":
+        source = tool_args.get("source", "snapshot://")
+        # Parse resolution suffix: @low, @high, @max
+        resolution = None
+        base_source = source
+        if "@" in source:
+            base_source, res_str = source.rsplit("@", 1)
+            if res_str in ("low", "high", "max"):
+                resolution = res_str
+        # Parse source type and frame spec
+        if base_source.startswith("frame://"):
+            frame_spec = base_source[len("frame://"):]
+            src_type = "frame"
+        elif base_source.startswith("transcode://"):
+            frame_spec = base_source[len("transcode://"):]
+            src_type = "transcode"
+        elif base_source.startswith("crop://"):
+            frame_spec = base_source[len("crop://"):]
+            src_type = "crop"
+    else:
+        src_type = "snapshot"
+        frame_spec = ""
+
+    # Handle snapshot specially — no index parsing needed
+    if src_type == "snapshot":
+        img_path = Path(frames_dir) / "snapshot.jpg"
+        if img_path.exists():
+            img = Image.open(img_path)
+            img_counter = len(list(agent_path.glob("display_*.jpg"))) + 1
+            fname = f"display_{img_counter:03d}.jpg"
+            img.save(agent_path / fname, "JPEG", quality=85)
+            ref = f"[[{fname}]]"
+            state["messages"].append({
+                "role": "user",
+                "content": [
+                    {"type": "image_url", "image_url": {"url": ref}},
+                    {"type": "text", "text": "Detection snapshot."},
+                ],
             })
-            state["messages"].append({"role": "user", "content": img_content})
-            tool_result = f"Returned {len(frames)} frame(s) [{start}-{end}] at {resolution} resolution."
         else:
-            tool_result = "No frames in range."
+            if tc_id:
+                state["messages"].append({
+                    "role": "tool", "tool_call_id": tc_id,
+                    "content": "No snapshot available.",
+                })
+    elif src_type != "snapshot":
+        # Determine if range (N-M) or single (N)
+        frames_list = []
+        if "-" in frame_spec:
+            range_parts = frame_spec.split("-")
+            try:
+                f_start, f_end = int(range_parts[0]), int(range_parts[1])
+                frames_list = list(range(f_start, f_end + 1))
+            except (ValueError, IndexError):
+                frames_list = []
+        elif frame_spec:
+            try:
+                frames_list = [int(frame_spec)]
+            except ValueError:
+                frames_list = []
+
+        # For transcode source, frame_spec is "batch/frame_idx" or "batch/start-end"
+        if src_type == "transcode":
+            parts = frame_spec.split("/")
+            if len(parts) >= 2:
+                batch = int(parts[0])
+                frame_part = parts[1]
+                if "-" in frame_part:
+                    rp = frame_part.split("-")
+                    frames_list = list(range(int(rp[0]), int(rp[1]) + 1))
+                else:
+                    frames_list = [int(frame_part)]
+            else:
+                frames_list = []
+
+        if not frames_list:
+            if tc_id:
+                state["messages"].append({
+                    "role": "tool", "tool_call_id": tc_id,
+                    "content": f"Invalid frame source: {source}",
+                })
+        else:
+            # Compute default resolution from frame count
+            if resolution is None:
+                n_frames = len(frames_list)
+                if n_frames == 1:
+                    resolution = "max"
+                elif n_frames <= 9:
+                    resolution = "high"
+                else:
+                    resolution = "low"
+            img_content = []
+            img_counter = len(list(agent_path.glob("display_*.jpg")))
+            for fi in frames_list:
+                # Build file path
+                if src_type == "frame":
+                    img_path = Path(frames_dir) / f"frame_{fi:03d}.jpg"
+                elif src_type == "transcode":
+                    img_path = agent_path / f"transcode_{batch:03d}_{fi:03d}.jpg"
+                elif src_type == "crop":
+                    img_path = agent_path / f"crop_{fi:03d}.jpg"
+                else:
+                    img_path = Path(frames_dir) / "snapshot.jpg"
+                if not img_path.exists():
+                    if src_type == "transcode":
+                        # On-demand transcode
+                        log.warning("transcode batch %d not found, extracting on demand", batch)
+                        camera = state.get("camera", "")
+                        st = state.get("start_time", 0)
+                        et = state.get("end_time", 0)
+                        mf = state.get("max_frames", 0)
+                        proxy = str(Path(frames_dir) / "proxy.mp4")
+                        try:
+                            tcframes = _transcode_frames(camera, st, et, batch, min(batch + 24, mf - 1), mf, proxy)
+                            tci = 0
+                            for tcdata in tcframes:
+                                tci += 1
+                                tfname = f"transcode_{batch:03d}_{tci:03d}.jpg"
+                                (agent_path / tfname).write_bytes(tcdata)
+                            img_path = agent_path / f"transcode_{batch:03d}_{fi:03d}.jpg"
+                        except Exception as e:
+                            log.exception("On-demand transcode failed")
+                            continue
+                    else:
+                        msg = f"Source not found: {source}"
+                        if tc_id:
+                            state["messages"].append({"role": "tool", "tool_call_id": tc_id, "content": msg})
+                        continue
+                # Load and re-encode
+                try:
+                    img = Image.open(img_path)
+                    tw, th = _resolution_pixels(resolution, img.size)
+                    img = _resize_to(img, tw)
+                except Exception:
+                    log.exception("Failed to load frame %s", img_path)
+                    continue
+                img_counter += 1
+                fname = f"display_{img_counter:03d}.jpg"
+                img.save(agent_path / fname, "JPEG", quality=85)
+                ref = f"[[{fname}]]"
+                img_content.append({"type": "image_url", "image_url": {"url": ref}})
+            if img_content:
+                label_text = f"{len(frames_list)} frame(s) at {resolution} resolution."
+                if src_type == "transcode":
+                    label_text += f" From transcode batch {batch}."
+                img_content.append({"type": "text", "text": label_text})
+                state["messages"].append({"role": "user", "content": img_content})
 
     elif tool_name == "transcode":
         frames = save_arg.get("frames", [])
-        img_counter = len(list(agent_path.glob("tool_*.jpg")))
-        img_content = []
-        for f in frames:
-            img_counter += 1
-            fname = f"tool_{img_counter:03d}.jpg"
+        batch_start = tool_args.get("start", 0)
+        for i, f in enumerate(frames):
+            fname = f"transcode_{batch_start:03d}_{i:03d}.jpg"
             (agent_path / fname).write_bytes(f)
-            ref = f"agent://{fname}"
-            img_content.append({"type": "image_url", "image_url": {"url": ref}})
-        img_content.append({
-            "type": "text",
-            "text": f"Transcoded frames {tool_args.get('start', 0)}-{tool_args.get('start', 0) + len(frames) - 1} at source resolution.",
-        })
-        state["messages"].append({"role": "user", "content": img_content})
-        tool_result = f"Transcoded {len(frames)} frames [{tool_args.get('start', 0)}-{tool_args.get('start', 0) + len(frames) - 1}] at source resolution."
+        n_frames = len(frames)
+        if tc_id:
+            state["messages"].append({
+                "role": "tool", "tool_call_id": tc_id,
+                "content": (
+                    f"Transcoded {n_frames} frames [{batch_start}-{batch_start + n_frames - 1}] "
+                    f"at source resolution. Available: transcode://{batch_start}/0 through "
+                    f"transcode://{batch_start}/{n_frames - 1}. "
+                    f"Use show_frame() or crop() to inspect individual frames."
+                ),
+            })
 
+    elif tool_name == "crop":
+        source = tool_args.get("source", "")
+        x1 = max(0.0, min(1.0, float(tool_args.get("x1", 0))))
+        y1 = max(0.0, min(1.0, float(tool_args.get("y1", 0))))
+        x2 = max(0.0, min(1.0, float(tool_args.get("x2", 1))))
+        y2 = max(0.0, min(1.0, float(tool_args.get("y2", 1))))
+        if x1 >= x2 or y1 >= y2:
+            if tc_id:
+                state["messages"].append({
+                    "role": "tool", "tool_call_id": tc_id,
+                    "content": f"Invalid crop region ({x1},{y1})-({x2},{y2})",
+                })
+        else:
+            # Resolve source to file path (same as show_frame but single only)
+            base_source = source
+            if "@" in source:
+                base_source = source.rsplit("@", 1)[0]
+            img_path = None
+            if base_source.startswith("frame://"):
+                idx = int(base_source[len("frame://"):])
+                img_path = Path(frames_dir) / f"frame_{idx:03d}.jpg"
+            elif base_source.startswith("transcode://"):
+                parts = base_source[len("transcode://"):].split("/")
+                batch = int(parts[0])
+                fi = int(parts[1])
+                img_path = agent_path / f"transcode_{batch:03d}_{fi:03d}.jpg"
+            elif base_source.startswith("crop://"):
+                idx = int(base_source[len("crop://"):])
+                img_path = agent_path / f"crop_{idx:03d}.jpg"
+            else:
+                img_path = Path(frames_dir) / "snapshot.jpg"
+            if img_path and img_path.exists():
+                try:
+                    img = Image.open(img_path)
+                    w, h = img.size
+                    crop_box = (int(x1 * w), int(y1 * h), int(x2 * w), int(y2 * h))
+                    cropped = img.crop(crop_box)
+                    img_counter = len(list(agent_path.glob("crop_*.jpg")))
+                    crop_id = img_counter + 1
+                    fname = f"crop_{crop_id:03d}.jpg"
+                    cropped.save(agent_path / fname, "JPEG", quality=95)
+                    ref = f"[[{fname}]]"
+                    state["messages"].append({
+                        "role": "user",
+                        "content": [
+                            {"type": "image_url", "image_url": {"url": ref}},
+                            {"type": "text", "text": f"Cropped ({x1:.2f},{y1:.2f})-({x2:.2f},{y2:.2f}) from {base_source}. Stored as crop://{crop_id}."},
+                        ],
+                    })
+                except Exception as e:
+                    if tc_id:
+                        state["messages"].append({
+                            "role": "tool", "tool_call_id": tc_id,
+                            "content": f"Failed to crop: {e}",
+                        })
+            else:
+                if tc_id:
+                    state["messages"].append({
+                        "role": "tool", "tool_call_id": tc_id,
+                        "content": f"Source not found: {source}",
+                    })
     elif tool_name == "compact":
+        # Collect text findings
         summary_parts = ["Exploration so far:"]
         for m in state["messages"]:
             if m.get("role") == "user" and isinstance(m.get("content"), list):
@@ -1144,6 +1389,14 @@ async def save_tool_result_activity(save_arg: dict) -> dict | None:
                 ]
                 for t in text_parts:
                     summary_parts.append(f"  {t}")
+        # Preserve crop addresses
+        crop_files = sorted(Path(state["agent_dir"]).glob("crop_*.jpg"))
+        if crop_files:
+            crop_lines = ["\nCrops available:"]
+            for cf in crop_files:
+                crop_id = cf.stem.replace("crop_", "")
+                crop_lines.append(f"  crop://{int(crop_id)}: {cf.name}")
+            summary_parts.append("\n".join(crop_lines))
         summary_text = "\n".join(summary_parts)
         state["messages"].append({"role": "user", "content": summary_text})
         # Strip image_url parts from all earlier user messages
@@ -1155,11 +1408,7 @@ async def save_tool_result_activity(save_arg: dict) -> dict | None:
                         p for p in content
                         if isinstance(p, dict) and p.get("type") != "image_url"
                     ]
-        tool_result = (
-            "Context compacted. Images from previous turns removed. "
-            "Findings summary above. Continue exploring."
-        )
-        # Also append as tool message
+        tool_result = "Context compacted. Images removed, crop addresses preserved."
         state["messages"].append({
             "role": "tool", "tool_call_id": tc_id, "content": tool_result,
         })
@@ -1330,38 +1579,9 @@ def _atomic_write(path: str, data: dict) -> None:
         _json.dump(data, f, default=str)
     os.replace(tmp, path)
 
-def _serialize_messages(messages: list, agent_dir: str) -> list:
-    """Convert base64 data URIs in messages to agent:// refs.
-    Writes image bytes to agent_dir. Mutates messages in place.
-    Returns the modified messages list.
-    """
-    import base64 as _b64
-    import json as _json
-    agent_path = Path(agent_dir)
-    agent_path.mkdir(parents=True, exist_ok=True)
-    img_counter = [0]
-
-    def _save_image(b64_data: str) -> str:
-        """Save base64 data to agent_dir, return agent:// ref."""
-        img_counter[0] += 1
-        fname = f"tool_{img_counter[0]:03d}.jpg"
-        raw = _b64.b64decode(b64_data)
-        (agent_path / fname).write_bytes(raw)
-        return f"agent://{fname}"
-
-    for m in messages:
-        content = m.get("content")
-        if isinstance(content, list):
-            for part in content:
-                if isinstance(part, dict) and part.get("type") == "image_url":
-                    url = part.get("image_url", {}).get("url", "")
-                    if url.startswith("data:image/jpeg;base64,"):
-                        b64 = url[len("data:image/jpeg;base64,"):]
-                        part["image_url"]["url"] = _save_image(b64)
-    return messages
 
 def _deserialize_messages(messages: list, agent_dir: str) -> list:
-    """Convert agent:// refs in messages to base64 data URIs.
+    """Convert [[filename]] refs in messages to base64 data URIs.
     Reads image bytes from agent_dir. Does NOT mutate — returns new list.
     """
     import base64 as _b64
@@ -1374,8 +1594,8 @@ def _deserialize_messages(messages: list, agent_dir: str) -> list:
             for part in content:
                 if isinstance(part, dict) and part.get("type") == "image_url":
                     url = part.get("image_url", {}).get("url", "")
-                    if url.startswith("agent://"):
-                        fname = url[len("agent://"):]
+                    if url.startswith("[[") and url.endswith("]]"):
+                        fname = url[2:-2]
                         img_path = agent_path / fname
                         if img_path.exists():
                             raw = img_path.read_bytes()
@@ -1594,7 +1814,7 @@ class GenAIWorkflow:
                         save_assistant_message_activity,
                         arg={"msg_path": msg_path, "assistant_message": result["assistant_message"]},
                         task_queue=genai_queue,
-                        start_to_close_timeout=timedelta(seconds=10),
+                        start_to_close_timeout=timedelta(seconds=30),
                     )
                     trace_entries.append({"type": "nudge", "reason": "no_tool_call"})
                     continue
@@ -1604,7 +1824,7 @@ class GenAIWorkflow:
                     save_assistant_message_activity,
                     arg={"msg_path": msg_path, "assistant_message": result["assistant_message"]},
                     task_queue=genai_queue,
-                    start_to_close_timeout=timedelta(seconds=10),
+                    start_to_close_timeout=timedelta(seconds=30),
                 )
 
                 for tc in result.get("tool_calls", []):
@@ -1633,31 +1853,23 @@ class GenAIWorkflow:
                                  "args": tc["args"], "frames": frames,
                                  "event_id": event_id},
                             task_queue=genai_queue,
-                            start_to_close_timeout=timedelta(seconds=10),
+                            start_to_close_timeout=timedelta(seconds=30),
                         )
-                    elif tc["name"] == "get_frames":
-                        resolution = tc["args"].get("resolution", "low")
-                        if resolution == "low":
-                            turns_low += 1
-                        elif resolution == "high":
-                            turns_high += 1
-                        else:
-                            turns_max += 1
-                        te["resolution"] = resolution
+                    elif tc["name"] == "show_frame":
                         await workflow.execute_activity(
                             save_tool_result_activity,
-                            arg={"msg_path": msg_path, "tool_name": "get_frames",
+                            arg={"msg_path": msg_path, "tool_name": "show_frame",
                                  "args": tc["args"], "event_id": event_id},
                             task_queue=genai_queue,
-                            start_to_close_timeout=timedelta(seconds=10),
+                            start_to_close_timeout=timedelta(seconds=30),
                         )
-                    elif tc["name"] in ("get_snapshot", "compact", "set_description"):
+                    elif tc["name"] in ("crop", "get_snapshot", "compact", "set_description"):
                         await workflow.execute_activity(
                             save_tool_result_activity,
                             arg={"msg_path": msg_path, "tool_name": tc["name"],
                                  "args": tc["args"], "event_id": event_id},
                             task_queue=genai_queue,
-                            start_to_close_timeout=timedelta(seconds=10),
+                            start_to_close_timeout=timedelta(seconds=30),
                         )
                     trace_entries.append(te)
 
@@ -1856,6 +2068,7 @@ def _build_workflow_input(event: dict) -> dict | None:
         log.info("Label pause active for '%s', skipping event %s", label, event.get("id"))
         return None
     input_data = {
+        "data_box": event.get("data", {}).get("box"),
         "event_id": event["id"],
         "camera": event.get("camera", ""),
         "label": label,
