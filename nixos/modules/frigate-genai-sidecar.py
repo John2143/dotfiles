@@ -249,16 +249,13 @@ def transcode_into_parts(
     camera: str,
     start_time: float,
     end_time: float,
-    fps: float,
-    max_frames: int = 30,
     proxy_path: str = "",
-
-
 ) -> list[bytes]:
     """
-    Extract JPEG frames at source resolution from Frigate recording via HLS.
+    Extract every JPEG frame at source resolution from Frigate recording via HLS.
     If proxy_path is given, simultaneously produce a local H.264 proxy MP4
     for fast in-process transcoding — one HLS pull, two outputs.
+    Full source quality — no fps cap, no scaling.
 
     Returns list of JPEG byte strings, chronologically ordered.
     """
@@ -271,8 +268,8 @@ def transcode_into_parts(
     duration = end_time - start_time
 
     log.info(
-        "Extracting up to %d frames at %.1ffps from %s (%.1fs clip)",
-        max_frames, fps, hls_url, duration,
+        "Extracting all frames from %s (%.1fs clip, full source framerate)",
+        hls_url, duration,
     )
 
     with tempfile.TemporaryDirectory(prefix="frigate-genai-") as tmp:
@@ -282,8 +279,6 @@ def transcode_into_parts(
             "-loglevel", "error",
             "-i", hls_url,
             "-map", "0:v",
-            "-vf", f"fps={fps}",
-            "-frames:v", str(max_frames),
             "-q:v", "3",
             f"{tmp}/frame_%03d.jpg",
         ]
@@ -291,7 +286,6 @@ def transcode_into_parts(
         if proxy_path:
             cmd += [
                 "-map", "0:v",
-                "-vf", f"fps={fps},scale='min(1920,iw)':-2,format=yuv420p",
                 "-c:v", "h264_nvenc",
                 "-preset", "p1",
                 "-cq", "23",
@@ -533,7 +527,7 @@ def _tool_show_frame_schema() -> dict:
                 "Display recording frames to your vision. frame://N jumps to any keyframe instantly "
                 "(free, fast). frame://N-M@low does a low-res scan of a range. "
                 "transcode://batch/frame shows a high-res frame from a transcode batch. "
-                "crop://N re-shows a crop. snapshot:// shows the detection snapshot. "
+                "crop://N re-shows a crop. snapshot:// shows the low-res bounding box preview. "
                 "Cost: ~200-500 tokens per frame."
             ),
             "parameters": {
@@ -578,8 +572,9 @@ def _tool_get_snapshot_schema() -> dict:
         "function": {
             "name": "get_snapshot",
             "description": (
-                "Return the close-up snapshot of the detected object from Frigate. "
-                "Use this first to understand what was detected. Cost: ~500 tokens."
+                "The Frigate detection snapshot: a low-res bounding box preview ~3s into "
+                "the clip. Good for orientation — but use frame://N to find and examine "
+                "the object in the actual recording frames. Cannot be cropped. Cost: ~500 tokens."
             ),
             "parameters": {"type": "object", "properties": {}, "required": []},
         },
@@ -778,20 +773,17 @@ async def transcode_into_parts_activity(input_data: dict) -> tuple[str, int]:
     event_id = input_data["event_id"]
 
     duration = end_time - start_time
-    fps = max(1, min(4, 4 / max(1, duration)))
-    max_frames = max(4, min(300, int(duration * fps)))
-
     frames_dir = FRAMES_DIR / event_id
     frames_dir_str = str(frames_dir)
     proxy_path = str(frames_dir / "proxy.mp4")
     frames_dir.mkdir(parents=True, exist_ok=True)
     log.info(
-        "Activity transcode_into_parts: event=%s camera=%s duration=%.1fs max_frames=%d dir=%s",
-        event_id, camera, duration, max_frames, frames_dir,
+        "Activity transcode_into_parts: event=%s camera=%s duration=%.1fs dir=%s",
+        event_id, camera, duration, frames_dir,
     )
 
     frames = await _run_with_heartbeat(
-        transcode_into_parts, camera, start_time, end_time, fps, max_frames, proxy_path,
+        transcode_into_parts, camera, start_time, end_time, proxy_path,
     )
     if not frames:
         raise ApplicationError(
@@ -1034,27 +1026,32 @@ async def init_agent_state_activity(init_arg: dict) -> dict:
 
     if label == "car":
         system_prompt = (
-            "You are a meticulous vehicle analyst. Identify make, model, color, license plate, "
-            "and distinctive features. Scan every angle. Track movement across frames. "
+            "You are a forensic vehicle analyst. The event you are watching matters — "
+            "someone may have committed a crime. Your entire job is to LOOK AT FRAMES. "
+            "Extract every identifying detail: make, model, color, license plate, damage, "
+            "stickers, occupants. "
             "\n\n"
-            "STRATEGY. show_frame() displays frames to your vision. Use frame://N for any "
-            "keyframe index — instant and free. Use snapshot:// for the detection snapshot. "
-            "transcode() is slow (~2s) — extract 24 HD frames only after scanning found "
-            "something worth inspecting. crop() zooms into details at max resolution. "
-            "compact() frees context by dropping images but keeping text findings — call "
-            "it after every 3-4 images. Always end with set_description()."
+            "SCANNING IS YOUR PRIMARY TASK. Show ranges of frames at @low resolution — "
+            "never view single frames in isolation. For short clips (<10 frames), view EVERY "
+            "frame. Show them 5-10 at a time. Scan the full timeline before drawing conclusions. "
+            "When you find something, transcode() that region and inspect the HD frames. "
+            "crop() to zoom into plates, faces, logos. compact() after every 3-4 images. "
+            "Bisect when the vehicle stops or disappears. Track every movement. "
+            "Only call set_description() after you have seen enough frames to be certain."
         )
     else:
         system_prompt = (
-            "You are a meticulous security camera analyst. Inspect every clip thoroughly. "
-            "Scan freely. Hunt for evidence. Build a timeline of what happened. "
+            "You are a forensic security camera analyst. The event you are watching "
+            "matters — someone may need help or have committed a crime. Your entire job "
+            "is to LOOK AT FRAMES. Understand exactly what happened from start to finish."
             "\n\n"
-            "STRATEGY. show_frame() displays frames to your vision. Use frame://N for any "
-            "keyframe index — instant and free. Use snapshot:// for the detection snapshot. "
-            "transcode() is slow (~2s) — extract 24 HD frames only after scanning found "
-            "something worth inspecting. crop() zooms into details at max resolution. "
-            "compact() frees context by dropping images but keeping text findings — call "
-            "it after every 3-4 images. Always end with set_description()."
+            "SCANNING IS YOUR PRIMARY TASK. Show ranges of frames at @low resolution — "
+            "never view single frames in isolation. For short clips (<10 frames), view EVERY "
+            "frame. Show them 5-10 at a time. Scan the full timeline before drawing conclusions. "
+            "When you find something, transcode() that region and inspect the HD frames. "
+            "crop() for identifying features and context clues. compact() after every 3-4 images. "
+            "Bisect when behavior changes or the subject disappears. Track every movement. "
+            "Only call set_description() after you have seen enough frames to be certain."
         )
     if camera_desc:
         system_prompt += f"\n\n{camera_desc}"
@@ -1065,7 +1062,11 @@ async def init_agent_state_activity(init_arg: dict) -> dict:
     max_frames = len(frame_files)
     user_text = (
         f"{label} on {camera}. {max_frames} recording frames (indices 0-{max_frames - 1}). "
-        f"{box_text}"
+        f"The snapshot is a low-res bounding box preview ~3s into the clip — orient yourself "
+        f"with it, then find the object in the actual frames. "
+        f"SCAN FIRST. Use show_frame('frame://0-{max_frames - 1}@low') to scan the whole clip "
+        f"before committing to a transcode(). Many @low frames cost less than one HD transcode frame. "
+        f"Only transcode() after you know which region matters. {box_text}"
     )
 
     agent_dir = Path(frames_dir) / "agent"
@@ -1348,13 +1349,16 @@ def tool_transcode_activity(arg: dict) -> dict:
         state["messages"].append({
             "role": "tool", "tool_call_id": tc_id,
             "content": (
-                f"Transcoded {n_frames} frames [{batch_start}-{batch_start + n_frames - 1}] "
+                f"Transcoded {n_frames} HD frames [{batch_start}-{batch_start + n_frames - 1}] "
                 f"at source resolution. Available: transcode://{batch_start}/0 through "
                 f"transcode://{batch_start}/{n_frames - 1}. "
-                f"Use show_frame() or crop() to inspect individual frames."
+                f"You have NOT viewed these frames yet. Call show_frame() to inspect them. "
+                f"Scan a range at @low first (e.g. show_frame('transcode://{batch_start}/0-5@low')) "
+                f"— many low-res views cost less than one HD view. Then zoom in on specific frames "
+                f"at @high or @max, and crop() for detail. "
+                f"Do NOT call set_description() until you have inspected at least some frames."
             ),
         })
-
     _atomic_write(msg_path, state)
     log.info("tool_transcode: event=%s frames=%d [%d-%d]",
              event_id, n_frames, batch_start, batch_start + n_frames - 1)
@@ -1401,8 +1405,17 @@ async def tool_crop_activity(arg: dict) -> dict:
         elif base_source.startswith("crop://"):
             idx = int(base_source[len("crop://"):])
             img_path = agent_path / f"crop_{idx:03d}.jpg"
-        else:
-            img_path = Path(frames_dir) / "snapshot.jpg"
+        elif base_source.startswith("snapshot://"):
+            if tc_id:
+                state["messages"].append({
+                    "role": "tool", "tool_call_id": tc_id,
+                    "content": (
+                        "Cannot crop snapshot://. The snapshot is a low-res bounding box "
+                        "preview. Use frame://N to find the object in the recording frames."
+                    ),
+                })
+            _atomic_write(msg_path, state)
+            return {"crop_id": None, "source": source, "error": "snapshot_rejected"}
         if img_path and img_path.exists():
             try:
                 img = Image.open(img_path)
@@ -1912,6 +1925,12 @@ class GenAIWorkflow:
                     "prompt_tokens": pt, "completion_tokens": ct,
                     "cached": cached > 0,
                 })
+                workflow.set_current_details(
+                    f"Turn {turn+1}/{MAX_TURNS} | "
+                    f"tokens: {total_cost['prompt']}+{total_cost['completion']} "
+                    f"(cached: {total_cost['cached']}) | "
+                    f"tools: {len(trace_entries)}"
+                )
 
                 if result.get("description"):
                     description = result["description"]
@@ -1964,6 +1983,13 @@ class GenAIWorkflow:
                     if isinstance(outcome, dict):
                         te.update(outcome)
                     trace_entries.append(te)
+                workflow.set_current_details(
+                    f"Turn {turn+1}/{MAX_TURNS} | "
+                    f"tokens: {total_cost['prompt']}+{total_cost['completion']} "
+                    f"(cached: {total_cost['cached']}) | "
+                    f"tools: {len(trace_entries)} | "
+                    f"last: {tc['name']}"
+                )
 
             if not description:
                 description = f"Agentic failed: max turns ({MAX_TURNS}) exceeded without set_description"
@@ -2438,6 +2464,8 @@ async def async_main(prompts_path: str, provider_path: str) -> None:
                     "global": paused_global,
                     "labels": paused_labels,
                 }).encode())
+            elif self.path.startswith("/agent/"):
+                self._serve_agent_view()
             else:
                 self.send_response(404)
                 self.end_headers()
@@ -2456,6 +2484,114 @@ async def async_main(prompts_path: str, provider_path: str) -> None:
                 self._cors()
                 self.end_headers()
                 self.wfile.write(str(e).encode())
+
+        def _serve_agent_view(self):
+            """Render agent conversation history as HTML with inline images."""
+            import base64 as _b64
+            import json as _json
+            parts = self.path.split("/")
+            # path: /agent/{event_id} or /agent/{event_id}/file/{filename}
+            if len(parts) < 3:
+                self.send_response(400)
+                self.end_headers()
+                return
+            event_id = parts[2]
+            # Raw file serving
+            if len(parts) >= 5 and parts[3] == "file":
+                fname = parts[4]
+                img_path = FRAMES_DIR / event_id / "agent" / fname
+                if img_path.exists():
+                    self.send_response(200)
+                    self._cors()
+                    self.send_header("Content-type", "image/jpeg")
+                    self.end_headers()
+                    self.wfile.write(img_path.read_bytes())
+                else:
+                    self.send_response(404)
+                    self.end_headers()
+                return
+            # Full conversation view
+            msg_path = FRAMES_DIR / event_id / "agent" / "messages.json"
+            if not msg_path.exists():
+                self.send_response(404)
+                self._cors()
+                self.send_header("Content-type", "text/plain")
+                self.end_headers()
+                self.wfile.write(b"Agent state not found")
+                return
+            state = _json.loads(msg_path.read_text())
+            msgs = state.get("messages", [])
+            agent_dir = state.get("agent_dir", "")
+            html = ['<!DOCTYPE html><html><head><meta charset="utf-8">'
+                    '<title>Agent: {}</title>'
+                    '<style>*{{margin:0;padding:0;box-sizing:border-box}}'
+                    'body{{background:#0f0f1a;color:#d4d4d8;font:13px system-ui;padding:16px}}'
+                    'h1{{font-size:16px;margin-bottom:8px;color:#fff}}'
+                    '.msg{{margin-bottom:12px;padding:10px 14px;border-radius:8px;max-width:900px}}'
+                    '.msg.system{{background:#1a1a2e;border-left:3px solid #666}}'
+                    '.msg.user{{background:#14283a;border-left:3px solid #4ade80}}'
+                    '.msg.assistant{{background:#2a1a2e;border-left:3px solid #c084fc}}'
+                    '.msg.tool{{background:#1a2e1a;border-left:3px solid #fbbf24}}'
+                    '.role{{font-size:10px;text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px;color:#888}}'
+                    'img{{max-width:400px;max-height:300px;border-radius:4px;margin:4px 4px 0 0;cursor:pointer}}'
+                    'img:hover{{outline:2px solid #4ade80}}'
+                    '.text{{line-height:1.5;white-space:pre-wrap}}'
+                    '.tool-call{{font-size:11px;color:#c084fc;font-family:monospace}}'
+                    '</style></head><body>'
+                    '<h1>Agent: {}</h1>'.format(event_id, event_id)]
+            for m in msgs:
+                role = m.get("role", "?")
+                html.append('<div class="msg {}"><div class="role">{}</div>'.format(role, role))
+                if role == "assistant":
+                    tcs = m.get("tool_calls", [])
+                    if tcs:
+                        for tc in tcs:
+                            name = tc.get("function", {}).get("name", "?")
+                            args = tc.get("function", {}).get("arguments", "")
+                            if isinstance(args, str):
+                                try: args = _json.loads(args)
+                                except: pass
+                            html.append('<div class="tool-call">→ {}({})</div>'.format(
+                                name, _json.dumps(args)[:200]))
+                    content = m.get("content", "")
+                    if content:
+                        html.append('<div class="text">{}</div>'.format(str(content)[:500]))
+                elif role == "tool":
+                    html.append('<div class="text">{}</div>'.format(str(m.get("content", ""))[:500]))
+                elif role == "user":
+                    content = m.get("content", "")
+                    if isinstance(content, list):
+                        for part in content:
+                            if isinstance(part, dict):
+                                if part.get("type") == "image_url":
+                                    url = part.get("image_url", {}).get("url", "")
+                                    if url.startswith("[[") and url.endswith("]]"):
+                                        fname = url[2:-2]
+                                        img_path = Path(agent_dir) / fname
+                                        if img_path.exists():
+                                            raw = img_path.read_bytes()
+                                            b64 = _b64.b64encode(raw).decode()
+                                            html.append('<img src="data:image/jpeg;base64,{}" '
+                                                        'onclick="this.style.maxWidth=this.style.maxWidth==\'100%\'?\'400px\':\'100%\'">'.format(b64))
+                                        else:
+                                            html.append('<div class="text">[image: {} not found]</div>'.format(fname))
+                                elif part.get("type") == "text":
+                                    html.append('<div class="text">{}</div>'.format(part["text"][:500]))
+                    else:
+                        html.append('<div class="text">{}</div>'.format(str(content)[:500]))
+                elif role == "system":
+                    html.append('<div class="text">{}</div>'.format(str(m.get("content", ""))[:500]))
+                html.append('</div>')
+            html.append('<div style="margin-top:16px;color:#666;font-size:11px">'
+                        'camera: {} | start_time: {} | end_time: {} | max_frames: {}</div>'
+                        .format(state.get("camera","?"), state.get("start_time","?"),
+                                state.get("end_time","?"), state.get("max_frames","?")))
+            html.append('</body></html>')
+            self.send_response(200)
+            self._cors()
+            self.send_header("Content-type", "text/html; charset=utf-8")
+            self.end_headers()
+            self.wfile.write("\n".join(html).encode())
         def do_POST(self):
             if self.path.startswith("/reprocess/"):
                 event_id = self.path.split("/reprocess/", 1)[1]
