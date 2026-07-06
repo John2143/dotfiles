@@ -315,6 +315,11 @@ in
     "--service-cidr=10.43.0.0/16,fd42:42:43::/112"
     "--flannel-ipv6-masq"
     "--node-ip=192.168.5.76,fd00:1::7ce1:b412:3068:c799"
+    # Fast crash recovery — detect downed nodes in 20s, evict pods in 40s
+    "--kube-apiserver-arg=default-not-ready-toleration-seconds=40"
+    "--kube-apiserver-arg=default-unreachable-toleration-seconds=40"
+    "--kube-controller-manager-arg=node-monitor-grace-period=20s"
+    "--kube-controller-manager-arg=node-monitor-period=2s"
   ];
   custom.backup.enable = true;
 

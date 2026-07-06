@@ -33,15 +33,15 @@
       wants = [ "avahi-daemon.service" ];
       environment.K3S_RESOLV_CONF = "/etc/rancher/k3s/resolv.conf";
       serviceConfig = {
-        TimeoutStopSec = lib.mkForce "120s";
+        TimeoutStopSec = lib.mkForce "30s";
       };
     };
     # Graceful k3s shutdown — tells kubelet to drain pods before systemd
     # sends SIGKILL. 90s for normal pods, 15s for critical (DNS, CNI).
     services.k3s.gracefulNodeShutdown = {
       enable = true;
-      shutdownGracePeriod = "90s";
-      shutdownGracePeriodCriticalPods = "15s";
+      shutdownGracePeriod = "20s";
+      shutdownGracePeriodCriticalPods = "10s";
     };
     # Clean resolv.conf for k3s pods — strips the Tailscale MagicDNS search
     # domain (ts.2143.me) to prevent ndots:5 expansion from prepending it

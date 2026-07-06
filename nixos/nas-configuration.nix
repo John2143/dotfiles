@@ -274,6 +274,11 @@
     "--service-cidr=10.43.0.0/16,fd42:42:43::/112"
     "--flannel-ipv6-masq"
     "--node-ip=192.168.5.175,fd00:1::175"
+    # Fast crash recovery — detect downed nodes in 20s, evict pods in 40s
+    "--kube-apiserver-arg=default-not-ready-toleration-seconds=40"
+    "--kube-apiserver-arg=default-unreachable-toleration-seconds=40"
+    "--kube-controller-manager-arg=node-monitor-grace-period=20s"
+    "--kube-controller-manager-arg=node-monitor-period=2s"
     "--node-label=node.longhorn.io/create-default-disk=true"
   ];
 

@@ -123,6 +123,11 @@
       "--node-ip=192.168.5.36,fd00:1::36"
       # Required for IPv6 pod egress when using flannel
       "--flannel-ipv6-masq"
+      # Fast crash recovery — detect downed nodes in 20s, evict pods in 40s
+      "--kube-apiserver-arg=default-not-ready-toleration-seconds=40"
+      "--kube-apiserver-arg=default-unreachable-toleration-seconds=40"
+      "--kube-controller-manager-arg=node-monitor-grace-period=20s"
+      "--kube-controller-manager-arg=node-monitor-period=2s"
       # Keep standard per-node subnet sizing across families
       "--kube-controller-manager-arg=node-cidr-mask-size-ipv4=24"
       "--kube-controller-manager-arg=node-cidr-mask-size-ipv6=64"
