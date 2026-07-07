@@ -22,10 +22,10 @@ jobs:
           nix_path: nixpkgs=channel:nixos-unstable
 
       - name: Build genai image
-        run: nix build .#frigate-genai-genai-image --out-link result-genai
+        run: nix build .#frigate-genai-genai-image --out-link result-genai --no-write-lock-file
 
       - name: Build ffmpeg image
-        run: nix build .#frigate-genai-ffmpeg-image --out-link result-ffmpeg
+        run: nix build .#frigate-genai-ffmpeg-image --out-link result-ffmpeg --no-write-lock-file
 
       - name: Push to ghcr.io
         run: |
