@@ -32,6 +32,8 @@ jobs:
         run: nix build .#frigate-genai-ffmpeg-image --out-link result-ffmpeg
 
       - name: Push to ghcr.io
+        env:
+          REGISTRIES_CONFIG_PATH: /tmp
         run: |
           echo "${{ secrets.GITHUB_TOKEN }}" | \
             nix shell nixpkgs#skopeo -c skopeo login ghcr.io \
