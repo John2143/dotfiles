@@ -249,13 +249,13 @@ def transcode_into_parts(
     camera: str,
     start_time: float,
     end_time: float,
-    proxy_path: str = "",
+    fps: int | None = 1,
 ) -> list[bytes]:
     """
-    Extract every JPEG frame at source resolution from Frigate recording via HLS.
-    If proxy_path is given, simultaneously produce a local H.264 proxy MP4
-    for fast in-process transcoding — one HLS pull, two outputs.
-    Full source quality — no fps cap, no scaling.
+    Extract JPEG frames from Frigate recording via HLS.
+    If fps is set, decimate to that rate (default 1 fps for initial scan).
+    If fps is None, extract all frames at source framerate.
+    Full source quality — no scaling.
 
     Returns list of JPEG byte strings, chronologically ordered.
     """
@@ -266,11 +266,13 @@ def transcode_into_parts(
         f"/index.m3u8"
     )
     duration = end_time - start_time
-
+    fps_label = f"{fps}fps" if fps else "full framerate"
     log.info(
-        "Extracting all frames from %s (%.1fs clip, full source framerate)",
-        hls_url, duration,
+        "Extracting frames from %s (%.1fs clip, %s)",
+        hls_url, duration, fps_label,
     )
+
+    clip_timeout = max(30, min(300, int(duration * 15)))
 
     with tempfile.TemporaryDirectory(prefix="frigate-genai-") as tmp:
         cmd: list[str] = [
@@ -279,23 +281,17 @@ def transcode_into_parts(
             "-loglevel", "error",
             "-i", hls_url,
             "-map", "0:v",
+        ]
+        if fps is not None:
+            cmd += ["-vf", f"fps={fps}"]
+        cmd += [
             "-q:v", "3",
             f"{tmp}/frame_%03d.jpg",
         ]
-        # Dual output: simultaneously produce H.264 proxy MP4 via GPU (nvenc)
-        if proxy_path:
-            cmd += [
-                "-map", "0:v",
-                "-c:v", "h264_nvenc",
-                "-preset", "p1",
-                "-cq", "23",
-                "-an",
-                proxy_path,
-            ]
-            log.info("Producing proxy MP4 at %s", proxy_path)
         try:
             result = subprocess.run(
                 cmd, check=True, capture_output=True, text=True,
+                timeout=clip_timeout,
             )
         except subprocess.CalledProcessError as e:
             stderr = (e.stderr or "").strip()
@@ -303,6 +299,9 @@ def transcode_into_parts(
                 log.debug("ffmpeg: recording not ready for %s", hls_url)
             else:
                 log.error("ffmpeg failed: %s", stderr)
+            return []
+        except subprocess.TimeoutExpired:
+            log.error("ffmpeg timed out after %ds for %s", clip_timeout, hls_url)
             return []
 
         frames = []
@@ -556,21 +555,22 @@ def _tool_transcode_schema() -> dict:
         "function": {
             "name": "transcode",
             "description": (
-                "Extract 24 HD frames at native fps starting at frame N. "
+                "Extract HD frames at full framerate from a time window starting at frame N. "
+                "Default window: 1 second. Max: 10 seconds. Frame count depends on camera fps. "
                 "SLOW (~2s). Only call after scanning with show_frame() found something "
                 "worth close inspection. Frames saved as transcode://N/0 through "
-                "transcode://N/23. Use show_frame() or crop() to view them."
+                "transcode://N/M. Use show_frame() or crop() to view them."
             ),
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "start": {"type": "integer", "description": "Frame index to start at (0-based). Returns start..start+23."},
+                    "start": {"type": "integer", "description": "Frame index to start at (0-based)."},
+                    "duration": {"type": "number", "description": "Window duration in seconds (1-10, default 1)."},
                 },
                 "required": ["start"],
             },
         },
     }
-
 
 def _tool_get_snapshot_schema() -> dict:
     return {
@@ -661,42 +661,33 @@ def _transcode_frames(
     camera: str,
     start_time: float,
     end_time: float,
-    frame_start: int,
-    frame_end: int,
-    max_frames: int,
-    proxy_path: str = "",
+    start_offset: float,
+    duration: float = 1.0,
+    fps: int | None = None,
 ) -> list[bytes]:
-    """On-demand ffmpeg: extract all frames at source resolution from a sub-range.
+    """On-demand ffmpeg: extract frames at source resolution from a sub-range.
 
-    Prefers local proxy MP4 if available (fast, no frigate load). Falls back to
-    HLS URL for backward compatibility and error resilience.
+    Args:
+        camera: Frigate camera name.
+        start_time: Event start time (absolute epoch).
+        end_time: Event end time (absolute epoch). Unused; kept for API compatibility.
+        start_offset: Seconds into the clip to start extraction.
+        duration: Duration to extract (default 1s, min 1s, max 10s).
+        fps: Frame rate to decimate to. None = full source framerate.
     """
     import math as _math
-    clip_duration = end_time - start_time
-    # Map frame indices to seconds (linear interpolation across the clip)
-    offset_start = clip_duration * (frame_start / max(1, max_frames))
-    offset_end = clip_duration * (frame_end / max(1, max_frames))
-    abs_start = start_time + offset_start
-    abs_end = start_time + offset_end
 
-    # Prefer local proxy if available — near-instant seek, no frigate load
-    if proxy_path and os.path.exists(proxy_path):
-        input_path = proxy_path
-        # Proxy captured the full clip from start_time; offsets still apply
-        seek_start = abs_start - start_time
-        seek_duration = abs_end - abs_start
-        log.debug("transcode from proxy: %s, seek=%.2fs dur=%.2fs",
-                  proxy_path, seek_start, seek_duration)
-    else:
-        base_url = os.environ.get("FRIGATE_BASE_URL", "http://localhost:5000")
-        input_path = (
-            f"{base_url}/vod/{camera}"
-            f"/start/{int(abs_start)}/end/{int(_math.ceil(abs_end))}"
-            f"/index.m3u8"
-        )
-        # HLS URL already seeks to abs_start, so use offset from 0
-        seek_start = 0
-        seek_duration = offset_end - offset_start
+    duration = max(1.0, min(10.0, duration))
+    abs_start = start_time + start_offset
+    # Pad end to ensure we capture frames that straddle the boundary
+    abs_end_ceil = abs_start + duration + 1.0
+
+    base_url = os.environ.get("FRIGATE_BASE_URL", "http://localhost:5000")
+    input_path = (
+        f"{base_url}/vod/{camera}"
+        f"/start/{int(abs_start)}/end/{int(_math.ceil(abs_end_ceil))}"
+        f"/index.m3u8"
+    )
 
     with tempfile.TemporaryDirectory() as tmpdir:
         out_pattern = os.path.join(tmpdir, "frame_%d.jpg")
@@ -704,15 +695,23 @@ def _transcode_frames(
             "ffmpeg",
             "-hwaccel", "cuda",
             "-v", "error",
-            "-ss", f"{seek_start:.3f}",
-            "-to", f"{seek_duration:.3f}",
+            "-ss", "0.000",
             "-i", input_path,
+            "-t", f"{duration:.3f}",
+        ]
+        if fps is not None:
+            cmd += ["-vf", f"fps={fps}"]
+        cmd += [
             "-q:v", "3",
             out_pattern,
         ]
         try:
-            subprocess.run(cmd, capture_output=True, timeout=15, check=True)
+            subprocess.run(cmd, capture_output=True, timeout=60, check=True)
         except subprocess.CalledProcessError:
+            return []
+        except subprocess.TimeoutExpired:
+            log.error("transcode timed out: camera=%s start=%.1f dur=%.1f",
+                      camera, abs_start, duration)
             return []
         frame_paths = sorted(Path(tmpdir).glob("frame_*.jpg"))
         return [p.read_bytes() for p in frame_paths]
@@ -773,7 +772,7 @@ async def select_model_activity(input_data: dict) -> str:
     return model
 @activity.defn(name="transcode_into_parts")
 async def transcode_into_parts_activity(input_data: dict) -> tuple[str, int]:
-    """Extract frames + proxy MP4 via ffmpeg, save to disk. Returns (frames_dir, frame_count)."""
+    """Extract frames via ffmpeg (1 fps initial scan), save to disk. Returns (frames_dir, frame_count)."""
     camera = input_data["camera"]
     start_time = input_data["start_time"]
     end_time = input_data["end_time"]
@@ -782,7 +781,6 @@ async def transcode_into_parts_activity(input_data: dict) -> tuple[str, int]:
     duration = end_time - start_time
     frames_dir = FRAMES_DIR / event_id
     frames_dir_str = str(frames_dir)
-    proxy_path = str(frames_dir / "proxy.mp4")
     frames_dir.mkdir(parents=True, exist_ok=True)
     log.info(
         "Activity transcode_into_parts: event=%s camera=%s duration=%.1fs dir=%s",
@@ -790,7 +788,7 @@ async def transcode_into_parts_activity(input_data: dict) -> tuple[str, int]:
     )
 
     frames = await _run_with_heartbeat(
-        transcode_into_parts, camera, start_time, end_time, proxy_path,
+        transcode_into_parts, camera, start_time, end_time, 1,
     )
     if not frames:
         raise ApplicationError(
@@ -800,10 +798,8 @@ async def transcode_into_parts_activity(input_data: dict) -> tuple[str, int]:
     for i, frame_bytes in enumerate(frames):
         (frames_dir / f"frame_{i:03d}.jpg").write_bytes(frame_bytes)
 
-    proxy_size = Path(proxy_path).stat().st_size if Path(proxy_path).exists() else 0
-    log.info("Extracted %d ffmpeg frames + proxy (%d bytes) to %s", len(frames), proxy_size, frames_dir)
+    log.info("Extracted %d ffmpeg frames (1fps) to %s", len(frames), frames_dir)
     return frames_dir_str, len(frames)
-    """Extract frames via ffmpeg, save to disk. Returns (frames_dir, frame_count)."""
 @activity.defn(name="fetch_snapshot")
 async def fetch_snapshot_activity(input_data: dict) -> str:
     """Fetch the snapshot from Frigate API, save to disk. Returns frames_dir."""
@@ -1014,10 +1010,9 @@ async def run_genai_turn_activity(turn_arg: dict) -> dict:
 async def init_agent_state_activity(init_arg: dict) -> dict:
     """Initialize agent state on disk: loads prompts, composes system prompt,
     writes messages.json. All disk I/O stays in the activity.
-    Returns {msg_path, system_prompt, max_frames, proxy_path}.
+    Returns {msg_path, max_frames}.
     """
     import json as _json
-    import shutil
     event_id = init_arg["event_id"]
     camera = init_arg["camera"]
     label = init_arg["label"]
@@ -1080,7 +1075,9 @@ async def init_agent_state_activity(init_arg: dict) -> dict:
 
     agent_dir = Path(frames_dir) / "agent"
     if agent_dir.exists():
-        shutil.rmtree(str(agent_dir))
+        # Only clean display files to avoid breaking in-flight activities
+        for f in agent_dir.glob("display_*.jpg"):
+            f.unlink(missing_ok=True)
     agent_dir.mkdir(parents=True, exist_ok=True)
     msg_path = str(agent_dir / "messages.json")
 
@@ -1122,9 +1119,8 @@ async def init_agent_state_activity(init_arg: dict) -> dict:
     }
     _atomic_write(msg_path, init_state)
 
-    proxy_path = str(Path(frames_dir) / "proxy.mp4")
     log.info("init_agent_state: event=%s frames=%d msg_path=%s", event_id, max_frames, msg_path)
-    return {"msg_path": msg_path, "max_frames": max_frames, "proxy_path": proxy_path}
+    return {"msg_path": msg_path, "max_frames": max_frames}
 
 
 @activity.defn(name="save_agent_log")
@@ -1347,19 +1343,22 @@ def tool_transcode_activity(arg: dict) -> dict:
     state, agent_dir = _load_state(msg_path)
     agent_path = Path(agent_dir)
     agent_path.mkdir(parents=True, exist_ok=True)
-    frames_dir = str(agent_path.parent)
 
     tc_id = _find_tc_id(state, "transcode")
     batch_start = tool_args.get("start", 0)
     max_frames = arg.get("max_frames", state.get("max_frames", 0))
-    batch_end = min(batch_start + 24, max_frames - 1)
+    clip_duration = (arg.get("end_time", state.get("end_time", 0))
+                     - arg.get("start_time", state.get("start_time", 0)))
+
+    # Map frame index to time offset within the clip
+    start_offset = clip_duration * (batch_start / max(1, max_frames))
+    duration = max(1.0, min(10.0, float(tool_args.get("duration", 1.0))))
 
     frames = _transcode_frames(
         arg.get("camera", state.get("camera", "")),
         arg.get("start_time", state.get("start_time", 0)),
         arg.get("end_time", state.get("end_time", 0)),
-        batch_start, batch_end,
-        max_frames, arg.get("proxy_path", str(Path(frames_dir) / "proxy.mp4")),
+        start_offset, duration, fps=None,
     )
     for i, f in enumerate(frames):
         fname = f"transcode_{batch_start:03d}_{i:03d}.jpg"
@@ -1370,8 +1369,9 @@ def tool_transcode_activity(arg: dict) -> dict:
         state["messages"].append({
             "role": "tool", "tool_call_id": tc_id,
             "content": (
-                f"Transcoded {n_frames} HD frames [{batch_start}-{batch_start + n_frames - 1}] "
-                f"at source resolution. Available: transcode://{batch_start}/0 through "
+                f"Transcoded {n_frames} HD frames from a {duration:.1f}s window "
+                f"starting at frame {batch_start} (offset {start_offset:.1f}s). "
+                f"Available: transcode://{batch_start}/0 through "
                 f"transcode://{batch_start}/{n_frames - 1}. "
                 f"You have NOT viewed these frames yet. Call show_frame() to inspect them. "
                 f"Scan a range at @low first (e.g. show_frame('transcode://{batch_start}/0-5@low')) "
@@ -1381,9 +1381,10 @@ def tool_transcode_activity(arg: dict) -> dict:
             ),
         })
     _atomic_write(msg_path, state)
-    log.info("tool_transcode: event=%s frames=%d [%d-%d]",
-             event_id, n_frames, batch_start, batch_start + n_frames - 1)
-    return {"frames_extracted": n_frames, "batch_start": batch_start, "batch_end": batch_start + n_frames - 1}
+    log.info("tool_transcode: event=%s frames=%d [%d] dur=%.1fs",
+             event_id, n_frames, batch_start, duration)
+    return {"frames_extracted": n_frames, "batch_start": batch_start,
+            "batch_end": batch_start + n_frames - 1}
 
 
 @activity.defn(name="tool_crop")
@@ -1933,7 +1934,6 @@ class GenAIWorkflow:
             )
             msg_path = init_result["msg_path"]
             max_frames = init_result["max_frames"]
-            proxy_path = init_result["proxy_path"]
 
             turn_arg = {
                 "msg_path": msg_path,
@@ -2022,7 +2022,6 @@ class GenAIWorkflow:
                             "camera": camera,
                             "start_time": start_time,
                             "end_time": end_time,
-                            "proxy_path": proxy_path,
                         },
                         task_queue=task_queue,
                         start_to_close_timeout=timeout,
