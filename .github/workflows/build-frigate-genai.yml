@@ -31,22 +31,24 @@ jobs:
 
       - name: Push to ghcr.io
         run: |
-          nix shell nixpkgs#skopeo -c skopeo copy \
-            --dest-creds="${{ github.actor }}:${{ secrets.GITHUB_TOKEN }}" \
-            docker-archive:result-genai \
-            docker://ghcr.io/${{ github.repository_owner }}/frigate-genai-genai:v${{ github.run_number }}
-
-          nix shell nixpkgs#skopeo -c skopeo copy \
-            --dest-creds="${{ github.actor }}:${{ secrets.GITHUB_TOKEN }}" \
-            docker-archive:result-ffmpeg \
-            docker://ghcr.io/${{ github.repository_owner }}/frigate-genai-ffmpeg:v${{ github.run_number }}
+          OWNER_LOWER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
 
           nix shell nixpkgs#skopeo -c skopeo copy \
             --dest-creds="${{ github.actor }}:${{ secrets.GITHUB_TOKEN }}" \
             docker-archive:result-genai \
-            docker://ghcr.io/${{ github.repository_owner }}/frigate-genai-genai:latest
+            docker://ghcr.io/${OWNER_LOWER}/frigate-genai-genai:v${{ github.run_number }}
 
           nix shell nixpkgs#skopeo -c skopeo copy \
             --dest-creds="${{ github.actor }}:${{ secrets.GITHUB_TOKEN }}" \
             docker-archive:result-ffmpeg \
-            docker://ghcr.io/${{ github.repository_owner }}/frigate-genai-ffmpeg:latest
+            docker://ghcr.io/${OWNER_LOWER}/frigate-genai-ffmpeg:v${{ github.run_number }}
+
+          nix shell nixpkgs#skopeo -c skopeo copy \
+            --dest-creds="${{ github.actor }}:${{ secrets.GITHUB_TOKEN }}" \
+            docker-archive:result-genai \
+            docker://ghcr.io/${OWNER_LOWER}/frigate-genai-genai:latest
+
+          nix shell nixpkgs#skopeo -c skopeo copy \
+            --dest-creds="${{ github.actor }}:${{ secrets.GITHUB_TOKEN }}" \
+            docker-archive:result-ffmpeg \
+            docker://ghcr.io/${OWNER_LOWER}/frigate-genai-ffmpeg:latest
