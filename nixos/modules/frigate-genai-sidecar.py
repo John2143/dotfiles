@@ -329,63 +329,6 @@ def fetch_snapshot(event_id: str) -> bytes | None:
 
 
 
-# ── LiteLLM provider ────────────────────────────────────────────────
-
-def call_litellm(
-    prompt_text: str,
-    images: list[bytes],
-    snapshot: bytes | None,
-    label: str,
-    provider_cfg: dict,
-    model: str,
-) -> tuple[str | None, str | None]:
-    """Call LiteLLM (OpenAI-compatible) with images as base64 data URIs."""
-    import base64
-    from openai import OpenAI
-
-    api_key = os.environ.get(provider_cfg.get("api_key_env", ""), "")
-    if not api_key:
-        log.error("LiteLLM API key not found in env var %s", provider_cfg.get("api_key_env"))
-        return None, None
-    base_url = provider_cfg.get("base_url", os.environ.get("OPENAI_BASE_URL", ""))
-    client = OpenAI(api_key=api_key, base_url=base_url, timeout=120.0)
-
-    content: list[dict] = [{"type": "text", "text": prompt_text}]
-
-    for img in images:
-        b64 = base64.b64encode(img).decode()
-        content.append({
-            "type": "image_url",
-            "image_url": {"url": f"data:image/jpeg;base64,{b64}"},
-        })
-
-    if snapshot:
-        content.append({
-            "type": "text",
-            "text": (
-                f"The next image is a close-up of the {label}. "
-                "Use it for appearance detail (clothing, items, expression); "
-                "use the preceding full frames for scene context, movement, "
-                "and event progression."
-            ),
-        })
-        b64 = base64.b64encode(snapshot).decode()
-        content.append({
-            "type": "image_url",
-            "image_url": {"url": f"data:image/jpeg;base64,{b64}"},
-        })
-
-    log.info("Calling LiteLLM %s with %d images + 1 snapshot", model, len(images))
-
-    try:
-        response = client.chat.completions.create(
-            model=model,
-            messages=[{"role": "user", "content": content}],
-        )
-        return response.choices[0].message.content, model
-    except Exception as e:
-        log.error("LiteLLM call failed: %s", e)
-        return None, None
 
 
 
@@ -409,84 +352,7 @@ def update_event_description(event_id: str, description: str) -> bool:
         return False
 
 
-# ── prompt composition ──────────────────────────────────────────────
 
-def compose_prompt(
-    prompts: dict,
-    camera: str,
-    label: str,
-    num_frames: int,
-) -> str:
-    """Compose the prompt from the Nix-generated template blocks."""
-    base = prompts.get("base", "")
-    camera_desc = prompts.get("camera", {}).get(camera, "")
-    suffix = prompts.get("suffix", "")
-    label_hint = prompts.get("label", {}).get(label, "")
-
-    base = base.replace("{label}", label)
-
-    parts = [base]
-    if camera_desc:
-        parts.append(camera_desc)
-    if label_hint:
-        parts.append(label_hint)
-    if suffix:
-        parts.append(suffix)
-
-    prompt = " ".join(parts)
-    prompt = prompt.replace("{label}", label)
-
-    first_line = "FIRST: State exactly how many image frames you received."
-    if first_line in prompt:
-        prompt = prompt.replace(
-            first_line,
-            f"You are viewing {num_frames} chronological frames from a security camera, "
-            f"at ~1-4 frames per second, plus one close-up detail image",
-        )
-    return prompt
-
-
-# ── Frame viewer helpers ─────────────────────────────────────────────
-
-
-def _resize_frame(img_bytes: bytes, max_width: int, quality: int = 60) -> bytes:
-    """Resize a JPEG frame to max_width, preserving aspect ratio. Returns JPEG bytes."""
-    from io import BytesIO
-    img = Image.open(BytesIO(img_bytes))
-    if img.mode != "RGB":
-        img = img.convert("RGB")
-    if img.width > max_width:
-        img = ImageOps.exif_transpose(img)
-        img.thumbnail((max_width, max_width))
-    buf = BytesIO()
-    img.save(buf, format="JPEG", quality=quality)
-    return buf.getvalue()
-
-
-def _load_frames(
-    frame_files: list[Path],
-    start: int,
-    end: int,
-    resolution: str = "low",
-) -> list[bytes]:
-    """Load and optionally resize frames [start, end] inclusive.
-    resolution: 'low'=640, 'high'=1280, 'max'=source (no resize)."""
-    if resolution == "max":
-        max_width = None
-        quality = 85
-    elif resolution == "high":
-        max_width = 1280
-        quality = 85
-    else:
-        max_width = 640
-        quality = 60
-    result = []
-    for i in range(max(0, start), min(end + 1, len(frame_files))):
-        data = frame_files[i].read_bytes()
-        if max_width:
-            data = _resize_frame(data, max_width, quality)
-        result.append(data)
-    return result
 
 
 _RES_LEVELS = {
@@ -513,11 +379,7 @@ def _resize_to(img: Image.Image, target_width: int) -> Image.Image:
     ratio = target_width / img.width
     new_h = int(img.height * ratio)
     return img.resize((target_width, new_h), Image.LANCZOS)
-def _build_image_content(data: bytes) -> dict:
-    """Build an image_url content part for an OpenAI-compatible messages array."""
-    import base64
-    b64 = base64.b64encode(data).decode()
-    return {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{b64}"}}
+
 
 
 
@@ -813,50 +675,6 @@ async def fetch_snapshot_activity(input_data: dict) -> str:
     return str(frames_dir)
 
 
-@activity.defn(name="run_genai")
-async def run_genai_activity(input_data: dict, frames_dir: str) -> str | None:
-    """Load frames and snapshot from disk, compose prompt, call GenAI provider."""
-    event_id = input_data["event_id"]
-    camera = input_data["camera"]
-    label = input_data["label"]
-    prompts_path = input_data["prompts_path"]
-    provider_path = input_data["provider_path"]
-    model = input_data.get("model", "gemini/gemini-2.5-flash")
-
-    frames_path = Path(frames_dir)
-    frame_files = sorted(frames_path.glob("frame_*.jpg"))
-    log.info("Activity run_genai: event=%s camera=%s label=%s frames=%d",
-             event_id, camera, label, len(frame_files))
-
-    try:
-        prompts = load_json(prompts_path)
-        provider_cfg = load_json(provider_path)
-    except (OSError, json.JSONDecodeError) as e:
-        log.error("Failed to load config in run_genai: %s", e)
-        raise RuntimeError(f"Failed to load config: {e}") from e
-
-    # Read frames + snapshot from disk
-    frames = []
-    for fp in frame_files:
-        frames.append(fp.read_bytes())
-    snapshot_path = frames_path / "snapshot.jpg"
-    snapshot = snapshot_path.read_bytes() if snapshot_path.exists() else None
-
-    if input_data.get("skip_frames"):
-        prompt_text = prompts.get("car", prompts.get("base", "Identify this vehicle.")).replace("{label}", label)
-    else:
-        prompt_text = compose_prompt(prompts, camera, label, len(frames))
-
-    description, model_used = await _run_with_heartbeat(
-        call_litellm, prompt_text, frames, snapshot, label, provider_cfg, model,
-    )
-
-    if model_used:
-        _stats["model_counts"][model_used] = _stats["model_counts"].get(model_used, 0) + 1
-    _stats["events_processed"] += 1
-    _stats["last_event"] = f"{camera}/{label}/{event_id[:12]}"
-
-    return description
 
 @activity.defn(name="run_genai_turn")
 async def run_genai_turn_activity(turn_arg: dict) -> dict:
@@ -1313,7 +1131,7 @@ async def tool_show_frame_activity(arg: dict) -> dict:
                     img = Image.open(img_path)
                     tw, th = _resolution_pixels(resolution, img.size)
                     img = _resize_to(img, tw)
-                except Exception:
+                except Exception as e:
                     log.exception("Failed to load frame %s", img_path)
                     continue
                 img_counter += 1
@@ -1474,7 +1292,7 @@ async def tool_crop_activity(arg: dict) -> dict:
                 fname = f"crop_{crop_id:03d}.jpg"
                 cropped.save(agent_path / fname, "JPEG", quality=95)
                 crop_results.append((crop_id, fname))
-            except Exception:
+            except Exception as e:
                 log.exception("Failed to crop source %r", entry)
 
         if crop_results:
@@ -1638,7 +1456,7 @@ async def summarize_agent_activity(stats: dict) -> str | None:
                 trace_path = AGENT_LOGS_DIR / f"{event_id}-trace.txt"
                 if trace_path.exists():
                     trace_path.write_text(trace_path.read_text() + f"\n\n{summary}")
-            except Exception:
+            except Exception as e:
                 pass
             return summary
     except Exception as e:
@@ -1646,79 +1464,6 @@ async def summarize_agent_activity(stats: dict) -> str | None:
     return None
 
 
-def _serialize_for_log(
-    messages: list,
-    total_cost: dict,
-    event_id: str,
-    camera: str,
-    label: str,
-    model: str,
-    num_turns: int,
-    turns_low: int,
-    turns_high: int,
-    turns_max: int = 0,
-    turns_transcode: int = 0,
-    summary: str | None = None,
-) -> dict:
-    """Convert messages to a JSON-serializable structure with inline images."""
-    import base64 as _b64
-    result = {
-        "event_id": event_id,
-        "camera": camera,
-        "label": label,
-        "model": model,
-        "turns": num_turns,
-        "frames_viewed": {
-            "low": turns_low, "high": turns_high,
-            "max": turns_max, "transcode": turns_transcode,
-        },
-        "total_cost": total_cost,
-    }
-    if summary:
-        result["summary"] = summary
-
-    serialized = []
-    for m in messages:
-        role = m.get("role", "unknown")
-        entry = {"role": role}
-
-        if "tool_calls" in m:
-            entry["tool_calls"] = [
-                {
-                    "id": tc.get("id"),
-                    "name": tc.get("function", {}).get("name", ""),
-                    "arguments": tc.get("function", {}).get("arguments", ""),
-                }
-                for tc in m.get("tool_calls", [])
-            ]
-        elif "tool_call_id" in m:
-            entry["tool_call_id"] = m.get("tool_call_id")
-            entry["content"] = m.get("content", "")
-        elif role == "assistant":
-            entry["content"] = m.get("content", "")
-        elif role == "user":
-            content = m.get("content", "")
-            if isinstance(content, list):
-                parts = []
-                for part in content:
-                    if isinstance(part, dict) and part.get("type") == "image_url":
-                        url = part.get("image_url", {}).get("url", "")
-                        if url.startswith("data:"):
-                            parts.append({"type": "image_url", "data": url})
-                        else:
-                            parts.append(part)
-                    else:
-                        parts.append(part)
-                entry["content"] = parts
-            else:
-                entry["content"] = content
-        else:
-            entry["content"] = str(m.get("content", ""))
-
-        serialized.append(entry)
-
-    result["messages"] = serialized
-    return result
 
 def _atomic_write(path: str, data: dict) -> None:
     """Write JSON to disk atomically via .tmp → rename."""
@@ -2291,7 +2036,7 @@ def build_mqtt_client(loop: asyncio.AbstractEventLoop) -> mqtt.Client:
                     _start_workflow_sync(after)
         except json.JSONDecodeError:
             log.debug("Non-JSON MQTT message on %s", msg.topic)
-        except Exception:
+        except Exception as e:
             log.exception("Error in MQTT message handler")
 
     mqtt_host = os.environ.get("MQTT_HOST", "localhost")
@@ -2310,7 +2055,7 @@ def build_mqtt_client(loop: asyncio.AbstractEventLoop) -> mqtt.Client:
         try:
             client.connect(mqtt_host, mqtt_port, 60)
             break
-        except Exception:
+        except Exception as e:
             log.warning("MQTT connection failed, retrying in 5s...")
             time.sleep(5)
 
@@ -2389,7 +2134,7 @@ async def async_main(prompts_path: str, provider_path: str) -> None:
     gemini_worker = Worker(
         _temporal_client,
         task_queue=GEMINI_TASK_QUEUE,
-        activities=[run_genai_activity, run_genai_turn_activity,
+        activities=[run_genai_turn_activity,
                     tool_get_snapshot_activity, tool_show_frame_activity,
                     tool_crop_activity, tool_compact_activity,
                     tool_set_description_activity, summarize_agent_activity,
@@ -2402,7 +2147,7 @@ async def async_main(prompts_path: str, provider_path: str) -> None:
     ollama_worker = Worker(
         _temporal_client,
         task_queue=OLLAMA_TASK_QUEUE,
-        activities=[run_genai_activity, run_genai_turn_activity,
+        activities=[run_genai_turn_activity,
                     tool_get_snapshot_activity, tool_show_frame_activity,
                     tool_crop_activity, tool_compact_activity,
                     tool_set_description_activity, summarize_agent_activity,
@@ -2435,7 +2180,7 @@ async def async_main(prompts_path: str, provider_path: str) -> None:
             await handle.cancel()
             log.info("Cancelled old workflow %s for reprocess", workflow_id)
 
-        except Exception:
+        except Exception as e:
             log.debug("No existing workflow %s to cancel", workflow_id)
         camera = event.get("camera", "")
         label = event.get("label", "")
@@ -2601,7 +2346,7 @@ async def async_main(prompts_path: str, provider_path: str) -> None:
                             args = tc.get("function", {}).get("arguments", "")
                             if isinstance(args, str):
                                 try: args = _json.loads(args)
-                                except: pass
+                                except Exception: pass
                             html.append('<div class="tool-call">→ {}({})</div>'.format(
                                 name, _json.dumps(args)[:200]))
                     content = m.get("content", "")
