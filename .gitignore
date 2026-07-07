@@ -24,3 +24,4 @@ tofu/.venv/
 nixos/cluster/secrets/cloud-ssh-key.age
 nixos/cluster/secrets/do-pat.age
 nixos/status-page/__pycache__/
+nixos/modules/__pycache__/

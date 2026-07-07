@@ -125,17 +125,19 @@
       fox = "If a fox: note whether our pets (cats/dogs) are also visible. Describe: size, color, behavior, whether peering at the house, and any sign of limping.";
     };
   };
+  # ── Python environment ──────────────────────────────────────────
+  pythonEnv = pkgs.python3.withPackages (ps: [
+    ps.paho-mqtt
+    ps.openai
+    ps.temporalio
+    ps.pillow
+    ps.boto3
+  ]);
+
   # ── GenAI sidecar package ─────────────────────────────────────────
   # Runs alongside Frigate, listens to MQTT for completed events,
   # extracts multi-frame clips + snapshot, calls Gemini, updates description.
-  frigateGenaiSidecarPkg = let
-    pythonEnv = pkgs.python3.withPackages (ps: [
-      ps.paho-mqtt
-      ps.openai
-      ps.temporalio
-      ps.pillow
-    ]);
-  in pkgs.runCommand "frigate-genai-sidecar" {
+  frigateGenaiSidecarPkg = pkgs.runCommand "frigate-genai-sidecar" {
     buildInputs = [ pkgs.makeWrapper ];
   } ''
     mkdir -p $out/bin
@@ -161,6 +163,30 @@
     api_key_env = "LITELLM_FRIGATE_KEY";
     base_url = "https://llm.2143.me/v1";
   });
+
+  # ── GenAI Docker images ──────────────────────────────────────────
+  frigateGenaiGenaiImage = pkgs.dockerTools.buildLayeredImage {
+    name = "frigate-genai-genai";
+    tag = "v1";
+    contents = [ pythonEnv pkgs.cacert ];
+    extraCommands = ''
+      mkdir -p var/lib/frigate-genai-sidecar
+      cp ${frigateGenaiPromptsFile} var/lib/frigate-genai-sidecar/prompts.json
+      cp ${frigateGenaiProviderFile} var/lib/frigate-genai-sidecar/provider.json
+    '';
+    config.Entrypoint = [ "${pythonEnv}/bin/python" "${./frigate-genai-sidecar.py}" ];
+  };
+  frigateGenaiFfmpegImage = pkgs.dockerTools.buildLayeredImage {
+    name = "frigate-genai-ffmpeg";
+    tag = "v1";
+    contents = [ pythonEnv pkgs.cacert pkgs.ffmpeg ];
+    extraCommands = ''
+      mkdir -p var/lib/frigate-genai-sidecar
+      cp ${frigateGenaiPromptsFile} var/lib/frigate-genai-sidecar/prompts.json
+      cp ${frigateGenaiProviderFile} var/lib/frigate-genai-sidecar/provider.json
+    '';
+    config.Entrypoint = [ "${pythonEnv}/bin/python" "${./frigate-genai-sidecar.py}" ];
+  };
 
   # ── Camera definitions ────────────────────────────────────────────
   # Edit names. Each pulls one RTSP stream from the Reolink NVR:
@@ -685,6 +711,10 @@ SCRIPT
     chmod +x $out
   '';
 in {
+  system.build = {
+    inherit frigateGenaiGenaiImage frigateGenaiFfmpegImage;
+  };
+
   # ── agenix secret: NVR credentials ─────────────────────────────────
   age.secrets.reolink-nvr = {
     file = ../../secrets/reolink-nvr.age;
@@ -723,8 +753,6 @@ in {
     "d /var/lib/frigate-genai-sidecar 0755 root root -"
     "L+ /var/lib/frigate-genai-sidecar/prompts.json - - - - ${frigateGenaiPromptsFile}"
     "L+ /var/lib/frigate-genai-sidecar/provider.json - - - - ${frigateGenaiProviderFile}"
-    "d /var/lib/frigate-genai-sidecar/frames 0755 root root 30m -"
-    "d /var/lib/frigate-genai-sidecar/agent-logs 0755 root root 24h -"
   ];
 
   # ── NVIDIA Container Toolkit for GPU passthrough ──────────────────
@@ -782,14 +810,14 @@ in {
     };
   };
   # ── GenAI sidecar service ────────────────────────────────────────
-  # Listens to MQTT for completed Frigate events, extracts multi-frame
-  # clips from recordings, calls Gemini for description, writes it back.
+  # Listens to MQTT for completed Frigate events, starts Temporal workflows.
+  # All activity workers now run in k8s. Arch mode: MQTT listener + HTTP reprocess only.
   systemd.services.frigate-genai-sidecar = {
-    description = "Frigate GenAI Sidecar — multi-frame event descriptions";
+    description = "Frigate GenAI Sidecar — MQTT listener + HTTP reprocess";
     wantedBy = ["multi-user.target"];
     after = [ "podman-frigate.service" ];
     requires = [ "podman-frigate.service" "network.target" ];
-    path = [ pkgs.ffmpeg ];
+    # path = [ pkgs.ffmpeg ];  ← removed — ffmpeg runs in k8s only
     environment = {
       FRIGATE_BASE_URL = "http://localhost:5000";
       MQTT_HOST = mqttHost;
@@ -798,16 +826,15 @@ in {
       MQTT_PASSWORD = mqttPass;
       HTTP_HOST = "0.0.0.0";
       TEMPORAL_ADDRESS = "192.168.5.10:32682";
-      TEMPORAL_MAX_FFMPEG = "2";
-      TEMPORAL_MAX_GEMINI_GENAI = "5";
-      TEMPORAL_MAX_OLLAMA_GENAI = "1";
+      S3_ENDPOINT = "https://files.john2143.com";
+      S3_ACCESS_KEY = "seaweedfs-frigate-genai";
     };
     serviceConfig = {
       Type = "simple";
-      ExecStart = "${frigateGenaiSidecarPkg}/bin/frigate-genai-sidecar";
+      ExecStart = "${frigateGenaiSidecarPkg}/bin/frigate-genai-sidecar --mode=arch";
       Restart = "on-failure";
       RestartSec = 10;
-      StateDirectory = "frigate-genai-sidecar";
+      # No StateDirectory — frames live in S3 now
       EnvironmentFile = [
         config.age.secrets.frigate-plus.path
         "-/var/lib/frigate-genai-sidecar/runtime.env"
@@ -817,24 +844,7 @@ in {
     };
   };
 
-  # ── GenAI frame cleanup: frames 30min, logs 24h ─────────────────
-  systemd.services.frigate-genai-cleanup = {
-    description = "Cleanup old Frigate GenAI frames and agent logs";
-    serviceConfig = {
-      Type = "oneshot";
-      ExecStart = "${frigateGenaiSidecarPkg}/bin/frigate-genai-sidecar --cleanup";
-      User = "root";
-    };
-  };
-  systemd.timers.frigate-genai-cleanup = {
-    description = "Timer for Frigate GenAI frame/log cleanup";
-    wantedBy = ["timers.target"];
-    timerConfig = {
-      OnBootSec = "5min";
-      OnUnitActiveSec = "15min";
-      RandomizedDelaySec = "60";
-    };
-  };
+
   # ── Sidecar config files ── appended to tmpfiles.rules below
   /*
   # ── Downgrade to YOLOv9 (uncomment all lines between START/END) ──

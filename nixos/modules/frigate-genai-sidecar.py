@@ -45,6 +45,64 @@ from temporalio.worker import Worker
 from temporalio.exceptions import ApplicationError
 from temporalio.api.enums.v1 import IndexedValueType
 from temporalio.api.operatorservice.v1 import AddSearchAttributesRequest
+import urllib.request as _urllib_request
+from functools import lru_cache as _lru_cache
+import io as _io
+
+# ── S3 abstraction layer ──────────────────────────────────────────────
+_S3_BUCKET = "frigate-genai"
+
+@_lru_cache(maxsize=1)
+def _s3_client():
+    import boto3
+    return boto3.client(
+        "s3",
+        endpoint_url=os.environ["S3_ENDPOINT"],
+        aws_access_key_id=os.environ["S3_ACCESS_KEY"],
+        aws_secret_access_key=os.environ["S3_SECRET_KEY"],
+    )
+
+def _s3_get(key: str) -> bytes | None:
+    """Download object from S3. Returns None if not found."""
+    try:
+        return _s3_client().get_object(Bucket=_S3_BUCKET, Key=key)["Body"].read()
+    except Exception:
+        return None
+
+def _s3_put(key: str, data: bytes) -> None:
+    """Upload bytes to S3."""
+    _s3_client().put_object(Bucket=_S3_BUCKET, Key=key, Body=data)
+
+def _s3_list(prefix: str) -> list[str]:
+    """List keys under prefix. Returns sorted key list."""
+    paginator = _s3_client().get_paginator("list_objects_v2")
+    keys = []
+    for page in paginator.paginate(Bucket=_S3_BUCKET, Prefix=prefix):
+        for obj in page.get("Contents", []):
+            keys.append(obj["Key"])
+    return sorted(keys)
+
+def _s3_delete_prefix(prefix: str) -> int:
+    """Delete all objects under prefix. Returns count deleted."""
+    keys = _s3_list(prefix)
+    if keys:
+        _s3_client().delete_objects(
+            Bucket=_S3_BUCKET,
+            Delete={"Objects": [{"Key": k} for k in keys]},
+        )
+    return len(keys)
+
+def _s3_read_text(key: str) -> str | None:
+    data = _s3_get(key)
+    return data.decode("utf-8") if data else None
+
+def _s3_event_prefix(event_id: str) -> str:
+    return f"events/{event_id}"
+
+def _s3_agent_prefix(event_id: str) -> str:
+    return f"events/{event_id}/agent"
+
+# ── end S3 abstraction ────────────────────────────────────────────────
 
 
 log = logging.getLogger("frigate-genai-sidecar")
@@ -57,9 +115,7 @@ TASK_QUEUE = "genai-tasks"
 FFMPEG_TASK_QUEUE = "genai-tasks-ffmpeg"
 GEMINI_TASK_QUEUE = "genai-tasks-gemini"
 OLLAMA_TASK_QUEUE = "genai-tasks-ollama"
-BASE_DIR = Path(os.environ.get("FRAMES_BASE_DIR", "/var/lib/frigate-genai-sidecar"))
-FRAMES_DIR = BASE_DIR / "frames"
-AGENT_LOGS_DIR = BASE_DIR / "agent-logs"
+# FRAMES_DIR and AGENT_LOGS_DIR removed — data lives in S3 now
 _SEARCH_CAMERA = SearchAttributeKey.for_keyword("Camera")
 _SEARCH_LABEL = SearchAttributeKey.for_keyword("Label")
 _SEARCH_EVENT_ID = SearchAttributeKey.for_keyword("EventId")
@@ -229,27 +285,6 @@ def load_json(path: str) -> dict:
     with open(path) as f:
         return json.load(f)
 
-def cleanup_old_files(base_dir: Path, subdir: str, max_age_minutes: int) -> int:
-    """Delete files and dirs older than max_age_minutes in base_dir/subdir.
-    Returns count of removed items."""
-    import shutil
-
-    target = base_dir / subdir
-    if not target.exists():
-        return 0
-    cutoff = time.time() - (max_age_minutes * 60)
-    removed = 0
-    for entry in target.iterdir():
-        try:
-            if entry.stat().st_mtime < cutoff:
-                if entry.is_dir():
-                    shutil.rmtree(entry)
-                else:
-                    entry.unlink()
-                removed += 1
-        except OSError:
-            pass
-    return removed
 
 # ── frame extraction ────────────────────────────────────────────────
 
@@ -642,19 +677,17 @@ async def select_model_activity(input_data: dict) -> str:
     return model
 @activity.defn(name="transcode_into_parts")
 async def transcode_into_parts_activity(input_data: dict) -> tuple[str, int]:
-    """Extract frames via ffmpeg (1 fps initial scan), save to disk. Returns (frames_dir, frame_count)."""
+    """Extract frames via ffmpeg (1 fps initial scan), upload to S3. Returns (event_prefix, frame_count)."""
     camera = input_data["camera"]
     start_time = input_data["start_time"]
     end_time = input_data["end_time"]
     event_id = input_data["event_id"]
 
     duration = end_time - start_time
-    frames_dir = FRAMES_DIR / event_id
-    frames_dir_str = str(frames_dir)
-    frames_dir.mkdir(parents=True, exist_ok=True)
+    event_prefix = _s3_event_prefix(event_id)
     log.info(
-        "Activity transcode_into_parts: event=%s camera=%s duration=%.1fs dir=%s",
-        event_id, camera, duration, frames_dir,
+        "Activity transcode_into_parts: event=%s camera=%s duration=%.1fs prefix=%s",
+        event_id, camera, duration, event_prefix,
     )
 
     try:
@@ -671,21 +704,21 @@ async def transcode_into_parts_activity(input_data: dict) -> tuple[str, int]:
         )
 
     for i, frame_bytes in enumerate(frames):
-        (frames_dir / f"frame_{i:03d}.jpg").write_bytes(frame_bytes)
+        _s3_put(f"{event_prefix}/frames/frame_{i:03d}.jpg", frame_bytes)
 
-    log.info("Extracted %d ffmpeg frames (1fps) to %s", len(frames), frames_dir)
-    return frames_dir_str, len(frames)
+    log.info("Extracted %d ffmpeg frames (1fps) to s3://%s/frames", len(frames), event_prefix)
+    return event_prefix, len(frames)
+
 @activity.defn(name="fetch_snapshot")
 async def fetch_snapshot_activity(input_data: dict) -> str:
-    """Fetch the snapshot from Frigate API, save to disk. Returns frames_dir."""
+    """Fetch the snapshot from Frigate API, upload to S3. Returns event_prefix."""
     event_id = input_data["event_id"]
-    frames_dir = FRAMES_DIR / event_id
-    frames_dir.mkdir(parents=True, exist_ok=True)
-    log.info("frames_dir=%s", frames_dir)
+    event_prefix = _s3_event_prefix(event_id)
+    log.info("event_prefix=%s", event_prefix)
     snapshot_bytes = await _run_with_heartbeat(fetch_snapshot, event_id)
     if snapshot_bytes:
-        (frames_dir / "snapshot.jpg").write_bytes(snapshot_bytes)
-    return str(frames_dir)
+        _s3_put(f"{event_prefix}/snapshot.jpg", snapshot_bytes)
+    return event_prefix
 
 
 
@@ -719,10 +752,8 @@ async def run_genai_turn_activity(turn_arg: dict) -> dict:
     camera = turn_arg["camera"]
     label = turn_arg["label"]
 
-    # Load state from disk
-    with open(msg_path) as f:
-        state = json.load(f)
-    agent_dir = state["agent_dir"]
+    # Load state from S3 or disk
+    state, agent_dir = _load_state(msg_path)
     messages = state["messages"]
 
     # Turn-limit warnings: at 25 remaining, and urgency in nudge within 10
@@ -842,15 +873,15 @@ async def run_genai_turn_activity(turn_arg: dict) -> dict:
 
 @activity.defn(name="init_agent_state")
 async def init_agent_state_activity(init_arg: dict) -> dict:
-    """Initialize agent state on disk: loads prompts, composes system prompt,
-    writes messages.json. All disk I/O stays in the activity.
+    """Initialize agent state in S3: loads prompts, composes system prompt,
+    writes messages.json. All I/O goes through S3.
     Returns {msg_path, max_frames}.
     """
 
     event_id = init_arg["event_id"]
     camera = init_arg["camera"]
     label = init_arg["label"]
-    frames_dir = init_arg["frames_dir"]
+    event_prefix = init_arg["frames_dir"]  # "events/{event_id}"
 
     prompts = load_json(init_arg["prompts_path"])
     camera_desc = prompts.get("camera", {}).get(camera, "")
@@ -894,7 +925,7 @@ async def init_agent_state_activity(init_arg: dict) -> dict:
     if label_hint:
         system_prompt += f"\n\n{label_hint}"
 
-    frame_files = sorted(Path(frames_dir).glob("frame_*.jpg"))
+    frame_files = _s3_list(f"{event_prefix}/frames/frame_")
     max_frames = len(frame_files)
     user_text = (
         f"{label} on {camera}. {max_frames} recording frames (indices 0-{max_frames - 1}). "
@@ -906,20 +937,18 @@ async def init_agent_state_activity(init_arg: dict) -> dict:
         f"Only transcode() after you know which region matters. {box_text}"
     )
 
-    agent_dir = Path(frames_dir) / "agent"
-    if agent_dir.exists():
-        # Only clean display files to avoid breaking in-flight activities
-        for f in agent_dir.glob("display_*.jpg"):
-            f.unlink(missing_ok=True)
-    agent_dir.mkdir(parents=True, exist_ok=True)
-    msg_path = str(agent_dir / "messages.json")
+    agent_prefix = f"{event_prefix}/agent"
+    # Clean old display files from S3
+    old_displays = _s3_list(f"{agent_prefix}/display_")
+    for key in old_displays:
+        _s3_client().delete_object(Bucket=_S3_BUCKET, Key=key)
+    msg_path = f"{agent_prefix}/messages.json"
 
-    # Seed with a completed tool cycle. Bridge user message satisfies Gemini's
-    # requirement that function calls come after a user or function response turn.
-    snapshot_path = Path(frames_dir) / "snapshot.jpg"
-    if snapshot_path.exists():
+    # Seed with a completed tool cycle
+    snapshot_data = _s3_get(f"{event_prefix}/snapshot.jpg")
+    if snapshot_data is not None:
         display_name = "display_001.jpg"
-        (agent_dir / display_name).write_bytes(snapshot_path.read_bytes())
+        _s3_put(f"{agent_prefix}/{display_name}", snapshot_data)
         init_messages = [
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": "A new detection was recorded. Inspect the snapshot."},
@@ -941,7 +970,7 @@ async def init_agent_state_activity(init_arg: dict) -> dict:
 
     init_state = {
         "messages": init_messages,
-        "agent_dir": str(agent_dir),
+        "agent_dir": agent_prefix,
         "camera": camera,
         "start_time": init_arg.get("start_time", 0),
         "end_time": init_arg.get("end_time", 0),
@@ -958,13 +987,12 @@ async def init_agent_state_activity(init_arg: dict) -> dict:
 
 @activity.defn(name="save_agent_log")
 async def save_agent_log_activity(log_arg: dict) -> None:
-    """Write agent trace log to disk. Activity to avoid sandbox restrictions."""
+    """Write agent trace log to S3. Activity to avoid sandbox restrictions."""
     event_id = log_arg["event_id"]
     trace_text = log_arg["trace_text"]
     try:
-        AGENT_LOGS_DIR.mkdir(parents=True, exist_ok=True)
-        (AGENT_LOGS_DIR / f"{event_id}-trace.txt").write_text(trace_text)
-        log.info("Agent trace saved: %s", AGENT_LOGS_DIR / f"{event_id}-trace.txt")
+        _s3_put(f"events/{event_id}/agent/trace.txt", trace_text.encode())
+        log.info("Agent trace saved: s3://events/%s/agent/trace.txt", event_id)
     except Exception as e:
         log.warning("Failed to write agent log: %s", e)
 
@@ -981,15 +1009,13 @@ async def tool_get_snapshot_activity(arg: dict) -> dict:
     msg_path = arg["msg_path"]
     state, agent_dir = _load_state(msg_path)
     frames_dir = str(Path(agent_dir).parent)
-    agent_path = Path(agent_dir)
-    agent_path.mkdir(parents=True, exist_ok=True)
 
     tc_id = _find_tc_id(state, "get_snapshot")
-    snapshot_path = Path(frames_dir) / "snapshot.jpg"
-    if snapshot_path.exists():
-        raw = snapshot_path.read_bytes()
+    snapshot_key = f"{frames_dir}/snapshot.jpg"
+    snapshot_data = _s3_get(snapshot_key)
+    if snapshot_data is not None:
         fname = "snapshot.jpg"
-        (agent_path / fname).write_bytes(raw)
+        _s3_put(f"{agent_dir}/{fname}", snapshot_data)
         ref = f"[[{fname}]]"
         img_content = [{"type": "image_url", "image_url": {"url": ref}}]
         img_content.append({"type": "text", "text": "Detection snapshot."})
@@ -1001,7 +1027,7 @@ async def tool_get_snapshot_activity(arg: dict) -> dict:
                 "content": "No snapshot available.",
             })
     _atomic_write(msg_path, state)
-    return {"snapshot_available": snapshot_path.exists()}
+    return {"snapshot_available": snapshot_data is not None}
 
 
 
@@ -1012,8 +1038,6 @@ async def tool_show_frame_activity(arg: dict) -> dict:
     tool_args = arg.get("args", {})
     state, agent_dir = _load_state(msg_path)
     frames_dir = str(Path(agent_dir).parent)
-    agent_path = Path(agent_dir)
-    agent_path.mkdir(parents=True, exist_ok=True)
 
     tc_id = _find_tc_id(state, "show_frame")
     source = tool_args.get("source", "snapshot://")
@@ -1041,12 +1065,14 @@ async def tool_show_frame_activity(arg: dict) -> dict:
         frame_spec = ""
 
     if src_type == "snapshot":
-        img_path = Path(frames_dir) / "snapshot.jpg"
-        if img_path.exists():
-            img = Image.open(img_path)
-            img_counter = len(list(agent_path.glob("display_*.jpg"))) + 1
+        snap_data = _s3_get(f"{frames_dir}/snapshot.jpg")
+        if snap_data is not None:
+            img = Image.open(_io.BytesIO(snap_data))
+            img_counter = len(_s3_list(f"{agent_dir}/display_")) + 1
             fname = f"display_{img_counter:03d}.jpg"
-            img.save(agent_path / fname, "JPEG", quality=85)
+            buf = _io.BytesIO()
+            img.save(buf, "JPEG", quality=85)
+            _s3_put(f"{agent_dir}/{fname}", buf.getvalue())
             ref = f"[[{fname}]]"
             state["messages"].append({
                 "role": "user",
@@ -1118,17 +1144,17 @@ async def tool_show_frame_activity(arg: dict) -> dict:
                 else:
                     resolution = "tiny"
             img_content = []
-            img_counter = len(list(agent_path.glob("display_*.jpg")))
+            img_counter = len(_s3_list(f"{agent_dir}/display_"))
             for fi in frames_list:
                 if src_type == "frame":
-                    img_path = Path(frames_dir) / f"frame_{fi:03d}.jpg"
+                    img_data = _s3_get(f"{frames_dir}/frames/frame_{fi:03d}.jpg")
                 elif src_type == "transcode":
-                    img_path = agent_path / f"transcode_{batch:03d}_{fi:03d}.jpg"
+                    img_data = _s3_get(f"{agent_dir}/transcode_{batch:03d}_{fi:03d}.jpg")
                 elif src_type == "crop":
-                    img_path = agent_path / f"crop_{fi:03d}.jpg"
+                    img_data = _s3_get(f"{agent_dir}/crop_{fi:03d}.jpg")
                 else:
-                    img_path = Path(frames_dir) / "snapshot.jpg"
-                if not img_path.exists():
+                    img_data = _s3_get(f"{frames_dir}/snapshot.jpg")
+                if img_data is None:
                     if src_type == "transcode":
                         msg = (
                             f"Transcode batch {batch} not found. "
@@ -1142,15 +1168,17 @@ async def tool_show_frame_activity(arg: dict) -> dict:
                         })
                     continue
                 try:
-                    img = Image.open(img_path)
+                    img = Image.open(_io.BytesIO(img_data))
                     tw, th = _resolution_pixels(resolution, img.size)
                     img = _resize_to(img, tw)
                 except Exception as e:
-                    log.exception("Failed to load frame %s", img_path)
+                    log.exception("Failed to load frame from source %s", source)
                     continue
                 img_counter += 1
                 fname = f"display_{img_counter:03d}.jpg"
-                img.save(agent_path / fname, "JPEG", quality=85)
+                buf = _io.BytesIO()
+                img.save(buf, "JPEG", quality=85)
+                _s3_put(f"{agent_dir}/{fname}", buf.getvalue())
                 ref = f"[[{fname}]]"
                 img_content.append({"type": "image_url", "image_url": {"url": ref}})
             if img_content:
@@ -1173,8 +1201,6 @@ def tool_transcode_activity(arg: dict) -> dict:
     event_id = arg.get("event_id", "")
 
     state, agent_dir = _load_state(msg_path)
-    agent_path = Path(agent_dir)
-    agent_path.mkdir(parents=True, exist_ok=True)
 
     tc_id = _find_tc_id(state, "transcode")
     batch_start = tool_args.get("start", 0)
@@ -1193,8 +1219,7 @@ def tool_transcode_activity(arg: dict) -> dict:
         start_offset, duration, fps=None,
     )
     for i, f in enumerate(frames):
-        fname = f"transcode_{batch_start:03d}_{i:03d}.jpg"
-        (agent_path / fname).write_bytes(f)
+        _s3_put(f'{agent_dir}/transcode_{batch_start:03d}_{i:03d}.jpg', f)
 
     n_frames = len(frames)
     fps_effective = n_frames / duration if duration > 0 else 0
@@ -1233,9 +1258,7 @@ async def tool_crop_activity(arg: dict) -> dict:
     msg_path = arg["msg_path"]
     tool_args = arg.get("args", {})
     state, agent_dir = _load_state(msg_path)
-    frames_dir = str(Path(agent_dir).parent)
-    agent_path = Path(agent_dir)
-    agent_path.mkdir(parents=True, exist_ok=True)
+    event_prefix = agent_dir.rsplit("/", 1)[0]
 
     tc_id = _find_tc_id(state, "crop")
     source = tool_args.get("source", "")
@@ -1293,25 +1316,30 @@ async def tool_crop_activity(arg: dict) -> dict:
         # Crop each source, collect results
         crop_results = []
         for entry in source_list:
-            img_path = None
+            img_key = None
             if entry[0] == "frame":
-                img_path = Path(frames_dir) / f"frame_{entry[1]:03d}.jpg"
+                img_key = f"{event_prefix}/frames/frame_{entry[1]:03d}.jpg"
             elif entry[0] == "transcode":
-                img_path = agent_path / f"transcode_{entry[1]:03d}_{entry[2]:03d}.jpg"
+                img_key = f"{agent_dir}/transcode_{entry[1]:03d}_{entry[2]:03d}.jpg"
             elif entry[0] == "crop":
-                img_path = agent_path / f"crop_{entry[1]:03d}.jpg"
+                img_key = f"{agent_dir}/crop_{entry[1]:03d}.jpg"
 
-            if not (img_path and img_path.exists()):
+            if not img_key:
+                continue
+            img_bytes = _s3_get(img_key)
+            if img_bytes is None:
                 continue
             try:
-                img = Image.open(img_path)
+                img = Image.open(_io.BytesIO(img_bytes))
                 w, h = img.size
                 crop_box = (int(x1 * w), int(y1 * h), int(x2 * w), int(y2 * h))
                 cropped = img.crop(crop_box)
-                img_counter = len(list(agent_path.glob("crop_*.jpg")))
-                crop_id = img_counter + 1
+                existing = _s3_list(f"{agent_dir}/crop_")
+                crop_id = len(existing) + 1
                 fname = f"crop_{crop_id:03d}.jpg"
-                cropped.save(agent_path / fname, "JPEG", quality=95)
+                buf = _io.BytesIO()
+                cropped.save(buf, "JPEG", quality=95)
+                _s3_put(f"{agent_dir}/{fname}", buf.getvalue())
                 crop_results.append((crop_id, fname))
             except Exception as e:
                 log.exception("Failed to crop source %r", entry)
@@ -1363,12 +1391,14 @@ async def tool_compact_activity(arg: dict) -> dict:
             ]
             for t in text_parts:
                 summary_parts.append(f"  {t}")
-    crop_files = sorted(Path(agent_dir).glob("crop_*.jpg"))
+    all_keys = _s3_list(agent_dir + "/")
+    crop_files = sorted(k for k in all_keys if k.rsplit("/", 1)[-1].startswith("crop_"))
     if crop_files:
         crop_lines = ["\nCrops available:"]
         for cf in crop_files:
-            crop_id = cf.stem.replace("crop_", "")
-            crop_lines.append(f"  crop://{int(crop_id)}: {cf.name}")
+            cf_name = cf.rsplit("/", 1)[-1]
+            crop_id = cf_name.replace("crop_", "").rsplit(".", 1)[0]
+            crop_lines.append(f"  crop://{int(crop_id)}: {cf_name}")
         summary_parts.append("\n".join(crop_lines))
     summary_text = "\n".join(summary_parts)
     state["messages"].append({"role": "user", "content": summary_text})
@@ -1459,11 +1489,12 @@ async def summarize_agent_activity(stats: dict) -> str | None:
             summary = f"Agent: {summary}"
             log.info("Agent summary for %s: %s", event_id, summary)
             try:
-                AGENT_LOGS_DIR.mkdir(parents=True, exist_ok=True)
-                (AGENT_LOGS_DIR / f"{event_id}-summary.txt").write_text(summary)
-                trace_path = AGENT_LOGS_DIR / f"{event_id}-trace.txt"
-                if trace_path.exists():
-                    trace_path.write_text(trace_path.read_text() + f"\n\n{summary}")
+                agent_prefix = _s3_agent_prefix(event_id)
+                _s3_put(f"{agent_prefix}/summary.txt", summary.encode())
+                trace_key = f"{agent_prefix}/trace.txt"
+                existing = _s3_read_text(trace_key)
+                if existing is not None:
+                    _s3_put(trace_key, (existing + f"\n\n{summary}").encode())
             except Exception as e:
                 pass
             return summary
@@ -1474,19 +1505,27 @@ async def summarize_agent_activity(stats: dict) -> str | None:
 
 
 def _atomic_write(path: str, data: dict) -> None:
-    """Write JSON to disk atomically via .tmp → rename."""
+    """Write JSON to S3 (if path starts with 'events/') or disk atomically."""
+    if path.startswith("events/"):
+        _s3_put(path, json.dumps(data, default=str).encode())
+    else:
+        tmp = path + ".tmp"
+        with open(tmp, "w") as f:
+            json.dump(data, f, default=str)
+        os.replace(tmp, path)
 
-    tmp = path + ".tmp"
-    with open(tmp, "w") as f:
-        json.dump(data, f, default=str)
-    os.replace(tmp, path)
 
 
 def _load_state(msg_path: str) -> tuple[dict, str]:
-    """Read messages.json and return (state, agent_dir)."""
-
-    with open(msg_path) as f:
-        state = json.load(f)
+    """Read messages.json from S3 or local disk. Returns (state, agent_dir)."""
+    if msg_path.startswith("events/"):
+        data = _s3_read_text(msg_path)
+        if data is None:
+            raise FileNotFoundError(f"State not found at {msg_path}")
+        state = json.loads(data)
+    else:
+        with open(msg_path) as f:
+            state = json.load(f)
     return state, state["agent_dir"]
 
 
@@ -1504,11 +1543,10 @@ def _find_tc_id(state: dict, tool_name: str) -> str | None:
 
 def _deserialize_messages(messages: list, agent_dir: str) -> list:
     """Convert [[filename]] refs in messages to base64 data URIs.
-    Reads image bytes from agent_dir. Does NOT mutate — returns new list.
+    Reads image bytes from S3 (if agent_dir starts with 'events/') or disk.
+    Does NOT mutate — returns new list.
     """
-
-
-    agent_path = Path(agent_dir)
+    is_s3 = agent_dir.startswith("events/")
     result = copy.deepcopy(messages)
     for m in result:
         content = m.get("content")
@@ -1518,9 +1556,12 @@ def _deserialize_messages(messages: list, agent_dir: str) -> list:
                     url = part.get("image_url", {}).get("url", "")
                     if url.startswith("[[") and url.endswith("]]"):
                         fname = url[2:-2]
-                        img_path = agent_path / fname
-                        if img_path.exists():
-                            raw = img_path.read_bytes()
+                        img_key = f"{agent_dir}/{fname}"
+                        raw = _s3_get(img_key) if is_s3 else None
+                        if raw is None and not is_s3:
+                            p = Path(agent_dir) / fname
+                            raw = p.read_bytes() if p.exists() else None
+                        if raw:
                             b64 = base64.b64encode(raw).decode("ascii")
                             part["image_url"]["url"] = f"data:image/jpeg;base64,{b64}"
     return result
@@ -1542,23 +1583,12 @@ async def update_description_activity(event_id: str, description: str) -> bool:
 async def cleanup_cancelled_activity(input_data: dict) -> None:
     """Clean up persisted data for a cancelled workflow: remove frames,
     agent logs, and post cancellation notice to Frigate."""
-    import shutil
-
     event_id = input_data["event_id"]
     log.info("Cleanup cancelled: event=%s", event_id)
 
-    # Remove persisted frames
-    frames_dir = FRAMES_DIR / event_id
-    if frames_dir.exists():
-        shutil.rmtree(frames_dir)
-        log.info("Removed frames: %s", frames_dir)
-
-    # Remove agent logs
-    for suffix in [".json", "-trace.txt", "-summary.txt"]:
-        log_path = AGENT_LOGS_DIR / f"{event_id}{suffix}"
-        if log_path.exists():
-            log_path.unlink()
-            log.info("Removed log: %s", log_path)
+    # Remove all persisted data for this event from S3
+    deleted = _s3_delete_prefix(f"events/{event_id}/")
+    log.info("Removed %d objects for event=%s", deleted, event_id)
     # Post cancellation notice to Frigate (run in thread via heartbeat to avoid blocking)
     await _run_with_heartbeat(update_event_description, event_id, "Cancelled")
 # ═════════════════════════════════════════════════════════════════════
@@ -2091,7 +2121,7 @@ def build_mqtt_client(loop: asyncio.AbstractEventLoop) -> mqtt.Client:
 # ── main ────────────────────────────────────────────────────────────
 
 
-async def async_main(prompts_path: str, provider_path: str) -> None:
+async def async_main(prompts_path: str, provider_path: str, mode: str = "arch") -> None:
     global _temporal_client, _main_event_loop
 
     logging.basicConfig(
@@ -2133,376 +2163,412 @@ async def async_main(prompts_path: str, provider_path: str) -> None:
         log.info("Search attributes registered: Camera, Label, EventId, Duration, Cost, Model, Confidence")
     except Exception as e:
         log.debug("Search attribute registration skipped: %s", e)
-    main_worker = Worker(
-        _temporal_client,
-        task_queue=TASK_QUEUE,
-        workflows=[GenAIWorkflow],
-        activities=[
-            select_model_activity,
-            update_description_activity,
-            fetch_snapshot_activity,
-            cleanup_cancelled_activity,
-            init_agent_state_activity,
-        ],
-    )
+    mode_tasks = []
 
-    # FFmpeg worker: frame extraction only (spiky CPU/disk, rate-limited)
-    ffmpeg_worker = Worker(
-        _temporal_client,
-        task_queue=FFMPEG_TASK_QUEUE,
-        activities=[transcode_into_parts_activity, tool_transcode_activity],
-        activity_executor=ThreadPoolExecutor(max_workers=2),
-        max_concurrent_activities=int(os.environ.get("TEMPORAL_MAX_FFMPEG", "2")),
-    )
+    # Main worker with misc activities (always present in arch/genai-gemini/genai-ollama, as workflow listener)
+    misc_activities = [select_model_activity, update_description_activity, fetch_snapshot_activity, cleanup_cancelled_activity, init_agent_state_activity]
 
-    # Gemini GenAI worker: handles turn + tool result activities for gemini models
-    gemini_worker = Worker(
-        _temporal_client,
-        task_queue=GEMINI_TASK_QUEUE,
-        activities=[run_genai_turn_activity,
-                    tool_get_snapshot_activity, tool_show_frame_activity,
-                    tool_crop_activity, tool_compact_activity,
-                    tool_set_description_activity, summarize_agent_activity,
-                    save_agent_log_activity],
-        max_concurrent_activities=int(os.environ.get("TEMPORAL_MAX_GEMINI_GENAI", "5")),
-    )
-
-    # Ollama GenAI worker: handles turn + tool result activities for ollama models
-    # Max 1 concurrent — Ollama cannot parallelize vision inference
-    ollama_worker = Worker(
-        _temporal_client,
-        task_queue=OLLAMA_TASK_QUEUE,
-        activities=[run_genai_turn_activity,
-                    tool_get_snapshot_activity, tool_show_frame_activity,
-                    tool_crop_activity, tool_compact_activity,
-                    tool_set_description_activity, summarize_agent_activity,
-                    save_agent_log_activity],
-        max_concurrent_activities=int(os.environ.get("TEMPORAL_MAX_OLLAMA_GENAI", "1")),
-    )
-
-    main_task = asyncio.create_task(main_worker.run())
-    ffmpeg_task = asyncio.create_task(ffmpeg_worker.run())
-    gemini_task = asyncio.create_task(gemini_worker.run())
-    ollama_task = asyncio.create_task(ollama_worker.run())
-    log.info("Temporal workers started: %s + %s + %s + %s",
-             TASK_QUEUE, FFMPEG_TASK_QUEUE, GEMINI_TASK_QUEUE, OLLAMA_TASK_QUEUE)
+    if mode == "arch":
+        main_worker = Worker(
+            _temporal_client,
+            task_queue=TASK_QUEUE,
+            workflows=[GenAIWorkflow],
+            activities=misc_activities,
+        )
+        ffmpeg_worker = Worker(
+            _temporal_client,
+            task_queue=FFMPEG_TASK_QUEUE,
+            activities=[transcode_into_parts_activity, tool_transcode_activity],
+            activity_executor=ThreadPoolExecutor(max_workers=2),
+            max_concurrent_activities=int(os.environ.get("TEMPORAL_MAX_FFMPEG", "2")),
+        )
+        gemini_worker = Worker(
+            _temporal_client,
+            task_queue=GEMINI_TASK_QUEUE,
+            activities=[run_genai_turn_activity,
+                        tool_get_snapshot_activity, tool_show_frame_activity,
+                        tool_crop_activity, tool_compact_activity,
+                        tool_set_description_activity, summarize_agent_activity,
+                        save_agent_log_activity],
+            max_concurrent_activities=int(os.environ.get("TEMPORAL_MAX_GEMINI_GENAI", "5")),
+        )
+        ollama_worker = Worker(
+            _temporal_client,
+            task_queue=OLLAMA_TASK_QUEUE,
+            activities=[run_genai_turn_activity,
+                        tool_get_snapshot_activity, tool_show_frame_activity,
+                        tool_crop_activity, tool_compact_activity,
+                        tool_set_description_activity, summarize_agent_activity,
+                        save_agent_log_activity],
+            max_concurrent_activities=int(os.environ.get("TEMPORAL_MAX_OLLAMA_GENAI", "1")),
+        )
+        mode_tasks = [asyncio.create_task(w.run()) for w in [main_worker, ffmpeg_worker, gemini_worker, ollama_worker]]
+    elif mode == "ffmpeg":
+        ffmpeg_worker = Worker(
+            _temporal_client,
+            task_queue=FFMPEG_TASK_QUEUE,
+            activities=[transcode_into_parts_activity, tool_transcode_activity],
+            activity_executor=ThreadPoolExecutor(max_workers=2),
+            max_concurrent_activities=int(os.environ.get("TEMPORAL_MAX_FFMPEG", "2")),
+        )
+        mode_tasks = [asyncio.create_task(ffmpeg_worker.run())]
+    elif mode == "genai-gemini":
+        main_worker = Worker(
+            _temporal_client,
+            task_queue=TASK_QUEUE,
+            activities=misc_activities,
+        )
+        gemini_worker = Worker(
+            _temporal_client,
+            task_queue=GEMINI_TASK_QUEUE,
+            activities=[run_genai_turn_activity,
+                        tool_get_snapshot_activity, tool_show_frame_activity,
+                        tool_crop_activity, tool_compact_activity,
+                        tool_set_description_activity, summarize_agent_activity,
+                        save_agent_log_activity],
+            max_concurrent_activities=int(os.environ.get("TEMPORAL_MAX_GEMINI_GENAI", "5")),
+        )
+        mode_tasks = [asyncio.create_task(w.run()) for w in [main_worker, gemini_worker]]
+    elif mode == "genai-ollama":
+        main_worker = Worker(
+            _temporal_client,
+            task_queue=TASK_QUEUE,
+            activities=misc_activities,
+        )
+        ollama_worker = Worker(
+            _temporal_client,
+            task_queue=OLLAMA_TASK_QUEUE,
+            activities=[run_genai_turn_activity,
+                        tool_get_snapshot_activity, tool_show_frame_activity,
+                        tool_crop_activity, tool_compact_activity,
+                        tool_set_description_activity, summarize_agent_activity,
+                        save_agent_log_activity],
+            max_concurrent_activities=int(os.environ.get("TEMPORAL_MAX_OLLAMA_GENAI", "1")),
+        )
+        mode_tasks = [asyncio.create_task(w.run()) for w in [main_worker, ollama_worker]]
 
     # ── MQTT — starts workflows via Temporal client ─────────────────
-    client_mqtt = build_mqtt_client(asyncio.get_running_loop())
+    if mode == 'arch':
+        client_mqtt = build_mqtt_client(asyncio.get_running_loop())
 
-    log.info("Frigate GenAI sidecar running, waiting for events...")
+    if mode == 'arch':
+        log.info("Frigate GenAI sidecar running, waiting for events...")
 
-    # ── HTTP server for manual reprocess triggers ──────────────────
-    import threading
+        # ── HTTP server for manual reprocess triggers ──────────────────
+        import threading
 
-    from http.server import HTTPServer, BaseHTTPRequestHandler
+        from http.server import HTTPServer, BaseHTTPRequestHandler
 
-    async def _do_reprocess(event_id: str, event: dict) -> str:
-        """Cancel old workflow and start a fresh one. Called via asyncio.run from HTTP handler."""
-        workflow_id = f"genai-{event_id}"
-        try:
-            handle = _temporal_client.get_workflow_handle(workflow_id)
-            await handle.cancel()
-            log.info("Cancelled old workflow %s for reprocess", workflow_id)
+        async def _do_reprocess(event_id: str, event: dict) -> str:
+            """Cancel old workflow and start a fresh one. Called via asyncio.run from HTTP handler."""
+            workflow_id = f"genai-{event_id}"
+            try:
+                handle = _temporal_client.get_workflow_handle(workflow_id)
+                await handle.cancel()
+                log.info("Cancelled old workflow %s for reprocess", workflow_id)
 
-        except Exception as e:
-            log.debug("No existing workflow %s to cancel", workflow_id)
-        camera = event.get("camera", "")
-        label = event.get("label", "")
-        input_data = _build_workflow_input(event)
-        if input_data is None:
-            return f"Skipping {event_id} ({camera}/{label}): paused (global or per-label)"
-        await _temporal_client.start_workflow(
-            "GenAIWorkflow",
-            input_data,
-            id=workflow_id,
-            task_queue=TASK_QUEUE,
-            search_attributes=TypedSearchAttributes([
-                SearchAttributePair(_SEARCH_CAMERA, camera),
-                SearchAttributePair(_SEARCH_LABEL, label),
-            ]),
-            memo={"event_id": event_id, "camera": camera, "label": label,
-                  "duration": int(event.get("end_time", event.get("start_time", 0)) - event.get("start_time", 0))})
-        return f"Reprocessing {event_id} ({event.get('camera', '')}/{event.get('label', '')})"
+            except Exception as e:
+                log.debug("No existing workflow %s to cancel", workflow_id)
+            camera = event.get("camera", "")
+            label = event.get("label", "")
+            input_data = _build_workflow_input(event)
+            if input_data is None:
+                return f"Skipping {event_id} ({camera}/{label}): paused (global or per-label)"
+            await _temporal_client.start_workflow(
+                "GenAIWorkflow",
+                input_data,
+                id=workflow_id,
+                task_queue=TASK_QUEUE,
+                search_attributes=TypedSearchAttributes([
+                    SearchAttributePair(_SEARCH_CAMERA, camera),
+                    SearchAttributePair(_SEARCH_LABEL, label),
+                ]),
+                memo={"event_id": event_id, "camera": camera, "label": label,
+                      "duration": int(event.get("end_time", event.get("start_time", 0)) - event.get("start_time", 0))})
+            return f"Reprocessing {event_id} ({event.get('camera', '')}/{event.get('label', '')})"
 
-    class ReprocessHandler(BaseHTTPRequestHandler):
-        def log_message(self, fmt, *args):
-            log.debug("HTTP: %s", fmt % args)
+        class ReprocessHandler(BaseHTTPRequestHandler):
+            def log_message(self, fmt, *args):
+                log.debug("HTTP: %s", fmt % args)
 
-        def _cors(self):
-            self.send_header("Access-Control-Allow-Origin", "*")
-            self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-            self.send_header("Access-Control-Allow-Headers", "Content-Type")
+            def _cors(self):
+                self.send_header("Access-Control-Allow-Origin", "*")
+                self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+                self.send_header("Access-Control-Allow-Headers", "Content-Type")
 
-        def do_OPTIONS(self):
-            self.send_response(200)
-            self._cors()
-            self.end_headers()
+            def do_OPTIONS(self):
+                self.send_response(200)
+                self._cors()
+                self.end_headers()
 
-        def do_GET(self):
-            if self.path == "/":
+            def do_GET(self):
+                if self.path == "/":
+                    self.send_response(200)
+                    self._cors()
+                    self.send_header("Content-type", "text/html; charset=utf-8")
+                    self.end_headers()
+                    self.wfile.write(UI_HTML.encode())
+                elif self.path == "/api/stats":
+                    self.send_response(200)
+                    self._cors()
+                    self.send_header("Content-type", "application/json; charset=utf-8")
+                    self.end_headers()
+                    self.wfile.write(json.dumps(_stats).encode())
+                elif self.path == "/api/temporal":
+                    self.send_response(200)
+                    self._cors()
+                    self.send_header("Content-type", "application/json; charset=utf-8")
+                    self.end_headers()
+                    self.wfile.write(json.dumps({
+                        "connected": _stats["temporal_connected"],
+                        "task_queue": TASK_QUEUE,
+                        "server": os.environ.get("TEMPORAL_ADDRESS", "192.168.5.10:32682"),
+                        "events_processed": _stats["events_processed"],
+                        "model_counts": _stats["model_counts"],
+                    }).encode())
+                elif self.path.startswith("/api/events/") and self.path.endswith("/snapshot.jpg"):
+                    self._proxy("image/jpeg")
+                elif self.path.startswith("/api/events"):
+                    self._proxy("application/json")
+                elif self.path == "/api/pause":
+                    paused = os.path.exists("/tmp/pause-ollama")
+                    self.send_response(200)
+                    self._cors()
+                    self.send_header("Content-type", "application/json")
+                    self.end_headers()
+                    self.wfile.write(json.dumps({"paused": paused}).encode())
+                elif self.path == "/api/genai-pause":
+                    paused_global = os.path.exists("/tmp/pause-frigate-genai")
+                    paused_labels = {}
+                    for f in Path("/tmp").glob("pause-frigate-genai-*"):
+                        paused_labels[f.name[len("pause-frigate-genai-"):]] = True
+                    self.send_response(200)
+                    self._cors()
+                    self.send_header("Content-type", "application/json")
+                    self.end_headers()
+                    self.wfile.write(json.dumps({
+                        "global": paused_global,
+                        "labels": paused_labels,
+                    }).encode())
+                elif self.path.startswith("/agent/"):
+                    self._serve_agent_view()
+                else:
+                    self.send_response(404)
+                    self.end_headers()
+
+            def _proxy(self, content_type):
+                try:
+                    resp = urllib.request.urlopen(_frigate_url(self.path), timeout=15)
+
+                    self.send_response(resp.status)
+                    self._cors()
+                    self.send_header("Content-type", content_type)
+                    self.end_headers()
+                    self.wfile.write(resp.read())
+                except Exception as e:
+                    self.send_response(502)
+                    self._cors()
+                    self.end_headers()
+                    self.wfile.write(str(e).encode())
+
+            def _serve_agent_view(self):
+                """Render agent conversation history as HTML with inline images."""
+
+                parts = self.path.split("/")
+                # path: /agent/{event_id} or /agent/{event_id}/file/{filename}
+                if len(parts) < 3:
+                    self.send_response(400)
+                    self.end_headers()
+                    return
+                event_id = parts[2]
+                # Raw file serving
+                if len(parts) >= 5 and parts[3] == "file":
+                    fname = parts[4]
+                    agent_prefix = _s3_agent_prefix(event_id)
+                    data = _s3_get(f"{agent_prefix}/{fname}")
+                    if data is not None:
+                        self.send_response(200)
+                        self._cors()
+                        self.send_header("Content-type", "image/jpeg")
+                        self.end_headers()
+                        self.wfile.write(data)
+                    else:
+                        self.send_response(404)
+                        self.end_headers()
+                    return
+                # Full conversation view
+                msg_data = _s3_read_text(f"events/{event_id}/agent/messages.json")
+                if msg_data is None:
+                    self.send_response(404)
+                    self._cors()
+                    self.send_header("Content-type", "text/plain")
+                    self.end_headers()
+                    self.wfile.write(b"Agent state not found")
+                    return
+                state = json.loads(msg_data)
+                msgs = state.get("messages", [])
+                agent_dir = state.get("agent_dir", "")
+                html = ['<!DOCTYPE html><html><head><meta charset="utf-8">'
+                        '<title>Agent: {}</title>'
+                        '<style>*{{margin:0;padding:0;box-sizing:border-box}}'
+                        'body{{background:#0f0f1a;color:#d4d4d8;font:13px system-ui;padding:16px}}'
+                        'h1{{font-size:16px;margin-bottom:8px;color:#fff}}'
+                        '.msg{{margin-bottom:12px;padding:10px 14px;border-radius:8px;max-width:900px}}'
+                        '.msg.system{{background:#1a1a2e;border-left:3px solid #666}}'
+                        '.msg.user{{background:#14283a;border-left:3px solid #4ade80}}'
+                        '.msg.assistant{{background:#2a1a2e;border-left:3px solid #c084fc}}'
+                        '.msg.tool{{background:#1a2e1a;border-left:3px solid #fbbf24}}'
+                        '.role{{font-size:10px;text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px;color:#888}}'
+                        'img{{max-width:400px;max-height:300px;border-radius:4px;margin:4px 4px 0 0;cursor:pointer}}'
+                        'img:hover{{outline:2px solid #4ade80}}'
+                        '.text{{line-height:1.5;white-space:pre-wrap}}'
+                        '.tool-call{{font-size:11px;color:#c084fc;font-family:monospace}}'
+                        '</style></head><body>'
+                        '<h1>Agent: {}</h1>'.format(event_id, event_id)]
+                for m in msgs:
+                    role = m.get("role", "?")
+                    html.append('<div class="msg {}"><div class="role">{}</div>'.format(role, role))
+                    if role == "assistant":
+                        tcs = m.get("tool_calls", [])
+                        if tcs:
+                            for tc in tcs:
+                                name = tc.get("function", {}).get("name", "?")
+                                args = tc.get("function", {}).get("arguments", "")
+                                if isinstance(args, str):
+                                    try: args = json.loads(args)
+                                    except Exception: pass
+                                html.append('<div class="tool-call">→ {}({})</div>'.format(
+                                    name, json.dumps(args)[:200]))
+                        content = m.get("content", "")
+                        if content:
+                            html.append('<div class="text">{}</div>'.format(str(content)[:500]))
+                    elif role == "tool":
+                        html.append('<div class="text">{}</div>'.format(str(m.get("content", ""))[:500]))
+                    elif role == "user":
+                        content = m.get("content", "")
+                        if isinstance(content, list):
+                            for part in content:
+                                if isinstance(part, dict):
+                                    if part.get("type") == "image_url":
+                                        url = part.get("image_url", {}).get("url", "")
+                                        if url.startswith("[[") and url.endswith("]]"):
+                                            fname = url[2:-2]
+                                            img_data = _s3_get(f"{agent_dir}/{fname}") if agent_dir.startswith("events/") else None
+                                            if img_data is None and not agent_dir.startswith("events/"):
+                                                p = Path(agent_dir) / fname
+                                                img_data = p.read_bytes() if p.exists() else None
+                                            if img_data:
+                                                b64 = base64.b64encode(img_data).decode()
+                                                html.append('<img src="data:image/jpeg;base64,{}" '
+                                                            'onclick="this.style.maxWidth=this.style.maxWidth==\'100%\'?\'400px\':\'100%\'">'.format(b64))
+                                            else:
+                                                html.append('<div class="text">[image: {} not found]</div>'.format(fname))
+                                    elif part.get("type") == "text":
+                                        html.append('<div class="text">{}</div>'.format(part["text"][:500]))
+                        else:
+                            html.append('<div class="text">{}</div>'.format(str(content)[:500]))
+                    elif role == "system":
+                        html.append('<div class="text">{}</div>'.format(str(m.get("content", ""))[:500]))
+                    html.append('</div>')
+                html.append('<div style="margin-top:16px;color:#666;font-size:11px">'
+                            'camera: {} | start_time: {} | end_time: {} | max_frames: {}</div>'
+                            .format(state.get("camera","?"), state.get("start_time","?"),
+                                    state.get("end_time","?"), state.get("max_frames","?")))
+                html.append('</body></html>')
                 self.send_response(200)
                 self._cors()
                 self.send_header("Content-type", "text/html; charset=utf-8")
                 self.end_headers()
-                self.wfile.write(UI_HTML.encode())
-            elif self.path == "/api/stats":
-                self.send_response(200)
-                self._cors()
-                self.send_header("Content-type", "application/json; charset=utf-8")
-                self.end_headers()
-                self.wfile.write(json.dumps(_stats).encode())
-            elif self.path == "/api/temporal":
-                self.send_response(200)
-                self._cors()
-                self.send_header("Content-type", "application/json; charset=utf-8")
-                self.end_headers()
-                self.wfile.write(json.dumps({
-                    "connected": _stats["temporal_connected"],
-                    "task_queue": TASK_QUEUE,
-                    "server": os.environ.get("TEMPORAL_ADDRESS", "192.168.5.10:32682"),
-                    "events_processed": _stats["events_processed"],
-                    "model_counts": _stats["model_counts"],
-                }).encode())
-            elif self.path.startswith("/api/events/") and self.path.endswith("/snapshot.jpg"):
-                self._proxy("image/jpeg")
-            elif self.path.startswith("/api/events"):
-                self._proxy("application/json")
-            elif self.path == "/api/pause":
-                paused = os.path.exists("/tmp/pause-ollama")
-                self.send_response(200)
-                self._cors()
-                self.send_header("Content-type", "application/json")
-                self.end_headers()
-                self.wfile.write(json.dumps({"paused": paused}).encode())
-            elif self.path == "/api/genai-pause":
-                paused_global = os.path.exists("/tmp/pause-frigate-genai")
-                paused_labels = {}
-                for f in Path("/tmp").glob("pause-frigate-genai-*"):
-                    paused_labels[f.name[len("pause-frigate-genai-"):]] = True
-                self.send_response(200)
-                self._cors()
-                self.send_header("Content-type", "application/json")
-                self.end_headers()
-                self.wfile.write(json.dumps({
-                    "global": paused_global,
-                    "labels": paused_labels,
-                }).encode())
-            elif self.path.startswith("/agent/"):
-                self._serve_agent_view()
-            else:
-                self.send_response(404)
-                self.end_headers()
+                self.wfile.write("\n".join(html).encode())
+            def do_POST(self):
+                if self.path.startswith("/reprocess/"):
+                    event_id = self.path.split("/reprocess/", 1)[1]
+                    try:
+                        resp = urllib.request.urlopen(_frigate_url(f"/api/events/{event_id}"), timeout=10)
+                        event = json.loads(resp.read())
 
-        def _proxy(self, content_type):
-            try:
-                resp = urllib.request.urlopen(_frigate_url(self.path), timeout=15)
+                        if _temporal_client is None:
+                            self.send_response(503)
+                            self._cors()
+                            self.send_header("Content-type", "text/plain")
+                            self.end_headers()
+                            self.wfile.write(b"Temporal not connected")
+                            return
 
-                self.send_response(resp.status)
-                self._cors()
-                self.send_header("Content-type", content_type)
-                self.end_headers()
-                self.wfile.write(resp.read())
-            except Exception as e:
-                self.send_response(502)
-                self._cors()
-                self.end_headers()
-                self.wfile.write(str(e).encode())
+                        msg = asyncio.run(_do_reprocess(event_id, event))
 
-        def _serve_agent_view(self):
-            """Render agent conversation history as HTML with inline images."""
-
-            parts = self.path.split("/")
-            # path: /agent/{event_id} or /agent/{event_id}/file/{filename}
-            if len(parts) < 3:
-                self.send_response(400)
-                self.end_headers()
-                return
-            event_id = parts[2]
-            # Raw file serving
-            if len(parts) >= 5 and parts[3] == "file":
-                fname = parts[4]
-                img_path = FRAMES_DIR / event_id / "agent" / fname
-                if img_path.exists():
-                    self.send_response(200)
-                    self._cors()
-                    self.send_header("Content-type", "image/jpeg")
-                    self.end_headers()
-                    self.wfile.write(img_path.read_bytes())
-                else:
-                    self.send_response(404)
-                    self.end_headers()
-                return
-            # Full conversation view
-            msg_path = FRAMES_DIR / event_id / "agent" / "messages.json"
-            if not msg_path.exists():
-                self.send_response(404)
-                self._cors()
-                self.send_header("Content-type", "text/plain")
-                self.end_headers()
-                self.wfile.write(b"Agent state not found")
-                return
-            state = json.loads(msg_path.read_text())
-            msgs = state.get("messages", [])
-            agent_dir = state.get("agent_dir", "")
-            html = ['<!DOCTYPE html><html><head><meta charset="utf-8">'
-                    '<title>Agent: {}</title>'
-                    '<style>*{{margin:0;padding:0;box-sizing:border-box}}'
-                    'body{{background:#0f0f1a;color:#d4d4d8;font:13px system-ui;padding:16px}}'
-                    'h1{{font-size:16px;margin-bottom:8px;color:#fff}}'
-                    '.msg{{margin-bottom:12px;padding:10px 14px;border-radius:8px;max-width:900px}}'
-                    '.msg.system{{background:#1a1a2e;border-left:3px solid #666}}'
-                    '.msg.user{{background:#14283a;border-left:3px solid #4ade80}}'
-                    '.msg.assistant{{background:#2a1a2e;border-left:3px solid #c084fc}}'
-                    '.msg.tool{{background:#1a2e1a;border-left:3px solid #fbbf24}}'
-                    '.role{{font-size:10px;text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px;color:#888}}'
-                    'img{{max-width:400px;max-height:300px;border-radius:4px;margin:4px 4px 0 0;cursor:pointer}}'
-                    'img:hover{{outline:2px solid #4ade80}}'
-                    '.text{{line-height:1.5;white-space:pre-wrap}}'
-                    '.tool-call{{font-size:11px;color:#c084fc;font-family:monospace}}'
-                    '</style></head><body>'
-                    '<h1>Agent: {}</h1>'.format(event_id, event_id)]
-            for m in msgs:
-                role = m.get("role", "?")
-                html.append('<div class="msg {}"><div class="role">{}</div>'.format(role, role))
-                if role == "assistant":
-                    tcs = m.get("tool_calls", [])
-                    if tcs:
-                        for tc in tcs:
-                            name = tc.get("function", {}).get("name", "?")
-                            args = tc.get("function", {}).get("arguments", "")
-                            if isinstance(args, str):
-                                try: args = json.loads(args)
-                                except Exception: pass
-                            html.append('<div class="tool-call">→ {}({})</div>'.format(
-                                name, json.dumps(args)[:200]))
-                    content = m.get("content", "")
-                    if content:
-                        html.append('<div class="text">{}</div>'.format(str(content)[:500]))
-                elif role == "tool":
-                    html.append('<div class="text">{}</div>'.format(str(m.get("content", ""))[:500]))
-                elif role == "user":
-                    content = m.get("content", "")
-                    if isinstance(content, list):
-                        for part in content:
-                            if isinstance(part, dict):
-                                if part.get("type") == "image_url":
-                                    url = part.get("image_url", {}).get("url", "")
-                                    if url.startswith("[[") and url.endswith("]]"):
-                                        fname = url[2:-2]
-                                        img_path = Path(agent_dir) / fname
-                                        if img_path.exists():
-                                            raw = img_path.read_bytes()
-                                            b64 = base64.b64encode(raw).decode()
-                                            html.append('<img src="data:image/jpeg;base64,{}" '
-                                                        'onclick="this.style.maxWidth=this.style.maxWidth==\'100%\'?\'400px\':\'100%\'">'.format(b64))
-                                        else:
-                                            html.append('<div class="text">[image: {} not found]</div>'.format(fname))
-                                elif part.get("type") == "text":
-                                    html.append('<div class="text">{}</div>'.format(part["text"][:500]))
-                    else:
-                        html.append('<div class="text">{}</div>'.format(str(content)[:500]))
-                elif role == "system":
-                    html.append('<div class="text">{}</div>'.format(str(m.get("content", ""))[:500]))
-                html.append('</div>')
-            html.append('<div style="margin-top:16px;color:#666;font-size:11px">'
-                        'camera: {} | start_time: {} | end_time: {} | max_frames: {}</div>'
-                        .format(state.get("camera","?"), state.get("start_time","?"),
-                                state.get("end_time","?"), state.get("max_frames","?")))
-            html.append('</body></html>')
-            self.send_response(200)
-            self._cors()
-            self.send_header("Content-type", "text/html; charset=utf-8")
-            self.end_headers()
-            self.wfile.write("\n".join(html).encode())
-        def do_POST(self):
-            if self.path.startswith("/reprocess/"):
-                event_id = self.path.split("/reprocess/", 1)[1]
-                try:
-                    resp = urllib.request.urlopen(_frigate_url(f"/api/events/{event_id}"), timeout=10)
-                    event = json.loads(resp.read())
-
-                    if _temporal_client is None:
-                        self.send_response(503)
+                        self.send_response(200)
                         self._cors()
                         self.send_header("Content-type", "text/plain")
                         self.end_headers()
-                        self.wfile.write(b"Temporal not connected")
-                        return
+                        self.wfile.write(msg.encode())
+                        log.info("HTTP reprocess: %s", msg)
+                    except Exception as e:
+                        self.send_response(500)
+                        self._cors()
+                        self.end_headers()
+                        self.wfile.write(str(e).encode())
+                        log.error("Reprocess failed: %s", e)
 
-                    msg = asyncio.run(_do_reprocess(event_id, event))
-
+                elif self.path == "/api/pause":
+                    pause_file = "/tmp/pause-ollama"
+                    if os.path.exists(pause_file):
+                        os.remove(pause_file)
+                        paused = False
+                    else:
+                        open(pause_file, "w").close()
+                        paused = True
                     self.send_response(200)
                     self._cors()
-                    self.send_header("Content-type", "text/plain")
+                    self.send_header("Content-type", "application/json")
                     self.end_headers()
-                    self.wfile.write(msg.encode())
-                    log.info("HTTP reprocess: %s", msg)
-                except Exception as e:
-                    self.send_response(500)
+                    self.wfile.write(json.dumps({"paused": paused}).encode())
+                    log.info("Ollama pause toggled: %s", "ON" if paused else "OFF")
+                elif self.path == "/api/genai-pause":
+                    # Toggle global genai pause; optional body {"label": "car"} for per-label
+                    body_len = int(self.headers.get("Content-Length", 0))
+                    body_raw = self.rfile.read(body_len) if body_len > 0 else b"{}"
+                    try:
+                        body = json.loads(body_raw or b"{}")
+                    except json.JSONDecodeError:
+                        body = {}
+                    label = body.get("label", "")
+                    if label:
+                        pause_file = f"/tmp/pause-frigate-genai-{label}"
+                    else:
+                        pause_file = "/tmp/pause-frigate-genai"
+                    if os.path.exists(pause_file):
+                        os.remove(pause_file)
+                        paused = False
+                    else:
+                        open(pause_file, "w").close()
+                        paused = True
+                    self.send_response(200)
                     self._cors()
+                    self.send_header("Content-type", "application/json")
                     self.end_headers()
-                    self.wfile.write(str(e).encode())
-                    log.error("Reprocess failed: %s", e)
+                    self.wfile.write(json.dumps({
+                        "paused": paused, "file": pause_file,
+                    }).encode())
+                    log.info("GenAI pause toggled (%s): %s", label or "global", "ON" if paused else "OFF")
+                else:
+                    self.send_response(404)
+                    self.end_headers()
 
-            elif self.path == "/api/pause":
-                pause_file = "/tmp/pause-ollama"
-                if os.path.exists(pause_file):
-                    os.remove(pause_file)
-                    paused = False
-                else:
-                    open(pause_file, "w").close()
-                    paused = True
-                self.send_response(200)
-                self._cors()
-                self.send_header("Content-type", "application/json")
-                self.end_headers()
-                self.wfile.write(json.dumps({"paused": paused}).encode())
-                log.info("Ollama pause toggled: %s", "ON" if paused else "OFF")
-            elif self.path == "/api/genai-pause":
-                # Toggle global genai pause; optional body {"label": "car"} for per-label
-                body_len = int(self.headers.get("Content-Length", 0))
-                body_raw = self.rfile.read(body_len) if body_len > 0 else b"{}"
-                try:
-                    body = json.loads(body_raw or b"{}")
-                except json.JSONDecodeError:
-                    body = {}
-                label = body.get("label", "")
-                if label:
-                    pause_file = f"/tmp/pause-frigate-genai-{label}"
-                else:
-                    pause_file = "/tmp/pause-frigate-genai"
-                if os.path.exists(pause_file):
-                    os.remove(pause_file)
-                    paused = False
-                else:
-                    open(pause_file, "w").close()
-                    paused = True
-                self.send_response(200)
-                self._cors()
-                self.send_header("Content-type", "application/json")
-                self.end_headers()
-                self.wfile.write(json.dumps({
-                    "paused": paused, "file": pause_file,
-                }).encode())
-                log.info("GenAI pause toggled (%s): %s", label or "global", "ON" if paused else "OFF")
-            else:
-                self.send_response(404)
-                self.end_headers()
-
-    http_port = int(os.environ.get("HTTP_PORT", "9090"))
-    http_host = os.environ.get("HTTP_HOST", "127.0.0.1")
-    httpd = HTTPServer((http_host, http_port), ReprocessHandler)
-    thread = threading.Thread(target=httpd.serve_forever, daemon=True)
-    thread.start()
-    log.info("HTTP reprocess endpoint on http://%s:%d", http_host, http_port)
+        http_port = int(os.environ.get("HTTP_PORT", "9090"))
+        http_host = os.environ.get("HTTP_HOST", "127.0.0.1")
+        httpd = HTTPServer((http_host, http_port), ReprocessHandler)
+        thread = threading.Thread(target=httpd.serve_forever, daemon=True)
+        thread.start()
+        log.info("HTTP reprocess endpoint on http://%s:%d", http_host, http_port)
 
     # ── Run workers (block forever; crash propagates, systemd restarts)
     try:
-        await asyncio.gather(main_task, ffmpeg_task)
+        await asyncio.gather(*mode_tasks)
     finally:
-        client_mqtt.loop_stop()
-        client_mqtt.disconnect()
+        if mode == 'arch':
+            client_mqtt.loop_stop()
+            client_mqtt.disconnect()
 
 
 def main():
@@ -2516,17 +2582,11 @@ def main():
         help="Path to provider JSON file",
     )
     parser.add_argument(
-        "--cleanup", action="store_true",
-        help="Run cleanup of old frames/agent-logs and exit",
+        "--mode", default="arch", choices=["arch", "ffmpeg", "genai-gemini", "genai-ollama"],
+        help="Worker mode: arch=all workers, ffmpeg=ffmpeg only, genai-gemini=gemini+main, genai-ollama=ollama+main",
     )
     args = parser.parse_args()
-    if args.cleanup:
-        logging.basicConfig(level=logging.INFO, format="%(asctime)s [cleanup] %(levelname)s: %(message)s")
-        f_removed = cleanup_old_files(BASE_DIR, "frames", 30)
-        a_removed = cleanup_old_files(BASE_DIR, "agent-logs", 24 * 60)
-        log.info("Cleanup: frames=%d, agent-logs=%d removed", f_removed, a_removed)
-        return
-    asyncio.run(async_main(args.prompts, args.provider))
+    asyncio.run(async_main(args.prompts, args.provider, args.mode))
 
 
 if __name__ == "__main__":
