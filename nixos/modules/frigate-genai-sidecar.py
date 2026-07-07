@@ -305,12 +305,13 @@ def transcode_into_parts(
             stderr = (e.stderr or "").strip()
             if "404 Not Found" in stderr or "Connection refused" in stderr:
                 log.debug("ffmpeg: recording not ready for %s", hls_url)
+                return []  # transient — caller will retry
             else:
-                log.error("ffmpeg failed: %s", stderr)
-            return []
+                log.error("ffmpeg failed for %s: %s", hls_url, stderr)
+                raise  # fatal — do not retry
         except subprocess.TimeoutExpired:
             log.error("ffmpeg timed out after %ds for %s", clip_timeout, hls_url)
-            return []
+            raise  # fatal — do not retry
 
         frames = []
         for p in sorted(Path(tmp).glob("frame_*.jpg")):
@@ -656,9 +657,14 @@ async def transcode_into_parts_activity(input_data: dict) -> tuple[str, int]:
         event_id, camera, duration, frames_dir,
     )
 
-    frames = await _run_with_heartbeat(
-        transcode_into_parts, camera, start_time, end_time, 1,
-    )
+    try:
+        frames = await _run_with_heartbeat(
+            transcode_into_parts, camera, start_time, end_time, 1,
+        )
+    except Exception:
+        raise ApplicationError(
+            f"Transcode failed (fatal) for {event_id}", non_retryable=True,
+        )
     if not frames:
         raise ApplicationError(
             f"Recording not ready for {event_id}", non_retryable=False,
@@ -1566,9 +1572,9 @@ _ACTIVITY_RETRY = RetryPolicy(
     maximum_interval=timedelta(seconds=30),
     backoff_coefficient=2.0,
 )
-# Extract retry policy — polls for recording readiness up to ~180s
+# Extract retry policy — polls for recording readiness up to ~70s
 _EXTRACT_RETRY = RetryPolicy(
-    maximum_attempts=12,
+    maximum_attempts=6,
     initial_interval=timedelta(seconds=2),
     maximum_interval=timedelta(seconds=20),
     backoff_coefficient=2.0,
