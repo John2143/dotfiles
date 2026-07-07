@@ -425,7 +425,8 @@ def _tool_transcode_schema() -> dict:
             "name": "transcode",
             "description": (
                 "Extract HD frames at full framerate from a time window starting at frame N. "
-                "Default window: 1 second. Max: 10 seconds. Frame count depends on camera fps. "
+                "Default window: 1 second. Max: 10 seconds. Each second yields 5-30 frames "
+                "depending on camera FPS (actual FPS reported in tool result). "
                 "SLOW (~2s). Only call after scanning with show_frame() found something "
                 "worth close inspection. Frames saved as transcode://N/0 through "
                 "transcode://N/M. Use show_frame() or crop() to view them."
@@ -1190,12 +1191,15 @@ def tool_transcode_activity(arg: dict) -> dict:
         (agent_path / fname).write_bytes(f)
 
     n_frames = len(frames)
+    fps_effective = n_frames / duration if duration > 0 else 0
+    end_offset = start_offset + duration
     if tc_id:
         state["messages"].append({
             "role": "tool", "tool_call_id": tc_id,
             "content": (
-                f"Transcoded {n_frames} HD frames from a {duration:.1f}s window "
-                f"starting at frame {batch_start} (offset {start_offset:.1f}s). "
+                f"Transcoded {n_frames} HD frames at {fps_effective:.1f} fps "
+                f"from {start_offset:.2f}s to {end_offset:.2f}s of the clip "
+                f"(frame {batch_start}, {duration:.1f}s window). "
                 f"Available: transcode://{batch_start}/0 through "
                 f"transcode://{batch_start}/{n_frames - 1}. "
                 f"You have NOT viewed these frames yet. Call show_frame() to inspect them. "
@@ -1206,10 +1210,14 @@ def tool_transcode_activity(arg: dict) -> dict:
             ),
         })
     _atomic_write(msg_path, state)
-    log.info("tool_transcode: event=%s frames=%d [%d] dur=%.1fs",
-             event_id, n_frames, batch_start, duration)
+    log.info("tool_transcode: event=%s frames=%d [%d] dur=%.1fs fps=%.1f",
+             event_id, n_frames, batch_start, duration, fps_effective)
     return {"frames_extracted": n_frames, "batch_start": batch_start,
-            "batch_end": batch_start + n_frames - 1}
+            "batch_end": batch_start + n_frames - 1,
+            "fps": round(fps_effective, 1),
+            "start_offset": round(start_offset, 2),
+            "end_offset": round(end_offset, 2),
+            "duration_secs": duration}
 
 
 @activity.defn(name="tool_crop")
@@ -1822,7 +1830,7 @@ class GenAIWorkflow:
                             )
                         elif n == "transcode":
                             lines.append(
-                                f"  -> transcode(start={a.get('start')}, dur={a.get('duration', 1)}): {e.get('frames_extracted', '?')} frames"
+                                f"  -> transcode(start={a.get('start')}, dur={a.get('duration', 1)}, {e.get('fps', '?')}fps): {e.get('frames_extracted', '?')} frames"
                             )
                         elif n == "compact":
                             lines.append("  -> compact()")
