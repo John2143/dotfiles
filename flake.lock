@@ -33,7 +33,9 @@
       },
       "locked": {
         "path": "./autoclicker",
-        "type": "path"
+        "type": "path",
+        "narHash": "sha256-c9KDl8b7tHsnOdVe2bkb73rcyPxnjf/CfnEg02MH3zQ=",
+        "lastModified": 1783466708
       },
       "original": {
         "path": "./autoclicker",
@@ -800,7 +802,9 @@
       },
       "locked": {
         "path": "./screen-control",
-        "type": "path"
+        "type": "path",
+        "narHash": "sha256-ckZ8Lq/jq9mTRJul3OKaqjltxnWIzux1QhwrSJ7IzcQ=",
+        "lastModified": 1783466708
       },
       "original": {
         "path": "./screen-control",
