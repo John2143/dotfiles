@@ -340,8 +340,14 @@
     packages.x86_64-linux.waytop = nixpkgs.legacyPackages.x86_64-linux.callPackage ./nixos/waytop.nix {
       src = waytop;
     };
-    packages.x86_64-linux.frigate-genai-genai-image = nixosConfigurations.arch.config.system.build.frigateGenaiGenaiImage;
-    packages.x86_64-linux.frigate-genai-ffmpeg-image = nixosConfigurations.arch.config.system.build.frigateGenaiFfmpegImage;
+    packages.x86_64-linux.frigate-genai-genai-image = 
+      (import ./nixos/modules/frigate-genai-config.nix { 
+        inherit (nixpkgs.legacyPackages.${system}) pkgs lib;
+      }).frigateGenaiGenaiImage;
+    packages.x86_64-linux.frigate-genai-ffmpeg-image = 
+      (import ./nixos/modules/frigate-genai-config.nix { 
+        inherit (nixpkgs.legacyPackages.${system}) pkgs lib;
+      }).frigateGenaiFfmpegImage;
 
     darwinConfigurations.mac = inputs.nix-darwin.lib.darwinSystem {
       system = "aarch64-darwin";
