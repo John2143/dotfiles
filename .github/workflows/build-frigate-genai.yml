@@ -18,6 +18,8 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+      - name: Unshallow git history
+        run: git fetch --unshallow || true
 
       - uses: cachix/install-nix-action@v27
         with:
