@@ -19,6 +19,9 @@ Environment:
 
 import argparse
 import asyncio
+import base64
+import copy
+
 import json
 import logging
 import math
@@ -65,6 +68,11 @@ _SEARCH_COST = SearchAttributeKey.for_int("Cost")
 _SEARCH_MODEL = SearchAttributeKey.for_keyword("Model")
 _SEARCH_CONFIDENCE = SearchAttributeKey.for_keyword("Confidence")
 _SEARCH_TRANSCODE = SearchAttributeKey.for_bool("Transcode")
+
+def _frigate_url(path: str = "") -> str:
+    """Return full Frigate URL for the given API path."""
+    base = os.environ.get("FRIGATE_BASE_URL", "http://localhost:5000")
+    return f"{base}{path}"
 _stats: dict = {
     "events_processed": 0,
     "model_counts": {},
@@ -259,12 +267,12 @@ def transcode_into_parts(
 
     Returns list of JPEG byte strings, chronologically ordered.
     """
-    base_url = os.environ.get("FRIGATE_BASE_URL", "http://localhost:5000")
-    hls_url = (
-        f"{base_url}/vod/{camera}"
+    hls_url = _frigate_url(
+        f"/vod/{camera}"
         f"/start/{int(start_time)}/end/{int(math.ceil(end_time))}"
         f"/index.m3u8"
     )
+
     duration = end_time - start_time
     fps_label = f"{fps}fps" if fps else "full framerate"
     log.info(
@@ -316,8 +324,8 @@ def transcode_into_parts(
         return frames
 def fetch_snapshot(event_id: str) -> bytes | None:
     """Fetch the event snapshot (close-up of tracked object)."""
-    base_url = os.environ.get("FRIGATE_BASE_URL", "http://localhost:5000")
-    url = f"{base_url}/api/events/{event_id}/snapshot.jpg"
+    url = _frigate_url(f"/api/events/{event_id}/snapshot.jpg")
+
     try:
         req = urllib.request.Request(url)
         with urllib.request.urlopen(req, timeout=15) as resp:
@@ -337,8 +345,7 @@ def fetch_snapshot(event_id: str) -> bytes | None:
 
 def update_event_description(event_id: str, description: str) -> bool:
     """Write description back to Frigate's event."""
-    base_url = os.environ.get("FRIGATE_BASE_URL", "http://localhost:5000")
-    url = f"{base_url}/api/events/{event_id}/description"
+    url = _frigate_url(f"/api/events/{event_id}/description")
     payload = json.dumps({"description": description}).encode()
     try:
         req = urllib.request.Request(
@@ -544,9 +551,8 @@ def _transcode_frames(
     # Pad end to ensure we capture frames that straddle the boundary
     abs_end_ceil = abs_start + duration + 1.0
 
-    base_url = os.environ.get("FRIGATE_BASE_URL", "http://localhost:5000")
-    input_path = (
-        f"{base_url}/vod/{camera}"
+    input_path = _frigate_url(
+        f"/vod/{camera}"
         f"/start/{int(abs_start)}/end/{int(_math.ceil(abs_end_ceil))}"
         f"/index.m3u8"
     )
@@ -676,14 +682,28 @@ async def fetch_snapshot_activity(input_data: dict) -> str:
 
 
 
+
+def _resolve_provider(provider_cfg: dict, model: str, timeout: float = 120.0):
+    """Return (OpenAI client, model_name) for ollama/ or gemini/ models."""
+    from openai import OpenAI
+    is_ollama = model.startswith("ollama/")
+    if is_ollama:
+        base_url = provider_cfg.get("ollama_base_url", "http://office.ts.2143.me:11434/v1")
+        api_key = os.environ.get("OLLAMA_API_KEY", "ollama")
+        model_name = model[len("ollama/"):]
+    else:
+        base_url = provider_cfg.get("base_url", os.environ.get("OPENAI_BASE_URL", ""))
+        api_key = os.environ.get(provider_cfg.get("api_key_env", ""), "")
+        if not api_key:
+            raise RuntimeError("API key not configured")
+        model_name = model
+    client = OpenAI(api_key=api_key, base_url=base_url, timeout=timeout)
+    return client, model_name
 @activity.defn(name="run_genai_turn")
 async def run_genai_turn_activity(turn_arg: dict) -> dict:
     """Single-turn LLM call. Loads messages.json, deserializes [[ ]] refs,
     calls LLM, returns tool_calls + assistant_message + optional description.
     """
-    import base64
-    import json as _json
-    from openai import OpenAI
 
     msg_path = turn_arg["msg_path"]
     provider_path = turn_arg["provider_path"]
@@ -694,7 +714,7 @@ async def run_genai_turn_activity(turn_arg: dict) -> dict:
 
     # Load state from disk
     with open(msg_path) as f:
-        state = _json.load(f)
+        state = json.load(f)
     agent_dir = state["agent_dir"]
     messages = state["messages"]
 
@@ -717,29 +737,18 @@ async def run_genai_turn_activity(turn_arg: dict) -> dict:
     # Load provider config
     try:
         provider_cfg = load_json(provider_path)
-    except (OSError, _json.JSONDecodeError) as e:
+    except (OSError, json.JSONDecodeError) as e:
         log.error("Failed to load provider config: %s", e)
         raise RuntimeError(f"Failed to load provider config: {e}") from e
 
     extra_body = {}
-    is_ollama = model.startswith("ollama/")
-
-    if is_ollama:
-        base_url = provider_cfg.get("ollama_base_url", "http://office.ts.2143.me:11434/v1")
-        api_key = os.environ.get("OLLAMA_API_KEY", "ollama")
-        model_name = model[len("ollama/"):]
+    if model.startswith("ollama/"):
         extra_body["reasoning_effort"] = "none"
-    else:
-        base_url = provider_cfg.get("base_url", os.environ.get("OPENAI_BASE_URL", ""))
-        api_key = os.environ.get(provider_cfg.get("api_key_env", ""), "")
-        if not api_key:
-            raise RuntimeError("API key not configured")
-        model_name = model
+    elif model.startswith("gemini/"):
         thinking_mode = os.environ.get("GENAI_THINKING", "1") != "0"
-        if thinking_mode and model.startswith("gemini/"):
+        if thinking_mode:
             extra_body["thinking_enabled"] = True
-
-    client = OpenAI(api_key=api_key, base_url=base_url, timeout=120.0)
+    client, model_name = _resolve_provider(provider_cfg, model)
     tools = [
         _tool_get_snapshot_schema(), _tool_show_frame_schema(), _tool_crop_schema(),
         _tool_transcode_schema(), _tool_compact_schema(), _tool_set_description_schema(),
@@ -802,8 +811,8 @@ async def run_genai_turn_activity(turn_arg: dict) -> dict:
     tool_calls = []
     for tc in msg.tool_calls:
         try:
-            args = _json.loads(tc.function.arguments)
-        except _json.JSONDecodeError:
+            args = json.loads(tc.function.arguments)
+        except json.JSONDecodeError:
             args = {}
         tc_entry = {
             "id": tc.id,
@@ -830,7 +839,7 @@ async def init_agent_state_activity(init_arg: dict) -> dict:
     writes messages.json. All disk I/O stays in the activity.
     Returns {msg_path, max_frames}.
     """
-    import json as _json
+
     event_id = init_arg["event_id"]
     camera = init_arg["camera"]
     label = init_arg["label"]
@@ -846,34 +855,33 @@ async def init_agent_state_activity(init_arg: dict) -> dict:
         box_text = f"Detected at left={data_box[0]:.2f} top={data_box[1]:.2f} width={data_box[2]:.2f} height={data_box[3]:.2f}."
 
     if label == "car":
-        system_prompt = (
+        prefix = (
             "You are a forensic vehicle analyst. The event you are watching matters — "
             "someone may have committed a crime. Your entire job is to LOOK AT FRAMES. "
             "Extract every identifying detail: make, model, color, license plate, damage, "
-            "stickers, occupants. "
-            "\n\n"
-            "SCANNING IS YOUR PRIMARY TASK. Show ranges of frames at @low resolution — "
-            "never view single frames in isolation. For short clips (<10 frames), view EVERY "
-            "frame. Show them 5-10 at a time. Scan the full timeline before drawing conclusions. "
-            "When you find something, transcode() that region and inspect the HD frames. "
-            "crop() to zoom into plates, faces, logos. compact() after every 3-4 images. "
-            "Bisect when the vehicle stops or disappears. Track every movement. "
-            "Only call set_description() after you have seen enough frames to be certain."
+            "stickers, occupants."
         )
+        crop_hint = "crop() to zoom into plates, faces, logos."
+        bisect_hint = "Bisect when the vehicle stops or disappears."
     else:
-        system_prompt = (
+        prefix = (
             "You are a forensic security camera analyst. The event you are watching "
             "matters — someone may need help or have committed a crime. Your entire job "
             "is to LOOK AT FRAMES. Understand exactly what happened from start to finish."
-            "\n\n"
-            "SCANNING IS YOUR PRIMARY TASK. Show ranges of frames at @low resolution — "
-            "never view single frames in isolation. For short clips (<10 frames), view EVERY "
-            "frame. Show them 5-10 at a time. Scan the full timeline before drawing conclusions. "
-            "When you find something, transcode() that region and inspect the HD frames. "
-            "crop() for identifying features and context clues. compact() after every 3-4 images. "
-            "Bisect when behavior changes or the subject disappears. Track every movement. "
-            "Only call set_description() after you have seen enough frames to be certain."
         )
+        crop_hint = "crop() for identifying features and context clues."
+        bisect_hint = "Bisect when behavior changes or the subject disappears."
+    system_prompt = (
+        prefix
+        + "\n\n"
+        + "SCANNING IS YOUR PRIMARY TASK. Show ranges of frames at @low resolution — "
+        "never view single frames in isolation. For short clips (<10 frames), view EVERY "
+        "frame. Show them 5-10 at a time. Scan the full timeline before drawing conclusions. "
+        "When you find something, transcode() that region and inspect the HD frames. "
+        + crop_hint + " compact() after every 3-4 images. "
+        + bisect_hint + " Track every movement. "
+        "Only call set_description() after you have seen enough frames to be certain."
+    )
     if camera_desc:
         system_prompt += f"\n\n{camera_desc}"
     if label_hint:
@@ -962,7 +970,7 @@ async def save_agent_log_activity(log_arg: dict) -> None:
 @activity.defn(name="tool_get_snapshot")
 async def tool_get_snapshot_activity(arg: dict) -> dict:
     """Copy snapshot.jpg into agent_dir and append image reference to messages."""
-    import json as _json
+
     msg_path = arg["msg_path"]
     state, agent_dir = _load_state(msg_path)
     frames_dir = str(Path(agent_dir).parent)
@@ -993,7 +1001,6 @@ async def tool_get_snapshot_activity(arg: dict) -> dict:
 @activity.defn(name="tool_show_frame")
 async def tool_show_frame_activity(arg: dict) -> dict:
     """Load, resize, and display a frame/crop/transcode source image to the model."""
-    import json as _json
     msg_path = arg["msg_path"]
     tool_args = arg.get("args", {})
     state, agent_dir = _load_state(msg_path)
@@ -1153,7 +1160,7 @@ async def tool_show_frame_activity(arg: dict) -> dict:
 @activity.defn(name="tool_transcode")
 def tool_transcode_activity(arg: dict) -> dict:
     """Extract frames via ffmpeg (CPU-heavy, sync in thread pool), save to agent_dir."""
-    import json as _json
+
     msg_path = arg["msg_path"]
     tool_args = arg.get("args", {})
     event_id = arg.get("event_id", "")
@@ -1208,7 +1215,7 @@ def tool_transcode_activity(arg: dict) -> dict:
 @activity.defn(name="tool_crop")
 async def tool_crop_activity(arg: dict) -> dict:
     """Crop a region from a source image and save the result to agent_dir."""
-    import json as _json
+
     msg_path = arg["msg_path"]
     tool_args = arg.get("args", {})
     state, agent_dir = _load_state(msg_path)
@@ -1328,7 +1335,7 @@ async def tool_crop_activity(arg: dict) -> dict:
 @activity.defn(name="tool_compact")
 async def tool_compact_activity(arg: dict) -> dict:
     """Compact context: collect text findings, preserve crop addresses, strip old images."""
-    import json as _json
+
     msg_path = arg["msg_path"]
     state, agent_dir = _load_state(msg_path)
 
@@ -1371,7 +1378,6 @@ async def tool_compact_activity(arg: dict) -> dict:
 @activity.defn(name="tool_set_description")
 async def tool_set_description_activity(arg: dict) -> dict:
     """Append the final description/confidence to messages.json."""
-    import json as _json
     msg_path = arg["msg_path"]
     state, agent_dir = _load_state(msg_path)
 
@@ -1383,8 +1389,8 @@ async def tool_set_description_activity(arg: dict) -> dict:
             args = tc.get("function", {}).get("arguments", {})
             if isinstance(args, str):
                 try:
-                    args = _json.loads(args)
-                except _json.JSONDecodeError:
+                    args = json.loads(args)
+                except json.JSONDecodeError:
                     args = {}
             description = args.get("description", "")
             confidence = args.get("confidence", "medium")
@@ -1415,19 +1421,7 @@ async def summarize_agent_activity(stats: dict) -> str | None:
         log.error("Failed to load provider config in summarize_agent: %s", e)
         raise RuntimeError(f"Failed to load config: {e}") from e
 
-    is_ollama = model.startswith("ollama/")
-    if is_ollama:
-        base_url = provider_cfg.get("ollama_base_url", "http://office.ts.2143.me:11434/v1")
-        api_key = os.environ.get("OLLAMA_API_KEY", "ollama")
-        model_name = model[len("ollama/"):]
-    else:
-        base_url = provider_cfg.get("base_url", os.environ.get("OPENAI_BASE_URL", ""))
-        api_key = os.environ.get(provider_cfg.get("api_key_env", ""), "")
-        if not api_key:
-            log.error("API key not found in env var %s", provider_cfg.get("api_key_env"))
-            raise RuntimeError("API key not configured")
-        model_name = model
-    client = OpenAI(api_key=api_key, base_url=base_url, timeout=30.0)
+    client, model_name = _resolve_provider(provider_cfg, model, timeout=30.0)
 
     prompt = (
         f"Answer in one sentence: model {model}, "
@@ -1467,24 +1461,27 @@ async def summarize_agent_activity(stats: dict) -> str | None:
 
 def _atomic_write(path: str, data: dict) -> None:
     """Write JSON to disk atomically via .tmp → rename."""
-    import json as _json
+
     tmp = path + ".tmp"
     with open(tmp, "w") as f:
-        _json.dump(data, f, default=str)
+        json.dump(data, f, default=str)
     os.replace(tmp, path)
 
 
 def _load_state(msg_path: str) -> tuple[dict, str]:
     """Read messages.json and return (state, agent_dir)."""
-    import json as _json
+
     with open(msg_path) as f:
-        state = _json.load(f)
+        state = json.load(f)
     return state, state["agent_dir"]
 
 
 def _find_tc_id(state: dict, tool_name: str) -> str | None:
     """Find the tool_call_id in the most recent assistant message matching tool_name."""
-    assistant_msg = state["messages"][-1]
+    msgs = state.get("messages", [])
+    if not msgs:
+        return None
+    assistant_msg = msgs[-1]
     for tc in assistant_msg.get("tool_calls", []):
         if tc.get("function", {}).get("name") == tool_name:
             return tc.get("id")
@@ -1495,10 +1492,10 @@ def _deserialize_messages(messages: list, agent_dir: str) -> list:
     """Convert [[filename]] refs in messages to base64 data URIs.
     Reads image bytes from agent_dir. Does NOT mutate — returns new list.
     """
-    import base64 as _b64
-    import json as _json
+
+
     agent_path = Path(agent_dir)
-    result = _json.loads(_json.dumps(messages, default=str))
+    result = copy.deepcopy(messages)
     for m in result:
         content = m.get("content")
         if isinstance(content, list):
@@ -1510,7 +1507,7 @@ def _deserialize_messages(messages: list, agent_dir: str) -> list:
                         img_path = agent_path / fname
                         if img_path.exists():
                             raw = img_path.read_bytes()
-                            b64 = _b64.b64encode(raw).decode("ascii")
+                            b64 = base64.b64encode(raw).decode("ascii")
                             part["image_url"]["url"] = f"data:image/jpeg;base64,{b64}"
     return result
 
@@ -1778,6 +1775,15 @@ class GenAIWorkflow:
                         turns_transcode += n
                     if isinstance(outcome, dict):
                         te.update(outcome)
+                    if tc["name"] == "show_frame" and isinstance(outcome, dict):
+                        res = outcome.get("resolution")
+                        n_frames = outcome.get("frames_shown", 0)
+                        if res in ("tiny", "low"):
+                            turns_low += n_frames
+                        elif res == "med":
+                            turns_high += n_frames
+                        elif res in ("high", "max"):
+                            turns_max += n_frames
                     trace_entries.append(te)
                 workflow.set_current_details(
                     f"Turn {turn+1}/{MAX_TURNS} | "
@@ -1804,15 +1810,20 @@ class GenAIWorkflow:
                     elif e["type"] == "tool_call":
                         n = e["name"]
                         a = e.get("args", {})
-                        fr = e.get("frames_returned", "?")
                         if n == "get_snapshot":
                             lines.append("  -> get_snapshot()")
-                        elif n == "get_frames":
+                        elif n == "show_frame":
                             lines.append(
-                                f"  -> get_frames({a.get('start')}-{a.get('end')}, {a.get('resolution')}): {fr} frames"
+                                f"  -> show_frame({a.get('source', '?')[:50]}, {a.get('resolution', '?')}): {e.get('frames_shown', '?')} frames"
+                            )
+                        elif n == "crop":
+                            lines.append(
+                                f"  -> crop({a.get('source', '')[:30]}, count={e.get('count', '?')})"
                             )
                         elif n == "transcode":
-                            lines.append(f"  -> transcode({a.get('start')}-{a.get('end')}): {fr} frames")
+                            lines.append(
+                                f"  -> transcode(start={a.get('start')}, dur={a.get('duration', 1)}): {e.get('frames_extracted', '?')} frames"
+                            )
                         elif n == "compact":
                             lines.append("  -> compact()")
                         elif n == "set_description":
@@ -2184,9 +2195,12 @@ async def async_main(prompts_path: str, provider_path: str) -> None:
             log.debug("No existing workflow %s to cancel", workflow_id)
         camera = event.get("camera", "")
         label = event.get("label", "")
+        input_data = _build_workflow_input(event)
+        if input_data is None:
+            return f"Skipping {event_id} ({camera}/{label}): paused (global or per-label)"
         await _temporal_client.start_workflow(
             "GenAIWorkflow",
-            _build_workflow_input(event),
+            input_data,
             id=workflow_id,
             task_queue=TASK_QUEUE,
             search_attributes=TypedSearchAttributes([
@@ -2267,9 +2281,9 @@ async def async_main(prompts_path: str, provider_path: str) -> None:
                 self.end_headers()
 
         def _proxy(self, content_type):
-            base_url = os.environ.get("FRIGATE_BASE_URL", "http://localhost:5000")
             try:
-                resp = urllib.request.urlopen(base_url + self.path, timeout=15)
+                resp = urllib.request.urlopen(_frigate_url(self.path), timeout=15)
+
                 self.send_response(resp.status)
                 self._cors()
                 self.send_header("Content-type", content_type)
@@ -2283,8 +2297,7 @@ async def async_main(prompts_path: str, provider_path: str) -> None:
 
         def _serve_agent_view(self):
             """Render agent conversation history as HTML with inline images."""
-            import base64 as _b64
-            import json as _json
+
             parts = self.path.split("/")
             # path: /agent/{event_id} or /agent/{event_id}/file/{filename}
             if len(parts) < 3:
@@ -2315,7 +2328,7 @@ async def async_main(prompts_path: str, provider_path: str) -> None:
                 self.end_headers()
                 self.wfile.write(b"Agent state not found")
                 return
-            state = _json.loads(msg_path.read_text())
+            state = json.loads(msg_path.read_text())
             msgs = state.get("messages", [])
             agent_dir = state.get("agent_dir", "")
             html = ['<!DOCTYPE html><html><head><meta charset="utf-8">'
@@ -2345,10 +2358,10 @@ async def async_main(prompts_path: str, provider_path: str) -> None:
                             name = tc.get("function", {}).get("name", "?")
                             args = tc.get("function", {}).get("arguments", "")
                             if isinstance(args, str):
-                                try: args = _json.loads(args)
+                                try: args = json.loads(args)
                                 except Exception: pass
                             html.append('<div class="tool-call">→ {}({})</div>'.format(
-                                name, _json.dumps(args)[:200]))
+                                name, json.dumps(args)[:200]))
                     content = m.get("content", "")
                     if content:
                         html.append('<div class="text">{}</div>'.format(str(content)[:500]))
@@ -2366,7 +2379,7 @@ async def async_main(prompts_path: str, provider_path: str) -> None:
                                         img_path = Path(agent_dir) / fname
                                         if img_path.exists():
                                             raw = img_path.read_bytes()
-                                            b64 = _b64.b64encode(raw).decode()
+                                            b64 = base64.b64encode(raw).decode()
                                             html.append('<img src="data:image/jpeg;base64,{}" '
                                                         'onclick="this.style.maxWidth=this.style.maxWidth==\'100%\'?\'400px\':\'100%\'">'.format(b64))
                                         else:
@@ -2391,9 +2404,8 @@ async def async_main(prompts_path: str, provider_path: str) -> None:
         def do_POST(self):
             if self.path.startswith("/reprocess/"):
                 event_id = self.path.split("/reprocess/", 1)[1]
-                base_url = os.environ.get("FRIGATE_BASE_URL", "http://localhost:5000")
                 try:
-                    resp = urllib.request.urlopen(f"{base_url}/api/events/{event_id}", timeout=10)
+                    resp = urllib.request.urlopen(_frigate_url(f"/api/events/{event_id}"), timeout=10)
                     event = json.loads(resp.read())
 
                     if _temporal_client is None:
