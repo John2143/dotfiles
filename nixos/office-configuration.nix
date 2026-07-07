@@ -15,6 +15,7 @@
     ./modules/ollama.nix
     ./modules/teamspeak.nix
     #./waybar.nix
+    ./modules/esrgan-upscaler.nix
     ./modules/nut-ups.nix
 
     # inputs.home-manager.nixosModules.default
@@ -214,5 +215,7 @@
   # and migrated your data accordingly.
   #
   # For more information, see `man configuration.nix` or https://nixos.org/manual/nixos/stable/options#opt-system.stateVersion .
+  services.esrgan-upscaler.enable = true;
   system.stateVersion = "23.11"; # Did you read the comment?
 }
+

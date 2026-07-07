@@ -490,17 +490,21 @@ def _load_frames(
     return result
 
 
+_RES_LEVELS = {
+    "tiny": 320,
+    "low": 640,
+    "med": 960,
+    "high": 1280,
+    "max": None,  # special-cased: return original size
+}
+
 def _resolution_pixels(resolution: str, size: tuple[int, int]) -> tuple[int, int]:
-    """Compute target pixel dimensions for a given resolution."""
+    """Compute target pixel dimensions for a given resolution level."""
     w, h = size
-    if resolution == "max":
+    tw = _RES_LEVELS.get(resolution)
+    if tw is None:
         return w, h
-    elif resolution == "high":
-        tw = min(w, 1280)
-        return tw, int(tw * h / w)
-    else:
-        tw = min(w, 640)
-        return tw, int(tw * h / w)
+    return tw, int(tw * h / w)
 
 
 def _resize_to(img: Image.Image, target_width: int) -> Image.Image:
@@ -525,17 +529,19 @@ def _tool_show_frame_schema() -> dict:
             "name": "show_frame",
             "description": (
                 "Display recording frames to your vision. frame://N jumps to any keyframe instantly "
-                "(free, fast). frame://N-M@low does a low-res scan of a range. "
+                "(free, fast). frame://N-M@res scans a range at @tiny (320px), @low (640px), "
+                "@med (960px), @high (1280px), or @max (full). "
                 "transcode://batch/frame shows a high-res frame from a transcode batch. "
                 "crop://N re-shows a crop. snapshot:// shows the low-res bounding box preview. "
-                "Cost: ~200-500 tokens per frame."
+                "Cost: ~200-500 tokens per frame at @tiny. Max 30 frames per call — "
+                "scan in batches."
             ),
             "parameters": {
                 "type": "object",
                 "properties": {
                     "source": {
                         "type": "string",
-                        "description": "Frame URL: frame://N, frame://N-M@res, transcode://batch/frame, crop://N, or snapshot://"
+                        "description": "Frame URL: frame://N, frame://N-M@res, transcode://batch/frame, crop://N, or snapshot://. Max 30 frames per call."
                     },
                 },
                 "required": ["source"],
@@ -633,12 +639,13 @@ def _tool_crop_schema() -> dict:
                 "Deep zoom into a region at full resolution. Coordinates 0.0-1.0 normalized. "
                 "Use after show_frame() identifies something worth closer inspection. "
                 "Keep crops narrow for clarity — widen bounds if you miss context. "
-                "Sources: frame://N, transcode://batch/frame, crop://N (single frame only)."
+                "Sources: frame://N (single), frame://N-M (range), transcode://batch/frame, "
+                "transcode://batch/N-M (range), crop://N (single only)."
             ),
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "source": {"type": "string", "description": "Frame URL (single frame only)"},
+                    "source": {"type": "string", "description": "Frame URL: frame://N, frame://N-M, transcode://batch/frame, transcode://batch/N-M, crop://N"},
                     "x1": {"type": "number", "description": "Left edge 0.0-1.0"},
                     "y1": {"type": "number", "description": "Top edge 0.0-1.0"},
                     "x2": {"type": "number", "description": "Right edge 0.0-1.0"},
@@ -1010,6 +1017,7 @@ async def init_agent_state_activity(init_arg: dict) -> dict:
     Returns {msg_path, system_prompt, max_frames, proxy_path}.
     """
     import json as _json
+    import shutil
     event_id = init_arg["event_id"]
     camera = init_arg["camera"]
     label = init_arg["label"]
@@ -1064,12 +1072,15 @@ async def init_agent_state_activity(init_arg: dict) -> dict:
         f"{label} on {camera}. {max_frames} recording frames (indices 0-{max_frames - 1}). "
         f"The snapshot is a low-res bounding box preview ~3s into the clip — orient yourself "
         f"with it, then find the object in the actual frames. "
-        f"SCAN FIRST. Use show_frame('frame://0-{max_frames - 1}@low') to scan the whole clip "
-        f"before committing to a transcode(). Many @low frames cost less than one HD transcode frame. "
+        f"SCAN FIRST. Scan in batches of 10-15 frames at @tiny resolution. "
+        f"For a {max_frames}-frame clip, scan across the full range in multiple "
+        f"show_frame() calls. @tiny frames cost ~400 tokens each. "
         f"Only transcode() after you know which region matters. {box_text}"
     )
 
     agent_dir = Path(frames_dir) / "agent"
+    if agent_dir.exists():
+        shutil.rmtree(str(agent_dir))
     agent_dir.mkdir(parents=True, exist_ok=True)
     msg_path = str(agent_dir / "messages.json")
 
@@ -1258,6 +1269,14 @@ async def tool_show_frame_activity(arg: dict) -> dict:
                     "role": "tool", "tool_call_id": tc_id,
                     "content": f"Invalid frame source: {source}",
                 })
+        elif len(frames_list) > 30:
+            if tc_id:
+                state["messages"].append({
+                    "role": "tool", "tool_call_id": tc_id,
+                    "content": f"Too many frames ({len(frames_list)}). Show at most 30 per call. Scan in batches.",
+                })
+            _atomic_write(msg_path, state)
+            return {"frames_shown": 0, "resolution": resolution, "error": "too_many_frames"}
         else:
             # Compute default resolution from frame count
             if resolution is None:
@@ -1266,8 +1285,10 @@ async def tool_show_frame_activity(arg: dict) -> dict:
                     resolution = "max"
                 elif n_frames <= 9:
                     resolution = "high"
+                elif n_frames <= 19:
+                    resolution = "med"
                 else:
-                    resolution = "low"
+                    resolution = "tiny"
             img_content = []
             img_counter = len(list(agent_path.glob("display_*.jpg")))
             for fi in frames_list:
@@ -1393,19 +1414,9 @@ async def tool_crop_activity(arg: dict) -> dict:
         base_source = source
         if "@" in source:
             base_source = source.rsplit("@", 1)[0]
-        img_path = None
-        if base_source.startswith("frame://"):
-            idx = int(base_source[len("frame://"):])
-            img_path = Path(frames_dir) / f"frame_{idx:03d}.jpg"
-        elif base_source.startswith("transcode://"):
-            parts = base_source[len("transcode://"):].split("/")
-            batch = int(parts[0])
-            fi = int(parts[1])
-            img_path = agent_path / f"transcode_{batch:03d}_{fi:03d}.jpg"
-        elif base_source.startswith("crop://"):
-            idx = int(base_source[len("crop://"):])
-            img_path = agent_path / f"crop_{idx:03d}.jpg"
-        elif base_source.startswith("snapshot://"):
+
+        # snapshot:// rejected early
+        if base_source.startswith("snapshot://"):
             if tc_id:
                 state["messages"].append({
                     "role": "tool", "tool_call_id": tc_id,
@@ -1415,8 +1426,43 @@ async def tool_crop_activity(arg: dict) -> dict:
                     ),
                 })
             _atomic_write(msg_path, state)
-            return {"crop_id": None, "source": source, "error": "snapshot_rejected"}
-        if img_path and img_path.exists():
+            return {"crop_ids": [], "source": source, "error": "snapshot_rejected"}
+
+        # Resolve source list: each entry is (src_type, *args)
+        source_list = []
+        if base_source.startswith("frame://"):
+            spec = base_source[len("frame://"):]
+            if "-" in spec:
+                rp = spec.split("-")
+                source_list = [("frame", i) for i in range(int(rp[0]), int(rp[1]) + 1)]
+            else:
+                source_list = [("frame", int(spec))]
+        elif base_source.startswith("transcode://"):
+            parts = base_source[len("transcode://"):].split("/")
+            batch = int(parts[0])
+            frame_part = parts[1] if len(parts) > 1 else "0"
+            if "-" in frame_part:
+                rp = frame_part.split("-")
+                source_list = [("transcode", batch, i) for i in range(int(rp[0]), int(rp[1]) + 1)]
+            else:
+                source_list = [("transcode", batch, int(frame_part))]
+        elif base_source.startswith("crop://"):
+            idx = int(base_source[len("crop://"):])
+            source_list = [("crop", idx)]
+
+        # Crop each source, collect results
+        crop_results = []
+        for entry in source_list:
+            img_path = None
+            if entry[0] == "frame":
+                img_path = Path(frames_dir) / f"frame_{entry[1]:03d}.jpg"
+            elif entry[0] == "transcode":
+                img_path = agent_path / f"transcode_{entry[1]:03d}_{entry[2]:03d}.jpg"
+            elif entry[0] == "crop":
+                img_path = agent_path / f"crop_{entry[1]:03d}.jpg"
+
+            if not (img_path and img_path.exists()):
+                continue
             try:
                 img = Image.open(img_path)
                 w, h = img.size
@@ -1426,32 +1472,38 @@ async def tool_crop_activity(arg: dict) -> dict:
                 crop_id = img_counter + 1
                 fname = f"crop_{crop_id:03d}.jpg"
                 cropped.save(agent_path / fname, "JPEG", quality=95)
-                ref = f"[[{fname}]]"
-                state["messages"].append({
-                    "role": "user",
-                    "content": [
-                        {"type": "image_url", "image_url": {"url": ref}},
-                        {"type": "text", "text": (
-                            f"Cropped ({x1:.2f},{y1:.2f})-({x2:.2f},{y2:.2f}) "
-                            f"from {base_source}. Stored as crop://{crop_id}."
-                        )},
-                    ],
-                })
-            except Exception as e:
-                if tc_id:
-                    state["messages"].append({
-                        "role": "tool", "tool_call_id": tc_id,
-                        "content": f"Failed to crop: {e}",
-                    })
+                crop_results.append((crop_id, fname))
+            except Exception:
+                log.exception("Failed to crop source %r", entry)
+
+        if crop_results:
+            crop_ids = [cid for cid, _ in crop_results]
+            content_parts = []
+            for _, fname in crop_results:
+                content_parts.append({"type": "image_url", "image_url": {"url": f"[[{fname}]]"}})
+            if len(crop_results) == 1:
+                label = (
+                    f"Cropped ({x1:.2f},{y1:.2f})-({x2:.2f},{y2:.2f}) "
+                    f"from {base_source}. Stored as crop://{crop_ids[0]}."
+                )
+            else:
+                label = (
+                    f"Cropped ({x1:.2f},{y1:.2f})-({x2:.2f},{y2:.2f}) "
+                    f"from {base_source} ({len(crop_results)} frames). "
+                    f"Stored as crop://{crop_ids[0]} through crop://{crop_ids[-1]}."
+                )
+            content_parts.append({"type": "text", "text": label})
+            state["messages"].append({"role": "user", "content": content_parts})
         else:
             if tc_id:
                 state["messages"].append({
                     "role": "tool", "tool_call_id": tc_id,
-                    "content": f"Source not found: {source}",
+                    "content": f"No sources could be cropped from: {source}",
                 })
 
     _atomic_write(msg_path, state)
-    return {"crop_id": crop_id, "source": source, "crop_region": [x1, y1, x2, y2]}
+    return {"crop_ids": [cid for cid, _ in crop_results] if crop_results else [],
+            "source": source, "crop_region": [x1, y1, x2, y2], "count": len(crop_results)}
 
 
 @activity.defn(name="tool_compact")
