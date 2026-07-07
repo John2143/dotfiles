@@ -1,10 +1,13 @@
 FROM rocm/pytorch:latest
 
-# OpenCV (cv2) needs these at runtime — not included in the rocm/pytorch base
+# Install system deps for OpenCV
 RUN apt-get update && apt-get install -y libgl1 libxcb1 && rm -rf /var/lib/apt/lists/*
 
-# Install Real-ESRGAN with API dependencies (torch is already in the base)
-RUN pip install --no-cache-dir realesrgan fastapi uvicorn python-multipart pillow
+# Install Real-ESRGAN with API dependencies.
+# Pin basicsr from git master for torchvision 0.25 compatibility
+# (functional_tensor was removed in newer torchvision, basicsr 1.4.2 still needs it).
+RUN pip install --no-cache-dir realesrgan fastapi uvicorn python-multipart pillow && \
+    pip install --no-cache-dir git+https://github.com/xinntao/BasicSR.git
 
 COPY download_weights.py /tmp/download_weights.py
 RUN python /tmp/download_weights.py

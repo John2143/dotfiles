@@ -365,33 +365,6 @@ in
               compat:
                 supportsToolChoice: true
 
-          # Yunwu — direct through LiteLLM proxy, short names
-          yunwu:
-            baseUrl: https://llm.2143.me/v1
-            api: openai-completions
-            apiKey: LITELLM_EDITOR_KEY
-            models:
-              - id: yunwu/official/claude-fable-5
-                name: fabog
-                reasoning: true
-                input: [text]
-                cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }
-                contextWindow: 200000
-                maxTokens: 65536
-                compat:
-                  supportsToolChoice: true
-
-              - id: yunwu/fast/claude-fable-5
-                name: fabfast
-                reasoning: true
-                input: [text]
-                cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }
-                contextWindow: 200000
-                maxTokens: 65536
-                compat:
-                  supportsToolChoice: true
-    '';
-
     ".omp/agent/config.yml".text = ''
       # Fish is the default shell on *most* machines in this flake. A few
       # (NAS, embedded) use bash. Agent bash commands are spawned in fish

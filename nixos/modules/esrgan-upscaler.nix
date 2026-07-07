@@ -17,8 +17,8 @@ in {
 
     image = lib.mkOption {
       type = lib.types.str;
-      default = "ghcr.io/john2143/real-esrgan-api:latest";
-      description = "OCI image for the Real-ESRGAN upscaler.";
+      default = "localhost/real-esrgan-api:latest";
+      description = "OCI image for the Real-ESRGAN upscaler. Defaults to local image; tag your build with 'localhost/real-esrgan-api:latest'.";
     };
 
     model = lib.mkOption {
