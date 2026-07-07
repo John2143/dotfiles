@@ -168,6 +168,7 @@ in {
   # Then add the .age file to git and list the decrypting hosts below.
   "nut-ups-password.age".publicKeys = [closet nas office arch];
   "reolink-nvr.age".publicKeys = [office arch closet];
+  "github-token.age".publicKeys = [office arch];
 
   "frigate-plus.age".publicKeys = [arch];
 }
