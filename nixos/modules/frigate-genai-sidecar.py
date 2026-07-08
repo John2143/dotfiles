@@ -1093,7 +1093,7 @@ async def tool_get_snapshot_activity(arg: dict) -> dict:
         _s3_put(f"{agent_dir}/{fname}", snapshot_data)
         ref = f"[[{fname}]]"
         img_content = [{"type": "image_url", "image_url": {"url": ref}}]
-        img_content.append({"type": "text", "text": "Detection snapshot."})
+        img_content.append({"type": "text", "text": f"Detection snapshot ({img.width}x{img.height})."})
         state["messages"].append({"role": "user", "content": img_content})
     else:
         if tc_id:
@@ -1156,7 +1156,7 @@ async def tool_show_frame_activity(arg: dict) -> dict:
                 "role": "user",
                 "content": [
                     {"type": "image_url", "image_url": {"url": ref}},
-                    {"type": "text", "text": "Detection snapshot."},
+                    {"type": "text", "text": f"Detection snapshot ({img.width}x{img.height})."},
                 ],
             })
         else:
@@ -1222,6 +1222,7 @@ async def tool_show_frame_activity(arg: dict) -> dict:
                 else:
                     resolution = "tiny"
             img_content = []
+            img_native_w = img_native_h = 0
             img_counter = len(_s3_list(f"{agent_dir}/display_"))
             for fi in frames_list:
                 if src_type == "frame":
@@ -1249,6 +1250,9 @@ async def tool_show_frame_activity(arg: dict) -> dict:
                     continue
                 try:
                     img = Image.open(_io.BytesIO(img_data))
+                    native_w, native_h = img.size
+                    if not img_native_w:
+                        img_native_w, img_native_h = native_w, native_h
                     tw, th = _resolution_pixels(resolution, img.size)
                     img = _resize_to(img, tw)
                 except Exception as e:
@@ -1262,7 +1266,7 @@ async def tool_show_frame_activity(arg: dict) -> dict:
                 ref = f"[[{fname}]]"
                 img_content.append({"type": "image_url", "image_url": {"url": ref}})
             if img_content:
-                label_text = f"{len(frames_list)} frame(s) at {resolution} resolution."
+                label_text = f"{len(frames_list)} frame(s) at {resolution} resolution (native {img_native_w}x{img_native_h})."
                 if src_type == "transcode":
                     label_text += f" From transcode batch {batch}."
                 img_content.append({"type": "text", "text": label_text})
@@ -1425,7 +1429,7 @@ async def tool_crop_activity(arg: dict) -> dict:
                 buf = _io.BytesIO()
                 cropped.save(buf, "JPEG", quality=95)
                 _s3_put(f"{agent_dir}/{fname}", buf.getvalue())
-                crop_results.append((crop_id, fname))
+                crop_results.append((crop_id, fname, cropped.width, cropped.height))
             except Exception as e:
                 log.exception("Failed to crop source %r", entry)
 
@@ -1435,9 +1439,10 @@ async def tool_crop_activity(arg: dict) -> dict:
             for _, fname in crop_results:
                 content_parts.append({"type": "image_url", "image_url": {"url": f"[[{fname}]]"}})
             if len(crop_results) == 1:
+                _, _, cw, ch = crop_results[0]
                 label = (
                     f"Cropped ({x1:.2f},{y1:.2f})-({x2:.2f},{y2:.2f}) "
-                    f"from {base_source}. Stored as crop://{crop_ids[0]}."
+                    f"→ {cw}x{ch} from {base_source}. Stored as crop://{crop_ids[0]}."
                 )
             else:
                 label = (
