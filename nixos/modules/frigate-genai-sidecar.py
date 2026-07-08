@@ -154,6 +154,7 @@ _SEARCH_COST = SearchAttributeKey.for_int("Cost")
 _SEARCH_MODEL = SearchAttributeKey.for_keyword("Model")
 _SEARCH_CONFIDENCE = SearchAttributeKey.for_keyword("Confidence")
 _SEARCH_TRANSCODE = SearchAttributeKey.for_bool("Transcode")
+_SEARCH_TOOL_FAILURES = SearchAttributeKey.for_int("ToolFailures")
 
 def _frigate_url(path: str = "") -> str:
     """Return full Frigate URL for the given API path."""
@@ -1698,11 +1699,16 @@ async def tool_upscale_activity(arg: dict) -> dict:
     max_input_px = int(os.environ.get("UPSCALE_MAX_INPUT_PX", "768"))
     src_img = Image.open(_io.BytesIO(image_bytes))
     if max(src_img.size) > max_input_px:
-        raise ApplicationError(
-            f"{source} is {src_img.width}x{src_img.height} — too large to upscale "
-            f"(limit {max_input_px}px). First crop() a TIGHT region around the "
-            f"specific detail (plate, face, text), then upscale that crop://N.",
-            non_retryable=True)
+        if tc_id:
+            outcome_messages.append({
+                "role": "tool", "tool_call_id": tc_id,
+                "content": (
+                    f"{source} is {src_img.width}x{src_img.height} — too large to upscale "
+                    f"(limit {max_input_px}px). First crop() a TIGHT region around the "
+                    f"specific detail (plate, face, text), then upscale that crop://N."
+                ),
+            })
+        return {"source": source, "error": "too_large", "messages": outcome_messages}
 
     # POST multipart to upscale API
     upscale_url = os.environ.get("UPSCALE_API_URL", "http://office.ts.2143.me:7870")
@@ -2154,6 +2160,7 @@ class GenAIWorkflow:
             turns_high = 0
             turns_max = 0
             turns_transcode = 0
+            tool_failures = 0
             trace_entries: list[dict] = []
             description = None
             confidence = None
@@ -2250,6 +2257,8 @@ class GenAIWorkflow:
                     outcomes: list[dict] = []
                     for tc, te, handle in handles:
                         outcome = await handle
+                        if isinstance(outcome, dict) and outcome.get("error"):
+                            tool_failures += 1
                         if tc["name"] == "transcode" and isinstance(outcome, dict):
                             n = outcome.get("frames_extracted", 0)
                             turns_transcode += n
@@ -2357,6 +2366,9 @@ class GenAIWorkflow:
                 ])
             workflow.upsert_search_attributes([
                 SearchAttributePair(_SEARCH_TRANSCODE, turns_transcode > 0),
+            ])
+            workflow.upsert_search_attributes([
+                SearchAttributePair(_SEARCH_TOOL_FAILURES, tool_failures),
             ])
 
             # Persist agent logs (fire-and-forget activity)
@@ -2613,11 +2625,12 @@ async def async_main(prompts_path: str, provider_path: str, mode: str = "trigger
                     "Model": IndexedValueType.INDEXED_VALUE_TYPE_KEYWORD,
                     "Confidence": IndexedValueType.INDEXED_VALUE_TYPE_KEYWORD,
                     "Transcode": IndexedValueType.INDEXED_VALUE_TYPE_BOOL,
+                    "ToolFailures": IndexedValueType.INDEXED_VALUE_TYPE_INT,
                 },
                 namespace="default",
             ),
         )
-        log.info("Search attributes registered: Camera, Label, EventId, Duration, Cost, Model, Confidence")
+        log.info("Search attributes registered: Camera, Label, EventId, Duration, Cost, Model, Confidence, Transcode, ToolFailures")
     except Exception as e:
         log.debug("Search attribute registration skipped: %s", e)
     mode_tasks = []
