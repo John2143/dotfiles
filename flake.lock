@@ -32,6 +32,8 @@
         "utils": "utils"
       },
       "locked": {
+        "lastModified": 1748251200,
+        "narHash": "sha256-c9KDl8b7tHsnOdVe2bkb73rcyPxnjf/CfnEg02MH3zQ=",
         "path": "./autoclicker",
         "type": "path"
       },
