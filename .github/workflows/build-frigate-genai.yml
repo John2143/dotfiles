@@ -3,6 +3,7 @@ name: Build and push frigate-genai images
 on:
   push:
     paths:
+      - .github/workflows/build-frigate-genai.yml
       - nixos/modules/frigate-genai-sidecar.py
       - nixos/modules/frigate.nix
       - flake.nix
@@ -45,3 +46,62 @@ jobs:
           docker tag frigate-genai-ffmpeg:v1 ghcr.io/${OWNER_LOWER}/frigate-genai-ffmpeg:latest
           docker push ghcr.io/${OWNER_LOWER}/frigate-genai-ffmpeg:v${{ github.run_number }}
           docker push ghcr.io/${OWNER_LOWER}/frigate-genai-ffmpeg:latest
+
+  update-argo:
+    needs: build
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    env:
+      NEW_TAG: v${{ github.run_number }}
+      ARGO_MANIFEST_DIR: workloads/frigate-genai
+    steps:
+    - name: Prepare env
+      run: |
+        echo "OWNER_LOWER=$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')" >> $GITHUB_ENV
+        echo "FFMPEG_IMAGE=ghcr.io/$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')/frigate-genai-ffmpeg" >> $GITHUB_ENV
+        echo "GENAI_IMAGE=ghcr.io/$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')/frigate-genai-genai" >> $GITHUB_ENV
+    - uses: actions/checkout@v4
+      with:
+        repository: 2143-Labs/argo
+        ssh-key: ${{ secrets.DEPLOY_KEY_ARGO }}
+    - name: Update image tags
+      run: |
+        sed -i "s|\(${FFMPEG_IMAGE}:\)[^ ]*|\1${NEW_TAG}|g" \
+          ${ARGO_MANIFEST_DIR}/ffmpeg-deployment.yaml
+        sed -i "s|\(${GENAI_IMAGE}:\)[^ ]*|\1${NEW_TAG}|g" \
+          ${ARGO_MANIFEST_DIR}/gemini-deployment.yaml \
+          ${ARGO_MANIFEST_DIR}/ollama-deployment.yaml \
+          ${ARGO_MANIFEST_DIR}/triggers-deployment.yaml
+
+    - name: Verify tags applied
+      run: |
+        grep -q "${NEW_TAG}" ${ARGO_MANIFEST_DIR}/ffmpeg-deployment.yaml || \
+          (echo "ERROR: ffmpeg tag not found -- sed may have failed" && exit 1)
+        grep -q "${NEW_TAG}" ${ARGO_MANIFEST_DIR}/gemini-deployment.yaml || \
+          (echo "ERROR: genai tag not found -- sed may have failed" && exit 1)
+
+    - name: Verify image pullable (ghcr ready)
+      run: |
+        echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+        docker pull "${FFMPEG_IMAGE}:${NEW_TAG}"
+        docker pull "${GENAI_IMAGE}:${NEW_TAG}"
+
+    - name: Smoke-test ffmpeg worker startup
+      run: |
+        docker run --rm \
+          "${FFMPEG_IMAGE}:${NEW_TAG}" \
+          --mode=ffmpeg &
+        PID=$!
+        sleep 15
+        if ! kill -0 $PID 2>/dev/null; then
+          echo "ERROR: ffmpeg worker crashed on startup" && exit 1
+        fi
+        kill $PID 2>/dev/null; wait $PID 2>/dev/null
+
+    - name: Commit and push to argo repo
+      run: |
+        git config user.name "github-actions[bot]"
+        git config user.email "github-actions[bot]@users.noreply.github.com"
+        git pull --rebase origin main
+        git diff --quiet && echo "No changes" || \
+          (git commit -am "frigate-genai: bump images to ${NEW_TAG}" && git push)
