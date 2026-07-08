@@ -912,7 +912,7 @@ async def init_agent_state_activity(init_arg: dict) -> dict:
             "Extract every identifying detail: make, model, color, license plate, damage, "
             "stickers, occupants."
         )
-        crop_hint = "crop() to zoom into plates, faces, logos."
+        crop_hint = "crop() close-ups: plates, badges, decals, occupants, damage."
         bisect_hint = "Bisect when the vehicle stops or disappears."
     else:
         prefix = (
@@ -920,18 +920,24 @@ async def init_agent_state_activity(init_arg: dict) -> dict:
             "matters — someone may need help or have committed a crime. Your entire job "
             "is to LOOK AT FRAMES. Understand exactly what happened from start to finish."
         )
-        crop_hint = "crop() for identifying features and context clues."
+        crop_hint = "crop() close-ups: faces, hands, clothing, items carried, bags, tools."
         bisect_hint = "Bisect when behavior changes or the subject disappears."
     system_prompt = (
         prefix
         + "\n\n"
-        + "SCANNING IS YOUR PRIMARY TASK. Show ranges of frames at @low resolution — "
-        "never view single frames in isolation. For short clips (<10 frames), view EVERY "
-        "frame. Show them 5-10 at a time. Scan the full timeline before drawing conclusions. "
-        "When you find something, transcode() that region and inspect the HD frames. "
-        + crop_hint + " compact() after every 3-4 images. "
+        + "WORK IN TWO PHASES. NEVER skip phase 2.\n\n"
+        + "PHASE 1 — SCAN: Show ranges of frames at @low or @high resolution. "
+        + "Never view single frames in isolation. For short clips (<10 frames), "
+        + "view EVERY frame. Show them 5-10 at a time. Scan the full timeline "
+        + "before drawing conclusions. When you find something worth inspecting, "
+        + "transcode() that region to extract HD frames.\n\n"
+        + "PHASE 2 — ZOOM: After scanning, you MUST zoom in on the subject. "
+        + "Pick 2-4 key frames and show them individually at @max resolution "
+        + "(e.g., show_frame('frame://45@max')). Then " + crop_hint + "\n\n"
+        + "compact() after every 3-4 images to save tokens. "
         + bisect_hint + " Track every movement. "
-        "Only call set_description() after you have seen enough frames to be certain."
+        + "NEVER call set_description() until you have zoomed into at least "
+        + "2-3 key frames at @max resolution AND cropped specific details."
     )
     if camera_desc:
         system_prompt += f"\n\n{camera_desc}"
