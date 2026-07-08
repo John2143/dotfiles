@@ -27,6 +27,8 @@ import urllib.request
 app = FastAPI(title="Real-ESRGAN Upscaler")
 
 MODEL_NAME = os.environ.get("ESRGAN_MODEL", "RealESRGAN_x4plus")
+TILE = int(os.environ.get("ESRGAN_TILE", "400"))
+
 MODEL_URLS = {
     "RealESRGAN_x4plus": "https://github.com/xinntao/Real-ESRGAN/releases/download/v0.1.0/RealESRGAN_x4plus.pth",
     "RealESRGAN_x4plus_anime": "https://github.com/xinntao/Real-ESRGAN/releases/download/v0.2.2.4/RealESRGAN_x4plus_anime_6B.pth",
@@ -69,12 +71,14 @@ def load_model():
         scale=SCALE,
     )
     use_half = torch.cuda.is_available()
-    print(f"GPU available: {torch.cuda.is_available()} (using fp16: {use_half})")
+    tile_size = TILE
+    print(f"GPU available: {torch.cuda.is_available()} (using fp16: {use_half}, tile={tile_size})")
     upsampler = RealESRGANer(
         scale=SCALE,
         model_path=model_path,
         model=model,
-        tile=0,
+        tile=TILE,
+
         tile_pad=10,
         pre_pad=0,
         half=use_half,
