@@ -55,8 +55,9 @@ in {
         # ROCm GPU passthrough — same pattern as vllm.nix gpuBackend="rocm"
         "--device=/dev/kfd"
         "--device=/dev/dri"
-        "--group-add=video"
-        "--group-add=render"
+        # Use numeric GIDs; group names may not resolve inside the container
+        "--group-add=26"
+        "--group-add=303"
         "--ipc=host"
       ];
       environment = {

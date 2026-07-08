@@ -364,7 +364,11 @@ in
               maxTokens: 65536
               compat:
                 supportsToolChoice: true
-
+      equivalence:
+        overrides:
+          litellm/yunwu/official/claude-fable-5: claude-fable-5
+          litellm/yunwu/fast/claude-fable-5: claude-fable-5
+    '';
     ".omp/agent/config.yml".text = ''
       # Fish is the default shell on *most* machines in this flake. A few
       # (NAS, embedded) use bash. Agent bash commands are spawned in fish
@@ -389,7 +393,7 @@ in
         - anthropic
         - openai
         - google
-        - yunwu
+
 
       enabledModels:
         - "litellm/*"
@@ -402,7 +406,6 @@ in
         - "openrouter/*"
         - "openai/*"
         - "google/*"
-        - "yunwu/*"
       retry:
         enabled: true
         maxRetries: 3
