@@ -797,13 +797,15 @@ async def run_genai_turn_activity(turn_arg: dict) -> dict:
     ]
 
 
-    activity.heartbeat()
-    response = client.chat.completions.create(
-        model=model_name,
-        messages=messages_with_images,
-        tools=tools,
-        tool_choice="auto",
-        extra_body=extra_body if extra_body else None,
+    response = await _run_with_heartbeat(
+        lambda: client.chat.completions.create(
+            model=model_name,
+            messages=messages_with_images,
+            tools=tools,
+            tool_choice="auto",
+            extra_body=extra_body if extra_body else None,
+        ),
+        interval=8.0,
     )
     msg = response.choices[0].message
 
@@ -1751,8 +1753,8 @@ class GenAIWorkflow:
                     run_genai_turn_activity,
                     arg=turn_arg,
                     task_queue=genai_queue,
-                    start_to_close_timeout=timedelta(seconds=120),
-                    heartbeat_timeout=timedelta(seconds=10),
+                    start_to_close_timeout=timedelta(seconds=300),
+                    heartbeat_timeout=timedelta(seconds=15),
                     retry_policy=_ACTIVITY_RETRY,
                 )
 
