@@ -23,85 +23,216 @@ from realesrgan import RealESRGANer
 from basicsr.archs.rrdbnet_arch import RRDBNet
 import urllib.request
 
+from swinir_arch import SwinIR
 
-app = FastAPI(title="Real-ESRGAN Upscaler")
+app = FastAPI(title="Image Upscaler")
 
-MODEL_NAME = os.environ.get("ESRGAN_MODEL", "RealESRGAN_x4plus")
+DEFAULT_MODEL = os.environ.get("ESRGAN_MODEL", "swinir-psnr")
 TILE = int(os.environ.get("ESRGAN_TILE", "400"))
 
-MODEL_URLS = {
-    "RealESRGAN_x4plus": "https://github.com/xinntao/Real-ESRGAN/releases/download/v0.1.0/RealESRGAN_x4plus.pth",
-    "RealESRGAN_x4plus_anime": "https://github.com/xinntao/Real-ESRGAN/releases/download/v0.2.2.4/RealESRGAN_x4plus_anime_6B.pth",
+WEIGHTS_DIR = os.path.expanduser("~/.cache/realesrgan")
 
-    "RealESRGAN_x2plus": "https://github.com/xinntao/Real-ESRGAN/releases/download/v0.1.0/RealESRGAN_x2plus.pth",
+# ---------------------------------------------------------------------------
+# Model registry
+# ---------------------------------------------------------------------------
+
+MODEL_REGISTRY = {
+    "swinir-psnr": {
+        "display": "SwinIR-L x4 PSNR (real-world SR, no hallucination)",
+        "scale": 4,
+        "backend": "swinir",
+    },
+    "realesrgan": {
+        "display": "Real-ESRGAN x4plus (general-purpose, GAN-enhanced)",
+        "scale": 4,
+        "backend": "realesrgan",
+    },
+    "realesrgan-anime": {
+        "display": "Real-ESRGAN x4plus anime (anime-optimized)",
+        "scale": 4,
+        "backend": "realesrgan",
+    },
+    "realesrgan-x2": {
+        "display": "Real-ESRGAN x2plus (2x upscaling)",
+        "scale": 2,
+        "backend": "realesrgan",
+    },
 }
 
-MODEL_SCALES = {
-    "RealESRGAN_x4plus": 4,
-    "RealESRGAN_x4plus_anime": 4,
-    "RealESRGAN_x2plus": 2,
+REALESRGAN_MODEL_URLS = {
+    "realesrgan": "https://github.com/xinntao/Real-ESRGAN/releases/download/v0.1.0/RealESRGAN_x4plus.pth",
+    "realesrgan-anime": "https://github.com/xinntao/Real-ESRGAN/releases/download/v0.2.2.4/RealESRGAN_x4plus_anime_6B.pth",
+    "realesrgan-x2": "https://github.com/xinntao/Real-ESRGAN/releases/download/v0.2.1/RealESRGAN_x2plus.pth",
 }
 
-if MODEL_NAME not in MODEL_URLS:
-    raise ValueError(f"Unknown model: {MODEL_NAME}. Choose from: {', '.join(MODEL_URLS.keys())}")
+SWINIR_WEIGHT_URL = (
+    "https://github.com/JingyunLiang/SwinIR/releases/download/v0.0/"
+    "003_realSR_BSRGAN_DFOWMFC_s64w8_SwinIR-L_x4_PSNR.pth"
+)
+SWINIR_WEIGHT_NAME = "003_realSR_BSRGAN_DFOWMFC_s64w8_SwinIR-L_x4_PSNR.pth"
 
-SCALE = MODEL_SCALES[MODEL_NAME]
+# Lazy-loaded model instances
+_models = {}
 
-upsampler = None
 
+# ---------------------------------------------------------------------------
+# Model loaders
+# ---------------------------------------------------------------------------
 
-def load_model():
-    global upsampler
-    weights_dir = os.path.expanduser("~/.cache/realesrgan")
-    model_url = MODEL_URLS[MODEL_NAME]
-    model_filename = os.path.basename(model_url)
-    model_path = os.path.join(weights_dir, model_filename)
+def _load_realesrgan(model_key: str):
+    """Load a Real-ESRGAN model."""
+    from realesrgan import RealESRGANer
+    from basicsr.archs.rrdbnet_arch import RRDBNet
+
+    url = REALESRGAN_MODEL_URLS[model_key]
+    filename = os.path.basename(url)
+    model_path = os.path.join(WEIGHTS_DIR, filename)
 
     if not os.path.exists(model_path):
-        os.makedirs(weights_dir, exist_ok=True)
-        print(f"Downloading model weights: {model_url}")
-        urllib.request.urlretrieve(model_url, model_path)
+        os.makedirs(WEIGHTS_DIR, exist_ok=True)
+        print(f"Downloading Real-ESRGAN weights: {url}")
+        urllib.request.urlretrieve(url, model_path)
 
-    model = RRDBNet(
-        num_in_ch=3,
-        num_out_ch=3,
-        num_feat=64,
-        num_block=23,
-        num_grow_ch=32,
-        scale=SCALE,
-    )
+    scale = MODEL_REGISTRY[model_key]["scale"]
+    model = RRDBNet(num_in_ch=3, num_out_ch=3, num_feat=64, num_block=23, num_grow_ch=32, scale=scale)
     use_half = torch.cuda.is_available()
-    tile_size = TILE
-    print(f"GPU available: {torch.cuda.is_available()} (using fp16: {use_half}, tile={tile_size})")
-    upsampler = RealESRGANer(
-        scale=SCALE,
+    print(f"Loading Real-ESRGAN ({model_key}): scale={scale}, half={use_half}, tile={TILE}")
+    return RealESRGANer(
+        scale=scale,
         model_path=model_path,
         model=model,
         tile=TILE,
-
         tile_pad=10,
         pre_pad=0,
         half=use_half,
     )
 
 
-@app.on_event("startup")
-async def startup():
-    print(f"Loading Real-ESRGAN model: {MODEL_NAME} ({SCALE}x)")
-    load_model()
-    print("Model loaded successfully")
+def _load_swinir():
+    """Load SwinIR-L x4 PSNR for real-world SR with zero hallucination."""
+    model_path = os.path.join(WEIGHTS_DIR, SWINIR_WEIGHT_NAME)
+
+    if not os.path.exists(model_path):
+        os.makedirs(WEIGHTS_DIR, exist_ok=True)
+        print(f"Downloading SwinIR weights: {SWINIR_WEIGHT_URL}")
+        urllib.request.urlretrieve(SWINIR_WEIGHT_URL, model_path)
+
+    # SwinIR-L config for real-world SR (task=real_sr, --large_model).
+    # Exact config from the official main_test_swinir.py define_model().
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    model = SwinIR(
+        upscale=4,
+        in_chans=3,
+        img_size=64,
+        window_size=8,
+        img_range=1.0,
+        depths=[6, 6, 6, 6, 6, 6, 6, 6, 6],
+        embed_dim=240,
+        num_heads=[8, 8, 8, 8, 8, 8, 8, 8, 8],
+        mlp_ratio=2,
+        upsampler="nearest+conv",
+        resi_connection="3conv",
+    )
+
+    print(f"Loading SwinIR weights from {model_path}")
+    checkpoint = torch.load(model_path, map_location=device, weights_only=True)
+    # PSNR variant uses 'params' key (GAN variant uses 'params_ema')
+    param_key = "params" if "params" in checkpoint else "params_ema"
+    model.load_state_dict(checkpoint[param_key], strict=True)
+    model.eval()
+    model = model.to(device)
+    print(f"SwinIR-L x4 PSNR loaded on {device}")
+    return model
+
+
+def get_model(model_key: str):
+    """Lazy-load and cache model instances."""
+    if model_key in _models:
+        return _models[model_key]
+
+    if model_key not in MODEL_REGISTRY:
+        valid = ", ".join(MODEL_REGISTRY.keys())
+        raise ValueError(f"Unknown model: {model_key}. Valid: {valid}")
+
+    backend = MODEL_REGISTRY[model_key]["backend"]
+    if backend == "realesrgan":
+        _models[model_key] = _load_realesrgan(model_key)
+    elif backend == "swinir":
+        _models[model_key] = _load_swinir()
+    else:
+        raise ValueError(f"Unknown backend: {backend}")
+
+    return _models[model_key]
+
+
+# ---------------------------------------------------------------------------
+# Inference helpers
+# ---------------------------------------------------------------------------
+
+def upscale_realesrgan(img_np, model_key: str, outscale: int = 4):
+    """Run Real-ESRGAN inference."""
+    upsampler = get_model(model_key)
+    output, _ = upsampler.enhance(img_np, outscale=outscale)
+    return output
+
+
+def upscale_swinir(img_np):
+    """Run SwinIR inference with window-size padding and tile support."""
+    model = get_model("swinir-psnr")
+    device = next(model.parameters()).device
+
+    # Convert to tensor: HWC [0,255] -> NCHW [0,1]
+    img_tensor = torch.from_numpy(img_np).float().permute(2, 0, 1).unsqueeze(0) / 255.0
+    img_tensor = img_tensor.to(device)
+
+    with torch.no_grad():
+        output = model(img_tensor)
+
+    # Convert back: NCHW [0,1] -> HWC [0,255] uint8
+    output = output.squeeze(0).clamp(0, 1).cpu()
+    output = (output.permute(1, 2, 0).numpy() * 255.0).round().astype(np.uint8)
+    return output
+
+
+# ---------------------------------------------------------------------------
+# Endpoints
+# ---------------------------------------------------------------------------
+
+@app.get("/models")
+async def list_models():
+    """Return available models with their descriptions."""
+    return {
+        "default": DEFAULT_MODEL,
+        "models": {
+            key: {"display": info["display"], "scale": info["scale"]}
+            for key, info in MODEL_REGISTRY.items()
+        },
+    }
 
 
 @app.post("/upscale")
 async def upscale(
     file: UploadFile = File(...),
-    scale: int = Form(default=4),
+    model: str = Form(default=DEFAULT_MODEL),
 ):
+    if model not in MODEL_REGISTRY:
+        valid = ", ".join(MODEL_REGISTRY.keys())
+        return Response(
+            content=f"Unknown model: {model}. Valid: {valid}",
+            status_code=400,
+        )
+
+    backend = MODEL_REGISTRY[model]["backend"]
+    scale = MODEL_REGISTRY[model]["scale"]
+
     image_data = await file.read()
     img = Image.open(io.BytesIO(image_data)).convert("RGB")
     img_np = np.array(img)
 
-    output, _ = upsampler.enhance(img_np, outscale=scale)
+    if backend == "realesrgan":
+        output = upscale_realesrgan(img_np, model, outscale=scale)
+    elif backend == "swinir":
+        output = upscale_swinir(img_np)
 
     result = Image.fromarray(output)
     buf = io.BytesIO()
@@ -111,4 +242,8 @@ async def upscale(
 
 @app.get("/health")
 async def health():
-    return {"status": "ok", "model": MODEL_NAME, "scale": SCALE, "gpu": torch.cuda.is_available()}
+    return {
+        "status": "ok",
+        "default_model": DEFAULT_MODEL,
+        "gpu": torch.cuda.is_available(),
+    }

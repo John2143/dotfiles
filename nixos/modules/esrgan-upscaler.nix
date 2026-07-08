@@ -7,7 +7,7 @@
   cfg = config.services.esrgan-upscaler;
 in {
   options.services.esrgan-upscaler = {
-    enable = lib.mkEnableOption "Real-ESRGAN image upscaling service (podman + ROCm)";
+    enable = lib.mkEnableOption "Image upscaling service (podman + ROCm, Real-ESRGAN and SwinIR)";
 
     port = lib.mkOption {
       type = lib.types.port;
@@ -18,17 +18,18 @@ in {
     image = lib.mkOption {
       type = lib.types.str;
       default = "localhost/real-esrgan-api:latest";
-      description = "OCI image for the Real-ESRGAN upscaler. Defaults to local image; tag your build with 'localhost/real-esrgan-api:latest'.";
+      description = "OCI image for the upscaler. Defaults to local image; tag your build with 'localhost/real-esrgan-api:latest'.";
     };
 
     model = lib.mkOption {
       type = lib.types.str;
-      default = "RealESRGAN_x4plus";
+      default = "swinir-psnr";
       description = ''
-        Real-ESRGAN model name. Options:
-        - RealESRGAN_x4plus (default, general 4x)
-        - RealESRGAN_x4plus_anime (anime-optimized 4x)
-        - RealESRGAN_x2plus (2x upscaling)
+        Upscale model name. Options:
+        - swinir-psnr (default, x4 real-world SR with no hallucination)
+        - realesrgan (general-purpose x4, GAN-enhanced)
+        - realesrgan-anime (anime-optimized x4)
+        - realesrgan-x2 (2x upscaling)
       '';
     };
 
@@ -57,6 +58,7 @@ in {
         cp ${./../../containers/real-esrgan/Dockerfile} $out/Dockerfile
         cp ${./../../containers/real-esrgan/server.py} $out/server.py
         cp ${./../../containers/real-esrgan/download_weights.py} $out/download_weights.py
+        cp ${./../../containers/real-esrgan/swinir_arch.py} $out/swinir_arch.py
       '';
     in ''
       if ! podman image exists localhost/real-esrgan-api:latest; then
