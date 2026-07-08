@@ -59,6 +59,7 @@ in {
         "--group-add=26"
         "--group-add=303"
         "--ipc=host"
+        "--pull=never"
       ];
       environment = {
         ESRGAN_MODEL = cfg.model;
