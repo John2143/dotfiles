@@ -211,7 +211,7 @@ async function load() {
     const events = await r.json();
     const filtered = events.filter(e => DESCRIBE.includes(e.label) && e.has_clip && e.end_time);
     if (!filtered.length) { app.innerHTML = '<p>No eligible events found.</p>'; return; }
-    let html = '<table><tr><th>Snapshot</th><th>Camera</th><th>Label</th><th>Duration</th><th>Description</th><th></th></tr>';
+    let html = '<table><tr><th>Snapshot</th><th>Camera</th><th>Label</th><th>Duration</th><th>Description</th><th></th><th></th></tr>';
     for (const e of filtered) {
       const dur = (e.end_time - e.start_time).toFixed(1) + "s";
       const desc = (e.data?.description || "").substring(0, 120);
@@ -221,6 +221,7 @@ async function load() {
       html += '<td>' + e.label + '</td>';
       html += '<td>' + dur + '</td>';
       html += '<td class="desc" title="' + (e.data?.description || "").replace(/"/g,"&quot;") + '">' + (desc || "—") + '</td>';
+      html += '<td><a href="/agent/' + e.id + '" class="btn" target="_blank">View</a></td>';
       html += '<td><button class="btn" onclick="reprocess(\'' + e.id + '\',this)">Reprocess</button></td>';
       html += '</tr>';
     }
