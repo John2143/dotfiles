@@ -993,7 +993,11 @@ async def init_agent_state_activity(init_arg: dict) -> dict:
         "regions, different frames, different angles. Exhaust every visible detail "
         "before concluding. A blank crop means 'look elsewhere,' not 'nothing is "
         "there.' "
-        "compact() after every 3-4 images to save tokens. "
+        "ONLY call compact() for two reasons:\n"
+        "1. You investigated many frames that showed nothing useful and need a fresh start.\n"
+        "2. You are running out of context (many images loaded) and must trim to continue.\n"
+        "NEVER compact just because you viewed 3-4 images. NEVER compact before calling\n"
+        "set_description() — if you have findings, conclude. Compact is a tool of last resort. "
         + bisect_hint + " Track every movement. "
         + "NEVER call set_description() until you have searched every visible region "
         "across 2-3 key frames. Report what you found AND what you searched for "
@@ -1470,43 +1474,112 @@ async def tool_crop_activity(arg: dict) -> dict:
 
 @activity.defn(name="tool_compact")
 async def tool_compact_activity(arg: dict) -> dict:
-    """Compact context: collect text findings, preserve crop addresses, strip old images."""
+    """Compact context: distill findings via LLM, strip old images, preserve same-turn crops."""
 
     msg_path = arg["msg_path"]
+    provider_path = arg.get("provider_path", "/var/lib/frigate-genai-sidecar/provider.json")
+    model = arg.get("model", "gemini/gemini-2.5-flash")
     state, agent_dir = _load_state(msg_path)
 
     tc_id = _find_tc_id(state, "compact")
-    summary_parts = ["Exploration so far:"]
-    for m in state["messages"]:
-        if m.get("role") == "user" and isinstance(m.get("content"), list):
-            text_parts = [
-                p["text"] for p in m["content"]
-                if isinstance(p, dict) and p.get("type") == "text"
-            ]
-            for t in text_parts:
-                summary_parts.append(f"  {t}")
+
+    # Find the assistant message that called compact — only strip BEFORE it
+    compact_assistant_idx = None
+    for i in range(len(state["messages"]) - 1, -1, -1):
+        tcs = state["messages"][i].get("tool_calls", [])
+        names = [t.get("function", {}).get("name", "") for t in tcs]
+        if "compact" in names:
+            compact_assistant_idx = i
+            break
+
+    # Extract text from messages up to the compact-calling assistant
+    conv_lines = []
+    for m in state["messages"][:compact_assistant_idx]:
+        role = m.get("role", "")
+        content = m.get("content", "")
+        if isinstance(content, list):
+            text = " ".join(p.get("text", "") for p in content if isinstance(p, dict) and p.get("type") == "text")
+        else:
+            text = str(content) if content else ""
+        if text.strip():
+            prefix = "User" if role == "user" else ("Assistant" if role == "assistant" else role)
+            conv_lines.append(f"[{prefix}] {text.strip()}")
+    # Also include cropped/upscaled content from same turn (messages after assistant)
+    for m in state["messages"][compact_assistant_idx + 1:] if compact_assistant_idx is not None else []:
+        role = m.get("role", "")
+        content = m.get("content", "")
+        if isinstance(content, list):
+            text = " ".join(p.get("text", "") for p in content if isinstance(p, dict) and p.get("type") == "text")
+        elif isinstance(content, str):
+            text = content
+        else:
+            text = ""
+        if text.strip() and role == "user":
+            conv_lines.append(f"[Tool result] {text.strip()}")
+
     all_keys = _s3_list(agent_dir + "/")
     crop_files = sorted(k for k in all_keys if k.rsplit("/", 1)[-1].startswith("crop_"))
-    if crop_files:
-        crop_lines = ["\nCrops available:"]
-        for cf in crop_files:
-            cf_name = cf.rsplit("/", 1)[-1]
-            crop_id = cf_name.replace("crop_", "").rsplit(".", 1)[0]
-            crop_lines.append(f"  crop://{int(crop_id)}: {cf_name}")
-        summary_parts.append("\n".join(crop_lines))
-
     upscale_files = sorted(k for k in all_keys if k.rsplit("/", 1)[-1].startswith("upscale_"))
-    if upscale_files:
-        upscale_lines = ["\nUpscales available:"]
-        for uf in upscale_files:
-            uf_name = uf.rsplit("/", 1)[-1]
-            us_id = uf_name.replace("upscale_", "").rsplit(".", 1)[0]
-            upscale_lines.append(f"  upscale://{int(us_id)}: {uf_name}")
-        summary_parts.append("\n".join(upscale_lines))
-    summary_text = "\n".join(summary_parts)
+
+    conv_text = "\n".join(conv_lines) if conv_lines else "(no prior conversation)"
+    crop_list = ", ".join(f"crop://{int(cf.rsplit('/')[-1].replace('crop_','').rsplit('.',1)[0])}" for cf in crop_files[:20])
+    upscale_list = ", ".join(f"upscale://{int(uf.rsplit('/')[-1].replace('upscale_','').rsplit('.',1)[0])}" for uf in upscale_files[:10])
+
+    summary_prompt = (
+        "You are summarizing a visual investigation. From the conversation below, produce a single "
+        "paragraph covering:\n"
+        "- Which frames were useful (with indices + resolution) and what they showed.\n"
+        "- Which frames were NOT useful (empty, occluded, too dark).\n"
+        "- Where to look next if investigation should continue.\n"
+        "- What to re-view to refresh your memory (specific frame://N or crop://N).\n\n"
+        f"Available crops: {crop_list or 'none'}\n"
+        f"Available upscales: {upscale_list or 'none'}\n\n"
+        "Conversation:\n"
+        f"{conv_text}\n\n"
+        "Compact summary:"
+    )
+
+    # Call LLM for distilled summary
+    try:
+        provider_cfg = load_json(provider_path)
+        client, model_name = _resolve_provider(provider_cfg, model)
+        resp = await _run_with_heartbeat(
+            lambda: client.chat.completions.create(
+                model=model_name,
+                messages=[{"role": "user", "content": summary_prompt}],
+                temperature=0.1,
+                max_tokens=300,
+            ),
+            interval=5.0,
+        )
+        summary_text = resp.choices[0].message.content.strip()
+        log.info("Compact summary (%d chars): %.80s...", len(summary_text), summary_text)
+    except Exception as e:
+        log.warning("Compact LLM summary failed: %s, falling back to raw", e)
+        summary_parts = ["Exploration so far:"]
+        for line in conv_lines:
+            summary_parts.append(f"  {line}")
+        if crop_files:
+            crop_lines = ["\nCrops available:"]
+            for cf in crop_files:
+                cf_name = cf.rsplit("/", 1)[-1]
+                crop_id = cf_name.replace("crop_", "").rsplit(".", 1)[0]
+                crop_lines.append(f"  crop://{int(crop_id)}: {cf_name}")
+            summary_parts.append("\n".join(crop_lines))
+        if upscale_files:
+            upscale_lines = ["\nUpscales available:"]
+            for uf in upscale_files:
+                uf_name = uf.rsplit("/", 1)[-1]
+                us_id = uf_name.replace("upscale_", "").rsplit(".", 1)[0]
+                upscale_lines.append(f"  upscale://{int(us_id)}: {uf_name}")
+            summary_parts.append("\n".join(upscale_lines))
+        summary_text = "\n".join(summary_parts)
+
     state["messages"].append({"role": "user", "content": summary_text})
-    # Strip image_url parts from all earlier user messages
-    for mi in range(len(state["messages"]) - 1):
+
+    # Strip image_url parts from messages BEFORE the compact-calling assistant
+    strip_end = compact_assistant_idx if compact_assistant_idx is not None else len(state["messages"]) - 1
+    for mi in range(strip_end):
         if state["messages"][mi].get("role") == "user":
             content = state["messages"][mi].get("content")
             if isinstance(content, list):
@@ -1514,7 +1587,8 @@ async def tool_compact_activity(arg: dict) -> dict:
                     p for p in content
                     if isinstance(p, dict) and p.get("type") != "image_url"
                 ]
-    tool_result = "Context compacted. Images removed, crop and upscale addresses preserved."
+
+    tool_result = "Context compacted. Summary prepared, images removed. Use crop://N or upscale://N to re-view crops; use show_frame at @high resolution to re-examine frames."
     state["messages"].append({
         "role": "tool", "tool_call_id": tc_id, "content": tool_result,
     })
@@ -2073,6 +2147,7 @@ class GenAIWorkflow:
                     else:
                         timeout = timedelta(seconds=30)
 
+
                     outcome = await workflow.execute_activity(
                         activity_fn,
                         arg={
@@ -2083,6 +2158,8 @@ class GenAIWorkflow:
                             "camera": camera,
                             "start_time": start_time,
                             "end_time": end_time,
+                            "provider_path": input_data["provider_path"],
+                            "model": model,
                         },
                         task_queue=task_queue,
                         start_to_close_timeout=timeout,
