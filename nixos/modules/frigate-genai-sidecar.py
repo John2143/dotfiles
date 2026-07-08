@@ -1615,6 +1615,14 @@ _ACTIVITY_RETRY = RetryPolicy(
     maximum_interval=timedelta(seconds=30),
     backoff_coefficient=2.0,
 )
+# GenAI retry policy — longer backoff for LLM API 502s and transient outages.
+# 5 attempts with 5s→10s→20s→40s→60s backoff → ~135s total retry window.
+_GENAI_RETRY = RetryPolicy(
+    maximum_attempts=5,
+    initial_interval=timedelta(seconds=5),
+    maximum_interval=timedelta(seconds=60),
+    backoff_coefficient=2.0,
+)
 # Extract retry policy — polls for recording readiness up to ~70s
 _EXTRACT_RETRY = RetryPolicy(
     maximum_attempts=6,
@@ -1770,7 +1778,7 @@ class GenAIWorkflow:
                     task_queue=genai_queue,
                     start_to_close_timeout=timedelta(seconds=300),
                     heartbeat_timeout=timedelta(seconds=15),
-                    retry_policy=_ACTIVITY_RETRY,
+                    retry_policy=_GENAI_RETRY,
                 )
 
                 pt = result.get("prompt_tokens", 0)
