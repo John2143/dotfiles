@@ -80,20 +80,20 @@
               set +a
             fi
             ${omp-unwrapped}/bin/omp --system-prompt "$HOME/.omp/agent/system-prompt.md" "$@"
-            # exec ${pkgs.bubblewrap}/bin/bwrap \
-            #   --ro-bind /nix/store /nix/store \
-            #   --ro-bind /etc/resolv.conf /etc/resolv.conf \
-            #   --ro-bind /etc/ssl /etc/ssl \
-            #   --ro-bind /etc/static /etc/static \
-            #   --ro-bind /etc/passwd /etc/passwd \
-            #   --ro-bind /etc/group /etc/group \
-            #   --tmpfs /tmp --proc /proc --dev /dev \
-            #   --setenv ANTHROPIC_API_KEY "''${ANTHROPIC_API_KEY:-}" \
-            #   --setenv OPENAI_API_KEY "''${OPENAI_API_KEY:-}" \
-            #   --setenv HOME "$HOME" \
-            #   --setenv PATH "$PATH" \
-            #   --setenv TERM "''${TERM:-xterm}" \
-            #   --unshare-all --share-net --die-with-parent \
+            ## exec ${pkgs.bubblewrap}/bin/bwrap \
+            ##   --ro-bind /nix/store /nix/store \
+            ##   --ro-bind /etc/resolv.conf /etc/resolv.conf \
+            ##   --ro-bind /etc/ssl /etc/ssl \
+            ##   --ro-bind /etc/static /etc/static \
+            ##   --ro-bind /etc/passwd /etc/passwd \
+            ##   --ro-bind /etc/group /etc/group \
+            ##   --tmpfs /tmp --proc /proc --dev /dev \
+            ##   --setenv ANTHROPIC_API_KEY "''${ANTHROPIC_API_KEY:-}" \
+            ##   --setenv OPENAI_API_KEY "''${OPENAI_API_KEY:-}" \
+            ##   --setenv HOME "$HOME" \
+            ##   --setenv PATH "$PATH" \
+            ##   --setenv TERM "''${TERM:-xterm}" \
+            ##   --unshare-all --share-net --die-with-parent \
           ''
       )
       # claude wrapper: allowlist-style sandbox — explicitly bind only what
