@@ -44,8 +44,9 @@ import paho.mqtt.client as mqtt
 from temporalio import activity, workflow
 from temporalio.common import RetryPolicy, SearchAttributeKey, SearchAttributePair, TypedSearchAttributes
 from temporalio.client import Client
-from temporalio.worker import Worker
+from temporalio.worker import Worker, WorkerDeploymentConfig
 from temporalio.exceptions import ApplicationError
+from temporalio.common import VersioningBehavior, WorkerDeploymentVersion
 from temporalio.api.enums.v1 import IndexedValueType
 from temporalio.api.operatorservice.v1 import AddSearchAttributesRequest
 import urllib.request as _urllib_request
@@ -141,6 +142,9 @@ TASK_QUEUE = "genai-tasks"
 FFMPEG_TASK_QUEUE = "genai-tasks-ffmpeg"
 GEMINI_TASK_QUEUE = "genai-tasks-gemini"
 OLLAMA_TASK_QUEUE = "genai-tasks-ollama"
+
+DEPLOYMENT_NAME = os.environ.get("TEMPORAL_DEPLOYMENT_NAME", "local-dev")
+BUILD_ID = os.environ.get("TEMPORAL_WORKER_BUILD_ID", "local-dev")
 # FRAMES_DIR and AGENT_LOGS_DIR removed — data lives in S3 now
 _SEARCH_CAMERA = SearchAttributeKey.for_keyword("Camera")
 _SEARCH_LABEL = SearchAttributeKey.for_keyword("Label")
@@ -2622,27 +2626,57 @@ async def async_main(prompts_path: str, provider_path: str, mode: str = "trigger
     misc_activities = [select_model_activity, update_description_activity, fetch_snapshot_activity, cleanup_cancelled_activity, init_agent_state_activity, tool_upscale_activity]
 
     if mode == "triggers":
+
+        deployment_config = WorkerDeploymentConfig(
+            version=WorkerDeploymentVersion(
+                deployment_name=DEPLOYMENT_NAME,
+                build_id=BUILD_ID,
+            ),
+            use_worker_versioning=True,
+            default_versioning_behavior=VersioningBehavior.PINNED,
+        )
         main_worker = Worker(
             _temporal_client,
             task_queue=TASK_QUEUE,
             workflows=[GenAIWorkflow],
             activities=misc_activities,
+            deployment_config=deployment_config,
         )
         mode_tasks = [asyncio.create_task(main_worker.run())]
     elif mode == "ffmpeg":
+
+        deployment_config = WorkerDeploymentConfig(
+            version=WorkerDeploymentVersion(
+                deployment_name=DEPLOYMENT_NAME,
+                build_id=BUILD_ID,
+            ),
+            use_worker_versioning=True,
+            default_versioning_behavior=VersioningBehavior.PINNED,
+        )
         ffmpeg_worker = Worker(
             _temporal_client,
             task_queue=FFMPEG_TASK_QUEUE,
             activities=[transcode_into_parts_activity, tool_transcode_activity],
             activity_executor=ThreadPoolExecutor(max_workers=2),
             max_concurrent_activities=int(os.environ.get("TEMPORAL_MAX_FFMPEG", "2")),
+            deployment_config=deployment_config,
         )
         mode_tasks = [asyncio.create_task(ffmpeg_worker.run())]
     elif mode == "genai-gemini":
+
+        deployment_config = WorkerDeploymentConfig(
+            version=WorkerDeploymentVersion(
+                deployment_name=DEPLOYMENT_NAME,
+                build_id=BUILD_ID,
+            ),
+            use_worker_versioning=True,
+            default_versioning_behavior=VersioningBehavior.PINNED,
+        )
         main_worker = Worker(
             _temporal_client,
             task_queue=TASK_QUEUE,
             activities=misc_activities,
+            deployment_config=deployment_config,
         )
         gemini_worker = Worker(
             _temporal_client,
@@ -2654,13 +2688,24 @@ async def async_main(prompts_path: str, provider_path: str, mode: str = "trigger
                         summarize_agent_activity,
                         save_agent_log_activity],
             max_concurrent_activities=int(os.environ.get("TEMPORAL_MAX_GEMINI_GENAI", "5")),
+            deployment_config=deployment_config,
         )
         mode_tasks = [asyncio.create_task(w.run()) for w in [main_worker, gemini_worker]]
     elif mode == "genai-ollama":
+
+        deployment_config = WorkerDeploymentConfig(
+            version=WorkerDeploymentVersion(
+                deployment_name=DEPLOYMENT_NAME,
+                build_id=BUILD_ID,
+            ),
+            use_worker_versioning=True,
+            default_versioning_behavior=VersioningBehavior.PINNED,
+        )
         main_worker = Worker(
             _temporal_client,
             task_queue=TASK_QUEUE,
             activities=misc_activities,
+            deployment_config=deployment_config,
         )
         ollama_worker = Worker(
             _temporal_client,
@@ -2672,6 +2717,7 @@ async def async_main(prompts_path: str, provider_path: str, mode: str = "trigger
                         summarize_agent_activity,
                         save_agent_log_activity],
             max_concurrent_activities=int(os.environ.get("TEMPORAL_MAX_OLLAMA_GENAI", "1")),
+            deployment_config=deployment_config,
         )
         mode_tasks = [asyncio.create_task(w.run()) for w in [main_worker, ollama_worker]]
 
