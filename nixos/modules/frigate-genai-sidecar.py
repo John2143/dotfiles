@@ -83,9 +83,11 @@ def _s3_list(prefix: str) -> list[str]:
             for obj in page.get("Contents", []):
                 keys.append(obj["Key"])
         return sorted(keys)
-    except Exception as e:
-        log.debug("S3 list failed for prefix %s: %s", prefix, e)
-        return []
+    except botocore.exceptions.ClientError as e:
+        if e.response['Error']['Code'] == 'AccessDenied':
+            log.debug("S3 list AccessDenied for prefix %s (S3 backend lacks ListBucket permission)", prefix)
+            return []
+        raise
 def _s3_delete_prefix(prefix: str) -> int:
     """Delete all objects under prefix. Returns count deleted."""
     keys = _s3_list(prefix)
@@ -1617,17 +1619,25 @@ _EXTRACT_RETRY = RetryPolicy(
 )
 
 # ── Tool registry ──────────────────────────────────────────────────────
-# Maps tool_name → (activity_fn, task_queue).
-# Workflow uses this for queue-routed dispatch instead of switch/case.
-# Add GPU tools here with a new task_queue — no dispatch code changes needed.
-TOOL_REGISTRY: dict[str, tuple[object, str]] = {
-    "get_snapshot":    (tool_get_snapshot_activity,     GEMINI_TASK_QUEUE),
-    "show_frame":      (tool_show_frame_activity,       GEMINI_TASK_QUEUE),
-    "transcode":       (tool_transcode_activity,        FFMPEG_TASK_QUEUE),
-    "crop":            (tool_crop_activity,             GEMINI_TASK_QUEUE),
-    "compact":         (tool_compact_activity,          GEMINI_TASK_QUEUE),
-    "set_description": (tool_set_description_activity,  GEMINI_TASK_QUEUE),
+# Maps tool_name → activity function.
+# Use _get_tool_queue() for queue-routed dispatch — pass the genai_queue
+# (GEMINI_TASK_QUEUE or OLLAMA_TASK_QUEUE) so tools follow the model.
+_TOOL_ACTIVITIES: dict[str, object] = {
+    "get_snapshot":    tool_get_snapshot_activity,
+    "show_frame":      tool_show_frame_activity,
+    "transcode":       tool_transcode_activity,
+    "crop":            tool_crop_activity,
+    "compact":         tool_compact_activity,
+    "set_description": tool_set_description_activity,
 }
+
+def _get_tool_queue(tool_name: str, genai_queue: str) -> tuple[object, str]:
+    """Return (activity_fn, task_queue) for a tool call.
+    Transcode always routes to ffmpeg; everything else follows the genai model."""
+    activity_fn = _TOOL_ACTIVITIES[tool_name]
+    if tool_name == "transcode":
+        return activity_fn, FFMPEG_TASK_QUEUE
+    return activity_fn, genai_queue
 
 @workflow.defn
 class GenAIWorkflow:
@@ -1794,13 +1804,13 @@ class GenAIWorkflow:
 
                 for tc in result.get("tool_calls", []):
                     te = {"type": "tool_call", "name": tc["name"], "args": tc.get("args", {})}
-                    if tc["name"] not in TOOL_REGISTRY:
+                    if tc["name"] not in _TOOL_ACTIVITIES:
                         log.warning("Unknown tool: %s", tc["name"])
                         te["error"] = f"Unknown tool: {tc['name']}"
                         trace_entries.append(te)
                         continue
 
-                    activity_fn, task_queue = TOOL_REGISTRY[tc["name"]]
+                    activity_fn, task_queue = _get_tool_queue(tc["name"], genai_queue)
                     retry = _ACTIVITY_RETRY if tc["name"] == "transcode" else None
                     timeout = timedelta(seconds=60) if tc["name"] == "transcode" else timedelta(seconds=30)
 
@@ -1967,6 +1977,11 @@ class GenAIWorkflow:
             )
 
             workflow.logger.info("GenAI workflow completed: %s", log_ctx)
+            await workflow.execute_activity(
+                cleanup_cancelled_activity,
+                input_data,
+                start_to_close_timeout=timedelta(seconds=30),
+            )
         except asyncio.CancelledError:
             workflow.logger.info("GenAI workflow cancelled, cleaning up: %s", log_ctx)
             await workflow.execute_activity(
