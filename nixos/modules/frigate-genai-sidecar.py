@@ -594,12 +594,12 @@ def _tool_crop_schema() -> dict:
                 "Use after show_frame() identifies something worth closer inspection. "
                 "Keep crops narrow for clarity — widen bounds if you miss context. "
                 "Sources: frame://N (single), frame://N-M (range), transcode://batch/frame, "
-                "transcode://batch/N-M (range), crop://N (single only)."
+                "transcode://batch/N-M (range), crop://N, upscale://N (single only)."
             ),
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "source": {"type": "string", "description": "Frame URL: frame://N, frame://N-M, transcode://batch/frame, transcode://batch/N-M, crop://N"},
+                    "source": {"type": "string", "description": "Frame URL: frame://N, frame://N-M, transcode://batch/frame, transcode://batch/N-M, crop://N, upscale://N"},
                     "x1": {"type": "number", "description": "Left edge 0.0-1.0"},
                     "y1": {"type": "number", "description": "Top edge 0.0-1.0"},
                     "x2": {"type": "number", "description": "Right edge 0.0-1.0"},
@@ -1387,6 +1387,9 @@ async def tool_crop_activity(arg: dict) -> dict:
         elif base_source.startswith("crop://"):
             idx = int(base_source[len("crop://"):])
             source_list = [("crop", idx)]
+        elif base_source.startswith("upscale://"):
+            idx = int(base_source[len("upscale://"):])
+            source_list = [("upscale", idx)]
 
         # Crop each source, collect results
         crop_results = []
@@ -1398,6 +1401,8 @@ async def tool_crop_activity(arg: dict) -> dict:
                 img_key = f"{agent_dir}/transcode_{entry[1]:03d}_{entry[2]:03d}.jpg"
             elif entry[0] == "crop":
                 img_key = f"{agent_dir}/crop_{entry[1]:03d}.jpg"
+            elif entry[0] == "upscale":
+                img_key = f"{agent_dir}/upscale_{entry[1]:03d}.jpg"
 
             if not img_key:
                 continue
