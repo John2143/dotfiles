@@ -726,7 +726,17 @@ async def select_model_activity(input_data: dict) -> str:
         if ollama_models and random.random() < ratio:
             model = random.choice(ollama_models)
         elif gemini_models:
-            model = random.choice(gemini_models)
+            # Weighted selection: prefer models with more quota remaining
+            # flash-lite and pro have more headroom than base flash
+            weights = []
+            for m in gemini_models:
+                if "flash-lite" in m:
+                    weights.append(3)
+                elif "pro" in m:
+                    weights.append(3)
+                else:
+                    weights.append(1)
+            model = random.choices(gemini_models, weights=weights, k=1)[0]
         else:
             model = "gemini/gemini-2.5-flash"
 
