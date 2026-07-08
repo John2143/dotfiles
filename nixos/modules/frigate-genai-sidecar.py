@@ -37,6 +37,7 @@ import time
 import urllib.request
 from datetime import timedelta
 from pathlib import Path
+from uuid import uuid4
 
 from PIL import Image, ImageOps
 import paho.mqtt.client as mqtt
@@ -926,6 +927,23 @@ async def run_genai_turn_activity(turn_arg: dict) -> dict:
                 result["description"] = args.get("description", "")
                 result["confidence"] = confidence
         tool_calls.append(tc_entry)
+    # Guard: reject set_description when batched with other tools.
+    # The model must review tool results before concluding.
+    if len(tool_calls) > 1 and any(tc["name"] == "set_description" for tc in tool_calls):
+        # Emit a tool message so the model knows why set_description was ignored
+        sd_ids = [tc["id"] for tc in tool_calls if tc["name"] == "set_description"]
+        for sd_id in sd_ids:
+            state["messages"].append({
+                "role": "tool",
+                "tool_call_id": sd_id,
+                "content": "Cannot call set_description() while other tools are pending. Review their results first, then conclude."
+            })
+        _atomic_write(msg_path, state)
+        # Remove set_description from tool_calls — let other tools run
+        tool_calls = [tc for tc in tool_calls if tc["name"] != "set_description"]
+        # Also clear description/confidence from result so the workflow doesn't break
+        result.pop("description", None)
+        result.pop("confidence", None)
 
     result["tool_calls"] = tool_calls
     return result
@@ -1097,6 +1115,7 @@ async def tool_get_snapshot_activity(arg: dict) -> dict:
     state, agent_dir = _load_state(msg_path)
     frames_dir = str(Path(agent_dir).parent)
 
+    outcome_messages = []
     tc_id = _find_tc_id(state, "get_snapshot")
     snapshot_key = f"{frames_dir}/snapshot.jpg"
     snapshot_data = _s3_get(snapshot_key)
@@ -1106,15 +1125,14 @@ async def tool_get_snapshot_activity(arg: dict) -> dict:
         ref = f"[[{fname}]]"
         img_content = [{"type": "image_url", "image_url": {"url": ref}}]
         img_content.append({"type": "text", "text": f"Detection snapshot ({img.width}x{img.height})."})
-        state["messages"].append({"role": "user", "content": img_content})
+        outcome_messages.append({"role": "user", "content": img_content})
     else:
         if tc_id:
-            state["messages"].append({
+            outcome_messages.append({
                 "role": "tool", "tool_call_id": tc_id,
                 "content": "No snapshot available.",
             })
-    _atomic_write(msg_path, state)
-    return {"snapshot_available": snapshot_data is not None}
+    return {"snapshot_available": snapshot_data is not None, "messages": outcome_messages}
 
 
 
@@ -1124,6 +1142,7 @@ async def tool_show_frame_activity(arg: dict) -> dict:
     msg_path = arg["msg_path"]
     tool_args = arg.get("args", {})
     state, agent_dir = _load_state(msg_path)
+    outcome_messages = []
     frames_dir = str(Path(agent_dir).parent)
 
     tc_id = _find_tc_id(state, "show_frame")
@@ -1158,13 +1177,12 @@ async def tool_show_frame_activity(arg: dict) -> dict:
         snap_data = _s3_get(f"{frames_dir}/snapshot.jpg")
         if snap_data is not None:
             img = Image.open(_io.BytesIO(snap_data))
-            img_counter = len(_s3_list(f"{agent_dir}/display_")) + 1
-            fname = f"display_{img_counter:03d}.jpg"
+            fname = f"display_{uuid4().hex[:12]}.jpg"
             buf = _io.BytesIO()
             img.save(buf, "JPEG", quality=85)
             _s3_put(f"{agent_dir}/{fname}", buf.getvalue())
             ref = f"[[{fname}]]"
-            state["messages"].append({
+            outcome_messages.append({
                 "role": "user",
                 "content": [
                     {"type": "image_url", "image_url": {"url": ref}},
@@ -1173,7 +1191,7 @@ async def tool_show_frame_activity(arg: dict) -> dict:
             })
         else:
             if tc_id:
-                state["messages"].append({
+                outcome_messages.append({
                     "role": "tool", "tool_call_id": tc_id,
                     "content": "No snapshot available.",
                 })
@@ -1207,20 +1225,21 @@ async def tool_show_frame_activity(arg: dict) -> dict:
             else:
                 frames_list = []
 
+        img_content = []
         if not frames_list:
             if tc_id:
-                state["messages"].append({
+                outcome_messages.append({
                     "role": "tool", "tool_call_id": tc_id,
                     "content": f"Invalid frame source: {source}",
                 })
+            return {"frames_shown": 0, "resolution": resolution, "error": "invalid_source", "messages": outcome_messages}
         elif len(frames_list) > 30:
             if tc_id:
-                state["messages"].append({
+                outcome_messages.append({
                     "role": "tool", "tool_call_id": tc_id,
                     "content": f"Too many frames ({len(frames_list)}). Show at most 30 per call. Scan in batches.",
                 })
-            _atomic_write(msg_path, state)
-            return {"frames_shown": 0, "resolution": resolution, "error": "too_many_frames"}
+            return {"frames_shown": 0, "resolution": resolution, "error": "too_many_frames", "messages": outcome_messages}
         else:
             # Compute default resolution from frame count
             if resolution is None:
@@ -1235,7 +1254,7 @@ async def tool_show_frame_activity(arg: dict) -> dict:
                     resolution = "tiny"
             img_content = []
             img_native_w = img_native_h = 0
-            img_counter = len(_s3_list(f"{agent_dir}/display_"))
+
             for fi in frames_list:
                 if src_type == "frame":
                     img_data = _s3_get(f"{frames_dir}/frames/frame_{fi:03d}.jpg")
@@ -1256,7 +1275,7 @@ async def tool_show_frame_activity(arg: dict) -> dict:
                     else:
                         msg = f"Source not found: {source}"
                     if tc_id:
-                        state["messages"].append({
+                        outcome_messages.append({
                             "role": "tool", "tool_call_id": tc_id, "content": msg,
                         })
                     continue
@@ -1270,8 +1289,7 @@ async def tool_show_frame_activity(arg: dict) -> dict:
                 except Exception as e:
                     log.exception("Failed to load frame from source %s", source)
                     continue
-                img_counter += 1
-                fname = f"display_{img_counter:03d}.jpg"
+                fname = f"display_{uuid4().hex[:12]}.jpg"
                 buf = _io.BytesIO()
                 img.save(buf, "JPEG", quality=85)
                 _s3_put(f"{agent_dir}/{fname}", buf.getvalue())
@@ -1282,11 +1300,11 @@ async def tool_show_frame_activity(arg: dict) -> dict:
                 if src_type == "transcode":
                     label_text += f" From transcode batch {batch}."
                 img_content.append({"type": "text", "text": label_text})
-                state["messages"].append({"role": "user", "content": img_content})
+                outcome_messages.append({"role": "user", "content": img_content})
 
     frames_shown = len(img_content) - 1 if img_content else 0  # subtract label text
-    _atomic_write(msg_path, state)
-    return {"frames_shown": frames_shown, "resolution": resolution}
+
+    return {"frames_shown": frames_shown, "resolution": resolution, "messages": outcome_messages}
 
 @activity.defn(name="tool_transcode")
 def tool_transcode_activity(arg: dict) -> dict:
@@ -1297,6 +1315,7 @@ def tool_transcode_activity(arg: dict) -> dict:
     event_id = arg.get("event_id", "")
 
     state, agent_dir = _load_state(msg_path)
+    outcome_messages = []
 
     tc_id = _find_tc_id(state, "transcode")
     batch_start = tool_args.get("start", 0)
@@ -1321,7 +1340,7 @@ def tool_transcode_activity(arg: dict) -> dict:
     fps_effective = n_frames / duration if duration > 0 else 0
     end_offset = start_offset + duration
     if tc_id:
-        state["messages"].append({
+        outcome_messages.append({
             "role": "tool", "tool_call_id": tc_id,
             "content": (
                 f"Transcoded {n_frames} HD frames at {fps_effective:.1f} fps "
@@ -1336,7 +1355,6 @@ def tool_transcode_activity(arg: dict) -> dict:
                 f"Do NOT call set_description() until you have inspected at least some frames."
             ),
         })
-    _atomic_write(msg_path, state)
     log.info("tool_transcode: event=%s frames=%d [%d] dur=%.1fs fps=%.1f",
              event_id, n_frames, batch_start, duration, fps_effective)
     return {"frames_extracted": n_frames, "batch_start": batch_start,
@@ -1344,7 +1362,8 @@ def tool_transcode_activity(arg: dict) -> dict:
             "fps": round(fps_effective, 1),
             "start_offset": round(start_offset, 2),
             "end_offset": round(end_offset, 2),
-            "duration_secs": duration}
+            "duration_secs": duration,
+            "messages": outcome_messages}
 
 
 @activity.defn(name="tool_crop")
@@ -1358,6 +1377,8 @@ async def tool_crop_activity(arg: dict) -> dict:
 
     tc_id = _find_tc_id(state, "crop")
     source = tool_args.get("source", "")
+    outcome_messages = []
+
     x1 = max(0.0, min(1.0, float(tool_args.get("x1", 0))))
     y1 = max(0.0, min(1.0, float(tool_args.get("y1", 0))))
     x2 = max(0.0, min(1.0, float(tool_args.get("x2", 1))))
@@ -1365,7 +1386,7 @@ async def tool_crop_activity(arg: dict) -> dict:
 
     if x1 >= x2 or y1 >= y2:
         if tc_id:
-            state["messages"].append({
+            outcome_messages.append({
                 "role": "tool", "tool_call_id": tc_id,
                 "content": f"Invalid crop region ({x1},{y1})-({x2},{y2})",
             })
@@ -1377,15 +1398,15 @@ async def tool_crop_activity(arg: dict) -> dict:
         # snapshot:// rejected early
         if base_source.startswith("snapshot://"):
             if tc_id:
-                state["messages"].append({
+                outcome_messages.append({
                     "role": "tool", "tool_call_id": tc_id,
                     "content": (
                         "Cannot crop snapshot://. The snapshot is a low-res bounding box "
                         "preview. Use frame://N to find the object in the recording frames."
                     ),
                 })
-            _atomic_write(msg_path, state)
-            return {"crop_ids": [], "source": source, "error": "snapshot_rejected"}
+            return {"messages": outcome_messages, "crop_ids": [], "source": source, "error": "snapshot_rejected"}
+
 
         # Resolve source list: each entry is (src_type, *args)
         source_list = []
@@ -1463,16 +1484,16 @@ async def tool_crop_activity(arg: dict) -> dict:
                     f"Stored as crop://{crop_ids[0]} through crop://{crop_ids[-1]}."
                 )
             content_parts.append({"type": "text", "text": label})
-            state["messages"].append({"role": "user", "content": content_parts})
+            outcome_messages.append({"role": "user", "content": content_parts})
         else:
             if tc_id:
-                state["messages"].append({
+                outcome_messages.append({
                     "role": "tool", "tool_call_id": tc_id,
                     "content": f"No sources could be cropped from: {source}",
                 })
 
-    _atomic_write(msg_path, state)
-    return {"crop_ids": [cid for cid, _, _, _ in crop_results] if crop_results else [],
+    return {"messages": outcome_messages,
+            "crop_ids": [cid for cid, _, _, _ in crop_results] if crop_results else [],
             "source": source, "crop_region": [x1, y1, x2, y2], "count": len(crop_results)}
 
 
@@ -1484,6 +1505,8 @@ async def tool_compact_activity(arg: dict) -> dict:
     provider_path = arg.get("provider_path", "/var/lib/frigate-genai-sidecar/provider.json")
     model = arg.get("model", "gemini/gemini-2.5-flash")
     state, agent_dir = _load_state(msg_path)
+    outcome_messages = []
+
 
     tc_id = _find_tc_id(state, "compact")
 
@@ -1579,7 +1602,8 @@ async def tool_compact_activity(arg: dict) -> dict:
             summary_parts.append("\n".join(upscale_lines))
         summary_text = "\n".join(summary_parts)
 
-    state["messages"].append({"role": "user", "content": summary_text})
+    outcome_messages.append({"role": "user", "content": summary_text})
+
 
     # Strip image_url parts from messages BEFORE the compact-calling assistant
     strip_end = compact_assistant_idx if compact_assistant_idx is not None else len(state["messages"]) - 1
@@ -1593,11 +1617,14 @@ async def tool_compact_activity(arg: dict) -> dict:
                 ]
 
     tool_result = "Context compacted. Summary prepared, images removed. Use crop://N or upscale://N to re-view crops; use show_frame at @high resolution to re-examine frames."
-    state["messages"].append({
+    outcome_messages.append({
         "role": "tool", "tool_call_id": tc_id, "content": tool_result,
     })
-    _atomic_write(msg_path, state)
-    return {"crops_preserved": len(crop_files), "upscales_preserved": len(upscale_files)}
+
+
+    return {"crops_preserved": len(crop_files), "upscales_preserved": len(upscale_files),
+            "messages": outcome_messages,
+            "strip_images_before": compact_assistant_idx}
 
 
 
@@ -1636,24 +1663,24 @@ async def tool_upscale_activity(arg: dict) -> dict:
     state, agent_dir = _load_state(msg_path)
     frames_dir = str(Path(agent_dir).parent)
     tc_id = _find_tc_id(state, "upscale")
+    outcome_messages = []
 
     s3_key = _resolve_source_key(source, agent_dir, frames_dir)
     image_bytes = _s3_get(s3_key) if s3_key else None
     if image_bytes is None:
         if tc_id:
-            state["messages"].append({
+            outcome_messages.append({
                 "role": "tool", "tool_call_id": tc_id,
                 "content": f"Source not found or unsupported: {source}",
             })
-        _atomic_write(msg_path, state)
-        return {"source": source, "error": "source_not_found"}
+        return {"source": source, "error": "source_not_found", "messages": outcome_messages}
 
     # Crop-first gate: reject inputs too large to be a "tight crop".
     max_input_px = int(os.environ.get("UPSCALE_MAX_INPUT_PX", "768"))
     src_img = Image.open(_io.BytesIO(image_bytes))
     if max(src_img.size) > max_input_px:
         if tc_id:
-            state["messages"].append({
+            outcome_messages.append({
                 "role": "tool", "tool_call_id": tc_id,
                 "content": (
                     f"{source} is {src_img.width}x{src_img.height} — too large to upscale "
@@ -1661,9 +1688,8 @@ async def tool_upscale_activity(arg: dict) -> dict:
                     f"specific detail (plate, face, text), then upscale that crop://N."
                 ),
             })
-        _atomic_write(msg_path, state)
         return {"source": source, "error": "input_too_large",
-                "width": src_img.width, "height": src_img.height}
+                "width": src_img.width, "height": src_img.height, "messages": outcome_messages}
 
     # POST multipart to upscale API
     upscale_url = os.environ.get("UPSCALE_API_URL", "http://office.ts.2143.me:7870")
@@ -1702,15 +1728,14 @@ async def tool_upscale_activity(arg: dict) -> dict:
         # Self-report — NEVER raise: an ActivityError would kill the whole workflow.
         log.warning("Upscale API failed for %s: %s", source, last_err)
         if tc_id:
-            state["messages"].append({
+            outcome_messages.append({
                 "role": "tool", "tool_call_id": tc_id,
                 "content": (
                     f"Upscale service unavailable ({last_err}). "
                     f"Continue the analysis without upscaling — use crop/@max instead."
                 ),
             })
-        _atomic_write(msg_path, state)
-        return {"source": source, "error": "api_unavailable"}
+        return {"source": source, "error": "api_unavailable", "messages": outcome_messages}
 
     # Normalize to JPEG + get dims
     img = Image.open(_io.BytesIO(result_bytes)).convert("RGB")
@@ -1725,7 +1750,7 @@ async def tool_upscale_activity(arg: dict) -> dict:
     _s3_put(f"{agent_dir}/{fname}", jpeg_bytes)
 
     # Show inline to the model
-    state["messages"].append({
+    outcome_messages.append({
         "role": "user",
         "content": [
             {"type": "image_url", "image_url": {"url": f"[[{fname}]]"}},
@@ -1734,15 +1759,16 @@ async def tool_upscale_activity(arg: dict) -> dict:
                 f"Stored as upscale://{up_idx}."},
         ],
     })
-    _atomic_write(msg_path, state)
     return {"source": source, "model": model, "upscale_id": up_idx,
-            "width": img.width, "height": img.height}
+            "width": img.width, "height": img.height, "messages": outcome_messages}
 
 @activity.defn(name="tool_set_description")
 async def tool_set_description_activity(arg: dict) -> dict:
     """Append the final description/confidence to messages.json."""
     msg_path = arg["msg_path"]
     state, agent_dir = _load_state(msg_path)
+
+    outcome_messages = []
 
     # description and confidence are pre-validated in run_genai_turn_activity
     # and passed through the workflow — re-extract from state for safety
@@ -1760,13 +1786,12 @@ async def tool_set_description_activity(arg: dict) -> dict:
             tc_id = tc.get("id")
             tool_result = f"Description set. Confidence: {confidence}."
             if tc_id:
-                state["messages"].append({
+                outcome_messages.append({
                     "role": "tool", "tool_call_id": tc_id, "content": tool_result,
                 })
             break
 
-    _atomic_write(msg_path, state)
-    return {"description_set": True, "confidence": confidence}
+    return {"description_set": True, "confidence": confidence, "messages": outcome_messages}
 
 
 @activity.defn(name="summarize_agent")
@@ -1947,6 +1972,36 @@ _EXTRACT_RETRY = RetryPolicy(
     backoff_coefficient=2.0,
 )
 
+@activity.defn(name="apply_tool_messages")
+async def apply_tool_messages_activity(arg: dict) -> dict:
+    """Batch-apply tool messages to state after parallel collection.
+
+    Loads messages.json, appends all messages from all outcomes sequentially,
+    and writes the updated state back.
+    """
+    msg_path = arg["msg_path"]
+    outcomes = arg["outcomes"]
+    state, _agent_dir = _load_state(msg_path)
+
+    applied = 0
+    for outcome in outcomes:
+        # Handle compact's image stripping (mutates loaded state in-place)
+        strip_idx = outcome.get("strip_images_before")
+        if strip_idx is not None:
+            for mi in range(strip_idx):
+                if state["messages"][mi].get("role") == "user":
+                    content = state["messages"][mi].get("content")
+                    if isinstance(content, list):
+                        state["messages"][mi]["content"] = [
+                            p for p in content
+                            if isinstance(p, dict) and p.get("type") != "image_url"
+                        ]
+        for msg in outcome.get("messages", []):
+            state["messages"].append(msg)
+            applied += 1
+
+    _atomic_write(msg_path, state)
+    return {"messages_applied": applied}
 # ── Tool registry ──────────────────────────────────────────────────────
 # Maps tool_name → activity function.
 # Use _get_tool_queue() for queue-routed dispatch — pass the genai_queue
@@ -2136,10 +2191,15 @@ class GenAIWorkflow:
                     continue
 
 
+
+
+                # ── Parallel tool dispatch ──────────────────────────
+                # Phase 1: Launch all tool activities in parallel
+                handles: list[tuple[dict, dict, object]] = []
                 for tc in result.get("tool_calls", []):
                     te = {"type": "tool_call", "name": tc["name"], "args": tc.get("args", {})}
                     if tc["name"] not in _TOOL_ACTIVITIES:
-                        log.warning("Unknown tool: %s", tc["name"])
+                        workflow.logger.warning("Unknown tool: %s", tc["name"])
                         te["error"] = f"Unknown tool: {tc['name']}"
                         trace_entries.append(te)
                         continue
@@ -2153,8 +2213,7 @@ class GenAIWorkflow:
                     else:
                         timeout = timedelta(seconds=30)
 
-
-                    outcome = await workflow.execute_activity(
+                    handle = workflow.start_activity(
                         activity_fn,
                         arg={
                             "msg_path": msg_path,
@@ -2171,28 +2230,44 @@ class GenAIWorkflow:
                         start_to_close_timeout=timeout,
                         retry_policy=retry,
                     )
+                    handles.append((tc, te, handle))
 
-                    if tc["name"] == "transcode" and isinstance(outcome, dict):
-                        n = outcome.get("frames_extracted", 0)
-                        turns_transcode += n
-                    if isinstance(outcome, dict):
-                        te.update(outcome)
-                    if tc["name"] == "show_frame" and isinstance(outcome, dict):
-                        res = outcome.get("resolution")
-                        n_frames = outcome.get("frames_shown", 0)
-                        if res in ("tiny", "low"):
-                            turns_low += n_frames
-                        elif res == "med":
-                            turns_high += n_frames
-                        elif res in ("high", "max"):
-                            turns_max += n_frames
-                    trace_entries.append(te)
+                # Phase 2: Await all, collect stats + outcomes
+                if handles:
+                    outcomes: list[dict] = []
+                    for tc, te, handle in handles:
+                        outcome = await handle
+                        if tc["name"] == "transcode" and isinstance(outcome, dict):
+                            n = outcome.get("frames_extracted", 0)
+                            turns_transcode += n
+                        if isinstance(outcome, dict):
+                            te.update(outcome)
+                        if tc["name"] == "show_frame" and isinstance(outcome, dict):
+                            res = outcome.get("resolution")
+                            n_frames = outcome.get("frames_shown", 0)
+                            if res in ("tiny", "low"):
+                                turns_low += n_frames
+                            elif res == "med":
+                                turns_high += n_frames
+                            elif res in ("high", "max"):
+                                turns_max += n_frames
+                        trace_entries.append(te)
+                        outcomes.append(outcome)
+
+                    # Apply all messages to state in one batch
+                    await workflow.execute_activity(
+                        apply_tool_messages_activity,
+                        arg={"msg_path": msg_path, "outcomes": outcomes},
+                        task_queue=genai_queue,
+                        start_to_close_timeout=timedelta(seconds=10),
+                        retry_policy=_ACTIVITY_RETRY,
+                    )
+
                 workflow.set_current_details(
                     f"Turn {turn+1}/{MAX_TURNS} | "
                     f"tokens: {total_cost['prompt']}+{total_cost['completion']} "
                     f"(cached: {total_cost['cached']}) | "
-                    f"tools: {len(trace_entries)} | "
-                    f"last: {tc['name']}"
+                    f"tools: {len(trace_entries)}"
                 )
 
             if not description:
@@ -2566,7 +2641,8 @@ async def async_main(prompts_path: str, provider_path: str, mode: str = "trigger
             activities=[run_genai_turn_activity,
                         tool_get_snapshot_activity, tool_show_frame_activity,
                         tool_crop_activity, tool_compact_activity,
-                        tool_set_description_activity, summarize_agent_activity,
+                        tool_set_description_activity, apply_tool_messages_activity,
+                        summarize_agent_activity,
                         save_agent_log_activity],
             max_concurrent_activities=int(os.environ.get("TEMPORAL_MAX_GEMINI_GENAI", "5")),
         )
@@ -2583,7 +2659,8 @@ async def async_main(prompts_path: str, provider_path: str, mode: str = "trigger
             activities=[run_genai_turn_activity,
                         tool_get_snapshot_activity, tool_show_frame_activity,
                         tool_crop_activity, tool_compact_activity,
-                        tool_set_description_activity, summarize_agent_activity,
+                        tool_set_description_activity, apply_tool_messages_activity,
+                        summarize_agent_activity,
                         save_agent_log_activity],
             max_concurrent_activities=int(os.environ.get("TEMPORAL_MAX_OLLAMA_GENAI", "1")),
         )
