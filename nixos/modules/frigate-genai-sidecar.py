@@ -703,6 +703,18 @@ async def _run_with_heartbeat(func, *args, interval: float = 5.0):
     except asyncio.CancelledError:
         task.cancel()
         raise
+def _model_weights(gemini_models: list[str]) -> list[int]:
+    """Return selection weights: flash-lite=3, pro=3, base-flash=1."""
+    weights = []
+    for m in gemini_models:
+        if "flash-lite" in m:
+            weights.append(3)
+        elif "pro" in m:
+            weights.append(3)
+        else:
+            weights.append(1)
+    return weights
+
 @activity.defn(name="select_model")
 async def select_model_activity(input_data: dict) -> str:
     """Select the LLM model for this workflow. Activity so it's visible
@@ -716,9 +728,14 @@ async def select_model_activity(input_data: dict) -> str:
 
     paused = input_data.get("paused-ollama", False)
     if paused:
+        # Ollama is paused — always use a gemini model (weighted selection)
         gemini_models = [m for m in models if m.startswith("gemini/")]
-        model = gemini_models[0] if gemini_models else "gemini/gemini-2.5-flash"
-        log.warning("Paused ollama — forcing gemini model: %s", model)
+        if not gemini_models:
+            model = "gemini/gemini-2.5-flash"
+        else:
+            weights = _model_weights(gemini_models)
+            model = random.choices(gemini_models, weights=weights, k=1)[0]
+            log.info("Selected model %s (paused ollama, weighted)", model)
     else:
         ollama_models = [m for m in models if not m.startswith("gemini/")]
         gemini_models = [m for m in models if m.startswith("gemini/")]
@@ -726,16 +743,7 @@ async def select_model_activity(input_data: dict) -> str:
         if ollama_models and random.random() < ratio:
             model = random.choice(ollama_models)
         elif gemini_models:
-            # Weighted selection: prefer models with more quota remaining
-            # flash-lite and pro have more headroom than base flash
-            weights = []
-            for m in gemini_models:
-                if "flash-lite" in m:
-                    weights.append(3)
-                elif "pro" in m:
-                    weights.append(3)
-                else:
-                    weights.append(1)
+            weights = _model_weights(gemini_models)
             model = random.choices(gemini_models, weights=weights, k=1)[0]
         else:
             model = "gemini/gemini-2.5-flash"
@@ -2106,10 +2114,6 @@ class GenAIWorkflow:
                 ])
                 workflow.logger.info("duration=%ds frames=%d", dur_sec, frame_count)
 
-                # Force Gemini when we have many frames (larger context window)
-                if frame_count > 30:
-                    workflow.logger.info("frame_count=%d > 30 — forcing gemini", frame_count)
-                    input_data["model"] = "gemini/gemini-2.5-flash"
 
             # Step 2: progress patch
             await workflow.execute_activity(
