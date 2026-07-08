@@ -177,16 +177,48 @@ def upscale_realesrgan(img_np, model_key: str, outscale: int = 4):
 
 
 def upscale_swinir(img_np):
-    """Run SwinIR inference with window-size padding and tile support."""
+    """Run SwinIR inference with tile support for large images."""
     model = get_model("swinir-psnr")
     device = next(model.parameters()).device
+    window_size = model.window_size  # 8
+    scale = 4
+    tile_size = min(TILE, 512)  # SwinIR-L needs smaller tiles than Real-ESRGAN
+    tile_overlap = 32
 
     # Convert to tensor: HWC [0,255] -> NCHW [0,1]
     img_tensor = torch.from_numpy(img_np).float().permute(2, 0, 1).unsqueeze(0) / 255.0
     img_tensor = img_tensor.to(device)
+    _, _, h, w = img_tensor.shape
 
     with torch.no_grad():
-        output = model(img_tensor)
+        if h <= tile_size and w <= tile_size:
+            output = model(img_tensor)
+        else:
+            # Tile-by-tile with overlapping weighted blending (official approach)
+            sf = scale
+            tile = tile_size
+            stride = tile - tile_overlap
+            h_idx_list = list(range(0, h - tile, stride)) + [h - tile]
+            w_idx_list = list(range(0, w - tile, stride)) + [w - tile]
+            E = torch.zeros(1, 3, h * sf, w * sf).type_as(img_tensor)
+            W = torch.zeros_like(E)
+
+            for h_idx in h_idx_list:
+                for w_idx in w_idx_list:
+                    in_patch = img_tensor[..., h_idx : h_idx + tile, w_idx : w_idx + tile]
+                    out_patch = model(in_patch)
+                    out_patch_mask = torch.ones_like(out_patch)
+                    E[
+                        ...,
+                        h_idx * sf : (h_idx + tile) * sf,
+                        w_idx * sf : (w_idx + tile) * sf,
+                    ].add_(out_patch)
+                    W[
+                        ...,
+                        h_idx * sf : (h_idx + tile) * sf,
+                        w_idx * sf : (w_idx + tile) * sf,
+                    ].add_(out_patch_mask)
+            output = E.div_(W)
 
     # Convert back: NCHW [0,1] -> HWC [0,255] uint8
     output = output.squeeze(0).clamp(0, 1).cpu()

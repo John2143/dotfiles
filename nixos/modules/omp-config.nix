@@ -344,7 +344,7 @@ in
               maxTokens: 8192
 
             # Yunwu Claude Fable 5 — official tier
-            - id: yunwu/official/claude-fable-5
+            - id: fabog
               name: Claude Fable 5 (Yunwu Official)
               reasoning: true
               input: [text]
@@ -355,7 +355,7 @@ in
                 supportsToolChoice: true
 
             # Yunwu Claude Fable 5 — fast tier
-            - id: yunwu/fast/claude-fable-5
+            - id: fabfast
               name: Claude Fable 5 (Yunwu Fast)
               reasoning: true
               input: [text]
@@ -364,10 +364,7 @@ in
               maxTokens: 65536
               compat:
                 supportsToolChoice: true
-      equivalence:
-        overrides:
-          litellm/yunwu/official/claude-fable-5: claude-fable-5
-          litellm/yunwu/fast/claude-fable-5: claude-fable-5
+
     '';
     ".omp/agent/config.yml".text = ''
       # Fish is the default shell on *most* machines in this flake. A few
