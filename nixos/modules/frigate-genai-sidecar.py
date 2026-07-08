@@ -604,10 +604,11 @@ def _transcode_frames(
         out_pattern = os.path.join(tmpdir, "frame_%d.jpg")
         cmd = [
             "ffmpeg",
-            "-hwaccel", "cuda",
+            "-y",
             "-v", "error",
             "-ss", "0.000",
             "-i", input_path,
+            "-map", "0:v",
             "-t", f"{duration:.3f}",
         ]
         if fps is not None:
@@ -617,8 +618,12 @@ def _transcode_frames(
             out_pattern,
         ]
         try:
-            subprocess.run(cmd, capture_output=True, timeout=60, check=True)
-        except subprocess.CalledProcessError:
+            subprocess.run(cmd, capture_output=True,
+                           timeout=max(30, min(300, int(duration * 15))), check=True)
+        except subprocess.CalledProcessError as e:
+            log.error("ffmpeg failed: camera=%s start=%.1f dur=%.1f stderr=%s",
+                      camera, abs_start, duration,
+                      (e.stderr or b"").decode("utf-8", errors="replace"))
             return []
         except subprocess.TimeoutExpired:
             log.error("transcode timed out: camera=%s start=%.1f dur=%.1f",
