@@ -663,14 +663,17 @@ def _transcode_frames(
             subprocess.run(cmd, capture_output=True,
                            timeout=max(30, min(300, int(duration * 15))), check=True)
         except subprocess.CalledProcessError as e:
-            log.error("ffmpeg failed: camera=%s start=%.1f dur=%.1f stderr=%s",
-                      camera, abs_start, duration,
-                      (e.stderr or b"").decode("utf-8", errors="replace"))
-            return []
+            stderr = (e.stderr or b"").decode("utf-8", errors="replace")
+            if "404 Not Found" in stderr or "Connection refused" in stderr:
+                log.info("ffmpeg: recording not ready for %s", input_path)
+            else:
+                log.error("ffmpeg failed: camera=%s start=%.1f dur=%.1f stderr=%s",
+                          camera, abs_start, duration, stderr)
+            raise
         except subprocess.TimeoutExpired:
             log.error("transcode timed out: camera=%s start=%.1f dur=%.1f",
                       camera, abs_start, duration)
-            return []
+            raise
         frame_paths = sorted(Path(tmpdir).glob("frame_*.jpg"))
         return [p.read_bytes() for p in frame_paths]
 
