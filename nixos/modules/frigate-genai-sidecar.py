@@ -74,14 +74,18 @@ def _s3_put(key: str, data: bytes) -> None:
     _s3_client().put_object(Bucket=_S3_BUCKET, Key=key, Body=data)
 
 def _s3_list(prefix: str) -> list[str]:
-    """List keys under prefix. Returns sorted key list."""
-    paginator = _s3_client().get_paginator("list_objects_v2")
-    keys = []
-    for page in paginator.paginate(Bucket=_S3_BUCKET, Prefix=prefix):
-        for obj in page.get("Contents", []):
-            keys.append(obj["Key"])
-    return sorted(keys)
-
+    """List keys under prefix. Returns sorted key list. Gracefully handles
+    AccessDenied (some S3 backends don't allow ListObjects)."""
+    try:
+        paginator = _s3_client().get_paginator("list_objects_v2")
+        keys = []
+        for page in paginator.paginate(Bucket=_S3_BUCKET, Prefix=prefix):
+            for obj in page.get("Contents", []):
+                keys.append(obj["Key"])
+        return sorted(keys)
+    except Exception as e:
+        log.debug("S3 list failed for prefix %s: %s", prefix, e)
+        return []
 def _s3_delete_prefix(prefix: str) -> int:
     """Delete all objects under prefix. Returns count deleted."""
     keys = _s3_list(prefix)
