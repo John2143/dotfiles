@@ -60,10 +60,11 @@ in {
         cp ${./../../containers/real-esrgan/download_weights.py} $out/download_weights.py
         cp ${./../../containers/real-esrgan/swinir_arch.py} $out/swinir_arch.py
       '';
+      podman = "${pkgs.podman}/bin/podman";
     in ''
-      if ! podman image exists localhost/real-esrgan-api:latest; then
+      if ! ${podman} image exists localhost/real-esrgan-api:latest; then
         echo "[esrgan-upscaler] Building container image (this may take a while)..."
-        podman build -t localhost/real-esrgan-api:latest ${buildDir}
+        ${podman} build -t localhost/real-esrgan-api:latest ${buildDir}
         echo "[esrgan-upscaler] Build complete."
       fi
     '';
