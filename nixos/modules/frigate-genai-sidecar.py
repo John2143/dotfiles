@@ -1140,6 +1140,7 @@ async def tool_get_snapshot_activity(arg: dict) -> dict:
     if snapshot_data is not None:
         fname = "snapshot.jpg"
         _s3_put(f"{agent_dir}/{fname}", snapshot_data)
+        img = Image.open(_io.BytesIO(snapshot_data))
         ref = f"[[{fname}]]"
         img_content = [{"type": "image_url", "image_url": {"url": ref}}]
         img_content.append({"type": "text", "text": f"Detection snapshot ({img.width}x{img.height})."})
