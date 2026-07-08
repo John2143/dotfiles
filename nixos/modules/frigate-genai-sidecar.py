@@ -2061,6 +2061,8 @@ class GenAIWorkflow:
                 arg={
                     "event_id": event_id, "camera": camera, "label": label,
                     "frames_dir": frames_dir, "prompts_path": input_data["prompts_path"],
+                    "data_box": input_data.get("data_box"),
+                    "start_time": start_time, "end_time": end_time,
                 },
                 task_queue=TASK_QUEUE,
                 start_to_close_timeout=timedelta(seconds=10),
