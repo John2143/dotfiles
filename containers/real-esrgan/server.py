@@ -1,3 +1,17 @@
+import sys
+import types
+
+# Compat shim: torchvision 0.25 removed functional_tensor, but basicsr (dependency
+# of realesrgan) still imports rgb_to_grayscale from there. See xinntao/Real-ESRGAN#859.
+try:
+    from torchvision.transforms.functional_tensor import rgb_to_grayscale  # noqa: F401
+except ImportError:
+    from torchvision.transforms.functional import rgb_to_grayscale
+    functional_tensor = types.ModuleType("torchvision.transforms.functional_tensor")
+    functional_tensor.rgb_to_grayscale = rgb_to_grayscale
+    sys.modules["torchvision.transforms.functional_tensor"] = functional_tensor
+
+
 import os
 import io
 import torch
@@ -7,14 +21,16 @@ from fastapi import FastAPI, File, Form, UploadFile
 from fastapi.responses import Response
 from realesrgan import RealESRGANer
 from basicsr.archs.rrdbnet_arch import RRDBNet
-from basicsr.utils.download import load_file_from_url
+import urllib.request
+
 
 app = FastAPI(title="Real-ESRGAN Upscaler")
 
 MODEL_NAME = os.environ.get("ESRGAN_MODEL", "RealESRGAN_x4plus")
 MODEL_URLS = {
     "RealESRGAN_x4plus": "https://github.com/xinntao/Real-ESRGAN/releases/download/v0.1.0/RealESRGAN_x4plus.pth",
-    "RealESRGAN_x4plus_anime": "https://github.com/xinntao/Real-ESRGAN/releases/download/v0.1.0/RealESRGAN_x4plus_anime_6B.pth",
+    "RealESRGAN_x4plus_anime": "https://github.com/xinntao/Real-ESRGAN/releases/download/v0.2.2.4/RealESRGAN_x4plus_anime_6B.pth",
+
     "RealESRGAN_x2plus": "https://github.com/xinntao/Real-ESRGAN/releases/download/v0.1.0/RealESRGAN_x2plus.pth",
 }
 
@@ -42,7 +58,7 @@ def load_model():
     if not os.path.exists(model_path):
         os.makedirs(weights_dir, exist_ok=True)
         print(f"Downloading model weights: {model_url}")
-        load_file_from_url(url=model_url, model_dir=weights_dir, progress=True)
+        urllib.request.urlretrieve(model_url, model_path)
 
     model = RRDBNet(
         num_in_ch=3,

@@ -48,6 +48,23 @@ in {
     ];
 
     virtualisation.oci-containers.backend = "podman";
+
+    # Auto-build the container image as root if it doesn't exist yet.
+    # NixOS runs podman containers as root, so user-built images are invisible.
+    system.activationScripts.esrgan-upscaler-build = let
+      buildDir = pkgs.runCommand "esrgan-upscaler-build-context" {} ''
+        mkdir -p $out
+        cp ${./../../containers/real-esrgan/Dockerfile} $out/Dockerfile
+        cp ${./../../containers/real-esrgan/server.py} $out/server.py
+        cp ${./../../containers/real-esrgan/download_weights.py} $out/download_weights.py
+      '';
+    in ''
+      if ! podman image exists localhost/real-esrgan-api:latest; then
+        echo "[esrgan-upscaler] Building container image (this may take a while)..."
+        podman build -t localhost/real-esrgan-api:latest ${buildDir}
+        echo "[esrgan-upscaler] Build complete."
+      fi
+    '';
     virtualisation.oci-containers.containers.esrgan-upscaler = {
       image = cfg.image;
       ports = ["${toString cfg.port}:${toString cfg.port}"];
