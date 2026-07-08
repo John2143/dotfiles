@@ -66,13 +66,13 @@ jobs:
         ssh-key: ${{ secrets.DEPLOY_KEY_ARGO }}
     - name: Update image tags
       run: |
+        git pull --rebase origin main
         sed -i "s|\(${FFMPEG_IMAGE}:\)[^ ]*|\1${NEW_TAG}|g" \
           ${ARGO_MANIFEST_DIR}/ffmpeg-deployment.yaml
         sed -i "s|\(${GENAI_IMAGE}:\)[^ ]*|\1${NEW_TAG}|g" \
           ${ARGO_MANIFEST_DIR}/gemini-deployment.yaml \
           ${ARGO_MANIFEST_DIR}/ollama-deployment.yaml \
           ${ARGO_MANIFEST_DIR}/triggers-deployment.yaml
-
     - name: Verify tags applied
       run: |
         grep -q "${NEW_TAG}" ${ARGO_MANIFEST_DIR}/ffmpeg-deployment.yaml || \
@@ -111,6 +111,5 @@ jobs:
       run: |
         git config user.name "github-actions[bot]"
         git config user.email "github-actions[bot]@users.noreply.github.com"
-        git pull --rebase origin main
         git diff --quiet && echo "No changes" || \
           (git commit -am "frigate-genai: bump images to ${NEW_TAG}" && git push)
