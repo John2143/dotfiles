@@ -424,9 +424,7 @@ in
       calc.enabled: true
       render_mermaid.enabled: true
       checkpoint.enabled: true
-      webSearch:
-        provider: brave
-        apiKey: BRAVE_API_KEY
+      providers.webSearch: brave
     '';
 
     ".omp/agent/keybindings.json".text = ''
