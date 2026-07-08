@@ -973,11 +973,12 @@ async def init_agent_state_activity(init_arg: dict) -> dict:
         prefix
         + "\n\n"
         + "WORK IN TWO PHASES. NEVER skip phase 2.\n\n"
-        + "PHASE 1 — SCAN: Show ranges of frames at @low or @high resolution. "
-        + "Never view single frames in isolation. For short clips (<10 frames), "
-        + "view EVERY frame. Show them 5-10 at a time. Scan the full timeline "
-        + "before drawing conclusions. When you find something worth inspecting, "
-        + "transcode() that region to extract HD frames.\n\n"
+        + "PHASE 1 — SCAN: For clips with ≤5 frames, view EVERY frame at "
+        "@high or @max — token cost is trivial and low-res views miss details. "
+        "For longer clips, scan batches of 5-10 at @low first. "
+        "When you find something worth inspecting, transcode() that region "
+        "to extract HD frames.\n\n"
+
         + "PHASE 2 — ZOOM: After scanning, you MUST zoom in on the subject. "
         + "Pick 2-4 key frames and show them individually at @max resolution "
         + "(e.g., show_frame('frame://45@max')). Then " + crop_hint + " "
@@ -1011,13 +1012,16 @@ async def init_agent_state_activity(init_arg: dict) -> dict:
     frame_files = _s3_list(f"{event_prefix}/frames/frame_")
     max_frames = len(frame_files)
     user_text = (
-        f"{label} on {camera}. {max_frames} recording frames (indices 0-{max_frames - 1}). "
-        f"The snapshot is a low-res bounding box preview ~3s into the clip — orient yourself "
-        f"with it, then find the object in the actual frames. "
-        f"SCAN FIRST. Scan in batches of 10-15 frames at @tiny resolution. "
-        f"For a {max_frames}-frame clip, scan across the full range in multiple "
-        f"show_frame() calls. @tiny frames cost ~400 tokens each. "
-        f"Only transcode() after you know which region matters. {box_text}"
+        f"{label} on {camera}. {max_frames} recording frames (indices 0-{max_frames - 1}).\n\n"
+        f"{box_text}\n\n"
+        f"The snapshot is a low-res bounding box preview ~3s into the clip. "
+        f"START HERE: show the recording frame closest to the snapshot's timestamp "
+        f"at @high or @max resolution, then crop() the EXACT detection region "
+        f"from the box above. Never crop arbitrary corners when the box tells you "
+        f"where to look. Do NOT view frames at @tiny or @low unless you have 15+ "
+        f"frames to scan — for short clips, every frame should be at @high or @max. "
+        f"If the snapshot frame falls between recording frames, transcode() a 1-2s "
+        f"window around the snapshot timestamp to extract HD frames."
     )
 
     agent_prefix = f"{event_prefix}/agent"
