@@ -98,7 +98,6 @@ jobs:
           sleep 2
           if grep -q "Connecting to Temporal" /tmp/worker-stderr 2>/dev/null; then
             echo "SUCCESS: worker initialized and attempting Temporal connection"
-            kill $PID 2>/dev/null; wait $PID 2>/dev/null
             exit 0
           fi
           if ! kill -0 $PID 2>/dev/null; then
@@ -108,8 +107,6 @@ jobs:
           fi
         done
         echo "WARNING: worker did not reach Temporal connect within 60s (PID still alive)"
-        kill $PID 2>/dev/null; wait $PID 2>/dev/null
-
     - name: Commit and push to argo repo
       run: |
         git config user.name "github-actions[bot]"
