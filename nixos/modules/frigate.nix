@@ -49,8 +49,6 @@
   genaiCfg = import ./frigate-genai-config.nix { inherit pkgs lib; };
   inherit (genaiCfg)
     objectLabels genaiPrompts pythonEnv
-    frigateGenaiSidecarPkg
-    frigateGenaiPromptsFile frigateGenaiProviderFile
     frigateGenaiGenaiImage frigateGenaiFfmpegImage
   ;
 
@@ -616,9 +614,6 @@ in {
   systemd.tmpfiles.rules = [
     "d ${nasFrigatePath} 0755 1000 1000 -"
     "d /var/lib/frigate 0755 1000 1000 -"
-    "d /var/lib/frigate-genai-sidecar 0755 root root -"
-    "L+ /var/lib/frigate-genai-sidecar/prompts.json - - - - ${frigateGenaiPromptsFile}"
-    "L+ /var/lib/frigate-genai-sidecar/provider.json - - - - ${frigateGenaiProviderFile}"
   ];
 
   # ── NVIDIA Container Toolkit for GPU passthrough ──────────────────
@@ -675,44 +670,8 @@ in {
 
     };
   };
-  # ── GenAI sidecar service ────────────────────────────────────────
-  # Listens to MQTT for completed Frigate events, starts Temporal workflows.
-  # All activity workers now run in k8s. Arch mode: MQTT listener + HTTP reprocess only.
-  systemd.services.frigate-genai-sidecar = {
-    description = "Frigate GenAI Sidecar — MQTT listener + HTTP reprocess";
-    wantedBy = ["multi-user.target"];
-    after = [ "podman-frigate.service" ];
-    requires = [ "podman-frigate.service" "network.target" ];
-    # path = [ pkgs.ffmpeg ];  ← removed — ffmpeg runs in k8s only
-    environment = {
-      FRIGATE_BASE_URL = "http://localhost:5000";
-      MQTT_HOST = mqttHost;
-      MQTT_PORT = toString mqttPort;
-      MQTT_USER = mqttUser;
-      MQTT_PASSWORD = mqttPass;
-      HTTP_HOST = "0.0.0.0";
-      TEMPORAL_ADDRESS = "192.168.5.10:32682";
-      S3_ENDPOINT = "https://files.john2143.com";
-      S3_ACCESS_KEY = "seaweedfs-frigate-genai";
-    };
-    serviceConfig = {
-      Type = "simple";
-      ExecStart = "${frigateGenaiSidecarPkg}/bin/frigate-genai-sidecar --mode=arch";
-      Restart = "on-failure";
-      RestartSec = 10;
-      # No StateDirectory — frames live in S3 now
-      EnvironmentFile = [
-        config.age.secrets.frigate-plus.path
-        "-/var/lib/frigate-genai-sidecar/runtime.env"
-      ];
-      User = "root";
-      Group = "root";
-    };
-  };
-
-
-  # ── Sidecar config files ── appended to tmpfiles.rules below
   /*
+
   # ── Downgrade to YOLOv9 (uncomment all lines between START/END) ──
   systemd.services.build-frigate-model = {
     description = "Build Frigate YOLOv9 ONNX model if missing";

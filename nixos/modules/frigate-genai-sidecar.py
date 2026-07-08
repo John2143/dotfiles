@@ -2030,10 +2030,10 @@ def _build_workflow_input(event: dict) -> dict | None:
     Returns None if the event should be skipped (paused globally or per-label).
     """
     label = event.get("label", "")
-    if os.path.exists("/tmp/pause-frigate-genai"):
+    if _s3_get("events/_paused/genai") is not None:
         log.info("Global pause active, skipping event %s (%s/%s)", event.get("id"), event.get("camera"), label)
         return None
-    if label and os.path.exists(f"/tmp/pause-frigate-genai-{label}"):
+    if label and _s3_get(f"events/_paused/genai-{label}") is not None:
         log.info("Label pause active for '%s', skipping event %s", label, event.get("id"))
         return None
     input_data = {
@@ -2045,7 +2045,7 @@ def _build_workflow_input(event: dict) -> dict | None:
         "end_time": event.get("end_time", event.get("start_time", 0)),
         "prompts_path": "/var/lib/frigate-genai-sidecar/prompts.json",
         "provider_path": "/var/lib/frigate-genai-sidecar/provider.json",
-        "paused-ollama": os.path.exists("/tmp/pause-ollama"),
+        "paused-ollama": _s3_get("events/_paused/ollama") is not None,
         "agentic": True,
     }
     return input_data
@@ -2080,6 +2080,9 @@ def build_mqtt_client(loop: asyncio.AbstractEventLoop) -> mqtt.Client:
             if event_type == "end" and after.get("has_clip"):
                 log.info("End event: %s (%s/%s)", eid, camera, label)
                 _start_workflow_sync(after)
+                _stats["events_processed"] += 1
+                _stats["last_event"] = eid
+                _s3_put("events/_stats.json", json.dumps(_stats).encode())
 
             elif event_type == "update":
                 before = payload.get("before", {})
@@ -2089,6 +2092,9 @@ def build_mqtt_client(loop: asyncio.AbstractEventLoop) -> mqtt.Client:
                     after["has_clip"] = True
                     log.info("Redo trigger: %s (%s/%s)", eid, camera, label)
                     _start_workflow_sync(after)
+                    _stats["events_processed"] += 1
+                    _stats["last_event"] = eid
+                    _s3_put("events/_stats.json", json.dumps(_stats).encode())
         except json.JSONDecodeError:
             log.debug("Non-JSON MQTT message on %s", msg.topic)
         except Exception as e:
@@ -2121,7 +2127,7 @@ def build_mqtt_client(loop: asyncio.AbstractEventLoop) -> mqtt.Client:
 # ── main ────────────────────────────────────────────────────────────
 
 
-async def async_main(prompts_path: str, provider_path: str, mode: str = "arch") -> None:
+async def async_main(prompts_path: str, provider_path: str, mode: str = "triggers") -> None:
     global _temporal_client, _main_event_loop
 
     logging.basicConfig(
@@ -2168,41 +2174,14 @@ async def async_main(prompts_path: str, provider_path: str, mode: str = "arch") 
     # Main worker with misc activities (always present in arch/genai-gemini/genai-ollama, as workflow listener)
     misc_activities = [select_model_activity, update_description_activity, fetch_snapshot_activity, cleanup_cancelled_activity, init_agent_state_activity]
 
-    if mode == "arch":
+    if mode == "triggers":
         main_worker = Worker(
             _temporal_client,
             task_queue=TASK_QUEUE,
             workflows=[GenAIWorkflow],
             activities=misc_activities,
         )
-        ffmpeg_worker = Worker(
-            _temporal_client,
-            task_queue=FFMPEG_TASK_QUEUE,
-            activities=[transcode_into_parts_activity, tool_transcode_activity],
-            activity_executor=ThreadPoolExecutor(max_workers=2),
-            max_concurrent_activities=int(os.environ.get("TEMPORAL_MAX_FFMPEG", "2")),
-        )
-        gemini_worker = Worker(
-            _temporal_client,
-            task_queue=GEMINI_TASK_QUEUE,
-            activities=[run_genai_turn_activity,
-                        tool_get_snapshot_activity, tool_show_frame_activity,
-                        tool_crop_activity, tool_compact_activity,
-                        tool_set_description_activity, summarize_agent_activity,
-                        save_agent_log_activity],
-            max_concurrent_activities=int(os.environ.get("TEMPORAL_MAX_GEMINI_GENAI", "5")),
-        )
-        ollama_worker = Worker(
-            _temporal_client,
-            task_queue=OLLAMA_TASK_QUEUE,
-            activities=[run_genai_turn_activity,
-                        tool_get_snapshot_activity, tool_show_frame_activity,
-                        tool_crop_activity, tool_compact_activity,
-                        tool_set_description_activity, summarize_agent_activity,
-                        save_agent_log_activity],
-            max_concurrent_activities=int(os.environ.get("TEMPORAL_MAX_OLLAMA_GENAI", "1")),
-        )
-        mode_tasks = [asyncio.create_task(w.run()) for w in [main_worker, ffmpeg_worker, gemini_worker, ollama_worker]]
+        mode_tasks = [asyncio.create_task(main_worker.run())]
     elif mode == "ffmpeg":
         ffmpeg_worker = Worker(
             _temporal_client,
@@ -2248,10 +2227,10 @@ async def async_main(prompts_path: str, provider_path: str, mode: str = "arch") 
         mode_tasks = [asyncio.create_task(w.run()) for w in [main_worker, ollama_worker]]
 
     # ── MQTT — starts workflows via Temporal client ─────────────────
-    if mode == 'arch':
+    if mode == 'triggers':
         client_mqtt = build_mqtt_client(asyncio.get_running_loop())
 
-    if mode == 'arch':
+    if mode == 'triggers':
         log.info("Frigate GenAI sidecar running, waiting for events...")
 
         # ── HTTP server for manual reprocess triggers ──────────────────
@@ -2313,35 +2292,45 @@ async def async_main(prompts_path: str, provider_path: str, mode: str = "arch") 
                     self._cors()
                     self.send_header("Content-type", "application/json; charset=utf-8")
                     self.end_headers()
+                    if _stats["events_processed"] == 0:
+                        saved = _s3_read_text("events/_stats.json")
+                        if saved:
+                            self.wfile.write(saved.encode())
+                            return
                     self.wfile.write(json.dumps(_stats).encode())
                 elif self.path == "/api/temporal":
                     self.send_response(200)
                     self._cors()
                     self.send_header("Content-type", "application/json; charset=utf-8")
                     self.end_headers()
+                    stats = _stats
+                    if _stats["events_processed"] == 0:
+                        saved = _s3_read_text("events/_stats.json")
+                        if saved:
+                            stats = json.loads(saved)
                     self.wfile.write(json.dumps({
-                        "connected": _stats["temporal_connected"],
+                        "connected": stats["temporal_connected"],
                         "task_queue": TASK_QUEUE,
                         "server": os.environ.get("TEMPORAL_ADDRESS", "192.168.5.10:32682"),
-                        "events_processed": _stats["events_processed"],
-                        "model_counts": _stats["model_counts"],
+                        "events_processed": stats["events_processed"],
+                        "model_counts": stats["model_counts"],
                     }).encode())
                 elif self.path.startswith("/api/events/") and self.path.endswith("/snapshot.jpg"):
                     self._proxy("image/jpeg")
                 elif self.path.startswith("/api/events"):
                     self._proxy("application/json")
                 elif self.path == "/api/pause":
-                    paused = os.path.exists("/tmp/pause-ollama")
+                    paused = _s3_get("events/_paused/ollama") is not None
                     self.send_response(200)
                     self._cors()
                     self.send_header("Content-type", "application/json")
                     self.end_headers()
                     self.wfile.write(json.dumps({"paused": paused}).encode())
                 elif self.path == "/api/genai-pause":
-                    paused_global = os.path.exists("/tmp/pause-frigate-genai")
+                    paused_global = _s3_get("events/_paused/genai") is not None
                     paused_labels = {}
-                    for f in Path("/tmp").glob("pause-frigate-genai-*"):
-                        paused_labels[f.name[len("pause-frigate-genai-"):]] = True
+                    for k in _s3_list("events/_paused/genai-"):
+                        paused_labels[k[len("events/_paused/genai-"):]] = True
                     self.send_response(200)
                     self._cors()
                     self.send_header("Content-type", "application/json")
@@ -2511,12 +2500,12 @@ async def async_main(prompts_path: str, provider_path: str, mode: str = "arch") 
                         log.error("Reprocess failed: %s", e)
 
                 elif self.path == "/api/pause":
-                    pause_file = "/tmp/pause-ollama"
-                    if os.path.exists(pause_file):
-                        os.remove(pause_file)
+                    pause_key = "events/_paused/ollama"
+                    if _s3_get(pause_key) is not None:
+                        _s3_client().delete_object(Bucket=_S3_BUCKET, Key=pause_key)
                         paused = False
                     else:
-                        open(pause_file, "w").close()
+                        _s3_put(pause_key, b"")
                         paused = True
                     self.send_response(200)
                     self._cors()
@@ -2534,21 +2523,21 @@ async def async_main(prompts_path: str, provider_path: str, mode: str = "arch") 
                         body = {}
                     label = body.get("label", "")
                     if label:
-                        pause_file = f"/tmp/pause-frigate-genai-{label}"
+                        pause_key = f"events/_paused/genai-{label}"
                     else:
-                        pause_file = "/tmp/pause-frigate-genai"
-                    if os.path.exists(pause_file):
-                        os.remove(pause_file)
+                        pause_key = "events/_paused/genai"
+                    if _s3_get(pause_key) is not None:
+                        _s3_client().delete_object(Bucket=_S3_BUCKET, Key=pause_key)
                         paused = False
                     else:
-                        open(pause_file, "w").close()
+                        _s3_put(pause_key, b"")
                         paused = True
                     self.send_response(200)
                     self._cors()
                     self.send_header("Content-type", "application/json")
                     self.end_headers()
                     self.wfile.write(json.dumps({
-                        "paused": paused, "file": pause_file,
+                        "paused": paused, "key": pause_key,
                     }).encode())
                     log.info("GenAI pause toggled (%s): %s", label or "global", "ON" if paused else "OFF")
                 else:
@@ -2566,7 +2555,7 @@ async def async_main(prompts_path: str, provider_path: str, mode: str = "arch") 
     try:
         await asyncio.gather(*mode_tasks)
     finally:
-        if mode == 'arch':
+        if mode == 'triggers':
             client_mqtt.loop_stop()
             client_mqtt.disconnect()
 
@@ -2582,8 +2571,8 @@ def main():
         help="Path to provider JSON file",
     )
     parser.add_argument(
-        "--mode", default="arch", choices=["arch", "ffmpeg", "genai-gemini", "genai-ollama"],
-        help="Worker mode: arch=all workers, ffmpeg=ffmpeg only, genai-gemini=gemini+main, genai-ollama=ollama+main",
+        "--mode", default="triggers", choices=["triggers", "ffmpeg", "genai-gemini", "genai-ollama"],
+        help="Worker mode: triggers=mqtt+http+workflow listener (no activity workers), ffmpeg=ffmpeg only, genai-gemini=gemini+main, genai-ollama=ollama+main",
     )
     args = parser.parse_args()
     asyncio.run(async_main(args.prompts, args.provider, args.mode))
