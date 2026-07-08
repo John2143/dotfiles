@@ -32,8 +32,6 @@
         "utils": "utils"
       },
       "locked": {
-        "lastModified": 1748251200,
-        "narHash": "sha256-c9KDl8b7tHsnOdVe2bkb73rcyPxnjf/CfnEg02MH3zQ=",
         "path": "./autoclicker",
         "type": "path"
       },
@@ -397,11 +395,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1783479733,
-        "narHash": "sha256-d/JatqgG+Pmo+IuCTZfnrEAPWU3fdha48GQeXuFO+bE=",
+        "lastModified": 1783525612,
+        "narHash": "sha256-OEFYdbtG6Qy04KGteknnrx15Uo2XXkYVuUvBvFNEn+Q=",
         "owner": "nix-community",
         "repo": "home-manager",
-        "rev": "cee3f0e7fec85d80c149c7afc29926747f7bd3c2",
+        "rev": "1aac8895fea6fcabc6a0184c63a80fb2f99fd208",
         "type": "github"
       },
       "original": {
@@ -440,11 +438,11 @@
         "treefmt-nix": "treefmt-nix"
       },
       "locked": {
-        "lastModified": 1783492272,
-        "narHash": "sha256-4APwmEAAxW6MQAJgblXemdd0U5TkUa0w77/LpsPP8Po=",
+        "lastModified": 1783529501,
+        "narHash": "sha256-Iu2cWpJHGBlXIDZ5/cWMxahSKxmUqsBeW0xetawbAeI=",
         "owner": "numtide",
         "repo": "llm-agents.nix",
-        "rev": "e0319c8c10dffb2dc564417ce49baba49b149b33",
+        "rev": "2d7b9e94daf3bb4dcea74b653dc8d23d48fa3714",
         "type": "github"
       },
       "original": {
@@ -676,11 +674,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1783486130,
-        "narHash": "sha256-5QHtoOj0djK3UFpyY8n2HeJiuUYdlHQkEeWVEBMTt2k=",
+        "lastModified": 1783515701,
+        "narHash": "sha256-OWlqA2btkhHmtRssMSTYcH1HJT45uF57cZ5hRLMAk0k=",
         "owner": "John2143",
         "repo": "oh-my-pi",
-        "rev": "ccff88a77fb6b600d1b460c382c2dd95dfb260d4",
+        "rev": "8e9a363f3b9037909dfa9d6ba6d65b7d9c32ed19",
         "type": "github"
       },
       "original": {
@@ -753,8 +751,6 @@
         "utils": "utils_2"
       },
       "locked": {
-        "lastModified": 1748251200,
-        "narHash": "sha256-ckZ8Lq/jq9mTRJul3OKaqjltxnWIzux1QhwrSJ7IzcQ=",
         "path": "./screen-control",
         "type": "path"
       },
