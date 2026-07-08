@@ -372,6 +372,8 @@ in
       # wherever this config applies — the functions, aliases, and
       # completions defined in home.nix are available during agent sessions.
       shell: fish
+      startup.quiet: true
+      setupVersion: 1
       modelRoles:
         #default: vast-vllm/deepseek-v4-flash
         default: litellm/deepseek/deepseek-v4-flash
