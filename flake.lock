@@ -753,6 +753,8 @@
         "utils": "utils_2"
       },
       "locked": {
+        "lastModified": 1781158226,
+        "narHash": "sha256-ckZ8Lq/jq9mTRJul3OKaqjltxnWIzux1QhwrSJ7IzcQ=",
         "path": "./screen-control",
         "type": "path"
       },
