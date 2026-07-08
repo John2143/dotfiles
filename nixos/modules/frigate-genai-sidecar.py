@@ -1442,9 +1442,9 @@ async def tool_crop_activity(arg: dict) -> dict:
                 log.exception("Failed to crop source %r", entry)
 
         if crop_results:
-            crop_ids = [cid for cid, _ in crop_results]
+            crop_ids = [cid for cid, _, _, _ in crop_results]
             content_parts = []
-            for _, fname in crop_results:
+            for _, fname, _, _ in crop_results:
                 content_parts.append({"type": "image_url", "image_url": {"url": f"[[{fname}]]"}})
             if len(crop_results) == 1:
                 _, _, cw, ch = crop_results[0]
@@ -1468,7 +1468,7 @@ async def tool_crop_activity(arg: dict) -> dict:
                 })
 
     _atomic_write(msg_path, state)
-    return {"crop_ids": [cid for cid, _ in crop_results] if crop_results else [],
+    return {"crop_ids": [cid for cid, _, _, _ in crop_results] if crop_results else [],
             "source": source, "crop_region": [x1, y1, x2, y2], "count": len(crop_results)}
 
 
