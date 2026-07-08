@@ -88,14 +88,26 @@ jobs:
 
     - name: Smoke-test ffmpeg worker startup
       run: |
+        # Start worker in background, capture stderr
         docker run --rm \
           "${FFMPEG_IMAGE}:${NEW_TAG}" \
-          --mode=ffmpeg &
+          --mode=ffmpeg > /dev/null 2> /tmp/worker-stderr &
         PID=$!
-        sleep 15
-        if ! kill -0 $PID 2>/dev/null; then
-          echo "ERROR: ffmpeg worker crashed on startup" && exit 1
-        fi
+        # Wait for worker to reach Temporal connect step (up to 60s for nix env)
+        for i in $(seq 1 30); do
+          sleep 2
+          if grep -q "Connecting to Temporal" /tmp/worker-stderr 2>/dev/null; then
+            echo "SUCCESS: worker initialized and attempting Temporal connection"
+            kill $PID 2>/dev/null; wait $PID 2>/dev/null
+            exit 0
+          fi
+          if ! kill -0 $PID 2>/dev/null; then
+            echo "ERROR: worker crashed before reaching Temporal connect step"
+            cat /tmp/worker-stderr
+            exit 1
+          fi
+        done
+        echo "WARNING: worker did not reach Temporal connect within 60s (PID still alive)"
         kill $PID 2>/dev/null; wait $PID 2>/dev/null
 
     - name: Commit and push to argo repo
