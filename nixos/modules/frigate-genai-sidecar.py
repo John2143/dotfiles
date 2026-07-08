@@ -98,6 +98,17 @@ def _s3_delete_prefix(prefix: str) -> int:
         )
     return len(keys)
 
+def _s3_copy_key(src: str, dst: str) -> bool:
+    """Copy object within S3 bucket. Returns True if successful."""
+    try:
+        _s3_client().copy_object(
+            Bucket=_S3_BUCKET, Key=dst,
+            CopySource={"Bucket": _S3_BUCKET, "Key": src},
+        )
+        return True
+    except Exception:
+        return False
+
 def _s3_read_text(key: str) -> str | None:
     data = _s3_get(key)
     return data.decode("utf-8") if data else None
@@ -137,7 +148,6 @@ def _frigate_url(path: str = "") -> str:
     return f"{base}{path}"
 _stats: dict = {
     "events_processed": 0,
-    "model_counts": {},
     "last_event": None,
     "mqtt_connected": False,
     "temporal_connected": False,
@@ -229,10 +239,9 @@ async function loadStats() {
     const r = await fetch("/api/stats");
     const s = await r.json();
     const mqtt = s.mqtt_connected ? '<span class="ok">OK</span>' : '<span class="off">Disconnected</span>';
-    const models = Object.entries(s.model_counts).map(([m,c]) => m.split("/").pop()+": "+c).join(" | ") || "—";
     const statsEl = document.getElementById("stats");
     statsEl.className = "stats";
-    statsEl.innerHTML = '<div class="stat"><span class="stat-label">MQTT</span><span class="stat-value">'+mqtt+'</span></div><div class="stat"><span class="stat-label">Processed</span><span class="stat-value">'+s.events_processed+'</span></div><div class="stat"><span class="stat-label">Last</span><span class="stat-value">'+(s.last_event||"—")+'</span></div><div class="stat"><span class="stat-label">Models</span><span class="stat-value">'+models+'</span></div>';
+    statsEl.innerHTML = '<div class="stat"><span class="stat-label">MQTT</span><span class="stat-value">'+mqtt+'</span></div><div class="stat"><span class="stat-label">Processed</span><span class="stat-value">'+s.events_processed+'</span></div><div class="stat"><span class="stat-label">Last</span><span class="stat-value">'+(s.last_event||"—")+'</span></div>';
   } catch(e) { /* stats will stay as loading */ }
 }
 async function loadPause() {
@@ -1600,15 +1609,24 @@ async def update_description_activity(event_id: str, description: str) -> bool:
 
 @activity.defn(name="cleanup_cancelled")
 async def cleanup_cancelled_activity(input_data: dict) -> None:
-    """Clean up persisted data for a cancelled workflow: remove frames,
-    agent logs, and post cancellation notice to Frigate."""
+    """Clean up persisted data: archive agent artifacts to history/ prefix,
+    delete everything from events/ prefix, post notice to Frigate."""
     event_id = input_data["event_id"]
-    log.info("Cleanup cancelled: event=%s", event_id)
+    log.info("Cleanup: event=%s", event_id)
+
+    # Archive agent artifacts to history/ before deleting
+    src_prefix = f"events/{event_id}/agent/"
+    dst_prefix = f"history/{event_id}/agent/"
+    archived = 0
+    for key in _s3_list(src_prefix):
+        dst = dst_prefix + key[len(src_prefix):]
+        if _s3_copy_key(key, dst):
+            archived += 1
+    log.info("Archived %d agent artifacts for event=%s", archived, event_id)
 
     # Remove all persisted data for this event from S3
     deleted = _s3_delete_prefix(f"events/{event_id}/")
     log.info("Removed %d objects for event=%s", deleted, event_id)
-    # Post cancellation notice to Frigate (run in thread via heartbeat to avoid blocking)
     await _run_with_heartbeat(update_event_description, event_id, "Cancelled")
 # ═════════════════════════════════════════════════════════════════════
 # Temporal Workflow
@@ -2353,7 +2371,6 @@ async def async_main(prompts_path: str, provider_path: str, mode: str = "trigger
                         "task_queue": TASK_QUEUE,
                         "server": os.environ.get("TEMPORAL_ADDRESS", "192.168.5.10:32682"),
                         "events_processed": stats["events_processed"],
-                        "model_counts": stats["model_counts"],
                     }).encode())
                 elif self.path.startswith("/api/events/") and self.path.endswith("/snapshot.jpg"):
                     self._proxy("image/jpeg")
@@ -2425,8 +2442,12 @@ async def async_main(prompts_path: str, provider_path: str, mode: str = "trigger
                         self.send_response(404)
                         self.end_headers()
                     return
-                # Full conversation view
+                # Full conversation view — try live events/, fall back to archived history/
                 msg_data = _s3_read_text(f"events/{event_id}/agent/messages.json")
+                hist_fallback = False
+                if msg_data is None:
+                    msg_data = _s3_read_text(f"history/{event_id}/agent/messages.json")
+                    hist_fallback = msg_data is not None
                 if msg_data is None:
                     self.send_response(404)
                     self._cors()
@@ -2437,6 +2458,9 @@ async def async_main(prompts_path: str, provider_path: str, mode: str = "trigger
                 state = json.loads(msg_data)
                 msgs = state.get("messages", [])
                 agent_dir = state.get("agent_dir", "")
+                # When served from archive, images live under history/
+                if hist_fallback:
+                    agent_dir = f"history/{event_id}/agent"
                 html = ['<!DOCTYPE html><html><head><meta charset="utf-8">'
                         '<title>Agent: {}</title>'
                         '<style>*{{margin:0;padding:0;box-sizing:border-box}}'
@@ -2470,34 +2494,45 @@ async def async_main(prompts_path: str, provider_path: str, mode: str = "trigger
                                     name, json.dumps(args)[:200]))
                         content = m.get("content", "")
                         if content:
-                            html.append('<div class="text">{}</div>'.format(str(content)[:500]))
+                            html.append('<div class="text">{}</div>'.format(str(content)))
                     elif role == "tool":
-                        html.append('<div class="text">{}</div>'.format(str(m.get("content", ""))[:500]))
+                        html.append('<div class="text">{}</div>'.format(str(m.get("content", ""))))
                     elif role == "user":
                         content = m.get("content", "")
                         if isinstance(content, list):
+                            # Track resolution from text parts for image sizing
+                            cur_res = "high"  # default
                             for part in content:
                                 if isinstance(part, dict):
                                     if part.get("type") == "image_url":
                                         url = part.get("image_url", {}).get("url", "")
                                         if url.startswith("[[") and url.endswith("]]"):
                                             fname = url[2:-2]
-                                            img_data = _s3_get(f"{agent_dir}/{fname}") if agent_dir.startswith("events/") else None
-                                            if img_data is None and not agent_dir.startswith("events/"):
+                                            _is_s3 = agent_dir.startswith("events/") or agent_dir.startswith("history/")
+                                            img_data = _s3_get(f"{agent_dir}/{fname}") if _is_s3 else None
+                                            if img_data is None and not _is_s3:
                                                 p = Path(agent_dir) / fname
                                                 img_data = p.read_bytes() if p.exists() else None
                                             if img_data:
                                                 b64 = base64.b64encode(img_data).decode()
-                                                html.append('<img src="data:image/jpeg;base64,{}" '
-                                                            'onclick="this.style.maxWidth=this.style.maxWidth==\'100%\'?\'400px\':\'100%\'">'.format(b64))
+                                                sizes = {"low": "200", "med": "300", "high": "500", "max": "700", "tiny": "150"}
+                                                w = sizes.get(cur_res, "400")
+                                                html.append('<img src="data:image/jpeg;base64,{}" style="max-width:{}px;max-height:none" '
+                                                            'onclick="if(this.style.maxWidth===\'100%\'){{this.style.maxWidth=\'{}px\';this.style.maxHeight=\'\'}}else{{this.style.maxWidth=\'100%\';this.style.maxHeight=\'none\'}}"'.format(b64, w, w))
                                             else:
                                                 html.append('<div class="text">[image: {} not found]</div>'.format(fname))
                                     elif part.get("type") == "text":
-                                        html.append('<div class="text">{}</div>'.format(part["text"][:500]))
+                                        txt = part["text"]
+                                        # Extract resolution hint: "... at low resolution." etc.
+                                        import re
+                                        m = re.search(r"at (\w+) resolution", txt)
+                                        if m:
+                                            cur_res = m.group(1)
+                                        html.append('<div class="text">{}</div>'.format(txt))
                         else:
-                            html.append('<div class="text">{}</div>'.format(str(content)[:500]))
+                            html.append('<div class="text">{}</div>'.format(str(content)))
                     elif role == "system":
-                        html.append('<div class="text">{}</div>'.format(str(m.get("content", ""))[:500]))
+                        html.append('<div class="text">{}</div>'.format(str(m.get("content", ""))))
                     html.append('</div>')
                 html.append('<div style="margin-top:16px;color:#666;font-size:11px">'
                             'camera: {} | start_time: {} | end_time: {} | max_frames: {}</div>'
