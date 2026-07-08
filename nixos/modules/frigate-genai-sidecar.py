@@ -15,6 +15,8 @@ Environment:
   MQTT_HOST         — MQTT broker (default: localhost)
   MQTT_PORT         — MQTT port (default: 1883)
   TEMPORAL_ADDRESS  — Temporal frontend (default: 192.168.5.10:32682)
+  UPSCALE_API_URL   — upscale API base URL (default: http://office.ts.2143.me:7870)
+  UPSCALE_MAX_INPUT_PX — max input dimension (long side) for upscale; larger sources rejected (default: 768)
 """
 
 import argparse
@@ -48,6 +50,8 @@ from temporalio.api.operatorservice.v1 import AddSearchAttributesRequest
 import urllib.request as _urllib_request
 from functools import lru_cache as _lru_cache
 import io as _io
+import re
+from html import escape as _escape
 
 # ── S3 abstraction layer ──────────────────────────────────────────────
 _S3_BUCKET = "frigate-genai"
@@ -550,6 +554,35 @@ def _tool_compact_schema() -> dict:
         },
     }
 
+def _tool_upscale_schema() -> dict:
+    return {
+        "type": "function",
+        "function": {
+            "name": "upscale",
+            "description": (
+                "Upscale an image 4x with AI super-resolution to reveal fine detail "
+                "(license plates, faces, text) that is too small to read at native "
+                "resolution. ONLY works on small images: you MUST first crop() a tight "
+                "region around the detail, then upscale that crop://N. Full frames and "
+                "large images are rejected. Workflow: show_frame @max -> crop tight -> "
+                "if still unreadable -> upscale the crop. "
+                "Sources: crop://N (preferred), upscale://N, frame://N, snapshot:// — "
+                "all subject to the size limit. "
+                "The upscaled image is shown to you and stored as upscale://N."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "source": {"type": "string",
+                        "description": "Image to upscale: snapshot://, frame://N, crop://N, upscale://N"},
+                    "model": {"type": "string", "enum": ["swinir-psnr", "realesrgan"],
+                        "description": "swinir-psnr = accurate/faithful detail (default); realesrgan = general enhancement, more texture invention"},
+                },
+                "required": ["source"],
+            },
+        },
+    }
+
 
 def _tool_crop_schema() -> dict:
     return {
@@ -921,7 +954,7 @@ async def init_agent_state_activity(init_arg: dict) -> dict:
             "Extract every identifying detail: make, model, color, license plate, damage, "
             "stickers, occupants."
         )
-        crop_hint = "crop() close-ups: plates, badges, decals, occupants, damage."
+        crop_hint = "crop() close-ups: plates, badges, decals, occupants, damage. Crop TIGHT — a single plate or face should fill the crop, not the whole vehicle."
         bisect_hint = "Bisect when the vehicle stops or disappears."
     else:
         prefix = (
@@ -929,7 +962,7 @@ async def init_agent_state_activity(init_arg: dict) -> dict:
             "matters — someone may need help or have committed a crime. Your entire job "
             "is to LOOK AT FRAMES. Understand exactly what happened from start to finish."
         )
-        crop_hint = "crop() close-ups: faces, hands, clothing, items carried, bags, tools."
+        crop_hint = "crop() close-ups: faces, hands, clothing, items carried, bags, tools. Crop TIGHT — one subject per crop, not the whole scene."
         bisect_hint = "Bisect when behavior changes or the subject disappears."
     system_prompt = (
         prefix
@@ -942,7 +975,12 @@ async def init_agent_state_activity(init_arg: dict) -> dict:
         + "transcode() that region to extract HD frames.\n\n"
         + "PHASE 2 — ZOOM: After scanning, you MUST zoom in on the subject. "
         + "Pick 2-4 key frames and show them individually at @max resolution "
-        + "(e.g., show_frame('frame://45@max')). Then " + crop_hint + "\n\n"
+        + "(e.g., show_frame('frame://45@max')). Then " + crop_hint + " "
+        "If a cropped detail (plate, face, text) is STILL too small or blurry to read, "
+        "upscale('crop://N') to enhance it 4x. Upscale is expensive (up to 3 min) and only "
+        "accepts small tight crops — never full frames. Use it only when you have already "
+        "zoomed and cropped and the detail remains unreadable, and you can name what you "
+        "expect to read from it.\n\n"
         + "compact() after every 3-4 images to save tokens. "
         + bisect_hint + " Track every movement. "
         + "NEVER call set_description() until you have zoomed into at least "
@@ -1608,7 +1646,7 @@ async def update_description_activity(event_id: str, description: str) -> bool:
 
 
 @activity.defn(name="cleanup_cancelled")
-async def cleanup_cancelled_activity(input_data: dict) -> None:
+async def cleanup_cancelled_activity(input_data: dict, notify_cancelled: bool = False) -> None:
     """Clean up persisted data: archive agent artifacts to history/ prefix,
     delete everything from events/ prefix, post notice to Frigate."""
     event_id = input_data["event_id"]
@@ -1627,7 +1665,8 @@ async def cleanup_cancelled_activity(input_data: dict) -> None:
     # Remove all persisted data for this event from S3
     deleted = _s3_delete_prefix(f"events/{event_id}/")
     log.info("Removed %d objects for event=%s", deleted, event_id)
-    await _run_with_heartbeat(update_event_description, event_id, "Cancelled")
+    if notify_cancelled:
+        await _run_with_heartbeat(update_event_description, event_id, "Cancelled")
 # ═════════════════════════════════════════════════════════════════════
 # Temporal Workflow
 # ═════════════════════════════════════════════════════════════════════
@@ -2016,14 +2055,14 @@ class GenAIWorkflow:
             workflow.logger.info("GenAI workflow completed: %s", log_ctx)
             await workflow.execute_activity(
                 cleanup_cancelled_activity,
-                input_data,
+                args=[input_data, False],
                 start_to_close_timeout=timedelta(seconds=30),
             )
         except asyncio.CancelledError:
             workflow.logger.info("GenAI workflow cancelled, cleaning up: %s", log_ctx)
             await workflow.execute_activity(
                 cleanup_cancelled_activity,
-                input_data,
+                args=[input_data, True],
                 start_to_close_timeout=timedelta(seconds=30),
             )
             raise
@@ -2491,12 +2530,12 @@ async def async_main(prompts_path: str, provider_path: str, mode: str = "trigger
                                     try: args = json.loads(args)
                                     except Exception: pass
                                 html.append('<div class="tool-call">→ {}({})</div>'.format(
-                                    name, json.dumps(args)[:200]))
+                                    _escape(name), _escape(json.dumps(args)[:200])))
                         content = m.get("content", "")
                         if content:
-                            html.append('<div class="text">{}</div>'.format(str(content)))
+                            html.append('<div class="text">{}</div>'.format(_escape(str(content))))
                     elif role == "tool":
-                        html.append('<div class="text">{}</div>'.format(str(m.get("content", ""))))
+                        html.append('<div class="text">{}</div>'.format(_escape(str(m.get("content", "")))))
                     elif role == "user":
                         content = m.get("content", "")
                         if isinstance(content, list):
@@ -2520,19 +2559,18 @@ async def async_main(prompts_path: str, provider_path: str, mode: str = "trigger
                                                 html.append('<img src="data:image/jpeg;base64,{}" style="max-width:{}px;max-height:none" '
                                                             'onclick="if(this.style.maxWidth===\'100%\'){{this.style.maxWidth=\'{}px\';this.style.maxHeight=\'\'}}else{{this.style.maxWidth=\'100%\';this.style.maxHeight=\'none\'}}"'.format(b64, w, w))
                                             else:
-                                                html.append('<div class="text">[image: {} not found]</div>'.format(fname))
+                                                html.append('<div class="text">[image: {} not found]</div>'.format(_escape(fname)))
                                     elif part.get("type") == "text":
                                         txt = part["text"]
                                         # Extract resolution hint: "... at low resolution." etc.
-                                        import re
-                                        m = re.search(r"at (\w+) resolution", txt)
-                                        if m:
-                                            cur_res = m.group(1)
-                                        html.append('<div class="text">{}</div>'.format(txt))
+                                        res_m = re.search(r"at (\w+) resolution", txt)
+                                        if res_m:
+                                            cur_res = res_m.group(1)
+                                        html.append('<div class="text">{}</div>'.format(_escape(txt)))
                         else:
-                            html.append('<div class="text">{}</div>'.format(str(content)))
+                            html.append('<div class="text">{}</div>'.format(_escape(str(content))))
                     elif role == "system":
-                        html.append('<div class="text">{}</div>'.format(str(m.get("content", ""))))
+                        html.append('<div class="text">{}</div>'.format(_escape(str(m.get("content", "")))))
                     html.append('</div>')
                 html.append('<div style="margin-top:16px;color:#666;font-size:11px">'
                             'camera: {} | start_time: {} | end_time: {} | max_frames: {}</div>'
