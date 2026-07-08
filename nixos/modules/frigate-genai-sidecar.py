@@ -54,6 +54,10 @@ import io as _io
 import re
 from html import escape as _escape
 
+import random
+def _first_line(s: str) -> str:
+    return s.split("\n")[0][:200]
+
 # ── S3 abstraction layer ──────────────────────────────────────────────
 _S3_BUCKET = "frigate-genai"
 
@@ -696,7 +700,8 @@ async def _run_with_heartbeat(func, *args, interval: float = 5.0):
     try:
         while not task.done():
             try:
-                await asyncio.wait_for(asyncio.shield(task), timeout=interval)
+                jittered = interval * (0.8 + 0.4 * random.random())
+                await asyncio.wait_for(asyncio.shield(task), timeout=jittered)
             except TimeoutError:
                 activity.heartbeat()
         return task.result()
@@ -870,16 +875,24 @@ async def run_genai_turn_activity(turn_arg: dict) -> dict:
     ]
 
 
-    response = await _run_with_heartbeat(
-        lambda: client.chat.completions.create(
-            model=model_name,
-            messages=messages_with_images,
-            tools=tools,
-            tool_choice="auto",
-            extra_body=extra_body if extra_body else None,
-        ),
-        interval=8.0,
-    )
+    from openai import APIStatusError, RateLimitError
+    try:
+        response = await _run_with_heartbeat(
+            lambda: client.chat.completions.create(
+                model=model_name,
+                messages=messages_with_images,
+                tools=tools,
+                tool_choice="auto",
+                extra_body=extra_body if extra_body else None,
+            ),
+            interval=8.0,
+        )
+    except RateLimitError as e:
+        log.warning("Model %s rate-limited (429): %s", model, _first_line(str(e)))
+        raise
+    except APIStatusError as e:
+        log.warning("LLM API error (HTTP %s): %s", e.status_code, _first_line(str(e)))
+        raise
     msg = response.choices[0].message
 
     prompt_tok = response.usage.prompt_tokens
@@ -1246,19 +1259,11 @@ async def tool_show_frame_activity(arg: dict) -> dict:
 
         img_content = []
         if not frames_list:
-            if tc_id:
-                outcome_messages.append({
-                    "role": "tool", "tool_call_id": tc_id,
-                    "content": f"Invalid frame source: {source}",
-                })
-            return {"frames_shown": 0, "resolution": resolution, "error": "invalid_source", "messages": outcome_messages}
+            raise ApplicationError(f"Invalid frame source: {source}", non_retryable=True)
         elif len(frames_list) > 30:
-            if tc_id:
-                outcome_messages.append({
-                    "role": "tool", "tool_call_id": tc_id,
-                    "content": f"Too many frames ({len(frames_list)}). Show at most 30 per call. Scan in batches.",
-                })
-            return {"frames_shown": 0, "resolution": resolution, "error": "too_many_frames", "messages": outcome_messages}
+            raise ApplicationError(
+                f"Too many frames ({len(frames_list)}). Show at most 30 per call. Scan in batches.",
+                non_retryable=True)
         else:
             # Compute default resolution from frame count
             if resolution is None:
@@ -1404,112 +1409,103 @@ async def tool_crop_activity(arg: dict) -> dict:
     y2 = max(0.0, min(1.0, float(tool_args.get("y2", 1))))
 
     if x1 >= x2 or y1 >= y2:
+        raise ApplicationError(
+            f"Invalid crop region ({x1},{y1})-({x2},{y2})", non_retryable=True)
+    base_source = source
+    if "@" in source:
+        base_source = source.rsplit("@", 1)[0]
+
+    # snapshot:// rejected early
+    if base_source.startswith("snapshot://"):
+        raise ApplicationError(
+            "Cannot crop snapshot://. The snapshot is a low-res bounding box "
+            "preview. Use frame://N to find the object in the recording frames.",
+            non_retryable=True)
+
+
+    # Resolve source list: each entry is (src_type, *args)
+    source_list = []
+    if base_source.startswith("frame://"):
+        spec = base_source[len("frame://"):]
+        if "-" in spec:
+            rp = spec.split("-")
+            source_list = [("frame", i) for i in range(int(rp[0]), int(rp[1]) + 1)]
+        else:
+            source_list = [("frame", int(spec))]
+    elif base_source.startswith("transcode://"):
+        parts = base_source[len("transcode://"):].split("/")
+        batch = int(parts[0])
+        frame_part = parts[1] if len(parts) > 1 else "0"
+        if "-" in frame_part:
+            rp = frame_part.split("-")
+            source_list = [("transcode", batch, i) for i in range(int(rp[0]), int(rp[1]) + 1)]
+        else:
+            source_list = [("transcode", batch, int(frame_part))]
+    elif base_source.startswith("crop://"):
+        idx = int(base_source[len("crop://"):])
+        source_list = [("crop", idx)]
+    elif base_source.startswith("upscale://"):
+        idx = int(base_source[len("upscale://"):])
+        source_list = [("upscale", idx)]
+
+    # Crop each source, collect results
+    crop_results = []
+    for entry in source_list:
+        img_key = None
+        if entry[0] == "frame":
+            img_key = f"{event_prefix}/frames/frame_{entry[1]:03d}.jpg"
+        elif entry[0] == "transcode":
+            img_key = f"{agent_dir}/transcode_{entry[1]:03d}_{entry[2]:03d}.jpg"
+        elif entry[0] == "crop":
+            img_key = f"{agent_dir}/crop_{entry[1]:03d}.jpg"
+        elif entry[0] == "upscale":
+            img_key = f"{agent_dir}/upscale_{entry[1]:03d}.jpg"
+
+        if not img_key:
+            continue
+        img_bytes = _s3_get(img_key)
+        if img_bytes is None:
+            continue
+        try:
+            img = Image.open(_io.BytesIO(img_bytes))
+            w, h = img.size
+            crop_box = (int(x1 * w), int(y1 * h), int(x2 * w), int(y2 * h))
+            cropped = img.crop(crop_box)
+            existing = _s3_list(f"{agent_dir}/crop_")
+            crop_id = len(existing) + 1
+            fname = f"crop_{crop_id:03d}.jpg"
+            buf = _io.BytesIO()
+            cropped.save(buf, "JPEG", quality=95)
+            _s3_put(f"{agent_dir}/{fname}", buf.getvalue())
+            crop_results.append((crop_id, fname, cropped.width, cropped.height))
+        except Exception as e:
+            log.exception("Failed to crop source %r", entry)
+
+    if crop_results:
+        crop_ids = [cid for cid, _, _, _ in crop_results]
+        content_parts = []
+        for _, fname, _, _ in crop_results:
+            content_parts.append({"type": "image_url", "image_url": {"url": f"[[{fname}]]"}})
+        if len(crop_results) == 1:
+            _, _, cw, ch = crop_results[0]
+            label = (
+                f"Cropped ({x1:.2f},{y1:.2f})-({x2:.2f},{y2:.2f}) "
+                f"→ {cw}x{ch} from {base_source}. Stored as crop://{crop_ids[0]}."
+            )
+        else:
+            label = (
+                f"Cropped ({x1:.2f},{y1:.2f})-({x2:.2f},{y2:.2f}) "
+                f"from {base_source} ({len(crop_results)} frames). "
+                f"Stored as crop://{crop_ids[0]} through crop://{crop_ids[-1]}."
+            )
+        content_parts.append({"type": "text", "text": label})
+        outcome_messages.append({"role": "user", "content": content_parts})
+    else:
         if tc_id:
             outcome_messages.append({
                 "role": "tool", "tool_call_id": tc_id,
-                "content": f"Invalid crop region ({x1},{y1})-({x2},{y2})",
+                "content": f"No sources could be cropped from: {source}",
             })
-    else:
-        base_source = source
-        if "@" in source:
-            base_source = source.rsplit("@", 1)[0]
-
-        # snapshot:// rejected early
-        if base_source.startswith("snapshot://"):
-            if tc_id:
-                outcome_messages.append({
-                    "role": "tool", "tool_call_id": tc_id,
-                    "content": (
-                        "Cannot crop snapshot://. The snapshot is a low-res bounding box "
-                        "preview. Use frame://N to find the object in the recording frames."
-                    ),
-                })
-            return {"messages": outcome_messages, "crop_ids": [], "source": source, "error": "snapshot_rejected"}
-
-
-        # Resolve source list: each entry is (src_type, *args)
-        source_list = []
-        if base_source.startswith("frame://"):
-            spec = base_source[len("frame://"):]
-            if "-" in spec:
-                rp = spec.split("-")
-                source_list = [("frame", i) for i in range(int(rp[0]), int(rp[1]) + 1)]
-            else:
-                source_list = [("frame", int(spec))]
-        elif base_source.startswith("transcode://"):
-            parts = base_source[len("transcode://"):].split("/")
-            batch = int(parts[0])
-            frame_part = parts[1] if len(parts) > 1 else "0"
-            if "-" in frame_part:
-                rp = frame_part.split("-")
-                source_list = [("transcode", batch, i) for i in range(int(rp[0]), int(rp[1]) + 1)]
-            else:
-                source_list = [("transcode", batch, int(frame_part))]
-        elif base_source.startswith("crop://"):
-            idx = int(base_source[len("crop://"):])
-            source_list = [("crop", idx)]
-        elif base_source.startswith("upscale://"):
-            idx = int(base_source[len("upscale://"):])
-            source_list = [("upscale", idx)]
-
-        # Crop each source, collect results
-        crop_results = []
-        for entry in source_list:
-            img_key = None
-            if entry[0] == "frame":
-                img_key = f"{event_prefix}/frames/frame_{entry[1]:03d}.jpg"
-            elif entry[0] == "transcode":
-                img_key = f"{agent_dir}/transcode_{entry[1]:03d}_{entry[2]:03d}.jpg"
-            elif entry[0] == "crop":
-                img_key = f"{agent_dir}/crop_{entry[1]:03d}.jpg"
-            elif entry[0] == "upscale":
-                img_key = f"{agent_dir}/upscale_{entry[1]:03d}.jpg"
-
-            if not img_key:
-                continue
-            img_bytes = _s3_get(img_key)
-            if img_bytes is None:
-                continue
-            try:
-                img = Image.open(_io.BytesIO(img_bytes))
-                w, h = img.size
-                crop_box = (int(x1 * w), int(y1 * h), int(x2 * w), int(y2 * h))
-                cropped = img.crop(crop_box)
-                existing = _s3_list(f"{agent_dir}/crop_")
-                crop_id = len(existing) + 1
-                fname = f"crop_{crop_id:03d}.jpg"
-                buf = _io.BytesIO()
-                cropped.save(buf, "JPEG", quality=95)
-                _s3_put(f"{agent_dir}/{fname}", buf.getvalue())
-                crop_results.append((crop_id, fname, cropped.width, cropped.height))
-            except Exception as e:
-                log.exception("Failed to crop source %r", entry)
-
-        if crop_results:
-            crop_ids = [cid for cid, _, _, _ in crop_results]
-            content_parts = []
-            for _, fname, _, _ in crop_results:
-                content_parts.append({"type": "image_url", "image_url": {"url": f"[[{fname}]]"}})
-            if len(crop_results) == 1:
-                _, _, cw, ch = crop_results[0]
-                label = (
-                    f"Cropped ({x1:.2f},{y1:.2f})-({x2:.2f},{y2:.2f}) "
-                    f"→ {cw}x{ch} from {base_source}. Stored as crop://{crop_ids[0]}."
-                )
-            else:
-                label = (
-                    f"Cropped ({x1:.2f},{y1:.2f})-({x2:.2f},{y2:.2f}) "
-                    f"from {base_source} ({len(crop_results)} frames). "
-                    f"Stored as crop://{crop_ids[0]} through crop://{crop_ids[-1]}."
-                )
-            content_parts.append({"type": "text", "text": label})
-            outcome_messages.append({"role": "user", "content": content_parts})
-        else:
-            if tc_id:
-                outcome_messages.append({
-                    "role": "tool", "tool_call_id": tc_id,
-                    "content": f"No sources could be cropped from: {source}",
-                })
 
     return {"messages": outcome_messages,
             "crop_ids": [cid for cid, _, _, _ in crop_results] if crop_results else [],
@@ -1698,17 +1694,11 @@ async def tool_upscale_activity(arg: dict) -> dict:
     max_input_px = int(os.environ.get("UPSCALE_MAX_INPUT_PX", "768"))
     src_img = Image.open(_io.BytesIO(image_bytes))
     if max(src_img.size) > max_input_px:
-        if tc_id:
-            outcome_messages.append({
-                "role": "tool", "tool_call_id": tc_id,
-                "content": (
-                    f"{source} is {src_img.width}x{src_img.height} — too large to upscale "
-                    f"(limit {max_input_px}px). First crop() a TIGHT region around the "
-                    f"specific detail (plate, face, text), then upscale that crop://N."
-                ),
-            })
-        return {"source": source, "error": "input_too_large",
-                "width": src_img.width, "height": src_img.height, "messages": outcome_messages}
+        raise ApplicationError(
+            f"{source} is {src_img.width}x{src_img.height} — too large to upscale "
+            f"(limit {max_input_px}px). First crop() a TIGHT region around the "
+            f"specific detail (plate, face, text), then upscale that crop://N.",
+            non_retryable=True)
 
     # POST multipart to upscale API
     upscale_url = os.environ.get("UPSCALE_API_URL", "http://office.ts.2143.me:7870")
@@ -1977,11 +1967,15 @@ _ACTIVITY_RETRY = RetryPolicy(
 )
 # GenAI retry policy — longer backoff for LLM API 502s and transient outages.
 # 5 attempts with 5s→10s→20s→40s→60s backoff → ~135s total retry window.
+# GenAI retry — long window for transient outages, instant fail for permanent errors.
+# 20 attempts: 1→2→4→8→16→32→60→60→... (~19 min window).
+# Syntax errors, bad args, type errors fail immediately (non_retryable).
 _GENAI_RETRY = RetryPolicy(
-    maximum_attempts=5,
-    initial_interval=timedelta(seconds=5),
+    maximum_attempts=20,
+    initial_interval=timedelta(seconds=1),
     maximum_interval=timedelta(seconds=60),
     backoff_coefficient=2.0,
+    non_retryable_error_types=["ValueError", "TypeError", "RuntimeError"],
 )
 # Extract retry policy — polls for recording readiness up to ~70s
 _EXTRACT_RETRY = RetryPolicy(
