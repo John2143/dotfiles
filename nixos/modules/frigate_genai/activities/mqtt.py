@@ -12,13 +12,13 @@ from temporalio.common import TypedSearchAttributes, SearchAttributePair
 
 from frigate_genai.config import TASK_QUEUE, _SEARCH_CAMERA, _SEARCH_LABEL
 from frigate_genai.s3_helpers import _s3_get, _s3_put, _stats
-from frigate_genai.worker import _temporal_client, _main_event_loop
 
 log = logging.getLogger("frigate-genai-sidecar")
 
 
 def _start_workflow_sync(event: dict) -> None:
     """Schedule a Temporal workflow start from a non-async context (MQTT thread)."""
+    from frigate_genai.worker import _temporal_client, _main_event_loop
     event_id = event.get("id", "unknown")
     camera = event.get("camera", "")
     label = event.get("label", "")

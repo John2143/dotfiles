@@ -21,15 +21,6 @@ from frigate_genai.s3_helpers import (
     _load_state,
     load_json,
 )
-from frigate_genai.tools.schemas import (
-    _tool_compact_schema,
-    _tool_crop_schema,
-    _tool_get_snapshot_schema,
-    _tool_set_description_schema,
-    _tool_show_frame_schema,
-    _tool_transcode_schema,
-    _tool_upscale_schema,
-)
 
 log = logging.getLogger("frigate-genai-sidecar")
 
@@ -135,6 +126,15 @@ async def run_genai_turn_activity(turn_arg: dict) -> dict:
         if thinking_mode:
             extra_body["thinking_enabled"] = True
     client, model_name = _resolve_provider(provider_cfg, model)
+    from frigate_genai.tools.schemas import (
+        _tool_compact_schema,
+        _tool_crop_schema,
+        _tool_get_snapshot_schema,
+        _tool_set_description_schema,
+        _tool_show_frame_schema,
+        _tool_transcode_schema,
+        _tool_upscale_schema,
+    )
     tools = turn_arg.get("tools")
     if tools is None:
         tools = [

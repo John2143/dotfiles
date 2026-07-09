@@ -3,7 +3,7 @@
 from datetime import timedelta
 
 from temporalio import workflow
-from temporalio.common import ParentClosePolicy
+from temporalio.workflow import ParentClosePolicy
 
 from frigate_genai.config import _ACTIVITY_RETRY
 from frigate_genai.activities.agent_state import init_subagent_state_activity

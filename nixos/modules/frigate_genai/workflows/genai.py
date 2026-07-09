@@ -4,7 +4,8 @@ import asyncio
 from datetime import timedelta
 
 from temporalio import workflow
-from temporalio.common import ParentClosePolicy, SearchAttributePair
+from temporalio.common import SearchAttributePair
+from temporalio.workflow import ParentClosePolicy
 
 from frigate_genai.config import (
     MAX_TURNS,
@@ -22,7 +23,6 @@ from frigate_genai.config import (
     _SEARCH_TRANSCODE,
     _SEARCH_TOOL_FAILURES,
 )
-from frigate_genai.s3_helpers import _s3_event_prefix, _s3_agent_prefix, _s3_put
 from frigate_genai.activities.select_model import select_model_activity
 from frigate_genai.activities.frame_extraction import transcode_into_parts_activity, fetch_snapshot_activity
 from frigate_genai.activities.lifecycle import (
