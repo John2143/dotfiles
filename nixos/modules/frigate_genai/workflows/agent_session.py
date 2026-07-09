@@ -1,8 +1,10 @@
 """AgentSessionWorkflow — self-contained agent turn loop as Temporal child workflow."""
 
 from datetime import timedelta
+from uuid import uuid4
 
 from temporalio import workflow
+from temporalio.exceptions import ApplicationError
 
 from frigate_genai.config import _GENAI_RETRY, _ACTIVITY_RETRY
 from frigate_genai.activities.genai_turn import run_genai_turn_activity
@@ -28,6 +30,9 @@ class AgentSessionWorkflow:
         start_time = session_input["start_time"]
         end_time = session_input["end_time"]
         genai_queue = session_input["genai_queue"]
+        prompts_path = session_input.get("prompts_path", "")
+        depth = session_input.get("depth", 0)
+        max_depth = session_input.get("max_depth", 2)
 
         turn_arg = {
             "msg_path": msg_path,
@@ -44,6 +49,11 @@ class AgentSessionWorkflow:
         turns_max = 0
         turns_transcode = 0
         tool_failures = 0
+        # Spawn/join tracking
+        MAX_CONCURRENT_SPAWNS = 5
+        MAX_TOTAL_SUBAGENTS = 20
+        spawn_handles: dict[str, list[tuple[dict, object]]] = {}
+        total_subagents = 0
         trace_entries: list[dict] = []
         description = None
         confidence = None
@@ -94,16 +104,81 @@ class AgentSessionWorkflow:
 
             # Parallel tool dispatch
             handles: list[tuple[dict, dict, object]] = []
+            outcomes: list[dict] = []
             for tc in result.get("tool_calls", []):
-                te = {"type": "tool_call", "name": tc["name"], "args": tc.get("args", {})}
-                if tc["name"] not in _TOOL_ACTIVITIES:
-                    workflow.logger.warning("Unknown tool: %s", tc["name"])
-                    te["error"] = f"Unknown tool: {tc['name']}"
-                    trace_entries.append(te)
+                # ── spawn handling ────────────────────────────────────────────
+                if tc["name"] == "spawn":
+                    tasks = tc["args"].get("tasks", [])
+                    if total_subagents + len(tasks) > MAX_TOTAL_SUBAGENTS:
+                        outcomes.append({"messages": [{"role": "tool", "tool_call_id": tc["id"],
+                            "content": f"Subagent limit ({MAX_TOTAL_SUBAGENTS}) reached. Conclude."}]})
+                        continue
+                    if len(tasks) > MAX_CONCURRENT_SPAWNS:
+                        outcomes.append({"messages": [{"role": "tool", "tool_call_id": tc["id"],
+                            "content": f"Max {MAX_CONCURRENT_SPAWNS} subagents per spawn(). Got {len(tasks)}."}]})
+                        continue
+                    if depth >= max_depth:
+                        outcomes.append({"messages": [{"role": "tool", "tool_call_id": tc["id"],
+                            "content": f"Already at max depth ({max_depth}). Cannot spawn further."}]})
+                        continue
+
+                    from frigate_genai.workflows.subagent import SubAgentWorkflow
+                    spawn_key = f"spawn://{uuid4().hex[:8]}"
+                    spawn_handles[spawn_key] = []
+                    sd = session_input.get("subagent_dir", session_input.get("parent_agent_dir",
+                         f"events/{event_id}/agent/"))
+
+                    for i, task in enumerate(tasks):
+                        sub_sd = f"{sd}subagent/s{total_subagents + i}/"
+                        sub_input = {
+                            "event_id": event_id, "camera": camera, "label": label,
+                            "task": task.get("task", ""), "image_refs": task.get("image_refs", []),
+                            "image_s3_keys": _resolve_image_refs(task.get("image_refs", []), sd),
+                            "parent_agent_dir": sd, "subagent_dir": sub_sd,
+                            "provider_path": provider_path, "model": model,
+                            "genai_queue": genai_queue, "prompts_path": prompts_path,
+                            "start_time": start_time, "end_time": end_time,
+                            "depth": depth + 1, "max_depth": max_depth,
+                            "max_turns": task.get("max_turns", 8),
+                        }
+                        handle = workflow.start_child_workflow(
+                            SubAgentWorkflow, arg=sub_input,
+                            id=f"{event_id}-{spawn_key}-{i}",
+                            task_queue=genai_queue,
+                        )
+                        spawn_handles[spawn_key].append((tc, handle))
+                    total_subagents += len(tasks)
+                    outcomes.append({"messages": [{"role": "tool", "tool_call_id": tc["id"],
+                        "content": f"Spawned {len(tasks)} subagents. Key: {spawn_key}. "
+                                   f"Call join(spawn_key='{spawn_key}') to collect results."}]})
                     continue
 
+                # ── join handling ─────────────────────────────────────────────
+                if tc["name"] == "join":
+                    spawn_key = tc["args"]["spawn_key"]
+                    if spawn_key not in spawn_handles:
+                        outcomes.append({"messages": [{"role": "tool", "tool_call_id": tc["id"],
+                            "content": f"Unknown spawn_key: {spawn_key}"}]})
+                        continue
+                    findings = []
+                    for _, handle in spawn_handles[spawn_key]:
+                        try:
+                            sub_result = await handle
+                            findings.append(dict(sub_result))
+                        except Exception as e:
+                            findings.append({"error": str(e), "task": "unknown"})
+                    fmt = _format_spawn_findings(findings)
+                    outcomes.append({"messages": [{"role": "tool", "tool_call_id": tc["id"],
+                        "content": fmt}]})
+                    del spawn_handles[spawn_key]
+                    continue
+
+                # ── normal tool dispatch ──────────────────────────────────────
+                te = {"type": "tool_call", "name": tc["name"], "args": tc.get("args", {})}
+                if tc["name"] not in _TOOL_ACTIVITIES:
+
                 activity_fn, task_queue = _get_tool_queue(tc["name"], genai_queue)
-                retry = _ACTIVITY_RETRY if tc["name"] in ("transcode", "upscale") else None
+                retry = _ACTIVITY_RETRY
                 if tc["name"] == "transcode":
                     timeout = timedelta(seconds=60)
                 elif tc["name"] == "upscale":
@@ -136,7 +211,10 @@ class AgentSessionWorkflow:
                     try:
                         outcome = await handle
                     except Exception as e:
-                        workflow.logger.warning("Tool %s failed: %s", tc["name"], e)
+                        if isinstance(e, ApplicationError) and getattr(e, 'non_retryable', False):
+                            workflow.logger.info("Tool %s rejected input (non-retryable): %s", tc["name"], str(e)[:120])
+                        else:
+                            workflow.logger.warning("Tool %s failed: %s", tc["name"], e)
                         te["error"] = str(e)[:200]
                         outcome = {
                             "messages": [

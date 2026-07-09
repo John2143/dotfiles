@@ -156,3 +156,80 @@ async def init_agent_state_activity(init_arg: dict) -> dict:
 
     log.info("init_agent_state: event=%s frames=%d msg_path=%s", event_id, max_frames, msg_path)
     return {"msg_path": msg_path, "max_frames": max_frames}
+
+
+
+@activity.defn(name="init_subagent_state")
+async def init_subagent_state_activity(init_arg: dict) -> dict:
+    """Initialize subagent state: copy parent images, compose task-focused system
+    prompt, seed messages.json. """
+    task = init_arg["task"]
+    camera = init_arg["camera"]
+    label = init_arg["label"]
+    subagent_dir = init_arg["subagent_dir"]
+    event_id = init_arg["event_id"]
+
+    # Copy parent images to subagent directory
+    display_files = []
+    for i, s3_key in enumerate(init_arg.get("image_s3_keys", [])):
+        raw = _s3_get(s3_key)
+        if raw:
+            dname = f"display_{i+1:03d}.jpg"
+            _s3_put(f"{subagent_dir}{dname}", raw)
+            display_files.append(dname)
+
+    # Build focused system prompt
+    prompts = load_json(init_arg["prompts_path"])
+    label_hint = prompts.get("label", {}).get(label, "")
+    start_t = init_arg.get("start_time", 0)
+    end_t = init_arg.get("end_time", 0)
+    duration = end_t - start_t if start_t and end_t else 0
+    system_prompt = (
+        f"You are a focused analysis subagent investigating event {event_id}.\n"
+        f"Camera: {camera}. Detected object: {label}. Clip duration: {duration:.1f}s.\n"
+        + (f"Guidance for {label}: {label_hint}\n" if label_hint else "")
+        + f"\nYour delegated task: {task}\n\n"
+        "TOOLS: show_frame (scan frames), crop (zoom into regions), "
+        "transcode (extract HD frames), upscale (4x AI enhancement for small details).\n\n"
+        "RULES:\n"
+        f"- You have {init_arg['max_turns']} turns. Be decisive.\n"
+        "- Report exactly what you see -- do not speculate beyond the evidence.\n"
+        "- If you cannot determine the answer after thorough inspection, "
+        "use confidence='nothing_found'.\n"
+        "- Do NOT call close_subagent until you have examined frames.\n"
+        "- Use compact() if context gets full.\n\n"
+        "YOUR OUTPUT: close_subagent(findings='...', confidence='high|medium|low|nothing_found')\n"
+        "  findings = complete description with specific observable details.\n"
+        "  confidence = how certain you are based on what you actually saw."
+    )
+
+    # Seed messages
+    content_parts = []
+    for dname in display_files:
+        content_parts.append({"type": "image_url", "image_url": {"url": f"[[{dname}]]"}})
+    content_parts.append({"type": "text", "text": f"Task: {task}\n\nInvestigate and call close_subagent() when complete."})
+
+    init_messages = [
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": content_parts},
+    ]
+
+    msg_path = f"{subagent_dir}messages.json"
+    state = {
+        "messages": init_messages,
+        "agent_dir": subagent_dir,
+        "camera": camera,
+        "start_time": init_arg.get("start_time", 0),
+        "end_time": init_arg.get("end_time", 0),
+        "max_frames": 0,
+        "data_box": None,
+        "trace": [],
+        "stats": {},
+        "task": task,
+        "subagent_id": subagent_dir.rstrip("/").split("/")[-1],
+        "key_images": [],
+    }
+    _atomic_write(msg_path, state)
+
+    log.info("init_subagent_state: event=%s sub_id=%s task=%s", event_id, state["subagent_id"], task[:40])
+    return {"msg_path": msg_path}

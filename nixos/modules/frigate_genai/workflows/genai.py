@@ -245,6 +245,7 @@ class GenAIWorkflow:
                 arg={"event_id": event_id, "trace_text": trace_header + trace_text},
                 task_queue=genai_queue,
                 start_to_close_timeout=timedelta(seconds=10),
+                retry_policy=_ACTIVITY_RETRY,
             )
 
             stats = {
@@ -288,6 +289,7 @@ class GenAIWorkflow:
                 cleanup_cancelled_activity,
                 args=[input_data, False],
                 start_to_close_timeout=timedelta(seconds=30),
+                retry_policy=_ACTIVITY_RETRY,
             )
         except asyncio.CancelledError:
             workflow.logger.info("GenAI workflow cancelled, cleaning up: %s", log_ctx)
@@ -295,5 +297,6 @@ class GenAIWorkflow:
                 cleanup_cancelled_activity,
                 args=[input_data, True],
                 start_to_close_timeout=timedelta(seconds=30),
+                retry_policy=_ACTIVITY_RETRY,
             )
             raise
