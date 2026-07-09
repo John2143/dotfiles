@@ -90,6 +90,23 @@ async def init_agent_state_activity(init_arg: dict) -> dict:
         "across 2-3 key frames. Report what you found AND what you searched for "
         "but couldn't find. If you upscaled, review the upscaled result before concluding."
     )
+
+    spawn_guidance = (
+        "\n\nSPAWN/JOIN -- PARALLEL SUBAGENTS:\n"
+        "You can spawn() parallel subagents to investigate different regions simultaneously.\n"
+        "Each subagent gets its own context and runs independently. Use spawn when:\n"
+        "- Multiple distinct regions need inspection (plates, faces, text)\n"
+        "- Different time windows need scanning\n"
+        "- Detail extraction that would consume many turns\n"
+        "Rules:\n"
+        "- spawn() returns a spawn_key immediately. Subagents run in background.\n"
+        "- call join(spawn_key) to collect results. BLOCKS until all complete.\n"
+        "- join() returns formatted findings from each subagent.\n"
+        "- Max 5 subagents per spawn.\n"
+        "- Only spawn() when you have specific tasks -- don't spawn for trivial checks."
+    )
+    system_prompt += spawn_guidance
+
     if camera_desc:
         system_prompt += f"\n\n{camera_desc}"
     if label_hint:

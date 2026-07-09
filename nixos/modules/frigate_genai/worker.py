@@ -45,7 +45,7 @@ from frigate_genai.s3_helpers import (
 )
 from frigate_genai.activities.select_model import select_model_activity
 from frigate_genai.activities.lifecycle import update_description_activity, cleanup_cancelled_activity, summarize_agent_activity, save_agent_log_activity
-from frigate_genai.activities.agent_state import init_agent_state_activity
+from frigate_genai.activities.agent_state import init_agent_state_activity, init_subagent_state_activity
 from frigate_genai.activities.genai_turn import run_genai_turn_activity
 from frigate_genai.activities.tool_apply import apply_tool_messages_activity
 from frigate_genai.activities.frame_extraction import transcode_into_parts_activity, fetch_snapshot_activity
@@ -59,6 +59,7 @@ from frigate_genai.tools.upscale import tool_upscale_activity
 from frigate_genai.tools.transcode import tool_transcode_activity
 from frigate_genai.workflows.genai import GenAIWorkflow
 from frigate_genai.workflows.agent_session import AgentSessionWorkflow
+from frigate_genai.workflows.subagent import SubAgentWorkflow
 
 log = logging.getLogger("frigate-genai-sidecar")
 
@@ -256,7 +257,7 @@ async def async_main(prompts_path: str, provider_path: str, mode: str = "trigger
         log.debug("Search attribute registration skipped: %s", e)
 
     mode_tasks = []
-    misc_activities = [select_model_activity, update_description_activity, fetch_snapshot_activity, cleanup_cancelled_activity, init_agent_state_activity, tool_upscale_activity]
+    misc_activities = [select_model_activity, update_description_activity, fetch_snapshot_activity, cleanup_cancelled_activity, init_agent_state_activity, init_subagent_state_activity, tool_upscale_activity]
 
     if mode == "triggers":
         deployment_config = WorkerDeploymentConfig(
@@ -270,7 +271,7 @@ async def async_main(prompts_path: str, provider_path: str, mode: str = "trigger
         main_worker = Worker(
             _temporal_client,
             task_queue=TASK_QUEUE,
-            workflows=[GenAIWorkflow, AgentSessionWorkflow],
+            workflows=[GenAIWorkflow, AgentSessionWorkflow, SubAgentWorkflow],
             activities=misc_activities,
             deployment_config=deployment_config,
         )
@@ -311,7 +312,7 @@ async def async_main(prompts_path: str, provider_path: str, mode: str = "trigger
         gemini_worker = Worker(
             _temporal_client,
             task_queue=GEMINI_TASK_QUEUE,
-            workflows=[AgentSessionWorkflow],
+            workflows=[AgentSessionWorkflow, SubAgentWorkflow],
             activities=[run_genai_turn_activity,
                         tool_get_snapshot_activity, tool_show_frame_activity,
                         tool_crop_activity, tool_compact_activity,
@@ -340,7 +341,7 @@ async def async_main(prompts_path: str, provider_path: str, mode: str = "trigger
         ollama_worker = Worker(
             _temporal_client,
             task_queue=OLLAMA_TASK_QUEUE,
-            workflows=[AgentSessionWorkflow],
+            workflows=[AgentSessionWorkflow, SubAgentWorkflow],
             activities=[run_genai_turn_activity,
                         tool_get_snapshot_activity, tool_show_frame_activity,
                         tool_crop_activity, tool_compact_activity,
@@ -457,6 +458,8 @@ async def async_main(prompts_path: str, provider_path: str, mode: str = "trigger
                         "global": paused_global,
                         "labels": paused_labels,
                     }).encode())
+                elif self.path.startswith("/agent/") and "/subagent/" in self.path:
+                    self._serve_subagent_view()
                 elif self.path.startswith("/agent/"):
                     self._serve_agent_view()
                 else:
@@ -486,8 +489,20 @@ async def async_main(prompts_path: str, provider_path: str, mode: str = "trigger
                 event_id = parts[2]
                 if len(parts) >= 5 and parts[3] == "file":
                     fname = parts[4]
-                    agent_prefix = _s3_agent_prefix(event_id)
-                    data = _s3_get(f"{agent_prefix}/{fname}")
+                    # Read agent_dir from messages.json to get actual S3 prefix
+                    msg_data = _s3_read_text(f"events/{event_id}/agent/messages.json")
+                    agent_dir = f"events/{event_id}/agent/"
+                    if msg_data:
+                        try:
+                            state = json.loads(msg_data)
+                            agent_dir = state.get("agent_dir", agent_dir)
+                        except Exception:
+                            pass
+                    # Subagent file? Check query param or path depth
+                    sub_dir = parts[5] if len(parts) >= 6 else None
+                    if sub_dir:
+                        agent_dir = f"events/{event_id}/agent/subagent/{sub_dir}/"
+                    data = _s3_get(f"{agent_dir}{fname}")
                     if data is None:
                         data = _s3_get(f"history/{event_id}/agent/{fname}")
                     if data is not None:
@@ -609,6 +624,72 @@ async def async_main(prompts_path: str, provider_path: str, mode: str = "trigger
                             'i.style.maxHeight="none"'
                             '}})})</script>'
                             '</body></html>')
+                self.send_response(200)
+                self._cors()
+                self.send_header("Content-type", "text/html; charset=utf-8")
+                self.end_headers()
+                self.wfile.write("\n".join(html).encode())
+
+
+            def _serve_subagent_view(self):
+                parts = self.path.split("/")
+                event_id = parts[2]
+                sub_id = parts[4]  # s0, s1, ...
+                msg_data = _s3_read_text(f"events/{event_id}/agent/subagent/{sub_id}/messages.json")
+                if msg_data is None:
+                    msg_data = _s3_read_text(f"history/{event_id}/agent/subagent/{sub_id}/messages.json")
+                if msg_data is None:
+                    self.send_response(404)
+                    self.end_headers()
+                    return
+                state = json.loads(msg_data)
+                agent_dir = state.get("agent_dir", f"events/{event_id}/agent/subagent/{sub_id}/")
+                task = state.get("task", "unknown task")
+                msgs = state.get("messages", [])
+                html = ['<!DOCTYPE html><html><head><meta charset="utf-8">'
+                        f'<title>Subagent: {task[:60]}</title>'
+                        '<style>*{{margin:0;padding:0;box-sizing:border-box}}'
+                        'body{{background:#0f0f1a;color:#d4d4d8;font:13px system-ui;padding:16px}}'
+                        'h1{{font-size:16px;margin-bottom:8px;color:#fff}}'
+                        '.msg{{margin-bottom:12px;padding:10px 14px;border-radius:8px;max-width:900px}}'
+                        '.msg.system{{background:#1a1a2e;border-left:3px solid #666}}'
+                        '.msg.user{{background:#14283a;border-left:3px solid #4ade80}}'
+                        '.msg.assistant{{background:#2a1a2e;border-left:3px solid #c084fc}}'
+                        '.msg.tool{{background:#1a2e1a;border-left:3px solid #fbbf24}}'
+                        '.role{{font-size:10px;text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px;color:#888}}'
+                        'img{{max-width:400px;max-height:300px;border-radius:4px;margin:4px 4px 0 0;cursor:pointer}}'
+                        'img:hover{{outline:2px solid #4ade80}}'
+                        '.img-grid{{display:flex;flex-wrap:wrap;gap:8px;align-items:flex-start}}'
+                        '.text{{white-space:pre-wrap;line-height:1.5}}'
+                        '.expanded{{max-width:100%!important;max-height:none!important}}'
+                        '</style></head><body>'
+                        f'<div style="margin-bottom:12px"><a href="/agent/{event_id}" style="color:#4ade80;font-size:14px">'
+                        f'&larr; Back to Agent {event_id}</a></div>'
+                        f'<h1>Subagent: {task[:80]}</h1>']
+                for m in msgs:
+                    role = m.get("role", "?")
+                    html.append(f'<div class="msg {role}">')
+                    html.append(f'<div class="role">{role}</div>')
+                    content = m.get("content", "")
+                    if isinstance(content, list):
+                        for part in content:
+                            if isinstance(part, dict):
+                                if part.get("type") == "image_url":
+                                    url = part.get("image_url", {}).get("url", "")
+                                    fname = url.lstrip("[[").rstrip("]]")
+                                    from urllib.parse import quote
+                                    html.append(f'<img src="/agent/{event_id}/file/{fname}" loading="lazy">')
+                                elif part.get("type") == "text":
+                                    from html import escape
+                                    html.append(f'<div class="text">{escape(part.get("text",""))}</div>')
+                    elif isinstance(content, str):
+                        from html import escape
+                        html.append(f'<div class="text">{escape(content)}</div>')
+                    html.append('</div>')
+                html.append(f'<div style="margin-top:16px;color:#666;font-size:11px">'
+                            f'task: {task} | camera: {state.get("camera","?")} | '
+                            f'start_time: {state.get("start_time","?")}</div>')
+                html.append('</body></html>')
                 self.send_response(200)
                 self._cors()
                 self.send_header("Content-type", "text/html; charset=utf-8")
