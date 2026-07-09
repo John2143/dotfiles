@@ -4,7 +4,8 @@ on:
   push:
     paths:
       - .github/workflows/build-frigate-genai.yml
-      - nixos/modules/frigate-genai-sidecar.py
+      - nixos/modules/frigate_genai/**
+      - nixos/modules/frigate-genai-config.nix
       - nixos/modules/frigate.nix
       - flake.nix
       - flake.lock

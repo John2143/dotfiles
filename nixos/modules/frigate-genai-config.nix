@@ -92,18 +92,19 @@ let
     ps.temporalio
     ps.pillow
     ps.boto3
+    ps.pydantic
   ]);
 
   # ── GenAI sidecar package ─────────────────────────────────────────
   frigateGenaiSidecarPkg = pkgs.runCommand "frigate-genai-sidecar" {
     buildInputs = [ pkgs.makeWrapper ];
   } ''
-    mkdir -p $out/bin
-    cp ${./frigate-genai-sidecar.py} $out/bin/frigate-genai-sidecar.py
-    chmod +x $out/bin/frigate-genai-sidecar.py
+    mkdir -p $out/bin $out/lib/frigate_genai
+    cp -r ${./frigate_genai}/* $out/lib/frigate_genai/
     makeWrapper "${pythonEnv}/bin/python" "$out/bin/frigate-genai-sidecar" \
-      --add-flags "$out/bin/frigate-genai-sidecar.py" \
-      --prefix PATH : "${pkgs.ffmpeg}/bin"
+      --add-flags "-m frigate_genai" \
+      --prefix PATH : "${pkgs.ffmpeg}/bin" \
+      --prefix PYTHONPATH : "$out/lib"
   '';
 
   # Prompt templates — derived from genaiPrompts above
@@ -130,10 +131,13 @@ let
     contents = [ pythonEnv pkgs.cacert ];
     extraCommands = ''
       mkdir -p var/lib/frigate-genai-sidecar
+      mkdir -p lib/frigate_genai
+      cp -r ${./frigate_genai}/* lib/frigate_genai/
       cp ${frigateGenaiPromptsFile} var/lib/frigate-genai-sidecar/prompts.json
       cp ${frigateGenaiProviderFile} var/lib/frigate-genai-sidecar/provider.json
     '';
-    config.Entrypoint = [ "${pythonEnv}/bin/python" "${./frigate-genai-sidecar.py}" ];
+    config.Entrypoint = [ "${pythonEnv}/bin/python" "-m" "frigate_genai" ];
+    config.Env = [ "PYTHONPATH=/lib" ];
   };
 
   frigateGenaiFfmpegImage = pkgs.dockerTools.buildLayeredImage {
@@ -142,10 +146,13 @@ let
     contents = [ pythonEnv pkgs.cacert pkgs.ffmpeg ];
     extraCommands = ''
       mkdir -p var/lib/frigate-genai-sidecar
+      mkdir -p lib/frigate_genai
+      cp -r ${./frigate_genai}/* lib/frigate_genai/
       cp ${frigateGenaiPromptsFile} var/lib/frigate-genai-sidecar/prompts.json
       cp ${frigateGenaiProviderFile} var/lib/frigate-genai-sidecar/provider.json
     '';
-    config.Entrypoint = [ "${pythonEnv}/bin/python" "${./frigate-genai-sidecar.py}" ];
+    config.Entrypoint = [ "${pythonEnv}/bin/python" "-m" "frigate_genai" ];
+    config.Env = [ "PYTHONPATH=/lib" ];
   };
 in {
   inherit
