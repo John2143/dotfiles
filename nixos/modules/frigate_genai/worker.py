@@ -353,6 +353,48 @@ async def async_main(prompts_path: str, provider_path: str, mode: str = "trigger
         )
         mode_tasks = [asyncio.create_task(w.run()) for w in [main_worker, ollama_worker]]
 
+    # ── Health HTTP server (all modes) ──────────────────────────────────
+    class _HealthHandler(BaseHTTPRequestHandler):
+        def log_message(self, fmt, *args):
+            log.debug("HTTP health: %s", fmt % args)
+        def do_GET(self):
+            if self.path == "/healthz":
+                if _stats["temporal_connected"]:
+                    self.send_response(200)
+                    self.send_header("Content-Type", "text/plain")
+                    self.end_headers()
+                    self.wfile.write(b"OK")
+                else:
+                    self.send_response(503)
+                    self.end_headers()
+            elif self.path == "/readyz":
+                if _stats["temporal_connected"] and _stats.get("mqtt_connected", False):
+                    self.send_response(200)
+                    self.send_header("Content-Type", "text/plain")
+                    self.end_headers()
+                    self.wfile.write(b"READY")
+                else:
+                    self.send_response(503)
+                    self.end_headers()
+            elif self.path == "/metrics":
+                build_id = os.environ.get("TEMPORAL_WORKER_BUILD_ID", "unknown")
+                self.send_response(200)
+                self.send_header("Content-Type", "text/plain")
+                self.end_headers()
+                self.wfile.write(
+                    f"# HELP frigate_genai_worker_info Worker deployment info\n"
+                    f"# TYPE frigate_genai_worker_info gauge\n"
+                    f'frigate_genai_worker_info{{version="{build_id}",healthy="{"1" if _stats["temporal_connected"] else "0"}"}} 1\n'
+                    .encode()
+                )
+    if mode != "triggers":
+        _health_port = int(os.environ.get("HTTP_PORT", "8080"))
+        _health_host = os.environ.get("HTTP_HOST", "0.0.0.0")
+        _health_server = HTTPServer((_health_host, _health_port), _HealthHandler)
+        _health_thread = threading.Thread(target=_health_server.serve_forever, daemon=True)
+        _health_thread.start()
+        log.info("Health endpoint on http://%s:%d", _health_host, _health_port)
+
     # MQTT — starts workflows via Temporal client
     if mode == 'triggers':
         client_mqtt = build_mqtt_client(asyncio.get_running_loop())
@@ -462,6 +504,35 @@ async def async_main(prompts_path: str, provider_path: str, mode: str = "trigger
                     self._serve_subagent_view()
                 elif self.path.startswith("/agent/"):
                     self._serve_agent_view()
+                elif self.path == "/healthz":
+                    if _stats["temporal_connected"]:
+                        self.send_response(200)
+                        self.send_header("Content-Type", "text/plain")
+                        self.end_headers()
+                        self.wfile.write(b"OK")
+                    else:
+                        self.send_response(503)
+                        self.end_headers()
+                elif self.path == "/readyz":
+                    if _stats["temporal_connected"] and _stats.get("mqtt_connected", False):
+                        self.send_response(200)
+                        self.send_header("Content-Type", "text/plain")
+                        self.end_headers()
+                        self.wfile.write(b"READY")
+                    else:
+                        self.send_response(503)
+                        self.end_headers()
+                elif self.path == "/metrics":
+                    build_id = os.environ.get("TEMPORAL_WORKER_BUILD_ID", "unknown")
+                    self.send_response(200)
+                    self.send_header("Content-Type", "text/plain")
+                    self.end_headers()
+                    self.wfile.write(
+                        f"# HELP frigate_genai_worker_info Worker deployment info\n"
+                        f"# TYPE frigate_genai_worker_info gauge\n"
+                        f'frigate_genai_worker_info{{version="{build_id}",healthy="{"1" if _stats["temporal_connected"] else "0"}"}} 1\n'
+                        .encode()
+                    )
                 else:
                     self.send_response(404)
                     self.end_headers()

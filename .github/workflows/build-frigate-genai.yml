@@ -153,3 +153,37 @@ jobs:
           fi
         done
         echo "WARNING: genai worker did not reach Temporal connect within 60s (PID still alive)"
+
+  validate-imports:
+    needs: build
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    env:
+      NEW_TAG: v${{ github.run_number }}
+    steps:
+    - name: Prepare env (lowercase owner for ghcr)
+      run: echo "GENAI_IMAGE=ghcr.io/$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')/frigate-genai-genai" >> $GITHUB_ENV
+    - name: Pull and validate all imports
+      run: |
+        echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+        docker pull "${GENAI_IMAGE}:${NEW_TAG}"
+        docker run --rm --entrypoint python3 "${GENAI_IMAGE}:${NEW_TAG}" -c "
+import sys, pkgutil, importlib
+import frigate_genai
+errors = []
+count = 0
+for finder, name, is_pkg in pkgutil.walk_packages(
+    frigate_genai.__path__, prefix='frigate_genai.'
+):
+    count += 1
+    try:
+        importlib.import_module(name)
+        print(f'OK: {name}')
+    except Exception as e:
+        errors.append(f'FAIL: {name}: {e}')
+if errors:
+    for e in errors:
+        print(e, file=sys.stderr)
+    sys.exit(1)
+print(f'All {count} modules validated')
+"
