@@ -556,10 +556,12 @@ def _tool_compact_schema() -> dict:
         "function": {
             "name": "compact",
             "description": (
-                "FREE CONTEXT. Drops all image data from previous turns. "
-                "Your text findings and crop addresses are preserved. "
-                "Call after bulk scanning to make room for detailed inspection. "
-                "Call early, call often."
+                "FREE — clears all old images from context instantly. "
+                "Your text findings and crop:// addresses survive. "
+                "Use compact when: (1) repeated crops keep coming back empty/tiny, "
+                "(2) you need to free space for fresh inspection, "
+                "(3) context is getting full. Call early, call often — "
+                "it only costs a few tokens."
             ),
             "parameters": {"type": "object", "properties": {}, "required": []},
         },
@@ -601,9 +603,12 @@ def _tool_crop_schema() -> dict:
         "function": {
             "name": "crop",
             "description": (
-                "Deep zoom into a region at full resolution. Coordinates 0.0-1.0 normalized. "
-                "Use after show_frame() identifies something worth closer inspection. "
-                "Keep crops narrow for clarity — widen bounds if you miss context. "
+                "Deep zoom into a region at full resolution. Coordinates 0.0-1.0 normalized "
+                "(each 0.01 ≈ 38px on a 3840px-wide frame). "
+                "Start WIDER than you think — you can always compact and zoom in tighter. "
+                "Widen bounds if the subject is partially cut off. "
+                "If 3 crops in a row return tiny or empty results, call compact() "
+                "to reset and retry with better coordinates. "
                 "Sources: frame://N (single), frame://N-M (range), transcode://batch/frame, "
                 "transcode://batch/N-M (range), crop://N, upscale://N (single only)."
             ),
@@ -1044,15 +1049,13 @@ async def init_agent_state_activity(init_arg: dict) -> dict:
         "Default to swinir-psnr for accurate detail; use realesrgan only on noisy or "
         "compressed frames. Never upscale an upscale://N — always go back to the "
         "original crop://N or frame://N for the cleanest source.\n\n"
-        "PERSISTENCE: If a crop shows nothing useful — keep looking. Try different "
-        "regions, different frames, different angles. Exhaust every visible detail "
-        "before concluding. A blank crop means 'look elsewhere,' not 'nothing is "
-        "there.' "
-        "ONLY call compact() for two reasons:\n"
-        "1. You investigated many frames that showed nothing useful and need a fresh start.\n"
-        "2. You are running out of context (many images loaded) and must trim to continue.\n"
-        "NEVER compact just because you viewed 3-4 images. NEVER compact before calling\n"
-        "set_description() — if you have findings, conclude. Compact is a tool of last resort. "
+        "PERSISTENCE: When cropping, start WIDER than you think — you can always call "
+        "compact() to erase old attempts and zoom in differently. If a crop shows "
+        "nothing useful, try a different region or frame. If 3 crops in a row produce "
+        "tiny (<200px) or empty results, your coordinate estimation is off — compact "
+        "and retry with wider bounds. Compact is FREE: it drops old compressed images "
+        "to free context space, preserving your text findings. Report what you found "
+        "AND what you searched for but couldn't find. "
         + bisect_hint + " Track every movement. "
         + "NEVER call set_description() until you have searched every visible region "
         "across 2-3 key frames. Report what you found AND what you searched for "
@@ -1493,15 +1496,21 @@ async def tool_crop_activity(arg: dict) -> dict:
             content_parts.append({"type": "image_url", "image_url": {"url": f"[[{fname}]]"}})
         if len(crop_results) == 1:
             _, _, cw, ch = crop_results[0]
+            size_hint = ""
+            if cw < 300 and ch < 300:
+                size_hint = " (tiny — consider wider bounds or compact)"
             label = (
                 f"Cropped ({x1:.2f},{y1:.2f})-({x2:.2f},{y2:.2f}) "
-                f"→ {cw}x{ch} from {base_source}. Stored as crop://{crop_ids[0]}."
+                f"→ {cw}x{ch} from {base_source}. "
+                f"Stored as crop://{crop_ids[0]}." + size_hint
             )
         else:
+            all_tiny = all(cw < 300 and ch < 300 for _, _, cw, ch in crop_results)
+            size_hint = " (tiny — consider wider bounds or compact)" if all_tiny else ""
             label = (
                 f"Cropped ({x1:.2f},{y1:.2f})-({x2:.2f},{y2:.2f}) "
                 f"from {base_source} ({len(crop_results)} frames). "
-                f"Stored as crop://{crop_ids[0]} through crop://{crop_ids[-1]}."
+                f"Stored as crop://{crop_ids[0]} through crop://{crop_ids[-1]}." + size_hint
             )
         content_parts.append({"type": "text", "text": label})
         outcome_messages.append({"role": "user", "content": content_parts})
@@ -2882,6 +2891,8 @@ async def async_main(prompts_path: str, provider_path: str, mode: str = "trigger
                     fname = parts[4]
                     agent_prefix = _s3_agent_prefix(event_id)
                     data = _s3_get(f"{agent_prefix}/{fname}")
+                    if data is None:
+                        data = _s3_get(f"history/{event_id}/agent/{fname}")
                     if data is not None:
                         self.send_response(200)
                         self._cors()
@@ -2924,6 +2935,10 @@ async def async_main(prompts_path: str, provider_path: str, mode: str = "trigger
                         '.role{{font-size:10px;text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px;color:#888}}'
                         'img{{max-width:400px;max-height:300px;border-radius:4px;margin:4px 4px 0 0;cursor:pointer}}'
                         'img:hover{{outline:2px solid #4ade80}}'
+                        '.img-grid{{display:flex;flex-wrap:wrap;gap:8px;align-items:flex-start}}'
+                        '.img-grid img{{max-height:300px;width:auto;cursor:pointer}}'
+                        '.img-grid img.expanded{{max-height:none;max-width:100%}}'
+                        '.res-badge{{font-size:10px;color:#888;display:block;text-align:center}}'
                         '.text{{line-height:1.5;white-space:pre-wrap}}'
                         '.tool-call{{font-size:11px;color:#c084fc;font-family:monospace}}'
                         '</style></head><body>'
@@ -2952,25 +2967,25 @@ async def async_main(prompts_path: str, provider_path: str, mode: str = "trigger
                         if isinstance(content, list):
                             # Track resolution from text parts for image sizing
                             cur_res = "high"  # default
+                            img_parts = [p for p in content if isinstance(p, dict) and p.get("type") == "image_url"]
+                            has_multi = len(img_parts) > 1
+                            if has_multi:
+                                html.append('<div class="img-grid">')
                             for part in content:
                                 if isinstance(part, dict):
                                     if part.get("type") == "image_url":
                                         url = part.get("image_url", {}).get("url", "")
                                         if url.startswith("[[") and url.endswith("]]"):
                                             fname = url[2:-2]
-                                            _is_s3 = agent_dir.startswith("events/") or agent_dir.startswith("history/")
-                                            img_data = _s3_get(f"{agent_dir}/{fname}") if _is_s3 else None
-                                            if img_data is None and not _is_s3:
-                                                p = Path(agent_dir) / fname
-                                                img_data = p.read_bytes() if p.exists() else None
-                                            if img_data:
-                                                b64 = base64.b64encode(img_data).decode()
-                                                sizes = {"low": "200", "med": "300", "high": "500", "max": "700", "tiny": "150"}
-                                                w = sizes.get(cur_res, "400")
-                                                html.append('<img src="data:image/jpeg;base64,{}" style="max-width:{}px;max-height:none" '
-                                                            'onclick="if(this.style.maxWidth===\'100%\'){{this.style.maxWidth=\'{}px\';this.style.maxHeight=\'\'}}else{{this.style.maxWidth=\'100%\';this.style.maxHeight=\'none\'}}"'.format(b64, w, w))
-                                            else:
-                                                html.append('<div class="text">[image: {} not found]</div>'.format(_escape(fname)))
+                                            sizes = {"low": "200", "med": "300", "high": "500", "max": "700", "tiny": "150"}
+                                            w = sizes.get(cur_res, "400")
+                                            src = f"/agent/{event_id}/file/{fname}"
+                                            html.append('<img src="{}" loading="lazy" data-sized-width="{}">'.format(src, w))
+                                            # Resolution badge: show native dims if known, else just res
+                                            badge_text = cur_res
+                                            html.append('<span class="res-badge">{}</span>'.format(_escape(badge_text)))
+                                        else:
+                                            html.append('<div class="text">[image: {}]</div>'.format(_escape(url[:80])))
                                     elif part.get("type") == "text":
                                         txt = part["text"]
                                         # Extract resolution hint: "... at low resolution." etc.
@@ -2978,6 +2993,8 @@ async def async_main(prompts_path: str, provider_path: str, mode: str = "trigger
                                         if res_m:
                                             cur_res = res_m.group(1)
                                         html.append('<div class="text">{}</div>'.format(_escape(txt)))
+                            if has_multi:
+                                html.append('</div>')
                         else:
                             html.append('<div class="text">{}</div>'.format(_escape(str(content))))
                     elif role == "system":
@@ -2987,7 +3004,19 @@ async def async_main(prompts_path: str, provider_path: str, mode: str = "trigger
                             'camera: {} | start_time: {} | end_time: {} | max_frames: {}</div>'
                             .format(state.get("camera","?"), state.get("start_time","?"),
                                     state.get("end_time","?"), state.get("max_frames","?")))
-                html.append('</body></html>')
+                html.append('<script>'
+                            'document.querySelectorAll(".msg.user img").forEach(function(i){'
+                            'i.addEventListener("click",function(){'
+                            'if(i.classList.contains("expanded")){'
+                            'i.classList.remove("expanded");'
+                            'i.style.maxWidth=i.dataset.sizedWidth+"px";'
+                            'i.style.maxHeight=""'
+                            '}else{'
+                            'i.classList.add("expanded");'
+                            'i.style.maxWidth="100%";'
+                            'i.style.maxHeight="none"'
+                            '}})})</script>'
+                            '</body></html>')
                 self.send_response(200)
                 self._cors()
                 self.send_header("Content-type", "text/html; charset=utf-8")
