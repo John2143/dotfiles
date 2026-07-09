@@ -167,23 +167,4 @@ jobs:
       run: |
         echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
         docker pull "${GENAI_IMAGE}:${NEW_TAG}"
-        docker run --rm --entrypoint python3 "${GENAI_IMAGE}:${NEW_TAG}" -c '
-import sys, pkgutil, importlib
-import frigate_genai
-errors = []
-count = 0
-for finder, name, is_pkg in pkgutil.walk_packages(
-    frigate_genai.__path__, prefix="frigate_genai."
-):
-    count += 1
-    try:
-        importlib.import_module(name)
-        print(f"OK: {name}")
-    except Exception as e:
-        errors.append(f"FAIL: {name}: {e}")
-if errors:
-    for e in errors:
-        print(e, file=sys.stderr)
-    sys.exit(1)
-print(f"All {count} modules validated")
-'
+        printf 'import sys, pkgutil, importlib\nimport frigate_genai\nerrors = []\ncount = 0\nfor finder, name, is_pkg in pkgutil.walk_packages(\n    frigate_genai.__path__, prefix="frigate_genai."\n):\n    count += 1\n    try:\n        importlib.import_module(name)\n        print(f"OK: {name}")\n    except Exception as e:\n        errors.append(f"FAIL: {name}: {e}")\nif errors:\n    for e in errors:\n        print(e, file=sys.stderr)\n    sys.exit(1)\nprint(f"All {count} modules validated")\n' | docker run --rm -i --entrypoint python3 "${GENAI_IMAGE}:${NEW_TAG}"
