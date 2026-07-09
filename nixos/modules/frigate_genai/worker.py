@@ -368,7 +368,7 @@ async def async_main(prompts_path: str, provider_path: str, mode: str = "trigger
                     self.send_response(503)
                     self.end_headers()
             elif self.path == "/readyz":
-                if _stats["temporal_connected"] and _stats.get("mqtt_connected", False):
+                if _stats["temporal_connected"]:
                     self.send_response(200)
                     self.send_header("Content-Type", "text/plain")
                     self.end_headers()
@@ -514,7 +514,7 @@ async def async_main(prompts_path: str, provider_path: str, mode: str = "trigger
                         self.send_response(503)
                         self.end_headers()
                 elif self.path == "/readyz":
-                    if _stats["temporal_connected"] and _stats.get("mqtt_connected", False):
+                    if _stats["temporal_connected"]:
                         self.send_response(200)
                         self.send_header("Content-Type", "text/plain")
                         self.end_headers()
