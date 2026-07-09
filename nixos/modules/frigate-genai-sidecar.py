@@ -2265,7 +2265,18 @@ class GenAIWorkflow:
                 if handles:
                     outcomes: list[dict] = []
                     for tc, te, handle in handles:
-                        outcome = await handle
+                        try:
+                            outcome = await handle
+                        except Exception as e:
+                            workflow.logger.warning("Tool %s failed: %s", tc["name"], e)
+                            te["error"] = str(e)[:200]
+                            outcome = {
+                                "messages": [
+                                    {"role": "tool", "tool_call_id": tc["id"],
+                                     "content": f"Error: {e}"}
+                                ],
+                                "error": str(e)[:200],
+                            }
                         if isinstance(outcome, dict) and outcome.get("error"):
                             tool_failures += 1
                         if tc["name"] == "transcode" and isinstance(outcome, dict):
