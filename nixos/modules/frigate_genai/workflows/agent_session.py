@@ -22,7 +22,6 @@ from frigate_genai.tools.schemas import (
 
 def _resolve_image_refs(refs: list[str], agent_dir: str) -> list[str]:
     """Convert image refs (crop://N, frame://N) to S3 keys under agent_dir."""
-    from frigate_genai.s3_helpers import _s3_list
     keys = []
     for ref in refs:
         if ref.startswith("crop://"):

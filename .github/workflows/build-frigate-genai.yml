@@ -122,3 +122,35 @@ jobs:
         git config user.email "github-actions[bot]@users.noreply.github.com"
         git diff --quiet && echo "No changes" || \
           (git commit -am "frigate-genai: bump images to ${NEW_TAG}" && git push)
+
+  smoke-test-genai:
+    needs: build
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    env:
+      NEW_TAG: v${{ github.run_number }}
+    steps:
+    - name: Prepare env
+      run: |
+        echo "GENAI_IMAGE=ghcr.io/$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')/frigate-genai-genai" >> $GITHUB_ENV
+    - name: Pull and smoke-test genai worker
+      run: |
+        echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+        docker pull "${GENAI_IMAGE}:${NEW_TAG}"
+        docker run --rm \
+          "${GENAI_IMAGE}:${NEW_TAG}" \
+          --mode=triggers > /dev/null 2> /tmp/genai-worker-stderr &
+        PID=$!
+        for i in $(seq 1 30); do
+          sleep 2
+          if grep -q "Connecting to Temporal" /tmp/genai-worker-stderr 2>/dev/null; then
+            echo "SUCCESS: genai worker initialized and attempting Temporal connection"
+            exit 0
+          fi
+          if ! kill -0 $PID 2>/dev/null; then
+            echo "ERROR: genai worker crashed before reaching Temporal connect step"
+            cat /tmp/genai-worker-stderr
+            exit 1
+          fi
+        done
+        echo "WARNING: genai worker did not reach Temporal connect within 60s (PID still alive)"
