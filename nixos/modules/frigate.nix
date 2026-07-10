@@ -157,6 +157,7 @@
         };
       };
     };
+    /* Temporarily disabled while investigating the Front Porch outage.
     # Main: 2560x1920 H264 25fps  Sub: 640x480 H264 10fps
     cam05 = {
       name = "Camera 5";
@@ -186,6 +187,7 @@
         };
       };
     };
+    */
     # Main: 4512x2512 HEVC 25fps  Sub: 896x512 H264 25fps
     cam06 = {
       name = "Camera 6";
