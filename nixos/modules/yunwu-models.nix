@@ -107,7 +107,7 @@ let
     in "{ input: ${f (cost.input or 0)}, output: ${f (cost.output or 0)}, cacheRead: ${f (cost.cacheRead or 0)}, cacheWrite: ${f (cost.cacheWrite or 0)} }";
 
   compatBlock = supports:
-    if supports then "\n\n              compat:\n                supportsToolChoice: true" else "";
+    if supports then "\n\n            compat:\n              supportsToolChoice: true" else "";
 
   # ── OMP model entry generator ──
 
@@ -117,16 +117,16 @@ let
       name = "${m.ompName} (Yunwu ${capTier tier})";
       cost = m.pricing.${tier} or { input = 0; output = 0; cacheRead = 0; cacheWrite = 0; };
       supportsToolChoice = m.supportsToolChoice or false;
-    in ''
-              # Yunwu ${m.ompName} — ${tier} tier
-              - id: ${id}
-                name: ${name}
-                reasoning: true
-                input: ${inputTypesYaml (m.inputTypes or ["text"])}
-                cost: ${costYaml cost}
-                contextWindow: ${toString m.contextWindow}
-                maxTokens: ${toString m.maxTokens}${compatBlock supportsToolChoice}
-    '';
+    in
+      "          # Yunwu ${m.ompName} — ${tier} tier\n" +
+      "          - id: ${id}\n" +
+      "            name: ${name}\n" +
+      "            reasoning: true\n" +
+      "            input: ${inputTypesYaml (m.inputTypes or ["text"])}\n" +
+      "            cost: ${costYaml cost}\n" +
+      "            contextWindow: ${toString m.contextWindow}\n" +
+      "            maxTokens: ${toString m.maxTokens}" +
+      compatBlock supportsToolChoice + "\n";
 
   mkOmpEntries = m:
     lib.concatMapStrings (tier:
