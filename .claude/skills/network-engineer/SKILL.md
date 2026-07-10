@@ -94,7 +94,12 @@ for c in sorted(clients, key=lambda c: c.get('signal', -100)):
 PYEOF
 ```
 
-After running, summarize: how many hosts are online (bound DHCP + reachable ARP), what services are exposed (dst-nat), which switch ports are live, and the UniFi wireless snapshot (AP status + client count + any weak-signal clients below -80 dBm). Then proceed with the user's actual request.
+**Tailscale snapshot (tailnet state):**
+```bash
+sudo tailscale status
+```
+
+After running, summarize: how many hosts are online (bound DHCP + reachable ARP), what services are exposed (dst-nat), which switch ports are live, the UniFi wireless snapshot (AP status + client count + any weak-signal clients below -80 dBm), and the Tailscale tailnet (node count, online/offline status). Then proceed with the user's actual request.
 
 ## How to Connect to MikroTik Devices
 

@@ -380,6 +380,7 @@ in
         #smol: office-ollama-cpu/gemma4
         smol: litellm/gemini/gemini-2.5-flash
         slow: litellm/deepseek/deepseek-v4-pro
+        advisor: litellm/deepseek/deepseek-v4-flash
 
       modelProviderOrder:
         - litellm

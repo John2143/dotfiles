@@ -10,6 +10,11 @@
   lib,
   ...
 }: {
+
+  # Reserve 1 core and 1Gi for system daemons — leaves 3 cores / 2.7Gi allocatable for workloads
+  services.k3s.extraFlags = [
+    "--kubelet-arg=system-reserved=cpu=1,memory=1Gi"
+  ];
   # ── Agenix Secrets ─────────────────────────────────────────────
   # ntfy topic URL for Alertmanager notifications.
   age.secrets.ntfy-topic-url = {
