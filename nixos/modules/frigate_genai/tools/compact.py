@@ -11,6 +11,7 @@ from frigate_genai.s3_helpers import (
     _load_state,
     _s3_get,
     _s3_list,
+    _s3_read_text,
     load_json,
 )
 
@@ -42,6 +43,8 @@ async def tool_compact_activity(arg: dict) -> dict:
     conv_lines = []
     for m in state["messages"][:compact_assistant_idx]:
         role = m.get("role", "")
+        if role == "system":
+            continue
         content = m.get("content", "")
         if isinstance(content, list):
             text = " ".join(p.get("text", "") for p in content if isinstance(p, dict) and p.get("type") == "text")
@@ -53,6 +56,8 @@ async def tool_compact_activity(arg: dict) -> dict:
     # Also include cropped/upscaled content from same turn (messages after assistant)
     for m in state["messages"][compact_assistant_idx + 1:] if compact_assistant_idx is not None else []:
         role = m.get("role", "")
+        if role == "system":
+            continue
         content = m.get("content", "")
         if isinstance(content, list):
             text = " ".join(p.get("text", "") for p in content if isinstance(p, dict) and p.get("type") == "text")
@@ -121,6 +126,21 @@ async def tool_compact_activity(arg: dict) -> dict:
             summary_parts.append("\n".join(upscale_lines))
         summary_text = "\n".join(summary_parts)
 
+    raw_tags = _s3_read_text(f"{agent_dir.rstrip('/')}/tags.json")
+    tags = json.loads(raw_tags) if raw_tags else {}
+    if tags:
+        useful = [(k, v.get("description", "")[:60]) for k, v in tags.items() if v.get("useful")]
+        not_useful = [(k, v.get("description", "")[:60]) for k, v in tags.items() if not v.get("useful")]
+        tag_lines = ["Tagged:"]
+        if useful:
+            tag_lines.append(f"  {len(useful)} useful: " + ", ".join(
+                f"{k}: '{d}'" for k, d in (useful[:3])
+            ))
+        if not_useful:
+            tag_lines.append(f"  {len(not_useful)} not-useful: " + ", ".join(
+                f"{k}: '{d}'" for k, d in (not_useful[:3])
+            ))
+        summary_text += "\n\n" + "\n".join(tag_lines)
     outcome_messages.append({"role": "user", "content": summary_text})
 
     # Strip image_url parts from messages BEFORE the compact-calling assistant

@@ -57,6 +57,8 @@ from frigate_genai.tools.compact import tool_compact_activity
 from frigate_genai.tools.set_description import tool_set_description_activity
 from frigate_genai.tools.upscale import tool_upscale_activity
 from frigate_genai.tools.transcode import tool_transcode_activity
+from frigate_genai.tools.find_keyframes import tool_find_keyframes_activity, tool_frame_diff_activity
+from frigate_genai.tools.tag_image import tool_tag_image_activity
 from frigate_genai.workflows.genai import GenAIWorkflow
 from frigate_genai.workflows.agent_session import AgentSessionWorkflow
 from frigate_genai.workflows.subagent import SubAgentWorkflow
@@ -314,6 +316,7 @@ async def async_main(prompts_path: str, provider_path: str, mode: str = "trigger
             task_queue=GEMINI_TASK_QUEUE,
             workflows=[AgentSessionWorkflow, SubAgentWorkflow],
             activities=[run_genai_turn_activity,
+                        tool_find_keyframes_activity, tool_frame_diff_activity, tool_tag_image_activity,
                         tool_get_snapshot_activity, tool_show_frame_activity,
                         tool_crop_activity, tool_compact_activity,
                         tool_set_description_activity, apply_tool_messages_activity,
@@ -343,6 +346,7 @@ async def async_main(prompts_path: str, provider_path: str, mode: str = "trigger
             task_queue=OLLAMA_TASK_QUEUE,
             workflows=[AgentSessionWorkflow, SubAgentWorkflow],
             activities=[run_genai_turn_activity,
+                        tool_find_keyframes_activity, tool_frame_diff_activity, tool_tag_image_activity,
                         tool_get_snapshot_activity, tool_show_frame_activity,
                         tool_crop_activity, tool_compact_activity,
                         tool_set_description_activity, apply_tool_messages_activity,

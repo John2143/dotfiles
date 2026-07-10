@@ -37,8 +37,20 @@ async def init_agent_state_activity(init_arg: dict) -> dict:
 
     data_box = init_arg.get("data_box")
     box_text = ""
+    crop_hint_text = ""
     if data_box and len(data_box) == 4:
         box_text = f"Detected at left={data_box[0]:.2f} top={data_box[1]:.2f} width={data_box[2]:.2f} height={data_box[3]:.2f}."
+        crop_hint_text = (
+            f"Frigate's detection box: x1={data_box[0]:.2f} y1={data_box[1]:.2f} "
+            f"x2={data_box[0]+data_box[2]:.2f} y2={data_box[1]+data_box[3]:.2f}. "
+            f"Use this as your INITIAL search region — the subject may have moved "
+            f"since the snapshot. VERIFY position before cropping each frame."
+        )
+    else:
+        crop_hint_text = (
+            "No bounding box provided. Use show_frame() at @high to LOCATE "
+            "the subject first. Describe where it appears before cropping."
+        )
 
     if label == "car":
         prefix = (
@@ -114,6 +126,84 @@ async def init_agent_state_activity(init_arg: dict) -> dict:
 
     frame_files = _s3_list(f"{event_prefix}/frames/frame_")
     max_frames = len(frame_files)
+    # Keyframe note: auto-run skips for <=5 frames
+    if max_frames > 5:
+        keyframe_note = (
+            "Keyframes have been pre-computed — see the keyframe analysis message "
+            "below. Start with show_frame() on those keyframes."
+        )
+    else:
+        most = max(max_frames - 1, 0)
+        keyframe_note = (
+            f"Only {max_frames} frame(s) — scan all directly with show_frame(frame://0"
+            + (f"-{most}" if most > 0 else "")
+            + ")."
+        )
+
+    # Specialist extraction checklist for each label
+    _specialist_prefixes = {
+        "car": (
+            "EXTRACTION FOCUS — VEHICLE: make, model, approximate year, color, "
+            "license plate (every character), damage, stickers/decals, occupants, cargo. "
+            f"{crop_hint_text} "
+            f"{keyframe_note} "
+            "Crop tight on plates, badges, decals. Upscale only cropped plates/text. "
+            "For each finding, cite the frame number. If you cannot determine "
+            "something, say so explicitly. "
+        ),
+        "person": (
+            "EXTRACTION FOCUS — PERSON: clothing (colors, layers, logos), accessories "
+            "(bag, phone, hat, glasses), build, activity (walking, carrying, entering), "
+            "direction. "
+            f"{crop_hint_text} "
+            f"{keyframe_note} "
+            "Crop tight on faces, hands, logos. Never speculate beyond what is visible. "
+        ),
+        "dog": (
+            "EXTRACTION FOCUS — DOG: size, color, breed if identifiable, behavior, "
+            "accompanied or alone. "
+            f"{crop_hint_text} "
+            f"{keyframe_note} "
+        ),
+        "cat": (
+            "EXTRACTION FOCUS — CAT: size, color, behavior, direction. "
+            f"{crop_hint_text} "
+            f"{keyframe_note} "
+        ),
+        "package": (
+            "EXTRACTION FOCUS — PACKAGE: size, color, carrier logo, where placed, "
+            "who interacted. Watch for porch piracy. "
+            f"{crop_hint_text} "
+            f"{keyframe_note} "
+            "Crop on logos and labels. "
+        ),
+        "face": (
+            "EXTRACTION FOCUS — FACE: visible features, approximate age, expression, "
+            "direction, headwear/glasses. "
+            f"{crop_hint_text} "
+            f"{keyframe_note} "
+            "Crop on the face. Upscale only on unreadable crops. "
+        ),
+    }
+    _default_prefix = (
+        "EXTRACTION FOCUS — {label}: identifying details, behavior, direction. "
+        f"{crop_hint_text} "
+        f"{keyframe_note} "
+    )
+
+    # Prepend specialist prefix to the existing system_prompt
+    specialist = _specialist_prefixes.get(label, _default_prefix.format(label=label))
+    system_prompt = specialist + "\n\n" + system_prompt
+
+    # Cost-minimization additions
+    system_prompt += (
+        "\n\nCOST: Every image you view costs tokens. Minimize cost:\n"
+        "- Scan 5+ frames at @low first; upgrade to @high/@max only for frames with the subject.\n"
+        "- Batch tag_image() calls — tag all inspected sources in one call, not one per frame.\n"
+        "- Use find_keyframes() and frame_diff() (free, no API cost) before expensive tool calls.\n"
+        "- Spawn subagents only for genuinely independent detail work (plates + face + cargo).\n"
+        "- Conclude after you have adequate evidence — don't inspect every frame."
+    )
     user_text = (
         f"{label} on {camera}. {max_frames} recording frames (indices 0-{max_frames - 1}).\n\n"
         f"{box_text}\n\n"

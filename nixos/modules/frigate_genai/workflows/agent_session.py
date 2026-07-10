@@ -11,6 +11,7 @@ from frigate_genai.activities.genai_turn import run_genai_turn_activity
 from frigate_genai.activities.tool_apply import apply_tool_messages_activity
 from frigate_genai.tools import _TOOL_ACTIVITIES, _get_tool_queue
 from frigate_genai.tools.schemas import (
+    _tool_find_keyframes_schema, _tool_frame_diff_schema, _tool_tag_image_schema,
     _tool_get_snapshot_schema, _tool_show_frame_schema, _tool_crop_schema,
     _tool_transcode_schema, _tool_compact_schema, _tool_set_description_schema,
     _tool_upscale_schema, _tool_spawn_schema, _tool_join_schema,
@@ -77,6 +78,7 @@ def _get_tools_for_depth(depth: int, max_depth: int) -> list[dict]:
     """Return tool schemas available at given depth. Root gets set_description + spawn + join.
     Subagents get close_subagent instead of set_description. Deepest agents lose spawn/join."""
     base = [
+        _tool_find_keyframes_schema(), _tool_frame_diff_schema(), _tool_tag_image_schema(),
         _tool_show_frame_schema(), _tool_crop_schema(), _tool_transcode_schema(),
         _tool_upscale_schema(),
     ]

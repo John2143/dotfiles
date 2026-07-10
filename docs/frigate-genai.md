@@ -95,6 +95,9 @@ The gemini pod is the **heavy lifter**. It:
 
 1. **Listens on `genai-tasks-gemini`** for LLM turn activities:
    - `run_genai_turn_activity` — the main LLM call with tool use loop
+   - `tool_find_keyframes_activity` — deterministic keyframe selection via pixel-difference analysis
+   - `tool_frame_diff_activity` — pairwise frame comparison for the LLM to query directly
+   - `tool_tag_image_activity` — batched useful/not-useful tagging for per-event working memory
    - `tool_get_snapshot_activity` — fetch a full-resolution camera snapshot
    - `tool_show_frame_activity` — extract a specific frame for the model to inspect
    - `tool_crop_activity` — crop a region of an image
@@ -140,8 +143,8 @@ Temporal separates **where work runs** (task queues) from **what work is** (acti
 | Task Queue | Purpose | Listeners | Scaled by |
 |---|---|---|---|
 | `genai-tasks` | Misc activities + workflow listener | triggers (1), gemini (N), ollama (N) | No (triggers) / Yes (gemini/ollama via KEDA) |
+| `genai-tasks-gemini` | LLM turns + tool execution (find_keyframes, frame_diff, tag_image, show_frame, crop, compact, set_description, upscale, apply) | gemini only | KEDA (0-5) |
 | `genai-tasks-ffmpeg` | Frame extraction | ffmpeg only | KEDA (0-3) |
-| `genai-tasks-gemini` | LLM turns via Gemini | gemini only | KEDA (0-5) |
 | `genai-tasks-ollama` | LLM turns via Ollama | ollama only | KEDA (0-1) |
 
 **Why separate queues?** Isolation. A ffmpeg backlog shouldn't block Gemini turns. Gemini rate-limiting shouldn't starve Ollama requests. Each workload can independently scale based on its own queue depth.
@@ -166,6 +169,11 @@ Temporal separates **where work runs** (task queues) from **what work is** (acti
 3. transcode_into_parts_activity
    → ffmpeg pod extracts frames at 1 fps from HLS
    → returns JPEG byte list
+
+3.5. find_keyframes — auto-run for clips with >5 frames
+   → deterministic pixel-difference analysis picks the 8 most informative frames
+   → saves `differences.json` for later `find_keyframes`/`frame_diff` queries
+   → injects a zero-cost keyframe summary into the LLM's first turn
 
 4. init_agent_state_activity
    → builds system prompt + tool definitions
@@ -521,6 +529,8 @@ Missing CRD or KEDA operator down. Check:
 - **Why two repos (dotfiles + argo)?** Code vs infrastructure state. The image tag (`v51`, `v52`) is infrastructure state — it changes every deploy. Keeping it in the argo repo means rollback is a single `git revert` in argo, not a code revert in dotfiles. CI writes to argo; humans write to dotfiles.
 
 - **Why Progressive rollout only for Gemini?** Gemini is the highest-risk path — it costs API credits and produces user-visible descriptions. FFmpeg is deterministic (frame extraction either works or doesn't). Ollama is a single-replica fallback. Triggers is single-replica always-on.
+
+- **Why mean-centered pixel diff for keyframes?** Spatially aware (motion registers proportionally to area moved), per-frame mean-centering cancels global lighting shifts, GaussianBlur suppresses sensor noise, and the data_box weights the detection region at 0.7. Global histogram methods were rejected: spatially blind and hypersensitive to lighting. The precomputed keyframe result is injected as a `role="user"` message (no fake tool-call ID needed), while LLM-invoked calls use normal `role="tool"` messages.
 
 ---
 
