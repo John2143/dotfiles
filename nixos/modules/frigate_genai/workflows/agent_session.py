@@ -1,7 +1,6 @@
 """AgentSessionWorkflow -- self-contained agent turn loop as Temporal child workflow."""
 
 from datetime import timedelta
-from uuid import uuid4
 
 from temporalio import workflow
 from temporalio.exceptions import ApplicationError
@@ -140,6 +139,7 @@ class AgentSessionWorkflow:
         # Spawn/join tracking
         spawn_handles: dict[str, list[tuple[dict, object]]] = {}
         total_subagents = 0
+        _spawn_count = 0
         MAX_CONCURRENT_SPAWNS = 5
         MAX_TOTAL_SUBAGENTS = 20
         trace_entries: list[dict] = []
@@ -212,7 +212,8 @@ class AgentSessionWorkflow:
                         continue
 
                     from frigate_genai.workflows.subagent import SubAgentWorkflow
-                    spawn_key = f"spawn://{uuid4().hex[:8]}"
+                    _spawn_count += 1
+                    spawn_key = f"spawn_{_spawn_count:08x}"
                     spawn_handles[spawn_key] = []
                     sd = session_input.get("subagent_dir", session_input.get("parent_agent_dir",
                          f"events/{event_id}/agent/"))
