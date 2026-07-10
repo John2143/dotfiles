@@ -140,31 +140,29 @@ let
   mkLitellmEntry = m: tier: name:
     let
       yunwuModel = m.yunwuModel or m.modelName;
-    in ''
-          - model_name: "${name}"
-            litellm_params:
-              model: "openai/${yunwuModel}"
-              api_key: "os.environ/YUNWU_${upperTier tier}_API_KEY"
-              api_base: "https://yunwu.ai/v1"
-    '';
+    in
+      "  - model_name: \"${name}\"\n" +
+      "    litellm_params:\n" +
+      "      model: \"openai/${yunwuModel}\"\n" +
+      "      api_key: \"os.environ/YUNWU_${upperTier tier}_API_KEY\"\n" +
+      "      api_base: \"https://yunwu.ai/v1\"\n";
 
   mkLitellmPricedEntry = m: tier:
     let
       yunwuModel = m.yunwuModel or m.modelName;
       price = m.pricing.${tier};
-    in ''
-          - model_name: "yunwu/${tier}/${m.modelName}"
-            litellm_params:
-              model: "openai/${yunwuModel}"
-              api_key: "os.environ/YUNWU_${upperTier tier}_API_KEY"
-              api_base: "https://yunwu.ai/v1"
-            model_info:
-              max_tokens: ${toString m.maxTokens}
-              input_cost_per_token: ${price.inputPerToken}
-              output_cost_per_token: ${price.outputPerToken}
-              cache_read_input_token_cost: ${price.cacheReadPerToken}
-              cache_creation_input_token_cost: ${price.cacheWritePerToken}
-    '';
+    in
+      "  - model_name: \"yunwu/${tier}/${m.modelName}\"\n" +
+      "    litellm_params:\n" +
+      "      model: \"openai/${yunwuModel}\"\n" +
+      "      api_key: \"os.environ/YUNWU_${upperTier tier}_API_KEY\"\n" +
+      "      api_base: \"https://yunwu.ai/v1\"\n" +
+      "    model_info:\n" +
+      "      max_tokens: ${toString m.maxTokens}\n" +
+      "      input_cost_per_token: ${price.inputPerToken}\n" +
+      "      output_cost_per_token: ${price.outputPerToken}\n" +
+      "      cache_read_input_token_cost: ${price.cacheReadPerToken}\n" +
+      "      cache_creation_input_token_cost: ${price.cacheWritePerToken}\n";
 
   mkLitellmEntries = m:
     lib.concatMapStrings (tier:
@@ -176,9 +174,7 @@ let
         priced = if m ? pricing && m.pricing ? ${tier}
           then mkLitellmPricedEntry m tier
           else "";
-        comment = ''
-          # ── ${m.ompName} — ${tier} tier ──
-    '';
+        comment = "  # ── ${m.ompName} — ${tier} tier ──\n";
       in comment + standard + legacy + priced
     ) m.tiers;
 

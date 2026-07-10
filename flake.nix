@@ -349,6 +349,91 @@
         inherit (nixpkgs.legacyPackages.${system}) pkgs lib;
       }).frigateGenaiFfmpegImage;
 
+    packages.x86_64-linux.litellm-configmap =
+      let
+        inherit (nixpkgs) lib;
+        yunwuModels = (import ./nixos/modules/yunwu-models.nix { inherit (nixpkgs) lib; });
+        yunwuSection = yunwuModels.toLitellmYaml yunwuModels.models;
+        pkgs = nixpkgs.legacyPackages.${system};
+        configContent = ''
+          general_settings:
+            master_key: "os.environ/LITELLM_MASTER_KEY"
+            store_model_in_db: true
+            store_prompts_in_spend_logs: true
+          model_list:
+            # Local Ollama (office)
+            - model_name: "ollama/huihui_ai/qwen3-vl-abliterated:8b"
+              litellm_params:
+                model: "ollama/huihui_ai/qwen3-vl-abliterated:8b"
+                api_base: "http://office.ts.2143.me:11434"
+            - model_name: "ollama/*"
+              litellm_params:
+                model: "ollama/*"
+                api_base: "http://office.ts.2143.me:11434"
+            # Google Gemini
+            - model_name: "gemini/*"
+              litellm_params:
+                model: "gemini/*"
+                api_key: "os.environ/GEMINI_API_KEY"
+            # DeepSeek
+            - model_name: "deepseek/*"
+              litellm_params:
+                model: "deepseek/*"
+                api_key: "os.environ/DEEPSEEK_API_KEY"
+            # Anthropic (Claude)
+            - model_name: "anthropic/*"
+              litellm_params:
+                model: "anthropic/*"
+                api_key: "os.environ/ANTHROPIC_API_KEY"
+            # OpenAI
+            - model_name: "openai/*"
+              litellm_params:
+                model: "openai/*"
+                api_key: "os.environ/OPENAI_API_KEY"
+            # OpenRouter
+            - model_name: "openrouter/*"
+              litellm_params:
+                model: "openrouter/*"
+                api_key: "os.environ/OPENROUTER_API_KEY"
+            # Yunwu
+          ${yunwuSection}
+            # Yunwu fast
+            - model_name: "yunwu/fast/*"
+              litellm_params:
+                model: "openai/*"
+                api_key: "os.environ/YUNWU_FAST_API_KEY"
+                api_base: "https://yunwu.ai/v1"
+            # Yunwu Official
+            - model_name: "yunwu/official/*"
+              litellm_params:
+                model: "openai/*"
+                api_key: "os.environ/YUNWU_OFFICIAL_API_KEY"
+                api_base: "https://yunwu.ai/v1"
+
+          litellm_settings:
+            drop_params: true
+            set_verbose: false
+            cache: true
+            cache_params:
+              type: redis
+              host: litellm-redis
+              port: "6379"
+        '';
+        indent4 = lines:
+          lib.concatMapStrings (line: "    ${line}\n") (lib.splitString "\n" lines);
+      in
+      pkgs.writeText "configmap.yaml" (''
+        apiVersion: v1
+        kind: ConfigMap
+        metadata:
+          labels:
+            app: litellm
+          name: litellm-config
+        data:
+          config.yaml: |
+      '' + indent4 configContent);
+
+
     darwinConfigurations.mac = inputs.nix-darwin.lib.darwinSystem {
       system = "aarch64-darwin";
       specialArgs = {
