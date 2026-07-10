@@ -24,13 +24,14 @@ jobs:
       - uses: cachix/install-nix-action@v31
         with:
           github_access_token: ${{ secrets.GITHUB_TOKEN }}
-      - name: Build genai image
-        run: nix build .#frigate-genai-genai-image --out-link result-genai
+      - name: Build images (parallel)
+        run: |
+          nix build '.#frigate-genai-genai-image' --out-link result-genai &
+          nix build '.#frigate-genai-ffmpeg-image' --out-link result-ffmpeg &
+          wait
 
-      - name: Build ffmpeg image
-        run: nix build .#frigate-genai-ffmpeg-image --out-link result-ffmpeg
 
-      - name: Push to ghcr.io
+      - name: Push to ghcr.io (parallel)
         run: |
           OWNER_LOWER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
           echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
@@ -38,14 +39,16 @@ jobs:
           docker load < result-genai
           docker tag frigate-genai-genai:v1 ghcr.io/${OWNER_LOWER}/frigate-genai-genai:v${{ github.run_number }}
           docker tag frigate-genai-genai:v1 ghcr.io/${OWNER_LOWER}/frigate-genai-genai:latest
-          docker push ghcr.io/${OWNER_LOWER}/frigate-genai-genai:v${{ github.run_number }}
-          docker push ghcr.io/${OWNER_LOWER}/frigate-genai-genai:latest
 
           docker load < result-ffmpeg
           docker tag frigate-genai-ffmpeg:v1 ghcr.io/${OWNER_LOWER}/frigate-genai-ffmpeg:v${{ github.run_number }}
           docker tag frigate-genai-ffmpeg:v1 ghcr.io/${OWNER_LOWER}/frigate-genai-ffmpeg:latest
-          docker push ghcr.io/${OWNER_LOWER}/frigate-genai-ffmpeg:v${{ github.run_number }}
-          docker push ghcr.io/${OWNER_LOWER}/frigate-genai-ffmpeg:latest
+
+          docker push ghcr.io/${OWNER_LOWER}/frigate-genai-genai:v${{ github.run_number }} &
+          docker push ghcr.io/${OWNER_LOWER}/frigate-genai-genai:latest &
+          docker push ghcr.io/${OWNER_LOWER}/frigate-genai-ffmpeg:v${{ github.run_number }} &
+          docker push ghcr.io/${OWNER_LOWER}/frigate-genai-ffmpeg:latest &
+          wait
 
   update-argo:
     needs: build
