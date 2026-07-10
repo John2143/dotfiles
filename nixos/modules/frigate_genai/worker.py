@@ -322,7 +322,8 @@ async def async_main(prompts_path: str, provider_path: str, mode: str = "trigger
                         tool_crop_activity, tool_compact_activity,
                         tool_set_description_activity, apply_tool_messages_activity,
                         summarize_agent_activity,
-                        save_agent_log_activity],
+                        save_agent_log_activity,
+                        init_subagent_state_activity],
             max_concurrent_activities=int(os.environ.get("TEMPORAL_MAX_GEMINI_GENAI", "5")),
             deployment_config=deployment_config,
         )
@@ -352,7 +353,8 @@ async def async_main(prompts_path: str, provider_path: str, mode: str = "trigger
                         tool_crop_activity, tool_compact_activity,
                         tool_set_description_activity, apply_tool_messages_activity,
                         summarize_agent_activity,
-                        save_agent_log_activity],
+                        save_agent_log_activity,
+                        init_subagent_state_activity],
             max_concurrent_activities=int(os.environ.get("TEMPORAL_MAX_OLLAMA_GENAI", "1")),
             deployment_config=deployment_config,
         )
