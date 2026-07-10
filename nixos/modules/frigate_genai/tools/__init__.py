@@ -13,6 +13,7 @@ from frigate_genai.tools.crop import tool_crop_activity
 from frigate_genai.tools.compact import tool_compact_activity
 from frigate_genai.tools.set_description import tool_set_description_activity
 from frigate_genai.tools.upscale import tool_upscale_activity
+from frigate_genai.config import TASK_QUEUE, FFMPEG_TASK_QUEUE
 
 _TOOL_ACTIVITIES: dict[str, object] = {
     "find_keyframes": tool_find_keyframes_activity,

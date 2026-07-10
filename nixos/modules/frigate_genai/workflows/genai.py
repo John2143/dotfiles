@@ -94,7 +94,7 @@ class GenAIWorkflow:
                         input_data,
                         task_queue=FFMPEG_TASK_QUEUE,
                         start_to_close_timeout=timedelta(hours=1),
-                        heartbeat_timeout=timedelta(seconds=10),
+                        heartbeat_timeout=timedelta(seconds=60),
                         retry_policy=_EXTRACT_RETRY,
                     ),
                 )

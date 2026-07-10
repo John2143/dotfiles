@@ -25,7 +25,7 @@ from frigate_genai.s3_helpers import (
 log = logging.getLogger("frigate-genai-sidecar")
 
 
-async def _run_with_heartbeat(func, *args, interval: float = 5.0):
+async def _run_with_heartbeat(func, *args, interval: float = 2.0):
     """Run a sync function in a thread, heartbeating every `interval` seconds.
 
     Prevents Temporal from cancelling the activity while the thread is busy
