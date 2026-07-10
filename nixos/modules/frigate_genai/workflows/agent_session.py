@@ -316,6 +316,13 @@ class AgentSessionWorkflow:
                             ],
                             "error": str(e)[:200],
                         }
+                    # The workflow owns the exact call ID being answered. Activities
+                    # may inspect stale state after another tool result is appended,
+                    # so their name-based lookup cannot safely pair a response.
+                    if isinstance(outcome, dict):
+                        for message in outcome.get("messages", []):
+                            if message.get("role") == "tool":
+                                message["tool_call_id"] = tc["id"]
                     if isinstance(outcome, dict) and outcome.get("error"):
                         tool_failures += 1
                     if tc["name"] == "transcode" and isinstance(outcome, dict):

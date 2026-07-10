@@ -210,6 +210,10 @@ async def run_genai_turn_activity(turn_arg: dict) -> dict:
     # Parse tool calls
     tool_calls = []
     for tc in msg.tool_calls:
+        # LiteLLM represents Gemini thought signatures as pseudo tool calls.
+        # Preserve them in assistant_msg, but they are not executable and require no tool response.
+        if "__thought__" in (tc.id or ""):
+            continue
         try:
             args = json.loads(tc.function.arguments)
         except json.JSONDecodeError:
