@@ -4,7 +4,8 @@ import asyncio
 from datetime import timedelta
 
 from temporalio import workflow
-from temporalio.common import ParentClosePolicy, SearchAttributePair
+from temporalio.common import SearchAttributePair
+from temporalio.workflow import ParentClosePolicy
 
 from frigate_genai.config import (
     MAX_TURNS,
@@ -22,7 +23,6 @@ from frigate_genai.config import (
     _SEARCH_TRANSCODE,
     _SEARCH_TOOL_FAILURES,
 )
-from frigate_genai.s3_helpers import _s3_event_prefix, _s3_agent_prefix, _s3_put
 from frigate_genai.activities.select_model import select_model_activity
 from frigate_genai.activities.frame_extraction import transcode_into_parts_activity, fetch_snapshot_activity
 from frigate_genai.activities.lifecycle import (
@@ -32,7 +32,8 @@ from frigate_genai.activities.lifecycle import (
     summarize_agent_activity,
 )
 from frigate_genai.activities.agent_state import init_agent_state_activity
-from frigate_genai.tools import _TOOL_ACTIVITIES, _get_tool_queue
+from frigate_genai.tools.find_keyframes import tool_find_keyframes_activity
+from frigate_genai.activities.tool_apply import apply_tool_messages_activity
 from frigate_genai.workflows.agent_session import AgentSessionWorkflow
 
 
@@ -93,7 +94,7 @@ class GenAIWorkflow:
                         input_data,
                         task_queue=FFMPEG_TASK_QUEUE,
                         start_to_close_timeout=timedelta(hours=1),
-                        heartbeat_timeout=timedelta(seconds=10),
+                        heartbeat_timeout=timedelta(seconds=60),
                         retry_policy=_EXTRACT_RETRY,
                     ),
                 )
@@ -132,6 +133,35 @@ class GenAIWorkflow:
             msg_path = init_result["msg_path"]
             max_frames = init_result["max_frames"]
 
+            # Auto-run find_keyframes for clips with >5 frames
+            if max_frames > 5:
+                try:
+                    find_keyframes_result = await workflow.execute_activity(
+                        tool_find_keyframes_activity,
+                        arg={
+                            "msg_path": msg_path,
+                            "event_id": event_id,
+                            "max_frames": max_frames,
+                            "args": {"count": 8, "data_box": input_data.get("data_box")},
+                        },
+                        task_queue=genai_queue,
+                        start_to_close_timeout=timedelta(seconds=30),
+                        retry_policy=_ACTIVITY_RETRY,
+                    )
+                    keyframe_msg = f"[Keyframe analysis — precomputed, zero token cost]\n{find_keyframes_result['messages'][0]['content']}"
+                    await workflow.execute_activity(
+                        apply_tool_messages_activity,
+                        arg={
+                            "msg_path": msg_path,
+                            "outcomes": [{"messages": [{"role": "user", "content": keyframe_msg}]}],
+                        },
+                        task_queue=genai_queue,
+                        start_to_close_timeout=timedelta(seconds=10),
+                        retry_policy=_ACTIVITY_RETRY,
+                    )
+                except Exception:
+                    workflow.logger.warning("find_keyframes auto-run failed; LLM will fall back to calling it directly")
+
             session_result = await workflow.execute_child_workflow(
                 AgentSessionWorkflow,
                 arg={
@@ -146,6 +176,10 @@ class GenAIWorkflow:
                     "start_time": start_time,
                     "end_time": end_time,
                     "genai_queue": genai_queue,
+                    "prompts_path": input_data["prompts_path"],
+                    "depth": 0,
+                    "max_depth": 2,
+                    "parent_agent_dir": f"events/{event_id}/agent/",
                 },
                 id=f"{event_id}-agent-session",
                 task_queue=genai_queue,
@@ -194,6 +228,31 @@ class GenAIWorkflow:
                             lines.append(
                                 f"  -> set_description(confidence={e.get('confidence')}): {e.get('description', '')[:120]}"
                             )
+                        elif n == "find_keyframes":
+                            a = e.get("args", {})
+                            kf = e.get("keyframes", [])
+                            lines.append(f"  -> find_keyframes(count={a.get('count', 5)}): {len(kf)} keyframes from {e.get('total_frames', '?')} frames")
+                            if kf and e.get("keyframe_scores"):
+                                top = sorted(e["keyframe_scores"].items(), key=lambda x: -x[1])[:3]
+                                top_str = ", ".join(f"#{f}({s:.3f})" for f, s in top)
+                                lines.append(f"    Top: {top_str}")
+                            sf = e.get("sharpest_frame")
+                            if sf is not None:
+                                blur = e.get("blur_scores", {}).get(str(sf))
+                                blur_str = f"{blur:.0f}" if isinstance(blur, (int, float)) else "?"
+                                lines.append(f"    Sharpest: #{sf} (edge={blur_str})")
+                        elif n == "frame_diff":
+                            a = e.get("args", {})
+                            label_b = a.get("frame_b") if a.get("frame_b") is not None else "neighbors"
+                            d = e.get("distance")
+                            d_str = f"{d:.3f}" if isinstance(d, (int, float)) else "?"
+                            lines.append(f"  -> frame_diff({a.get('frame_a')}, {label_b}) dist={d_str}")
+                        elif n == "tag_image":
+                            a = e.get("args", {})
+                            tc = e.get("tagged", "?")
+                            tt = e.get("total_tagged", "?")
+                            uc = e.get("useful_count", "?")
+                            lines.append(f"  -> tag_image({tc} tagged, total={tt}, useful={uc})")
                         else:
                             lines.append(f"  -> {n}()")
                         if e.get("error"):
@@ -245,6 +304,7 @@ class GenAIWorkflow:
                 arg={"event_id": event_id, "trace_text": trace_header + trace_text},
                 task_queue=genai_queue,
                 start_to_close_timeout=timedelta(seconds=10),
+                retry_policy=_ACTIVITY_RETRY,
             )
 
             stats = {
@@ -288,6 +348,7 @@ class GenAIWorkflow:
                 cleanup_cancelled_activity,
                 args=[input_data, False],
                 start_to_close_timeout=timedelta(seconds=30),
+                retry_policy=_ACTIVITY_RETRY,
             )
         except asyncio.CancelledError:
             workflow.logger.info("GenAI workflow cancelled, cleaning up: %s", log_ctx)
@@ -295,5 +356,6 @@ class GenAIWorkflow:
                 cleanup_cancelled_activity,
                 args=[input_data, True],
                 start_to_close_timeout=timedelta(seconds=30),
+                retry_policy=_ACTIVITY_RETRY,
             )
             raise

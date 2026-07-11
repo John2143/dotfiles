@@ -37,8 +37,20 @@ async def init_agent_state_activity(init_arg: dict) -> dict:
 
     data_box = init_arg.get("data_box")
     box_text = ""
+    crop_hint_text = ""
     if data_box and len(data_box) == 4:
         box_text = f"Detected at left={data_box[0]:.2f} top={data_box[1]:.2f} width={data_box[2]:.2f} height={data_box[3]:.2f}."
+        crop_hint_text = (
+            f"Frigate's detection box: x1={data_box[0]:.2f} y1={data_box[1]:.2f} "
+            f"x2={data_box[0]+data_box[2]:.2f} y2={data_box[1]+data_box[3]:.2f}. "
+            f"Use this as your INITIAL search region — the subject may have moved "
+            f"since the snapshot. VERIFY position before cropping each frame."
+        )
+    else:
+        crop_hint_text = (
+            "No bounding box provided. Use show_frame() at @high to LOCATE "
+            "the subject first. Describe where it appears before cropping."
+        )
 
     if label == "car":
         prefix = (
@@ -90,6 +102,23 @@ async def init_agent_state_activity(init_arg: dict) -> dict:
         "across 2-3 key frames. Report what you found AND what you searched for "
         "but couldn't find. If you upscaled, review the upscaled result before concluding."
     )
+
+    spawn_guidance = (
+        "\n\nSPAWN/JOIN -- PARALLEL SUBAGENTS:\n"
+        "You can spawn() parallel subagents to investigate different regions simultaneously.\n"
+        "Each subagent gets its own context and runs independently. Use spawn when:\n"
+        "- Multiple distinct regions need inspection (plates, faces, text)\n"
+        "- Different time windows need scanning\n"
+        "- Detail extraction that would consume many turns\n"
+        "Rules:\n"
+        "- spawn() returns a spawn_key immediately. Subagents run in background.\n"
+        "- call join(spawn_key) to collect results. BLOCKS until all complete.\n"
+        "- join() returns formatted findings from each subagent.\n"
+        "- Max 5 subagents per spawn.\n"
+        "- Only spawn() when you have specific tasks -- don't spawn for trivial checks."
+    )
+    system_prompt += spawn_guidance
+
     if camera_desc:
         system_prompt += f"\n\n{camera_desc}"
     if label_hint:
@@ -97,6 +126,84 @@ async def init_agent_state_activity(init_arg: dict) -> dict:
 
     frame_files = _s3_list(f"{event_prefix}/frames/frame_")
     max_frames = len(frame_files)
+    # Keyframe note: auto-run skips for <=5 frames
+    if max_frames > 5:
+        keyframe_note = (
+            "Keyframes have been pre-computed — see the keyframe analysis message "
+            "below. Start with show_frame() on those keyframes."
+        )
+    else:
+        most = max(max_frames - 1, 0)
+        keyframe_note = (
+            f"Only {max_frames} frame(s) — scan all directly with show_frame(frame://0"
+            + (f"-{most}" if most > 0 else "")
+            + ")."
+        )
+
+    # Specialist extraction checklist for each label
+    _specialist_prefixes = {
+        "car": (
+            "EXTRACTION FOCUS — VEHICLE: make, model, approximate year, color, "
+            "license plate (every character), damage, stickers/decals, occupants, cargo. "
+            f"{crop_hint_text} "
+            f"{keyframe_note} "
+            "Crop tight on plates, badges, decals. Upscale only cropped plates/text. "
+            "For each finding, cite the frame number. If you cannot determine "
+            "something, say so explicitly. "
+        ),
+        "person": (
+            "EXTRACTION FOCUS — PERSON: clothing (colors, layers, logos), accessories "
+            "(bag, phone, hat, glasses), build, activity (walking, carrying, entering), "
+            "direction. "
+            f"{crop_hint_text} "
+            f"{keyframe_note} "
+            "Crop tight on faces, hands, logos. Never speculate beyond what is visible. "
+        ),
+        "dog": (
+            "EXTRACTION FOCUS — DOG: size, color, breed if identifiable, behavior, "
+            "accompanied or alone. "
+            f"{crop_hint_text} "
+            f"{keyframe_note} "
+        ),
+        "cat": (
+            "EXTRACTION FOCUS — CAT: size, color, behavior, direction. "
+            f"{crop_hint_text} "
+            f"{keyframe_note} "
+        ),
+        "package": (
+            "EXTRACTION FOCUS — PACKAGE: size, color, carrier logo, where placed, "
+            "who interacted. Watch for porch piracy. "
+            f"{crop_hint_text} "
+            f"{keyframe_note} "
+            "Crop on logos and labels. "
+        ),
+        "face": (
+            "EXTRACTION FOCUS — FACE: visible features, approximate age, expression, "
+            "direction, headwear/glasses. "
+            f"{crop_hint_text} "
+            f"{keyframe_note} "
+            "Crop on the face. Upscale only on unreadable crops. "
+        ),
+    }
+    _default_prefix = (
+        "EXTRACTION FOCUS — {label}: identifying details, behavior, direction. "
+        f"{crop_hint_text} "
+        f"{keyframe_note} "
+    )
+
+    # Prepend specialist prefix to the existing system_prompt
+    specialist = _specialist_prefixes.get(label, _default_prefix.format(label=label))
+    system_prompt = specialist + "\n\n" + system_prompt
+
+    # Cost-minimization additions
+    system_prompt += (
+        "\n\nCOST: Every image you view costs tokens. Minimize cost:\n"
+        "- Scan 5+ frames at @low first; upgrade to @high/@max only for frames with the subject.\n"
+        "- Batch tag_image() calls — tag all inspected sources in one call, not one per frame.\n"
+        "- Use find_keyframes() and frame_diff() (free, no API cost) before expensive tool calls.\n"
+        "- Spawn subagents only for genuinely independent detail work (plates + face + cargo).\n"
+        "- Conclude after you have adequate evidence — don't inspect every frame."
+    )
     user_text = (
         f"{label} on {camera}. {max_frames} recording frames (indices 0-{max_frames - 1}).\n\n"
         f"{box_text}\n\n"
@@ -156,3 +263,80 @@ async def init_agent_state_activity(init_arg: dict) -> dict:
 
     log.info("init_agent_state: event=%s frames=%d msg_path=%s", event_id, max_frames, msg_path)
     return {"msg_path": msg_path, "max_frames": max_frames}
+
+
+
+@activity.defn(name="init_subagent_state")
+async def init_subagent_state_activity(init_arg: dict) -> dict:
+    """Initialize subagent state: copy parent images, compose task-focused system
+    prompt, seed messages.json. """
+    task = init_arg["task"]
+    camera = init_arg["camera"]
+    label = init_arg["label"]
+    subagent_dir = init_arg["subagent_dir"]
+    event_id = init_arg["event_id"]
+
+    # Copy parent images to subagent directory
+    display_files = []
+    for i, s3_key in enumerate(init_arg.get("image_s3_keys", [])):
+        raw = _s3_get(s3_key)
+        if raw:
+            dname = f"display_{i+1:03d}.jpg"
+            _s3_put(f"{subagent_dir}{dname}", raw)
+            display_files.append(dname)
+
+    # Build focused system prompt
+    prompts = load_json(init_arg["prompts_path"])
+    label_hint = prompts.get("label", {}).get(label, "")
+    start_t = init_arg.get("start_time", 0)
+    end_t = init_arg.get("end_time", 0)
+    duration = end_t - start_t if start_t and end_t else 0
+    system_prompt = (
+        f"You are a focused analysis subagent investigating event {event_id}.\n"
+        f"Camera: {camera}. Detected object: {label}. Clip duration: {duration:.1f}s.\n"
+        + (f"Guidance for {label}: {label_hint}\n" if label_hint else "")
+        + f"\nYour delegated task: {task}\n\n"
+        "TOOLS: show_frame (scan frames), crop (zoom into regions), "
+        "transcode (extract HD frames), upscale (4x AI enhancement for small details).\n\n"
+        "RULES:\n"
+        f"- You have {init_arg['max_turns']} turns. Be decisive.\n"
+        "- Report exactly what you see -- do not speculate beyond the evidence.\n"
+        "- If you cannot determine the answer after thorough inspection, "
+        "use confidence='nothing_found'.\n"
+        "- Do NOT call close_subagent until you have examined frames.\n"
+        "- Use compact() if context gets full.\n\n"
+        "YOUR OUTPUT: close_subagent(findings='...', confidence='high|medium|low|nothing_found')\n"
+        "  findings = complete description with specific observable details.\n"
+        "  confidence = how certain you are based on what you actually saw."
+    )
+
+    # Seed messages
+    content_parts = []
+    for dname in display_files:
+        content_parts.append({"type": "image_url", "image_url": {"url": f"[[{dname}]]"}})
+    content_parts.append({"type": "text", "text": f"Task: {task}\n\nInvestigate and call close_subagent() when complete."})
+
+    init_messages = [
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": content_parts},
+    ]
+
+    msg_path = f"{subagent_dir}messages.json"
+    state = {
+        "messages": init_messages,
+        "agent_dir": subagent_dir,
+        "camera": camera,
+        "start_time": init_arg.get("start_time", 0),
+        "end_time": init_arg.get("end_time", 0),
+        "max_frames": 0,
+        "data_box": None,
+        "trace": [],
+        "stats": {},
+        "task": task,
+        "subagent_id": subagent_dir.rstrip("/").split("/")[-1],
+        "key_images": [],
+    }
+    _atomic_write(msg_path, state)
+
+    log.info("init_subagent_state: event=%s sub_id=%s task=%s", event_id, state["subagent_id"], task[:40])
+    return {"msg_path": msg_path}

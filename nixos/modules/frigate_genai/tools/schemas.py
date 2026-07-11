@@ -167,3 +167,183 @@ def _tool_crop_schema() -> dict:
             },
         },
     }
+
+
+def _tool_spawn_schema() -> dict:
+    return {
+        "type": "function",
+        "function": {
+            "name": "spawn",
+            "description": (
+                "Spawn parallel subagents to investigate different regions simultaneously. "
+                "Each subagent gets its own context and runs independently. Call join() to "
+                "collect results when ready. Subagents can show_frame, crop, transcode, and "
+                "upscale. Max 5 subagents per spawn, max depth 2."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "tasks": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "task": {"type": "string", "description": "Precise task."},
+                                "image_refs": {"type": "array", "items": {"type": "string"},
+                                    "description": "Images to pre-load. Max 3 per subagent."},
+                                "max_turns": {"type": "integer",
+                                    "description": "Turn budget (default 8, max 15)."},
+                            },
+                            "required": ["task"],
+                        },
+                        "description": "Tasks to spawn. Each becomes a parallel subagent.",
+                    },
+                },
+                "required": ["tasks"],
+            },
+        },
+    }
+
+
+def _tool_join_schema() -> dict:
+    return {
+        "type": "function",
+        "function": {
+            "name": "join",
+            "description": (
+                "Collect results from a spawn(). BLOCKS until ALL spawned subagents "
+                "call close_subagent(). Returns formatted findings from each subagent. "
+                "Join each spawn_key exactly once."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "spawn_key": {"type": "string",
+                        "description": "The spawn_key returned by spawn()."},
+                },
+                "required": ["spawn_key"],
+            },
+        },
+    }
+
+
+def _tool_close_subagent_schema() -> dict:
+    return {
+        "type": "function",
+        "function": {
+            "name": "close_subagent",
+            "description": (
+                "Terminate this subagent and return findings. Call when investigation "
+                "is complete. Confidence: high=certain, medium=probable, low=unclear, "
+                "nothing_found=searched thoroughly."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "findings": {"type": "string",
+                        "description": "Complete findings with specific details."},
+                    "confidence": {"type": "string",
+                        "enum": ["high","medium","low","nothing_found"]},
+                    "show_images": {"type": "array", "items": {"type": "string"},
+                        "description": "Optional image refs to show parent. Max 2."},
+                },
+                "required": ["findings", "confidence"],
+            },
+        },
+    }
+
+def _tool_find_keyframes_schema() -> dict:
+    return {
+        "type": "function",
+        "function": {
+            "name": "find_keyframes",
+            "description": (
+                "Find the most informative keyframes using pixel-difference "
+                "analysis. Returns frame indices ranked by visual change plus "
+                "the sharpest frame. Free — no API cost."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "count": {
+                        "type": "integer",
+                        "description": "Number of keyframes to return (1-10, default 5).",
+                        "default": 5,
+                        "maximum": 10,
+                    },
+                },
+                "required": [],
+            },
+        },
+    }
+
+
+def _tool_frame_diff_schema() -> dict:
+    return {
+        "type": "function",
+        "function": {
+            "name": "frame_diff",
+            "description": (
+                "Compare two frames (0=identical, 0.04+=noticeable change). "
+                "Free — no API cost."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "frame_a": {
+                        "type": "integer",
+                        "description": "First frame index.",
+                    },
+                    "frame_b": {
+                        "type": "integer",
+                        "description": "Second frame index; if omitted returns the change curve around frame_a.",
+                    },
+                },
+                "required": ["frame_a"],
+            },
+        },
+    }
+
+
+def _tool_tag_image_schema() -> dict:
+    return {
+        "type": "function",
+        "function": {
+            "name": "tag_image",
+            "description": (
+                "Tag frames/crops as useful or not-useful. Builds a working "
+                "memory index that survives compact(). Batch up to 20 sources "
+                "per call. Call after inspecting key frames — prevents "
+                "re-inspecting bad frames."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "tags": {
+                        "type": "array",
+                        "description": "List of tags to apply. Max 20.",
+                        "maxItems": 20,
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "source": {
+                                    "type": "string",
+                                    "description": "Frame source, e.g. frame://23, crop://3, upscale://1.",
+                                },
+                                "useful": {
+                                    "type": "boolean",
+                                    "description": "Whether this frame/crop contained useful information.",
+                                },
+                                "description": {
+                                    "type": "string",
+                                    "description": "Brief description of what was found (or not found).",
+                                },
+                            },
+                            "required": ["source", "useful"],
+                        },
+                    },
+                },
+                "required": ["tags"],
+            },
+        },
+    }

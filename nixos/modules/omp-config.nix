@@ -1,4 +1,4 @@
-{ ... }:
+{ lib, ... }:
 let
   # Skills — source of truth at ~/dotfiles/.claude/skills/. Enumerate all skill
   # directories and create symlinks for both Claude Code (~/.claude/skills/)
@@ -20,6 +20,7 @@ let
       builtins.foldl' (acc: fname: acc // mkLink fname) { } files;
 
   skillLinks = builtins.foldl' (acc: name: acc // mkSkillLinks name) { } skillNames;
+  yunwuModels = import ./yunwu-models.nix { inherit lib; };
 in
 {
   home.file = skillLinks // {
@@ -343,27 +344,7 @@ in
               contextWindow: 1000000
               maxTokens: 8192
 
-            # Yunwu Claude Fable 5 — official tier
-            - id: fabog
-              name: Claude Fable 5 (Yunwu Official)
-              reasoning: true
-              input: [text]
-              cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }
-              contextWindow: 200000
-              maxTokens: 65536
-              compat:
-                supportsToolChoice: true
-
-            # Yunwu Claude Fable 5 — fast tier
-            - id: fabfast
-              name: Claude Fable 5 (Yunwu Fast)
-              reasoning: true
-              input: [text]
-              cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }
-              contextWindow: 200000
-              maxTokens: 65536
-              compat:
-                supportsToolChoice: true
+  ${yunwuModels.toOmpYaml yunwuModels.models}
 
     '';
     ".omp/agent/config.yml".text = ''
@@ -380,6 +361,7 @@ in
         #smol: office-ollama-cpu/gemma4
         smol: litellm/gemini/gemini-2.5-flash
         slow: litellm/deepseek/deepseek-v4-pro
+        advisor: litellm/deepseek/deepseek-v4-flash
 
       modelProviderOrder:
         - litellm

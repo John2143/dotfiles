@@ -19,9 +19,9 @@ result
 tofu/terraform.tfstate
 tofu/terraform.tfstate.*.backup
 tofu/.terraform/
-tofu/__pycache__/
 tofu/.venv/
+__pycache__/
+*.pyc
+*.pyo
 nixos/cluster/secrets/cloud-ssh-key.age
 nixos/cluster/secrets/do-pat.age
-nixos/status-page/__pycache__/
-nixos/modules/__pycache__/

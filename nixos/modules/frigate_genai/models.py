@@ -137,3 +137,57 @@ class InitAgentStateArg(BaseFrigateModel):
 class InitAgentStateOutput(BaseFrigateModel):
     msg_path: str
     max_frames: int
+
+
+
+class SpawnArgs(BaseFrigateModel):
+    """Nested inside ToolCallArg.args for spawn() tool calls."""
+    tasks: list[dict]
+
+
+class SpawnTask(BaseFrigateModel):
+    task: str
+    image_refs: list[str] = []
+    max_turns: int = 8
+
+
+class SubAgentInput(BaseFrigateModel):
+    """Input to SubAgentWorkflow. Built by spawn handler."""
+    event_id: str
+    camera: str
+    label: str
+    task: str
+    image_refs: list[str] = []
+    image_s3_keys: list[str] = []
+    parent_agent_dir: str
+    subagent_dir: str
+    provider_path: str
+    model: str
+    genai_queue: str
+    prompts_path: str
+    start_time: float = 0
+    end_time: float = 0
+    depth: int = 1
+    max_depth: int = 2
+    max_turns: int = 8
+
+
+class SubAgentOutput(BaseFrigateModel):
+    findings: Optional[str] = None
+    confidence: Optional[str] = None
+    turns_used: int = 0
+    total_cost: dict[str, int] = {}
+    key_images: list[dict] = []
+    tool_failures: int = 0
+    subagent_id: str = ""
+    task: str = ""
+
+
+class CloseSubagentArgs(BaseFrigateModel):
+    findings: str
+    confidence: str
+    show_images: list[str] = []
+
+
+class JoinArgs(BaseFrigateModel):
+    spawn_key: str

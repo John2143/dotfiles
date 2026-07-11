@@ -21,17 +21,17 @@ jobs:
         with:
           fetch-depth: 0
 
-      - uses: cachix/install-nix-action@v27
+      - uses: cachix/install-nix-action@v31
         with:
-          nix_path: nixpkgs=channel:nixos-unstable
+          github_access_token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build images (parallel)
+        run: |
+          nix build '.#frigate-genai-genai-image' --out-link result-genai &
+          nix build '.#frigate-genai-ffmpeg-image' --out-link result-ffmpeg &
+          wait
 
-      - name: Build genai image
-        run: nix build .#frigate-genai-genai-image --out-link result-genai
 
-      - name: Build ffmpeg image
-        run: nix build .#frigate-genai-ffmpeg-image --out-link result-ffmpeg
-
-      - name: Push to ghcr.io
+      - name: Push to ghcr.io (parallel)
         run: |
           OWNER_LOWER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
           echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
@@ -39,14 +39,16 @@ jobs:
           docker load < result-genai
           docker tag frigate-genai-genai:v1 ghcr.io/${OWNER_LOWER}/frigate-genai-genai:v${{ github.run_number }}
           docker tag frigate-genai-genai:v1 ghcr.io/${OWNER_LOWER}/frigate-genai-genai:latest
-          docker push ghcr.io/${OWNER_LOWER}/frigate-genai-genai:v${{ github.run_number }}
-          docker push ghcr.io/${OWNER_LOWER}/frigate-genai-genai:latest
 
           docker load < result-ffmpeg
           docker tag frigate-genai-ffmpeg:v1 ghcr.io/${OWNER_LOWER}/frigate-genai-ffmpeg:v${{ github.run_number }}
           docker tag frigate-genai-ffmpeg:v1 ghcr.io/${OWNER_LOWER}/frigate-genai-ffmpeg:latest
-          docker push ghcr.io/${OWNER_LOWER}/frigate-genai-ffmpeg:v${{ github.run_number }}
-          docker push ghcr.io/${OWNER_LOWER}/frigate-genai-ffmpeg:latest
+
+          docker push ghcr.io/${OWNER_LOWER}/frigate-genai-genai:v${{ github.run_number }} &
+          docker push ghcr.io/${OWNER_LOWER}/frigate-genai-genai:latest &
+          docker push ghcr.io/${OWNER_LOWER}/frigate-genai-ffmpeg:v${{ github.run_number }} &
+          docker push ghcr.io/${OWNER_LOWER}/frigate-genai-ffmpeg:latest &
+          wait
 
   update-argo:
     needs: build
@@ -122,3 +124,50 @@ jobs:
         git config user.email "github-actions[bot]@users.noreply.github.com"
         git diff --quiet && echo "No changes" || \
           (git commit -am "frigate-genai: bump images to ${NEW_TAG}" && git push)
+
+  smoke-test-genai:
+    needs: build
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    env:
+      NEW_TAG: v${{ github.run_number }}
+    steps:
+    - name: Prepare env
+      run: |
+        echo "GENAI_IMAGE=ghcr.io/$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')/frigate-genai-genai" >> $GITHUB_ENV
+    - name: Pull and smoke-test genai worker
+      run: |
+        echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+        docker pull "${GENAI_IMAGE}:${NEW_TAG}"
+        docker run --rm \
+          "${GENAI_IMAGE}:${NEW_TAG}" \
+          --mode=triggers > /dev/null 2> /tmp/genai-worker-stderr &
+        PID=$!
+        for i in $(seq 1 30); do
+          sleep 2
+          if grep -q "Connecting to Temporal" /tmp/genai-worker-stderr 2>/dev/null; then
+            echo "SUCCESS: genai worker initialized and attempting Temporal connection"
+            exit 0
+          fi
+          if ! kill -0 $PID 2>/dev/null; then
+            echo "ERROR: genai worker crashed before reaching Temporal connect step"
+            cat /tmp/genai-worker-stderr
+            exit 1
+          fi
+        done
+        echo "WARNING: genai worker did not reach Temporal connect within 60s (PID still alive)"
+
+  validate-imports:
+    needs: build
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    env:
+      NEW_TAG: v${{ github.run_number }}
+    steps:
+    - name: Prepare env (lowercase owner for ghcr)
+      run: echo "GENAI_IMAGE=ghcr.io/$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')/frigate-genai-genai" >> $GITHUB_ENV
+    - name: Pull and validate all imports
+      run: |
+        echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+        docker pull "${GENAI_IMAGE}:${NEW_TAG}"
+        printf 'import sys, pkgutil, importlib\nimport frigate_genai\nerrors = []\ncount = 0\nfor finder, name, is_pkg in pkgutil.walk_packages(\n    frigate_genai.__path__, prefix="frigate_genai."\n):\n    count += 1\n    try:\n        importlib.import_module(name)\n        print(f"OK: {name}")\n    except Exception as e:\n        errors.append(f"FAIL: {name}: {e}")\nif errors:\n    for e in errors:\n        print(e, file=sys.stderr)\n    sys.exit(1)\nprint(f"All {count} modules validated")\n' | docker run --rm -i --entrypoint python3 "${GENAI_IMAGE}:${NEW_TAG}"

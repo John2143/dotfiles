@@ -21,20 +21,11 @@ from frigate_genai.s3_helpers import (
     _load_state,
     load_json,
 )
-from frigate_genai.tools.schemas import (
-    _tool_compact_schema,
-    _tool_crop_schema,
-    _tool_get_snapshot_schema,
-    _tool_set_description_schema,
-    _tool_show_frame_schema,
-    _tool_transcode_schema,
-    _tool_upscale_schema,
-)
 
 log = logging.getLogger("frigate-genai-sidecar")
 
 
-async def _run_with_heartbeat(func, *args, interval: float = 5.0):
+async def _run_with_heartbeat(func, *args, interval: float = 2.0):
     """Run a sync function in a thread, heartbeating every `interval` seconds.
 
     Prevents Temporal from cancelling the activity while the thread is busy
@@ -135,11 +126,24 @@ async def run_genai_turn_activity(turn_arg: dict) -> dict:
         if thinking_mode:
             extra_body["thinking_enabled"] = True
     client, model_name = _resolve_provider(provider_cfg, model)
-    tools = [
-        _tool_get_snapshot_schema(), _tool_show_frame_schema(), _tool_crop_schema(),
-        _tool_transcode_schema(), _tool_compact_schema(), _tool_set_description_schema(),
-        _tool_upscale_schema(),
-    ]
+    from frigate_genai.tools.schemas import (
+        _tool_find_keyframes_schema, _tool_frame_diff_schema, _tool_tag_image_schema,
+        _tool_compact_schema,
+        _tool_crop_schema,
+        _tool_get_snapshot_schema,
+        _tool_set_description_schema,
+        _tool_show_frame_schema,
+        _tool_transcode_schema,
+        _tool_upscale_schema,
+    )
+    tools = turn_arg.get("tools")
+    if tools is None:
+        tools = [
+            _tool_find_keyframes_schema(), _tool_frame_diff_schema(), _tool_tag_image_schema(),
+            _tool_get_snapshot_schema(), _tool_show_frame_schema(), _tool_crop_schema(),
+            _tool_transcode_schema(), _tool_compact_schema(), _tool_set_description_schema(),
+            _tool_upscale_schema(),
+        ]
 
 
     from openai import APIStatusError, RateLimitError
@@ -189,9 +193,8 @@ async def run_genai_turn_activity(turn_arg: dict) -> dict:
             "role": "user",
             "content": (
                 f"{urgency}You must call a function. You cannot output plain text. "
-                "Use show_frame(), crop(), transcode(), compact(), or set_description(). "
-                "Do not describe what you see — use tools to investigate, then "
-                "call set_description() with your final analysis."
+                "Use available tools to investigate, then call set_description() or "
+                "close_subagent() with your final analysis."
             ),
         })
         _atomic_write(msg_path, state)
@@ -207,6 +210,10 @@ async def run_genai_turn_activity(turn_arg: dict) -> dict:
     # Parse tool calls
     tool_calls = []
     for tc in msg.tool_calls:
+        # LiteLLM represents Gemini thought signatures as pseudo tool calls.
+        # Preserve them in assistant_msg, but they are not executable and require no tool response.
+        if "__thought__" in (tc.id or ""):
+            continue
         try:
             args = json.loads(tc.function.arguments)
         except json.JSONDecodeError:
@@ -225,21 +232,29 @@ async def run_genai_turn_activity(turn_arg: dict) -> dict:
                 result["description"] = args.get("description", "")
                 result["confidence"] = confidence
         tool_calls.append(tc_entry)
-    # Guard: reject set_description when batched with other tools.
+        if tc.function.name == "close_subagent":
+            confidence = args.get("confidence", "medium")
+            valid_conf = {"high", "medium", "low", "nothing_found"}
+            if confidence not in valid_conf:
+                tc_entry["error"] = f"invalid_confidence: {confidence}"
+            else:
+                result["description"] = args.get("findings", "")
+                result["confidence"] = confidence
+                result["key_images"] = args.get("show_images", [])
+            continue  # Skip tool_calls.append(tc_entry) below
+    # Guard: reject set_description/close_subagent when batched with other tools.
     # The model must review tool results before concluding.
-    if len(tool_calls) > 1 and any(tc["name"] == "set_description" for tc in tool_calls):
-        # Emit a tool message so the model knows why set_description was ignored
-        sd_ids = [tc["id"] for tc in tool_calls if tc["name"] == "set_description"]
-        for sd_id in sd_ids:
+    exit_tools = ("set_description", "close_subagent")
+    if len(tool_calls) > 1 and any(tc["name"] in exit_tools for tc in tool_calls):
+        exit_ids = [tc["id"] for tc in tool_calls if tc["name"] in exit_tools]
+        for eid in exit_ids:
             state["messages"].append({
                 "role": "tool",
-                "tool_call_id": sd_id,
-                "content": "Cannot call set_description() while other tools are pending. Review their results first, then conclude."
+                "tool_call_id": eid,
+                "content": "Cannot call set_description/close_subagent while other tools are pending. Review their results first, then conclude."
             })
         _atomic_write(msg_path, state)
-        # Remove set_description from tool_calls — let other tools run
-        tool_calls = [tc for tc in tool_calls if tc["name"] != "set_description"]
-        # Also clear description/confidence from result so the workflow doesn't break
+        tool_calls = [tc for tc in tool_calls if tc["name"] not in exit_tools]
         result.pop("description", None)
         result.pop("confidence", None)
 

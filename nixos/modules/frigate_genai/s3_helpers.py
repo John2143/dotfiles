@@ -11,8 +11,6 @@ import io as _io
 from functools import lru_cache as _lru_cache
 from pathlib import Path
 
-import boto3 as _boto3
-import botocore as _botocore
 from PIL import Image
 from uuid import uuid4
 
@@ -50,10 +48,15 @@ def _s3_put(key: str, data: bytes) -> None:
     """Upload bytes to S3."""
     _s3_client().put_object(Bucket=_S3_BUCKET, Key=key, Body=data)
 
+def _s3_delete(key: str) -> None:
+    """Delete a single object from S3."""
+    _s3_client().delete_object(Bucket=_S3_BUCKET, Key=key)
+
 
 def _s3_list(prefix: str) -> list[str]:
     """List keys under prefix. Returns sorted key list. Gracefully handles
     AccessDenied (some S3 backends don't allow ListObjects)."""
+    import botocore as _botocore
     try:
         paginator = _s3_client().get_paginator("list_objects_v2")
         keys = []
