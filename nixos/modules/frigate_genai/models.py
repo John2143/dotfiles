@@ -170,6 +170,7 @@ class SubAgentInput(BaseFrigateModel):
     depth: int = 1
     max_depth: int = 2
     max_turns: int = 8
+    frames_dir: str = ""
 
 
 class SubAgentOutput(BaseFrigateModel):

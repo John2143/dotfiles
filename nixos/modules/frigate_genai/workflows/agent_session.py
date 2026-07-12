@@ -20,20 +20,39 @@ from frigate_genai.tools.schemas import (
 
 # ── helpers ──────────────────────────────────────────────────────────────────
 
-def _resolve_image_refs(refs: list[str], agent_dir: str) -> list[str]:
-    """Convert image refs (crop://N, frame://N) to S3 keys under agent_dir."""
+def _resolve_image_refs(refs: list[str], agent_dir: str, frames_dir: str = "") -> tuple[list[str], list[str]]:
+    """Convert image refs (crop://N, frame://N) to S3 keys under agent_dir.
+    Returns (resolved_keys, error_refs). Never raises.
+    Supports crop://<non-negative int> and frame://<non-negative int>.
+    Strips @<suffix> before parsing. Silently ignores unknown schemes.
+    When frames_dir is provided, it is used for frame:// key resolution instead
+    of deriving from agent_dir (important for nested subagents).
+    """
+    base = agent_dir.rstrip("/")
+    parent = "/".join(base.split("/")[:-1]) + "/"
     keys = []
+    errors = []
     for ref in refs:
         if ref.startswith("crop://"):
-            idx = ref[len("crop://"):].split("@")[0]
-            k = f"{agent_dir}crop_{int(idx):03d}.jpg"
-            keys.append(k)
+            idx_str = ref[len("crop://"):].split("@")[0]
+            try:
+                idx = int(idx_str)
+                k = f"{base}/crop_{idx:03d}.jpg"
+                keys.append(k)
+            except ValueError:
+                errors.append(ref)
         elif ref.startswith("frame://"):
-            idx = ref[len("frame://"):].split("@")[0]
-            pd = "/".join(agent_dir.rstrip("/").split("/")[:-1]) + "/"
-            k = f"{pd}frames/frame_{int(idx):03d}.jpg"
-            keys.append(k)
-    return keys
+            idx_str = ref[len("frame://"):].split("@")[0]
+            try:
+                idx = int(idx_str)
+                if frames_dir:
+                    k = f"{frames_dir}/frames/frame_{idx:03d}.jpg"
+                else:
+                    k = f"{parent}frames/frame_{idx:03d}.jpg"
+                keys.append(k)
+            except ValueError:
+                errors.append(ref)
+    return keys, errors
 
 
 def _format_spawn_findings(findings: list[dict]) -> str:
@@ -218,28 +237,53 @@ class AgentSessionWorkflow:
                     sd = session_input.get("subagent_dir", session_input.get("parent_agent_dir",
                          f"events/{event_id}/agent/"))
 
+                    # ── Validate tasks ─────────────────────────────────────────
+                    from frigate_genai.models import SpawnTask
+                    validated_tasks = []
+                    validation_errors = []
                     for i, task in enumerate(tasks):
+                        try:
+                            st = SpawnTask.model_validate(task)
+                            validated_tasks.append(st)
+                        except Exception as e:
+                            validation_errors.append(f"  task[{i}]: {e}")
+                    if validation_errors:
+                        outcomes.append({"messages": [{"role": "tool", "tool_call_id": tc["id"],
+                            "content": "Spawn task validation failed:\n" + "\n".join(validation_errors)}]})
+                        continue
+
+                    # ── Resolve image refs ──────────────────────────────────────
+                    all_errors: list[str] = []
+                    for i, st in enumerate(validated_tasks):
+                        _, errs = _resolve_image_refs(st.image_refs, sd, frames_dir=f"events/{event_id}")
+                        if errs:
+                            all_errors.append(f"  task[{i}]: invalid refs: {errs}")
+                    if all_errors:
+                        outcomes.append({"messages": [{"role": "tool", "tool_call_id": tc["id"],
+                            "content": "Spawn image_refs resolution failed:\n" + "\n".join(all_errors)}]})
+                        continue
+
+                    # ── Start child workflows ───────────────────────────────────
+                    for i, st in enumerate(validated_tasks):
                         sub_sd = f"{sd}subagent/s{total_subagents + i}/"
+                        s3_keys, _ = _resolve_image_refs(st.image_refs, sd, frames_dir=f"events/{event_id}")
                         sub_input = {
                             "event_id": event_id, "camera": camera, "label": label,
-                            "task": task.get("task", ""), "image_refs": task.get("image_refs", []),
-                            "image_s3_keys": _resolve_image_refs(task.get("image_refs", []), sd),
+                            "task": st.task, "image_refs": st.image_refs,
+                            "image_s3_keys": s3_keys,
                             "parent_agent_dir": sd, "subagent_dir": sub_sd,
+                            "frames_dir": f"events/{event_id}",
                             "provider_path": provider_path, "model": model,
-                            "genai_queue": genai_queue, "prompts_path": prompts_path,
-                            "start_time": start_time, "end_time": end_time,
-                            "depth": depth + 1, "max_depth": max_depth,
-                            "max_turns": task.get("max_turns", 8),
                         }
                         handle = workflow.start_child_workflow(
                             SubAgentWorkflow, arg=sub_input,
-                            id=f"{event_id}-{spawn_key}-{i}",
+                            id=f"{event_id}-{sd.rstrip('/').split('/')[-1]}-{spawn_key}-{i}",
                             task_queue=genai_queue,
                         )
                         spawn_handles[spawn_key].append((tc, handle))
-                    total_subagents += len(tasks)
+                    total_subagents += len(validated_tasks)
                     outcomes.append({"messages": [{"role": "tool", "tool_call_id": tc["id"],
-                        "content": f"Spawned {len(tasks)} subagents. Key: {spawn_key}. "
+                        "content": f"Spawned {len(validated_tasks)} subagents. Key: {spawn_key}. "
                                    f"Call join(spawn_key='{spawn_key}') to collect results."}]})
                     continue
 

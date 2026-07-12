@@ -185,14 +185,28 @@ def _tool_spawn_schema() -> dict:
                 "properties": {
                     "tasks": {
                         "type": "array",
+                        "minItems": 1,
+                        "maxItems": 5,
                         "items": {
                             "type": "object",
+                            "additionalProperties": false,
                             "properties": {
                                 "task": {"type": "string", "description": "Precise task."},
-                                "image_refs": {"type": "array", "items": {"type": "string"},
-                                    "description": "Images to pre-load. Max 3 per subagent."},
-                                "max_turns": {"type": "integer",
-                                    "description": "Turn budget (default 8, max 15)."},
+                                "image_refs": {
+                                    "type": "array",
+                                    "maxItems": 3,
+                                    "items": {
+                                        "type": "string",
+                                        "pattern": "^(crop|frame)://\\d+(@\\w+)?$",
+                                    },
+                                    "description": "Images to pre-load. Max 3 per subagent.",
+                                },
+                                "max_turns": {
+                                    "type": "integer",
+                                    "minimum": 1,
+                                    "maximum": 15,
+                                    "description": "Turn budget (default 8, max 15).",
+                                },
                             },
                             "required": ["task"],
                         },

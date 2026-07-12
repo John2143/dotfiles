@@ -335,6 +335,7 @@ async def init_subagent_state_activity(init_arg: dict) -> dict:
         "task": task,
         "subagent_id": subagent_dir.rstrip("/").split("/")[-1],
         "key_images": [],
+        "frames_dir": init_arg.get("frames_dir", ""),
     }
     _atomic_write(msg_path, state)
 

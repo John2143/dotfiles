@@ -159,12 +159,11 @@ def _deserialize_messages(messages: list, agent_dir: str) -> list:
                 if isinstance(part, dict) and part.get("type") == "image_url":
                     url = part.get("image_url", {}).get("url", "")
                     if url.startswith("[") and url.endswith("]]"):
-                        fname = url[2:-2]
-                        img_key = f"{agent_dir}/{fname}"
+                        base = agent_dir.rstrip("/")
+                        img_key = f"{base}/{fname}"
                         raw = _s3_get(img_key) if is_s3 else None
-                        if raw is None and not is_s3:
-                            p = Path(agent_dir) / fname
-                            raw = p.read_bytes() if p.exists() else None
+                        p = Path(agent_dir) / fname
+                        raw = p.read_bytes() if p.exists() else None
                         if raw:
                             b64 = base64.b64encode(raw).decode("ascii")
                             part["image_url"]["url"] = f"data:image/jpeg;base64,{b64}"
