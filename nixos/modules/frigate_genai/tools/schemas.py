@@ -189,7 +189,7 @@ def _tool_spawn_schema() -> dict:
                         "maxItems": 5,
                         "items": {
                             "type": "object",
-                            "additionalProperties": false,
+                            "additionalProperties": False,
                             "properties": {
                                 "task": {"type": "string", "description": "Precise task."},
                                 "image_refs": {
