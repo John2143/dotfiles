@@ -150,17 +150,17 @@
         '')
       # claw wrapper: sources runtime API keys from agenix. No sandboxing
       # yet (same pattern as claude/omp — bwrap commented out for now).
-      (let
-        claw-unwrapped = pkgs.claw;
-      in
-        pkgs.writeShellScriptBin "claw" ''
-          if [ -f /run/agenix/llm-runtime-keys ]; then
-            set -a
-            . /run/agenix/llm-runtime-keys
-            set +a
-          fi
-          exec ${claw-unwrapped}/bin/claw "$@"
-        '')
+      #(let
+        #claw-unwrapped = pkgs.claw;
+      #in
+        #pkgs.writeShellScriptBin "claw" ''
+          #if [ -f /run/agenix/llm-runtime-keys ]; then
+            #set -a
+            #. /run/agenix/llm-runtime-keys
+            #set +a
+          #fi
+          #exec ${claw-unwrapped}/bin/claw "$@"
+        #'')
     ]
     ++ lib.optionals (builtins.elem config.networking.hostName ["office" "arch"]) [
       # Vast.ai CLI wrapper. Loads VAST_API_KEY from /run/agenix/vast-credentials

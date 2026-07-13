@@ -121,7 +121,7 @@
     rusty-path-of-building # Path of Exile build planner
     #bitwarden-desktop # password manager
     kind
-    mongodb-compass
+    pkgs-stable.mongodb-compass
     doctl # DigitalOcean CLI
     hcloud # Hetzner CLI
     rclone # S3/B2/RustFS sync
