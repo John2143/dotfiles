@@ -500,6 +500,102 @@ Missing CRD or KEDA operator down. Check:
 
 ---
 
+## Performance baseline (2026-07-12)
+
+Baseline from 2,000 GenAIWorkflow executions (July 10-12, 2026). Source: `analyze_jobs.py` against Temporal history API.
+
+### Overall health
+
+| Metric | Value |
+|---|---|
+| Total root workflows | 2,000 |
+| Completed | 920 (46.0%) |
+| Failed | 828 (41.4%) |
+| Terminated | 252 (12.6%) |
+
+**The 41.4% failure rate is not a code defect.** 92.1% of all failures are two infrastructure issues:
+
+| Root cause | Count | % of failures | Explanation |
+|---|---|---|---|
+| Ollama unavailable | 970 | 48.0% | `litellm` returning "no available server" — Ollama instance was down |
+| Gemini rate limit (429) | 890 | 44.1% | "prepayment credits depleted" / "exceeded current quota" |
+| Terminated (deployment rollover) | 111 | 5.5% | Workflows killed by WorkerDeployment version rotation |
+| Activity timeouts | 20 | 1.0% | StartToClose or Heartbeat timeouts |
+| Everything else combined | 28 | 1.4% | Server errors, Frigate API, auth, genuine app errors |
+
+When Ollama is running and Gemini credits are available, expected failure rate drops to low single digits.
+
+### Duration (completed workflows only)
+
+| Percentile | Duration |
+|---|---|
+| p50 | 82 seconds |
+| p90 | 312 seconds (5.2 min) |
+| p95 | 378 seconds (6.3 min) |
+| p99 | 3,282 seconds (54.7 min) |
+| max | 10,685 seconds (178.1 min) |
+
+61% of completions have exactly 42-47 state transitions (14-16 agent turns). The long tail (>30 min, 13 workflows) all have 47-56 transitions — the agent gets stuck looping or the LLM API is slow, not more turns.
+
+### Duration by model (completed, p50)
+
+| Model | n | p50 | Has tool failures | Why |
+|---|---|---|---|---|
+| `gemini-2.5-flash-lite` | 388 | **54s** | 12.4% | Fastest; more tool failures but recovers quickly |
+| `gemini-2.5-pro` | 416 | 100s | 11.8% | Baseline; balanced |
+| `gemini-2.5-flash` | 116 | **310s** | 1.7% | 6x slower than flash-lite despite fewest tool failures — likely higher per-token latency or different prompt routing |
+
+**`gemini-2.5-flash` is an outlier.** Verify whether its accuracy justifies the 6x wall-time cost over flash-lite. Only 116 workflows use it — it may be an older model version still in rotation.
+
+### Confidence by label
+
+| Label | n | High | Low | Nothing found |
+|---|---|---|---|---|
+| person | 231 | **65%** | 25% | 2% |
+| dog | 39 | 49% | 28% | 3% |
+| package | 8 | 62% | 25% | 0% |
+| car | 636 | **10%** | 45% | 27% |
+
+**Cars are the hardest label.** Only 10% high confidence. 27% of car analyses find nothing actionable — the agent can't determine what's noteworthy about the vehicle (arriving? departing? whose?). Binary presence labels (person, package) score much higher than interpretive labels (car).
+
+### Confidence by camera
+
+| Camera | n | High | Low | Nothing found | Likely location |
+|---|---|---|---|---|---|
+| cam03 | 135 | **60%** | 27% | 4% | Indoor |
+| cam04 | 74 | **59%** | 27% | 4% | Indoor |
+| cam02 | 78 | 37% | 38% | 1% | Mixed |
+| cam01 | 350 | 15% | 44% | 18% | Driveway (outdoor) |
+| cam06 | 283 | 11% | 42% | **36%** | Street (outdoor) |
+
+Outdoor cameras produce dramatically lower confidence. cam06 (street) has 36% "nothing found" — the agent frequently can't determine anything actionable from wide-angle public street footage. Indoor cameras (cam03, cam04) achieve ~60% high confidence.
+
+### Build versions
+
+| Build | Workflows | Completed | Failed | Failure rate |
+|---|---|---|---|---|
+| v74 | 1,507 | 920 | 367 | 24.4% |
+| v75 | 492 | 0 | 460 | 93.5% |
+| v76 | 1 | 0 | 1 | 100% |
+
+**v75's 93.5% failure rate is infrastructure, not a regression.** v75 deployed during the Ollama outage + Gemini quota exhaustion period. All v75 failures are the same Ollama-unavailable + rate-limit root causes as v74. Zero completed v75 workflows means v75 was never tested under normal conditions — it was immediately rolled back or superseded. v76 has 1 workflow (too few to assess).
+
+### Other observations
+
+- **Cost tracking is not wired up.** The `Cost` search attribute exists in `config.py` but no workflow upserts it. All 920 completions show empty cost.
+- **97% of completions skip transcode** (single-snapshot or `skip_frames=True`). Only 26 workflows used full HLS frame extraction. Transcode is rarely needed for successful analysis.
+- **99 workflows (10.8%) completed with tool failures.** The agent recovered from invalid crops, frame source errors, etc. and still produced a result. These take ~50% longer (p50=116s vs 78s).
+- **Average agent turns: 14-16** (42-48 state transitions ÷ 3 transitions per turn). Highly consistent — the agent converges in a tight band when things work.
+
+### Updating this baseline
+
+```bash
+cd repos/dotfiles
+python nixos/modules/frigate_genai/analyze_jobs.py --limit 2000 --output-dir ./tmep/ --cache-dir ./tmep/temporal_cache/
+```
+
+Re-run after significant changes (new model added, prompt overhaul, retry policy change) and replace the numbers above.
+
 ## External dependencies
 
 | Service | Endpoint | Purpose | Fallback |
