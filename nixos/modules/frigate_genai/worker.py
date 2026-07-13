@@ -807,14 +807,28 @@ async def async_main(prompts_path: str, provider_path: str, mode: str = "trigger
                         _s3_put("events/_paused/ollama", b"1")
                     else:
                         _s3_delete("events/_paused/ollama")
+
+                    # Re-check paused state and send response
                     paused = _s3_get("events/_paused/ollama") is not None
+                    self.send_response(200)
+                    self._cors()
+                    self.send_header("Content-type", "application/json")
+                    self.end_headers()
+                    self.wfile.write(json.dumps({"paused": paused}).encode())
                 elif self.path == "/api/genai-pause":
                     existing = _s3_get("events/_paused/genai")
                     if existing is None:
                         _s3_put("events/_paused/genai", b"1")
                     else:
                         _s3_delete("events/_paused/genai")
+
+                    # Re-check paused state and send response
                     paused = _s3_get("events/_paused/genai") is not None
+                    self.send_response(200)
+                    self._cors()
+                    self.send_header("Content-type", "application/json")
+                    self.end_headers()
+                    self.wfile.write(json.dumps({"paused": paused}).encode())
                 else:
                     self.send_response(404)
                     self.end_headers()
