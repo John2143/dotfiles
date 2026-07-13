@@ -107,7 +107,7 @@
     nicotine-plus # soulseek client
 
     #mullvad-vpn # vpn  # DISABLED: gitlab.gnome.org 503 for gtk-doc dependency
-    plex-desktop # plex
+    #plex-desktop # plex
     #rustdesk
     #spotify # music
     (prismlauncher.override {

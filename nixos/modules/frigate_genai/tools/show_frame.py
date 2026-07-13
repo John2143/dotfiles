@@ -38,7 +38,7 @@ async def tool_show_frame_activity(arg: dict) -> dict:
     tool_args = arg.get("args", {})
     state, agent_dir = _load_state(msg_path)
     outcome_messages = []
-    frames_dir = str(Path(agent_dir).parent)
+    frames_dir = state.get("frames_dir") or str(Path(agent_dir).parent)
 
     tc_id = _find_tc_id(state, "show_frame")
     source = tool_args.get("source", "snapshot://")

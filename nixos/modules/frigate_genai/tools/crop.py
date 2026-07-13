@@ -23,7 +23,7 @@ async def tool_crop_activity(arg: dict) -> dict:
     msg_path = arg["msg_path"]
     tool_args = arg.get("args", {})
     state, agent_dir = _load_state(msg_path)
-    event_prefix = agent_dir.rsplit("/", 1)[0]
+    event_prefix = state.get("frames_dir") or agent_dir.rsplit("/", 1)[0]
 
     tc_id = _find_tc_id(state, "crop")
     source = tool_args.get("source", "")
