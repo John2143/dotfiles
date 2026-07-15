@@ -13,6 +13,7 @@ from http.server import HTTPServer, BaseHTTPRequestHandler
 
 import paho.mqtt.client as mqtt
 from temporalio.client import Client
+from temporalio.service import TLSConfig
 from temporalio.common import (
     TypedSearchAttributes,
     SearchAttributePair,
@@ -235,7 +236,24 @@ async def async_main(prompts_path: str, provider_path: str, mode: str = "trigger
     temporal_address = os.environ.get("TEMPORAL_ADDRESS", "192.168.5.10:32682")
     log.info("Connecting to Temporal at %s", temporal_address)
 
-    _temporal_client = await Client.connect(temporal_address, namespace="default")
+    tls_enabled = os.environ.get("TEMPORAL_TLS", "").lower() in ("1", "true", "yes")
+    tls_config = None
+    if tls_enabled:
+        tls_config = True  # Uses system CA trust store
+        ca_path = os.environ.get("TEMPORAL_TLS_CA_PATH")
+        if ca_path:
+            with open(ca_path, "rb") as f:
+                tls_config = TLSConfig(server_root_ca_cert=f.read())
+        server_name = os.environ.get("TEMPORAL_TLS_SERVER_NAME")
+        if server_name:
+            if tls_config is True:
+                tls_config = TLSConfig()
+            tls_config.domain = server_name
+    _temporal_client = await Client.connect(
+        temporal_address,
+        namespace="default",
+        tls=tls_config if tls_config is not True else True,
+    )
     _stats["temporal_connected"] = True
 
     try:
