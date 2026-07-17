@@ -233,26 +233,51 @@ async def async_main(prompts_path: str, provider_path: str, mode: str = "trigger
     log.info("GenAI provider: %s / %s", provider_cfg.get("provider"), provider_cfg.get("model"))
     log.info("Describe labels: %s", ", ".join(sorted(describe_labels)))
 
-    temporal_address = os.environ.get("TEMPORAL_ADDRESS", "192.168.5.10:32682")
+    temporal_address = os.environ.get("TEMPORAL_ADDRESS", "temporal-frontend.default.svc.cluster.local:7233")
     log.info("Connecting to Temporal at %s", temporal_address)
 
     tls_enabled = os.environ.get("TEMPORAL_TLS", "").lower() in ("1", "true", "yes")
     tls_config = None
     if tls_enabled:
-        tls_config = True  # Uses system CA trust store
-        ca_path = os.environ.get("TEMPORAL_TLS_CA_PATH")
-        if ca_path:
-            with open(ca_path, "rb") as f:
-                tls_config = TLSConfig(server_root_ca_cert=f.read())
-        server_name = os.environ.get("TEMPORAL_TLS_SERVER_NAME")
-        if server_name:
-            if tls_config is True:
-                tls_config = TLSConfig()
-            tls_config.domain = server_name
+        socket_path = os.environ.get("SPIFFE_ENDPOINT_SOCKET", "").replace("unix://", "")
+        if socket_path:
+            import subprocess, tempfile
+            svid_dir = tempfile.mkdtemp(prefix="svid-")
+            subprocess.run([
+                "spire-agent", "api", "fetch", "x509",
+                "-socketPath", socket_path,
+                "-write", svid_dir,
+                "-timeout", "30s",
+            ], check=True)
+            with open(f"{svid_dir}/svid.0.pem", "rb") as f:
+                client_cert = f.read()
+            with open(f"{svid_dir}/svid.0.key", "rb") as f:
+                client_key = f.read()
+            with open(f"{svid_dir}/bundle.0.pem", "rb") as f:
+                ca_cert = f.read()
+            tls_config = TLSConfig(
+                server_root_ca_cert=ca_cert,
+                client_cert=client_cert,
+                client_private_key=client_key,
+            )
+            server_name = os.environ.get("TEMPORAL_TLS_SERVER_NAME")
+            if server_name:
+                tls_config.domain = server_name
+            log.info("Fetched SPIRE X.509 SVID for mTLS")
+        else:
+            # Fallback: plain TLS with CA cert (no mTLS)
+            tls_config = TLSConfig()
+            ca_path = os.environ.get("TEMPORAL_TLS_CA_PATH")
+            if ca_path:
+                with open(ca_path, "rb") as f:
+                    tls_config.server_root_ca_cert = f.read()
+            server_name = os.environ.get("TEMPORAL_TLS_SERVER_NAME")
+            if server_name:
+                tls_config.domain = server_name
     _temporal_client = await Client.connect(
         temporal_address,
         namespace="default",
-        tls=tls_config if tls_config is not True else True,
+        tls=tls_config,
     )
     _stats["temporal_connected"] = True
 
