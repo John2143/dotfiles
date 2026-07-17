@@ -128,7 +128,7 @@ let
   frigateGenaiGenaiImage = pkgs.dockerTools.buildLayeredImage {
     name = "frigate-genai-genai";
     tag = "v1";
-    contents = [ pythonEnv pkgs.cacert ];
+    contents = [ pythonEnv pkgs.cacert pkgs.spire ];
     extraCommands = ''
       mkdir -p var/lib/frigate-genai-sidecar
       mkdir -p lib/frigate_genai
@@ -143,7 +143,7 @@ let
   frigateGenaiFfmpegImage = pkgs.dockerTools.buildLayeredImage {
     name = "frigate-genai-ffmpeg";
     tag = "v1";
-    contents = [ pythonEnv pkgs.cacert pkgs.ffmpeg ];
+    contents = [ pythonEnv pkgs.cacert pkgs.ffmpeg pkgs.spire ];
     extraCommands = ''
       mkdir -p var/lib/frigate-genai-sidecar
       mkdir -p lib/frigate_genai
