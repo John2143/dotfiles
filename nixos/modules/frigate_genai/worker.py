@@ -253,10 +253,15 @@ async def async_main(prompts_path: str, provider_path: str, mode: str = "trigger
                 client_cert = f.read()
             with open(f"{svid_dir}/svid.0.key", "rb") as f:
                 client_key = f.read()
-            with open(f"{svid_dir}/bundle.0.pem", "rb") as f:
-                ca_cert = f.read()
+            # Read Temporal server CA cert for server verification
+            # (SPIRE bundle is only trusted by the server for client auth)
+            server_ca_path = os.environ.get("TEMPORAL_TLS_CA_PATH")
+            server_ca = None
+            if server_ca_path:
+                with open(server_ca_path, "rb") as f:
+                    server_ca = f.read()
             tls_config = TLSConfig(
-                server_root_ca_cert=ca_cert,
+                server_root_ca_cert=server_ca,
                 client_cert=client_cert,
                 client_private_key=client_key,
             )
