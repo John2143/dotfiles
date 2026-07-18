@@ -6,6 +6,9 @@ import logging
 import os
 import re
 import threading
+import shutil
+import subprocess
+import tempfile
 import time
 import urllib.request as _urllib_request
 from concurrent.futures import ThreadPoolExecutor
@@ -13,6 +16,7 @@ from http.server import HTTPServer, BaseHTTPRequestHandler
 
 import paho.mqtt.client as mqtt
 from temporalio.client import Client
+from temporalio.service import TLSConfig
 from temporalio.common import (
     TypedSearchAttributes,
     SearchAttributePair,
@@ -216,6 +220,70 @@ def _escape(s: str) -> str:
     return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace('"', "&quot;")
 
 
+def _temporal_tls_config() -> TLSConfig | None:
+    """Build a TLSConfig with SPIRE mTLS, or None when TLS is disabled.
+
+    Requires SPIFFE_ENDPOINT_SOCKET and TEMPORAL_TLS_CA_PATH when TLS is
+    enabled.  Fetches the X.509 SVID up to three times with five-second
+    waits between attempts, constructs the full client certificate chain
+    (leaf + bundle), and raises after the third failure — no plain-TLS
+    fallback.
+    """
+    tls_enabled = os.environ.get("TEMPORAL_TLS", "").lower() in ("1", "true", "yes")
+    if not tls_enabled:
+        return None
+
+    socket_path = os.environ.get("SPIFFE_ENDPOINT_SOCKET", "").replace("unix://", "")
+    if not socket_path:
+        raise RuntimeError("TEMPORAL_TLS enabled but SPIFFE_ENDPOINT_SOCKET is not set")
+
+    server_ca_path = os.environ.get("TEMPORAL_TLS_CA_PATH")
+    if not server_ca_path:
+        raise RuntimeError("TEMPORAL_TLS enabled but TEMPORAL_TLS_CA_PATH is not set")
+
+    last_err = None
+    for attempt in range(1, 4):
+        svid_dir = None
+        try:
+            svid_dir = tempfile.mkdtemp(prefix="svid-")
+            subprocess.run([
+                "spire-agent", "api", "fetch", "x509",
+                "-socketPath", socket_path,
+                "-write", svid_dir,
+                "-timeout", "30s",
+            ], check=True)
+            # Concatenate leaf cert with bundle for full chain
+            with open(f"{svid_dir}/svid.0.pem", "rb") as f:
+                client_cert = f.read()
+            with open(f"{svid_dir}/bundle.0.pem", "rb") as f:
+                client_cert += f.read()
+            with open(f"{svid_dir}/svid.0.key", "rb") as f:
+                client_key = f.read()
+            with open(server_ca_path, "rb") as f:
+                server_ca = f.read()
+            tls_config = TLSConfig(
+                server_root_ca_cert=server_ca,
+                client_cert=client_cert,
+                client_private_key=client_key,
+            )
+            server_name = os.environ.get("TEMPORAL_TLS_SERVER_NAME")
+            if server_name:
+                tls_config.domain = server_name
+            log.info("Fetched SPIRE X.509 SVID for mTLS (attempt %d)", attempt)
+            return tls_config
+        except Exception as e:
+            last_err = e
+            if attempt < 3:
+                log.warning("SVID fetch attempt %d/3 failed (%s) — retrying in 5s", attempt, e)
+                time.sleep(5)
+        finally:
+            if svid_dir is not None:
+                shutil.rmtree(svid_dir, ignore_errors=True)
+
+    raise RuntimeError(
+        "Failed to fetch SPIRE X.509 SVID after 3 attempts: %s" % last_err
+    )
+
 async def async_main(prompts_path: str, provider_path: str, mode: str = "triggers") -> None:
     global _temporal_client, _main_event_loop
 
@@ -232,10 +300,15 @@ async def async_main(prompts_path: str, provider_path: str, mode: str = "trigger
     log.info("GenAI provider: %s / %s", provider_cfg.get("provider"), provider_cfg.get("model"))
     log.info("Describe labels: %s", ", ".join(sorted(describe_labels)))
 
-    temporal_address = os.environ.get("TEMPORAL_ADDRESS", "192.168.5.10:32682")
+    temporal_address = os.environ.get("TEMPORAL_ADDRESS", "temporal-frontend.default.svc.cluster.local:7233")
     log.info("Connecting to Temporal at %s", temporal_address)
 
-    _temporal_client = await Client.connect(temporal_address, namespace="default")
+    tls_config = _temporal_tls_config()
+    _temporal_client = await Client.connect(
+        temporal_address,
+        namespace="default",
+        tls=tls_config,
+    )
     _stats["temporal_connected"] = True
 
     try:
@@ -807,14 +880,28 @@ async def async_main(prompts_path: str, provider_path: str, mode: str = "trigger
                         _s3_put("events/_paused/ollama", b"1")
                     else:
                         _s3_delete("events/_paused/ollama")
+
+                    # Re-check paused state and send response
                     paused = _s3_get("events/_paused/ollama") is not None
+                    self.send_response(200)
+                    self._cors()
+                    self.send_header("Content-type", "application/json")
+                    self.end_headers()
+                    self.wfile.write(json.dumps({"paused": paused}).encode())
                 elif self.path == "/api/genai-pause":
                     existing = _s3_get("events/_paused/genai")
                     if existing is None:
                         _s3_put("events/_paused/genai", b"1")
                     else:
                         _s3_delete("events/_paused/genai")
+
+                    # Re-check paused state and send response
                     paused = _s3_get("events/_paused/genai") is not None
+                    self.send_response(200)
+                    self._cors()
+                    self.send_header("Content-type", "application/json")
+                    self.end_headers()
+                    self.wfile.write(json.dumps({"paused": paused}).encode())
                 else:
                     self.send_response(404)
                     self.end_headers()

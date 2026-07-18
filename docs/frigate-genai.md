@@ -2,7 +2,7 @@
 
 ## What it is
 
-Frigate GenAI watches Frigate NVR's MQTT event stream, starts a Temporal workflow for each detection event, and uses a vision-capable LLM (Gemini or Ollama) to describe what happened in natural language. Every event goes through: frame extraction → multi-turn LLM analysis with tool use → description written back to Frigate's sub_label. The system runs on a home k3s cluster, scales to zero when idle, and deploys via WorkerDeployments (Temporal-managed rainbow deploys with zero-downtime progressive rollout).
+Frigate GenAI watches Frigate NVR's MQTT event stream, starts a Temporal workflow for each detection event, and uses a vision-capable LLM (Gemini or Ollama) to describe what happened in natural language. Every event goes through: frame extraction → multi-turn LLM analysis with tool use → description written back to Frigate's sub_label. The system runs on a home k3s cluster and deploys as standard Kubernetes Deployments with Recreate strategy.
 
 ---
 
@@ -12,13 +12,13 @@ Frigate GenAI watches Frigate NVR's MQTT event stream, starts a Temporal workflo
 Frgate NVR ──MQTT──> triggers pod (Temporal workflow starter)
     │                    │
     │              Temporal Server
-    │             /    │     │      \
-    │     genai-tasks  ffmpeg-tasks  gemini-tasks  ollama-tasks
-    │     (misc acts)  (transcoding) (vision LLM)  (local LLM)
+    │                    │ (SPIRE X.509 mTLS)
+    │             genai-tasks  ffmpeg-tasks  gemini-tasks  ollama-tasks
+    │             (misc acts)  (transcoding) (vision LLM)  (local LLM)
     │         │            │            │             │
-    │     triggers-     ffmpeg-      gemini-       ollama-
-    │     vXX pod      vXX pod      vXX pods      vXX pod
-    │     (no KEDA)   (KEDA 0-3)   (KEDA 0-5)    (KEDA 0-1)
+    │     triggers      ffmpeg       gemini        ollama
+    │     pod           pod          pods          pod
+    │     (fixed 1)    (fixed 1)    (fixed 1)     (fixed 1)
     │
     │              LiteLLM Proxy (2 replicas, HA)
     │              /         \
@@ -31,12 +31,12 @@ Frgate NVR ──MQTT──> triggers pod (Temporal workflow starter)
 
 ## Component roles
 
-### 1. Triggers pod (always running, no KEDA)
+### 1. Triggers pod (always running, fixed 1 replica)
 
 **Mode:** `--mode=triggers`
 **Task queue:** `genai-tasks` (misc activities only)
-**WorkerDeployment:** `frigate-genai-triggers`
-**Rollout strategy:** `AllAtOnce` (no progressive ramp for single-replica)
+**Deployment:** `frigate-genai-triggers`
+**Rollout strategy:** `Recreate`
 
 The triggers pod is the **brain stem** of the system. It:
 
@@ -56,16 +56,14 @@ The triggers pod is the **brain stem** of the system. It:
 
 **Why one replica?** The MQTT subscriber and workflow starter are single-writer by nature. A second triggers pod would double-fire workflows. The Temporal workflow listener itself scales via activity distribution across queues.
 
-**Why no KEDA?** The triggers pod must always run to receive MQTT events. If it scaled to zero, events would be missed (MQTT QoS 1 means they queue at the broker, but Temporal workflows wouldn't start until the pod comes back).
-
 **Resources:** 100m CPU request, 128Mi memory — it's mostly sleeping waiting for MQTT.
 
-### 2. FFmpeg pod (KEDA-scaled, 0-3 replicas)
+### 2. FFmpeg pod (fixed 1 replica)
 
 **Mode:** `--mode=ffmpeg`
 **Task queue:** `genai-tasks-ffmpeg`
-**WorkerDeployment:** `frigate-genai-ffmpeg`
-**Rollout strategy:** `AllAtOnce`
+**Deployment:** `frigate-genai-ffmpeg`
+**Rollout strategy:** `Recreate`
 
 The ffmpeg pod extracts frames from Frigate's HLS recordings. It:
 
@@ -74,38 +72,24 @@ The ffmpeg pod extracts frames from Frigate's HLS recordings. It:
 3. **Returns JPEG byte arrays** to the workflow as a list
 4. **Runs two activities:** `transcode_into_parts_activity` (batch extraction for timeline) and `tool_transcode_activity` (single-frame extraction for detailed tool inspection)
 
-**Why KEDA scaled?** FFmpeg is CPU-heavy (software decoding). Multiple events queue up during busy periods, and KEDA scales pods based on `genai-tasks-ffmpeg` queue depth. When idle for 10 minutes, pods scale to zero.
-
 **Why its own task queue?** Isolates CPU-intensive work from LLM work. A Gemini turn shouldn't be delayed by frame extraction backlog, and vice versa.
 
-**Why AllAtOnce rollout?** Single-activity no-state worker — no progressive ramp needed. A new version either extracts frames or it doesn't.
+**Why Recreate rollout?** Single-activity no-state worker — no progressive ramp needed. A new version either extracts frames or it doesn't.
 
 **Max concurrent:** 2 (controlled by `TEMPORAL_MAX_FFMPEG` env). Each ffmpeg process uses one CPU core. Pod spec limits to 1000m CPU.
 
 **Resources:** 250m CPU request, 512Mi memory, 1000m CPU limit, 2Gi memory limit.
 
-### 3. Gemini pod (KEDA-scaled, 0-5 replicas)
+### 3. Gemini pod (fixed 1 replica)
 
 **Mode:** `--mode=genai-gemini`
 **Task queues:** `genai-tasks` (misc) + `genai-tasks-gemini` (LLM turns)
-**WorkerDeployment:** `frigate-genai-gemini`
-**Rollout strategy:** **Progressive** — 10% ramp → 5 min pause → 50% ramp → 5 min pause → 100%
+**Deployment:** `frigate-genai-gemini`
+**Rollout strategy:** `Recreate`
 
 The gemini pod is the **heavy lifter**. It:
 
-1. **Listens on `genai-tasks-gemini`** for LLM turn activities:
-   - `run_genai_turn_activity` — the main LLM call with tool use loop
-   - `tool_find_keyframes_activity` — deterministic keyframe selection via pixel-difference analysis
-   - `tool_frame_diff_activity` — pairwise frame comparison for the LLM to query directly
-   - `tool_tag_image_activity` — batched useful/not-useful tagging for per-event working memory
-   - `tool_get_snapshot_activity` — fetch a full-resolution camera snapshot
-   - `tool_show_frame_activity` — extract a specific frame for the model to inspect
-   - `tool_crop_activity` — crop a region of an image
-   - `tool_compact_activity` — prune the conversation history to stay under context limits
-   - `tool_set_description_activity` — commit the description early (persisted even if workflow later fails)
-   - `apply_tool_messages_activity` — merge tool results back into the conversation
-   - `summarize_agent_activity` — produce final structured summary
-   - `save_agent_log_activity` — archive the full agent conversation to S3
+1. **Listens on `genai-tasks-gemini`** for LLM turn activities (run_genai_turn, tool_find_keyframes, tool_frame_diff, tool_tag_image, tool_get_snapshot, tool_show_frame, tool_crop, tool_compact, tool_set_description, apply_tool_messages, summarize_agent, save_agent_log).
 
 2. **Also listens on `genai-tasks`** for misc activities (model selection, snapshot fetch, cleanup, upscale) — same as triggers pod, providing redundancy.
 
@@ -113,18 +97,16 @@ The gemini pod is the **heavy lifter**. It:
 
 4. **Has 5 concurrent activity slots** per pod, controlled by `TEMPORAL_MAX_GEMINI_GENAI`.
 
-**Why Progressive rollout?** Gemini is the highest-risk deployment. A bad prompt or tool change can waste API credits on every event. The progressive rollout (10% → 50% → 100%) limits blast radius — if v51 has a bug, only 10% of events hit it for the first 5 minutes, and we can revert before the full ramp.
-
 **Why topologySpread?** 4 physical nodes. The topology spread constraint (`maxSkew: 1`, `ScheduleAnyway`) spreads Gemini pods across nodes for fault tolerance. If one node goes down, other nodes still serve LLM turns.
 
 **Resources:** 250m CPU request, 512Mi memory, 1000m CPU limit, 2Gi memory limit.
 
-### 4. Ollama pod (KEDA-scaled, 0-1 replicas)
+### 4. Ollama pod (fixed 1 replica)
 
 **Mode:** `--mode=genai-ollama`
 **Task queues:** `genai-tasks` (misc) + `genai-tasks-ollama` (LLM turns)
-**WorkerDeployment:** `frigate-genai-ollama`
-**Rollout strategy:** `AllAtOnce`
+**Deployment:** `frigate-genai-ollama`
+**Rollout strategy:** `Recreate`
 
 Identical to Gemini pod but calls the **local Ollama API** through LiteLLM. Single replica because the local model can't handle more than one concurrent request.
 
@@ -133,24 +115,22 @@ Identical to Gemini pod but calls the **local Ollama API** through LiteLLM. Sing
 **Max concurrent:** 1 (controlled by `TEMPORAL_MAX_OLLAMA_GENAI`). Ollama on a single GPU can only handle one request at a time.
 
 **Resources:** 250m CPU request, 512Mi memory, 1000m CPU limit, 2Gi memory limit.
-
 ---
 
 ## Task queues — the routing layer
 
 Temporal separates **where work runs** (task queues) from **what work is** (activities/workflows).
 
-| Task Queue | Purpose | Listeners | Scaled by |
+| Task Queue | Purpose | Listeners | Replicas |
 |---|---|---|---|
-| `genai-tasks` | Misc activities + workflow listener | triggers (1), gemini (N), ollama (N) | No (triggers) / Yes (gemini/ollama via KEDA) |
-| `genai-tasks-gemini` | LLM turns + tool execution (find_keyframes, frame_diff, tag_image, show_frame, crop, compact, set_description, upscale, apply) | gemini only | KEDA (0-5) |
-| `genai-tasks-ffmpeg` | Frame extraction | ffmpeg only | KEDA (0-3) |
-| `genai-tasks-ollama` | LLM turns via Ollama | ollama only | KEDA (0-1) |
+| `genai-tasks` | Misc activities + workflow listener | triggers, gemini, ollama | Fixed (1 each) |
+| `genai-tasks-gemini` | LLM turns + tool execution | gemini only | Fixed (1) |
+| `genai-tasks-ffmpeg` | Frame extraction | ffmpeg only | Fixed (1) |
+| `genai-tasks-ollama` | LLM turns via Ollama | ollama only | Fixed (1) |
 
-**Why separate queues?** Isolation. A ffmpeg backlog shouldn't block Gemini turns. Gemini rate-limiting shouldn't starve Ollama requests. Each workload can independently scale based on its own queue depth.
+**Why separate queues?** Isolation. A ffmpeg backlog shouldn't block Gemini turns. Gemini rate-limiting shouldn't starve Ollama requests. Each workload is independently deployable via ArgoCD-managed Deployments.
 
 **Why do Gemini/Ollama also listen on `genai-tasks`?** Redundancy. The triggers pod runs the workflow and hosts misc activities. If the triggers pod is the only misc activity listener and it's being restarted, no new workflows can start. Gemini and Ollama picking up misc activities provides headroom.
-
 ---
 
 ## The GenAI Workflow — what happens per event
@@ -250,23 +230,19 @@ git push (dotfiles master)
     → build job:
        nix build → docker tag → ghcr push (v57, v58, ...)
     → update-argo job:
-       clone argo repo → sed unsafeCustomBuildID + image + TEMPORAL_WORKER_BUILD_ID into *-workerdeployment.yaml
-       → verify tags → smoke-test ffmpeg startup → git commit → git push (argo main)
+       clone argo repo → update image tag in *-deployment.yaml
+       → verify tags → git commit → git push (argo main)
   → ArgoCD (polls argo main every 3 min):
-    → syncs frigate-genai app (WorkerDeployment CRs updated from v51 to v52)
-  → Temporal Worker Controller (watches CRs):
-    → creates versioned Deployment: frigate-genai-gemini-v52
-    → progressive rollout: 10% → pause 5 min → 50% → pause 5 min → 100%
-    → old version (v51) sunsets: scaledown 30 min → delete 2h
+    → syncs frigate-genai app (Deployment image tags updated)
+  → Kubernetes:
+    → Recreate strategy: old pod terminates, new pod starts with new image
 ```
 
-**Why WorkerDeployments instead of direct Deployments?** Traditional Kubernetes Deployments replace pods instantly — every pod gets the new image at once. If the new image has a bug, all workflows fail. WorkerDeployments use Temporal's Pinned versioning — each workflow is pinned to its starting build ID. v51 workflows complete on v51 pods; v52 workflows start on v52 pods. Old pods drain naturally, new pods take new work. Zero interruption to in-flight work.
+**Why standard Deployments instead of WorkerDeployments?** The WorkerDeployment system (Temporal-managed rainbow deploys with progressive rollout) added operational complexity without proportional benefit for this workload. Frigate GenAI workflows are short-lived (p50 ~82s). Standard Kubernetes Deployments with Recreate strategy provide clean cutover: old pod drains in-flight work, new pod picks up fresh workflows. No versioned pods, no controller, no progressive rollout — simpler GitOps with ArgoCD.
 
-**Why CI pushes to two repos?** Separates code (dotfiles) from infrastructure state (argo). The dotfiles repo owns the Python code, CI workflow, and Nix build. The argo repo owns the Kubernetes manifests — including the image tags generated by CI. This means rollback is a single `git revert` in the argo repo.
+**Why CI pushes to two repos?** Separates code (dotfiles) from infrastructure state (argo). The dotfiles repo owns the Python code, CI workflow, and Nix build. The argo repo owns the Kubernetes manifests — including the image tags generated by CI. Rollback is a single `git revert` in the argo repo.
 
-**Why Nix-built images?** The Docker image is a Nix closure — every dependency (Python, PIL, boto3, temporalio, paho-mqtt) is pinned by hash. No `apt-get install` or `pip install` at build time; no dependency drift between CI and production. The image is a reproducible closure of exactly what was tested.
-
-**Why `unsafeCustomBuildID`?** The WorkerDeployment system normally expects the controller to set the build ID. `unsafeCustomBuildID` lets the ArgoCD-managed CR directly specify which version to deploy. The controller reads it and creates versioned Deployments with that build ID in labels. `unsafe` prefix is Temporal's way of saying "you're bypassing the server-managed versioning protocol" — but for GitOps, the server doesn't manage versions; ArgoCD does.
+**Why Nix-built images?** The Docker image is a Nix closure — every dependency (Python, PIL, boto3, temporalio, paho-mqtt) is pinned by hash. No `apt-get install` or `pip install` at build time; no dependency drift between CI and production.
 
 ---
 
@@ -286,30 +262,18 @@ The genai workers never talk directly to Gemini or Ollama. All LLM calls go thro
 
 ---
 
-## KEDA — event-driven scaling
+## Scaling (formerly KEDA)
 
-KEDA (Kubernetes Event-Driven Autoscaling) watches Temporal task queue depth and scales pods:
+**KEDA was removed in July 2026 cutover.** The system now uses fixed `replicas: 1` across all components:
 
-```
-Temporal task queue → KEDA temporal scaler → ScaledObject → HPA → Deployment replicas
-```
+| Worker | Replicas | Notes |
+|---|---|---|
+| triggers | 1 | Always-on (MQTT subscriber) |
+| ffmpeg | 1 | Single-threaded CPU work |
+| gemini | 1 | One pod handles all LLM turns |
+| ollama | 1 | Single-GPU local model |
 
-**Per-deployment scaling:**
-
-| Worker | Min | Max | Trigger | Target queue size | Cooldown |
-|---|---|---|---|---|---|
-| ffmpeg | 0 | 3 | `genai-tasks-ffmpeg` (activity) | 2 | 600s |
-| gemini | 0 | 5 | `genai-tasks-gemini` (activity) + `genai-tasks` (activity) | 5 + 2 | 600s |
-| ollama | 0 | 1 | `genai-tasks-ollama` (activity) + `genai-tasks` (activity) | 1 + 2 | 600s |
-| triggers | 1 | — | Cron trigger (always-on) | — | — |
-
-**Why KEDA instead of HPA on CPU/memory?** CPU/memory HPA doesn't work well for workers that block on network I/O (LLM API calls use 5-10% CPU while waiting for a 30-second response). Queue depth is the true measure of backlog.
-
-**Why cooldown 600s?** Prevents rapid scale-down/scale-up cycles. If a pod scales down too fast, new events that arrive 30 seconds later trigger a scale-up, creating latency. 10-minute cooldown means pods stick around through brief activity gaps.
-
-**Why WorkerResourceTemplate (WRT)?** The WRT is a Temporal WorkerDeployment feature that bridges to KEDA. The controller reads the WRT, patches in the versioned Deployment name (`frigate-genai-gemini-v51`), and creates a ScaledObject targeting the correct version's pods. Without WRTs, KEDA would scale old deployments.
-
----
+**Why fixed replicas instead of KEDA event-driven scaling?** The workload pattern is low-volume (dozens of events/day, not thousands). KEDA's scale-to-zero introduced cold-start latency (pod startup + LLM warmup) that wasn't justified by cost savings on a home cluster. Fixed replicas simplify operations and eliminate KEDA CRDs, ScaledObjects, and the Temporal Worker Controller from the deployment surface.
 
 ## S3 (SeaweedFS) — state & artifacts
 
@@ -328,6 +292,30 @@ All event data lives in SeaweedFS S3 (`frigate-genai` bucket):
 
 **Why SeaweedFS?** Self-hosted on the k3s cluster (running as a workload, ArgoCD-managed). No cloud egress costs. Latency is sub-millisecond for `10.42.x.x` pod network.
 
+
+## Network & Authentication — SPIRE X.509 mTLS
+
+Frigate GenAI workers authenticate to Temporal via **SPIRE X.509 mTLS** — no API keys, no PocketID tokens.
+
+**Connection chain:**
+1. SPIRE Agent (CSI driver) provisions X.509 SVIDs to each worker pod via Unix socket (`/spiffe-workload-api/spire-agent.sock`)
+2. Worker calls `spire-agent api fetch x509` before connecting, writing cert+key to a tmpfs
+3. Worker connects to Temporal gRPC at `temporal-grpc.john2143.com:7233` with:
+   - Client certificate (SPIRE-issued X.509 SVID)
+   - Server CA verification (`TEMPORAL_TLS_CA_PATH` → `/etc/temporal-certs/ca.crt`)
+   - TLS server name: `temporal-grpc.john2143.com`
+4. Temporal frontend verifies client cert against the SPIRE trust bundle (`requireClientAuth: true`)
+
+**Trust domain:** `kube.john2143.com` (root SPIRE server at home cluster). All worker SVIDs are under this domain — no cross-cluster federation needed for same-cluster workers.
+
+**Env vars (all workers):**
+- `TEMPORAL_TLS=true`
+- `SPIFFE_ENDPOINT_SOCKET=unix:///spiffe-workload-api/spire-agent.sock`
+- `TEMPORAL_TLS_CA_PATH=/etc/temporal-certs/ca.crt`
+- `TEMPORAL_ADDRESS=temporal-grpc.john2143.com:7233`
+- `TEMPORAL_TLS_SERVER_NAME=temporal-grpc.john2143.com`
+
+**No PocketID needed:** Same-cluster workers use mTLS only. The `POCKETID_TEMPORAL_CLIENT_ID` env var is optional — needed only for cross-cluster clients (e.g., remote john2143-com web app). When absent, workers connect with SPIRE mTLS exclusively.
 ---
 
 ## Model rotation — why multiple models
@@ -364,30 +352,22 @@ The `select_model_activity` reads from `provider.json` (generated by Nix from `f
 | `office` | Worker | amd64 (Intel i7-8700K) |
 | `nas` | Worker + storage | amd64 (Intel) |
 
-**Pod distribution** (v51, confirmed 2026-07-08):
+**Pod distribution** (July 2026, post-WorkerDeployment cutover):
 - **litellm**: 2 replicas on `closet` + `arch` (HA)
-- **gemini**: 4 replicas across all 4 nodes (topology spread)
-- **triggers**: 1 replica on `office`
-- **ffmpeg**: 1 replica on `arch`
-- **ollama**: 0 replicas (idle, KEDA scale-to-zero)
-
+- **gemini**: 1 replica (topology spread preference)
+- **triggers**: 1 replica (any node)
+- **ffmpeg**: 1 replica (any node)
+- **ollama**: 1 replica (GPU node preference)
 ---
 
 ## Health checks
 
 ```bash
-# WorkerDeployment status (should show vXX in CURRENT column)
-kubectl get workerdeployment -o wide
-
-# Versioned Deployments (should show vXX pods at 1/1)
-kubectl get deploy -l 'temporal.io/deployment-name'
-
-# KEDA (all should be Ready=True)
-kubectl get scaledobject
+# Deployment status (all should be 1/1 Ready)
+kubectl get deploy -l 'app.kubernetes.io/part-of=frigate-genai'
 
 # ArgoCD apps
 kubectl get applications -n argocd frigate-genai
-kubectl get applications -n argocd temporal-worker-controller
 
 # Temporal UI
 open https://temporal.ts.2143.me
@@ -396,10 +376,8 @@ open https://temporal.ts.2143.me
 curl -sk https://cameras.ts.2143.me/api/stats
 
 # Recent workflow completions
-kubectl logs -n default deploy/frigate-genai-triggers-v51 --tail=100 | grep 'duration='
+kubectl logs -n default deploy/frigate-genai-triggers --tail=100 | grep 'duration='
 ```
-
----
 
 ## Deploy changes
 
@@ -412,63 +390,31 @@ git add -A && git commit -m "fix(genai): fix tool_get_snapshot_activity image ha
 gh run watch --repo John2143/dotfiles
 
 # After CI completes:
-# 1. update-argo job commits new tag to argo main
+# 1. update-argo job commits new image tag to argo main
 # 2. ArgoCD syncs within 3 min
-# 3. Temporal Worker Controller creates versioned pods
-# 4. Progressive rollout (gemini only): 10% → 5 min → 50% → 5 min → 100%
-# 5. Old pods drain (scaledown 30 min) then delete (2 hr)
+# 3. Kubernetes Recreate strategy: old pod terminates, new pod starts
 
 # Verify rollout:
-kubectl get workerdeployment -o wide   # TARGET should show new version
-kubectl get deploy -l 'temporal.io/deployment-name'  # new versioned pods
+kubectl get deploy frigate-genai-gemini -o wide   # should show new image tag
+kubectl rollout status deploy/frigate-genai-gemini
 ```
-
 ---
 
 ## Rollback
 
-### Tier A — bad build ID (worker uses wrong image)
-
-The new version is live but processing events incorrectly. Revert the CI bump commit in argo:
+Revert the CI bump commit in argo:
 
 ```bash
 cd repos/argo
-git revert <ci-bump-commit>   # e.g., "frigate-genai: bump images to v52"
+git revert <ci-bump-commit>   # e.g., "frigate-genai: bump images to vXX"
 git push origin main
 ```
 
-ArgoCD syncs the old `unsafeCustomBuildID` back. The controller drains the bad version pods and creates the old version. In-flight workflows continue on the bad version until they complete — no data loss, just one bad description per affected event.
-
-### Tier B — complete reversion to old Deployment model
-
-```bash
-# 1. Revert WorkerDeployment changes in dotfiles
-cd repos/dotfiles
-git revert d97da56
-git push origin master
-
-# 2. Revert WorkerDeployment changes in argo
-cd repos/argo
-git revert 75e4bdf
-git push origin main
-
-# 3. Remove controller
-helm uninstall temporal-worker-controller -n temporal-system
-helm uninstall temporal-worker-controller-crds -n temporal-system
-
-# 4. ArgoCD syncs old Deployment/ScaledObject YAMLs back from git history
-```
+ArgoCD syncs the old image tag back. Kubernetes Recreate strategy terminates the bad pod and starts a new one with the old image. In-flight workflows may fail on pod termination — Temporal retries pick them up on the old version.
 
 ---
 
 ## Common failure modes
-
-### WorkerDeployment CURRENT column empty
-
-The controller hasn't promoted a version yet. Check:
-- `kubectl get workerdeployment -o yaml | grep -A5 status` — any conditions?
-- `kubectl logs -n temporal-system deploy/temporal-worker-controller` — controller errors?
-- Usually resolves within 2-3 minutes as versioned Deployments become ready.
 
 ### Workers scale but workflows fail with 502
 
@@ -479,16 +425,9 @@ LiteLLM proxy transient outage. The retry policy (20 attempts, 19 min window) ha
 
 ### Activity timeouts (heartbeat)
 
-LLM response > 300s. The genai activity has `start_to_close_timeout=300s` (5 min) and sends heartbeats every 15s with ±20% jitter. If a model takes >5 min to respond:
+LLM response > 300s. The genai activity has `start_to_close_timeout=300s` (5 min) and sends heartbeats every 15s with +/-20% jitter. If a model takes >5 min to respond:
 - Check which model is being used (Gemini 2.5-pro with complex tool chains can approach this)
 - Increase `start_to_close_timeout` in the workflow if needed
-
-### KEDA ScaledObjects READY: False
-
-Missing CRD or KEDA operator down. Check:
-- `kubectl get pods -n keda` — operator running?
-- `kubectl get crd | grep keda` — CRDs present?
-- Apply missing CRDs via server-side apply, restart operator
 
 ### Snapshots returning errors (pre-v51)
 
@@ -519,7 +458,7 @@ Baseline from 2,000 GenAIWorkflow executions (July 10-12, 2026). Source: `analyz
 |---|---|---|---|
 | Ollama unavailable | 970 | 48.0% | `litellm` returning "no available server" — Ollama instance was down |
 | Gemini rate limit (429) | 890 | 44.1% | "prepayment credits depleted" / "exceeded current quota" |
-| Terminated (deployment rollover) | 111 | 5.5% | Workflows killed by WorkerDeployment version rotation |
+| Terminated (deployment rollover) | 111 | 5.5% | Workflows killed by deployment rollover |
 | Activity timeouts | 20 | 1.0% | StartToClose or Heartbeat timeouts |
 | Everything else combined | 28 | 1.4% | Server errors, Frigate API, auth, genuine app errors |
 
@@ -614,17 +553,17 @@ Re-run after significant changes (new model added, prompt overhaul, retry policy
 
 - **Why not Kafka/MQTT as the workflow engine?** Temporal gives durability guarantees (workflows survive pod crashes, server restarts, and network partitions) and built-in retry/backoff. MQTT with QoS 1 only guarantees delivery to the broker, not to the worker.
 
-- **Why not direct Deployment + kubectl rollout restart?** WorkerDeployments provide Pinned versioning — in-flight workflows NEVER run on a new version mid-execution. Traditional rollouts kill running pods and restart on the new image, which can corrupt in-progress LLM calls.
+- **Why Recreate strategy instead of RollingUpdate?** The workers are single-replica and stateful (in-flight LLM calls). RollingUpdate would start a new pod before the old one terminates, causing two workers on the same task queue. Recreate ensures clean handoff: old pod drains, new pod picks up.
 
-- **Why not a single task queue for everything?** FFmpeg, Gemini, and misc activities have different CPU profiles, scaling needs, and failure modes. Isolating them on separate queues means a ffmpeg backlog doesn't block LLM turns, and vice versa.
+- **Why not a single task queue for everything?** FFmpeg, Gemini, and misc activities have different CPU profiles and failure modes. Isolating them on separate queues means a ffmpeg backlog doesn't block LLM turns, and vice versa.
 
-- **Why not HPA on CPU/Memory?** LLM API calls are I/O-bound (waiting for HTTP responses). A pod handling 5 concurrent turns uses ~100m CPU. Queue depth is the only signal that reflects actual backlog.
+- **Why not HPA on CPU/Memory?** LLM API calls are I/O-bound (waiting for HTTP responses). A pod handling 5 concurrent turns uses ~100m CPU. Fixed replicas keep it simple for a low-volume home workload.
 
 - **Why Nix for the Docker image?** Reproducible closures. No `pip install temporalio==1.2.3` that drifts between CI and production. The exact same Python environment (including transitive C extensions like Pillow) is tested as deployed.
 
 - **Why two repos (dotfiles + argo)?** Code vs infrastructure state. The image tag (`v51`, `v52`) is infrastructure state — it changes every deploy. Keeping it in the argo repo means rollback is a single `git revert` in argo, not a code revert in dotfiles. CI writes to argo; humans write to dotfiles.
 
-- **Why Progressive rollout only for Gemini?** Gemini is the highest-risk path — it costs API credits and produces user-visible descriptions. FFmpeg is deterministic (frame extraction either works or doesn't). Ollama is a single-replica fallback. Triggers is single-replica always-on.
+- **Why not WorkerDeployments?** The WorkerDeployment system (Temporal-managed progressive rollout with versioned pods and the worker controller) was replaced in July 2026. Frigate GenAI workflows are short-lived (p50 ~82s). Standard Kubernetes Deployments with Recreate strategy provide simpler GitOps with fewer moving parts.
 
 - **Why mean-centered pixel diff for keyframes?** Spatially aware (motion registers proportionally to area moved), per-frame mean-centering cancels global lighting shifts, GaussianBlur suppresses sensor noise, and the data_box weights the detection region at 0.7. Global histogram methods were rejected: spatially blind and hypersensitive to lighting. The precomputed keyframe result is injected as a `role="user"` message (no fake tool-call ID needed), while LLM-invoked calls use normal `role="tool"` messages.
 
