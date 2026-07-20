@@ -31,6 +31,7 @@
       "--cluster-cidr=10.42.0.0/16"
       "--service-cidr=10.43.0.0/16"
       "--node-label=node.longhorn.io/create-default-disk=true"
+      "--tls-san=${config.networking.hostName}.ts.9s.pics"
     ];
   };
   # Balanced shutdown — systemd waits up to 30s for services before SIGKILL

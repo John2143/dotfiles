@@ -59,7 +59,6 @@
       # Service ports (arrive via FIP on primary interface on Hetzner)
       iptables -A PRIMARY_IN -p tcp --dport 80 -j ACCEPT
       iptables -A PRIMARY_IN -p tcp --dport 443 -j ACCEPT
-      iptables -A PRIMARY_IN -p tcp --dport 6443 -j ACCEPT
       iptables -A PRIMARY_IN -p udp --dport 53 -j ACCEPT
       iptables -A PRIMARY_IN -p tcp --dport 53 -j ACCEPT
       iptables -A PRIMARY_IN -p udp --dport 3478 -j ACCEPT
@@ -86,8 +85,7 @@
         iptables -A FLOATING_IN -p tcp --dport 80  -j ACCEPT
         iptables -A FLOATING_IN -p tcp --dport 443 -j ACCEPT
 
-        # k3s API server
-        iptables -A FLOATING_IN -p tcp --dport 6443 -j ACCEPT
+        # ── Service ports (6443 closed — API access via Tailscale now) ──
         # DNS (k8gb GSLB — authoritative for *.9s.pics)
         iptables -A FLOATING_IN -p udp --dport 53 -j ACCEPT
         iptables -A FLOATING_IN -p tcp --dport 53 -j ACCEPT
