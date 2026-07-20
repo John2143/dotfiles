@@ -361,3 +361,67 @@ def _tool_tag_image_schema() -> dict:
             },
         },
     }
+
+
+def _tool_send_ipc_schema() -> dict:
+    return {
+        "type": "function",
+        "function": {
+            "name": "send_ipc",
+            "description": (
+                "Send a message to a parent or sibling agent. Use for findings, "
+                "questions, replies, or termination signals. Messages are validated "
+                "by an IPC token system; only registered agents in the same run can communicate. "
+                "Set wait_for_reply=True to block until the recipient responds."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "to_token": {"type": "string",
+                        "description": "Recipient IPC token (from spawn results or parent)."},
+                    "kind": {"type": "string",
+                        "enum": ["finding", "question", "reply", "terminate"],
+                        "description": "Message kind: finding (report), question (ask), reply (answer), terminate (end)."},
+                    "content": {"type": "string",
+                        "description": "Message body (1-8192 bytes)."},
+                    "confidence": {"type": "string",
+                        "enum": ["high", "medium", "low", "nothing_found"],
+                        "description": "Confidence for finding/reply kinds."},
+                    "reply_to": {"type": "string",
+                        "description": "Message ID being replied to (required for reply kind)."},
+                    "wait_for_reply": {"type": "boolean",
+                        "description": "Block until recipient sends a reply."},
+                    "timeout_seconds": {"type": "integer",
+                        "minimum": 1, "maximum": 300, "default": 30,
+                        "description": "Max wait time for wait_for_reply."},
+                },
+                "required": ["to_token", "kind", "content"],
+                "additionalProperties": False,
+            },
+        },
+    }
+
+
+def _tool_wait_ipc_schema() -> dict:
+    return {
+        "type": "function",
+        "function": {
+            "name": "wait_ipc",
+            "description": (
+                "Wait for incoming IPC messages. Without a message_id, returns up to 20 "
+                "unread messages from any registered agent. With a message_id, waits for "
+                "a specific reply. Returns 'timeout: no messages received' if nothing arrives."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "message_id": {"type": "string",
+                        "description": "Optional: wait for a reply to this specific message."},
+                    "timeout_seconds": {"type": "integer",
+                        "minimum": 1, "maximum": 300, "default": 30,
+                        "description": "Max wait time."},
+                },
+                "additionalProperties": False,
+            },
+        },
+    }

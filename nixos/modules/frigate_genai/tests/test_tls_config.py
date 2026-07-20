@@ -15,55 +15,13 @@ _PARENT = os.path.dirname(os.path.dirname(os.path.dirname(
 if _PARENT not in sys.path:
     sys.path.insert(0, _PARENT)
 
-# Create proper package mocks so "from X.Y import Z" works
-_PKG_DIRS = [
-    "frigate_genai.activities",
-    "frigate_genai.tools",
-    "frigate_genai.workflows",
-]
-for _pkg in _PKG_DIRS:
-    _m = types.ModuleType(_pkg)
-    _m.__path__ = []
-    _m.__package__ = _pkg
-    sys.modules[_pkg] = _m
-
-# Flat mocks for leaf modules — these get looked up as attributes
-# on their parent packages after the parent is resolved.
+# No package mocks needed — real frigate_genai modules are available.
+# Only mock external deps that aren't installed in the test venv.
 _LEAF_MOCKS = [
-    # External deps
     "paho", "paho.mqtt", "paho.mqtt.client",
-    "temporalio", "temporalio.client", "temporalio.service",
-    "temporalio.common", "temporalio.worker",
-    "temporalio.api", "temporalio.api.enums", "temporalio.api.enums.v1",
-    "temporalio.api.operatorservice", "temporalio.api.operatorservice.v1",
     "PIL", "PIL.Image",
     "boto3",
-    # frigate_genai sub-modules
-    "frigate_genai.config",
-    "frigate_genai.s3_helpers",
-    "frigate_genai.activities.select_model",
-    "frigate_genai.activities.lifecycle",
-    "frigate_genai.activities.agent_state",
-    "frigate_genai.activities.genai_turn",
-    "frigate_genai.activities.tool_apply",
-    "frigate_genai.activities.frame_extraction",
-    "frigate_genai.activities.mqtt",
-    "frigate_genai.tools.get_snapshot",
-    "frigate_genai.tools.show_frame",
-    "frigate_genai.tools.crop",
-    "frigate_genai.tools.compact",
-    "frigate_genai.tools.set_description",
-    "frigate_genai.tools.upscale",
-    "frigate_genai.tools.transcode",
-    "frigate_genai.tools.find_keyframes",
-    "frigate_genai.tools.tag_image",
-    "frigate_genai.workflows.genai",
-    "frigate_genai.workflows.agent_session",
-    "frigate_genai.workflows.subagent",
 ]
-for _mod in _LEAF_MOCKS:
-    sys.modules[_mod] = MagicMock()
-
 # Make frigate_genai.config export the names worker.py imports
 import frigate_genai.config as _cfg
 _cfg.TASK_QUEUE = "frigate-genai"

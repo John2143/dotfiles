@@ -135,6 +135,7 @@ async def run_genai_turn_activity(turn_arg: dict) -> dict:
         _tool_show_frame_schema,
         _tool_transcode_schema,
         _tool_upscale_schema,
+        _tool_send_ipc_schema, _tool_wait_ipc_schema,
     )
     tools = turn_arg.get("tools")
     if tools is None:
@@ -142,7 +143,7 @@ async def run_genai_turn_activity(turn_arg: dict) -> dict:
             _tool_find_keyframes_schema(), _tool_frame_diff_schema(), _tool_tag_image_schema(),
             _tool_get_snapshot_schema(), _tool_show_frame_schema(), _tool_crop_schema(),
             _tool_transcode_schema(), _tool_compact_schema(), _tool_set_description_schema(),
-            _tool_upscale_schema(),
+            _tool_upscale_schema(), _tool_send_ipc_schema(), _tool_wait_ipc_schema(),
         ]
 
 
