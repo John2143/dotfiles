@@ -46,11 +46,11 @@
           {"action": "accept", "src": ["tag:kube-control"], "dst": ["*:*"]}
         ],
         "tagOwners": {
-          "tag:kube-control": ["user:hetzner-nodes"]
+          "tag:kube-control": ["hetzner-nodes@"]
         },
         "autoApprovers": {
           "routes": {
-            "192.168.5.10/32": ["user:hetzner-nodes"]
+            "192.168.5.10/32": ["hetzner-nodes@"]
           }
         }
       }
