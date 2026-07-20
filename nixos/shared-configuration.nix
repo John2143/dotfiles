@@ -358,9 +358,9 @@ in {
       });
     })
     (final: prev: {
-      voxtype = inputs.voxtype.packages.${prev.stdenv.hostPlatform.system}.vulkan.overrideAttrs (old: {
-        CARGO_HTTP_USER_AGENT = "Mozilla/5.0 (X11; Linux x86_64; rv:137.0) Gecko/20100101 Firefox/137.0";
-      });
+      #voxtype = inputs.voxtype.packages.${prev.stdenv.hostPlatform.system}.vulkan.overrideAttrs (old: {
+        #CARGO_HTTP_USER_AGENT = "Mozilla/5.0 (X11; Linux x86_64; rv:137.0) Gecko/20100101 Firefox/137.0";
+      #});
       voxtype-osd-native = inputs.voxtype.packages.${prev.stdenv.hostPlatform.system}.osd-native.overrideAttrs (old: {
         CARGO_HTTP_USER_AGENT = "Mozilla/5.0 (X11; Linux x86_64; rv:137.0) Gecko/20100101 Firefox/137.0";
       });

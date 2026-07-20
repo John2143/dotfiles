@@ -144,6 +144,7 @@ in {
 
   home.sessionVariables = {
     EDITOR = "nvim";
+    KUBECONFIG = "$HOME/.kube/config";
   };
 
 

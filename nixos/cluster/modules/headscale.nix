@@ -32,17 +32,27 @@
         auto_update_enabled = true;
         server.enabled = false;
       };
+
+      policy.path = "/etc/headscale/policy.json";
     };
   };
 
-  # Default ACL: allow all traffic within the tailnet
-  # Write to a file since the option expects a path
-  environment.etc."headscale/acl.json" = {
+  # Deny-by-default grants policy — only tag:kube-control can reach each other on 6443 + internet for DERP
+  environment.etc."headscale/policy.json" = {
     text = ''
       {
         "acls": [
-          {"action": "accept", "src": ["*"], "dst": ["*:*"]}
-        ]
+          {"action": "accept", "src": ["tag:kube-control"], "dst": ["tag:kube-control:6443"]},
+          {"action": "accept", "src": ["tag:kube-control"], "dst": ["*:*"]}
+        ],
+        "tagOwners": {
+          "tag:kube-control": ["user:hetzner-nodes"]
+        },
+        "autoApprovers": {
+          "routes": {
+            "192.168.5.10/32": ["user:hetzner-nodes"]
+          }
+        }
       }
     '';
     mode = "0440";

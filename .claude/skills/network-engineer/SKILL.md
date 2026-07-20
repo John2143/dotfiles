@@ -348,24 +348,36 @@ mikrotik-connect r '/ip dhcp-server lease make-static [find host-name=Side]'
 
 | Device | IP | Model | MAC | Location | Uplink |
 |--------|-----|-------|-----|----------|--------|
-| U7 Pro XGS | 192.168.5.171 (DHCP) | U7 Pro XGS | 90:41:B2:D6:74:DB | Office | 10GbE (connected to office switch sfp-sfpplus1) |
-| U7 Lite | 192.168.5.173 (DHCP) | U7 Lite | 1C:0B:8B:50:FF:7E | Blue Room | 1GbE (connected to router ether6) |
+| U7 Pro XGS | 192.168.5.171 (DHCP) | U7 Pro XGS | 90:41:B2:D6:74:DB | Office | 10GbE (office switch sfp-sfpplus1) |
+| U7 Lite | 192.168.5.173 (DHCP) | U7 Lite | 1C:0B:8B:50:FF:7E | Blue Room | 1GbE (router ether6) |
+| U7-Mesh | 192.168.5.198 (DHCP) | U7-Mesh | 8C:ED:E1:EC:89:CA | — | Wireless mesh |
 
-APs discover the controller via L2 broadcast (same bridge segment) — no special DNS or routing needed.
-Device communication uses the `unifi-inform` service (LoadBalancer, TCP 8080).
+APs discover the controller via L2 broadcast (UDP 10001) or manual `set-inform`.
+Device communication uses the `unifi-inform` LoadBalancer service (TCP 8080) on
+the k3s node IPs **192.168.5.175, 192.168.5.36, or 192.168.5.76**.
+**Do NOT use `192.168.5.10` for inform** — that's the kube-vip VIP (k3s API only, inform LB not bound there).
+
+To re-point an AP after controller rebuild:
+```bash
+ssh ubnt@<ap-ip>
+set-inform http://192.168.5.175:8080/inform
+```
 
 ### Controller
 
-UniFi controller runs in k3s on closet (namespace: default), managed via ArgoCD:
+UniFi controller runs in k3s on closet (namespace: default), managed via ArgoCD.
+Single deployment with MongoDB as a sidecar container — no separate MongoDB pod.
 
 | Resource | Details |
 |----------|---------|
-| **Pod** | `unifi-*` (1 replica, deployment) |
-| **MongoDB pod** | `unifi-mongodb-*` (database backend) |
-| **Web UI (NodePort)** | `unifi-web` → internal 8443/TCP, **NodePort 30443** on every k3s node |
-| **Device inform (LB)** | `unifi-inform` → 8080/TCP, external IPs on closet, arch, nas |
-| **L2 discovery (LB)** | `unifi-discovery` → 10001/UDP, external IPs on closet, arch, nas |
-| **Version** | 10.0.162 (as of 2026-05-23) |
+| **Pod** | `unifi-*` (1 replica, 2 containers: unifi + mongodb) |
+| **Image** | `lscr.io/linuxserver/unifi-network-application:10.4.57-ls136` |
+| **MongoDB** | Sidecar (`mongo:7.0`), dedicated PVC `unifi-mongodb-data` (5Gi, Longhorn 3 replicas) |
+| **Web UI (NodePort)** | `unifi-web` → 8443/TCP, **NodePort 30443** on every k3s node |
+| **Device inform (LB)** | `unifi-inform` → 8080/TCP (NodePort 31455), external IPs .175,.36,.76 |
+| **L2 discovery (LB)** | `unifi-discovery` → 10001/UDP (NodePort 31640), external IPs .175,.36,.76 |
+| **Config PVC** | `unifi-data` (10Gi, Longhorn 3 replicas) |
+| **Version** | 10.4.57 (2026-07-18) |
 
 ### Accessing the UniFi Controller
 
@@ -373,23 +385,24 @@ UniFi controller runs in k3s on closet (namespace: default), managed via ArgoCD:
 ```
 https://192.168.5.10:30443
 ```
-Any k3s node IP on port 30443 works — use closet (192.168.5.10) as the canonical target.
-The certificate is self-signed; accept the browser warning. John has admin credentials.
+Any k3s node IP on port 30443 works. Certificate is self-signed. Admin account is local (no Ubiquiti SSO).
 
 Health check (no auth required):
 ```
 curl -sk https://192.168.5.10:30443/status
-# {"meta":{"rc":"ok","up":true,"server_version":"10.0.162",...},"data":[]}
+# {"meta":{"rc":"ok","up":true,"server_version":"10.4.57","uuid":"...","data":[]}
 ```
 
 **API (programmatic access):**
-The UniFi REST API lives at `/api/`. The correct login endpoint for this self-hosted (k3s) controller is **`/api/login`** (NOT `/api/auth/login` — that's for UniFi OS consoles). Credentials are stored in agenix at `/run/agenix/unifi-credentials`.
-**Via kubectl (k3s pod access):**
+Login endpoint is **`/api/login`** (NOT `/api/auth/login` — that's for UniFi OS consoles). Credentials: `/run/agenix/unifi-credentials` (updated post-reset).
+
+**Via kubectl:**
 ```
-ssh closet 'kubectl get pods,svc -n default | grep unifi'
-ssh closet 'kubectl logs deploy/unifi -n default --tail=100'
-ssh closet 'kubectl exec deploy/unifi -n default -- <command>'
+ssh closet.local 'kubectl get pods,svc -n default | grep unifi'
+ssh closet.local 'kubectl logs deploy/unifi -n default -c unifi --tail=100'
+ssh closet.local 'kubectl exec deploy/unifi -n default -c unifi -- <command>'
 ```
+
 
 
 ## Live Network State
