@@ -4,6 +4,7 @@ import logging
 from PIL import Image
 from temporalio import activity
 from temporalio.exceptions import ApplicationError
+from frigate_genai.tools.crop_helpers import validate_crop_coords
 
 from frigate_genai.s3_helpers import (
     _find_tc_id,
@@ -28,15 +29,23 @@ async def tool_crop_activity(arg: dict) -> dict:
     tc_id = _find_tc_id(state, "crop")
     source = tool_args.get("source", "")
     outcome_messages = []
-
-    x1 = max(0.0, min(1.0, float(tool_args.get("x1", 0))))
-    y1 = max(0.0, min(1.0, float(tool_args.get("y1", 0))))
-    x2 = max(0.0, min(1.0, float(tool_args.get("x2", 1))))
-    y2 = max(0.0, min(1.0, float(tool_args.get("y2", 1))))
+    x1_raw = float(tool_args.get("x1", 0))
+    y1_raw = float(tool_args.get("y1", 0))
+    x2_raw = float(tool_args.get("x2", 1))
+    y2_raw = float(tool_args.get("y2", 1))
+    x1, y1, x2, y2, coord_warnings = validate_crop_coords(x1_raw, y1_raw, x2_raw, y2_raw)
 
     if x1 >= x2 or y1 >= y2:
         raise ApplicationError(
             f"Invalid crop region ({x1},{y1})-({x2},{y2})", non_retryable=True)
+
+    # Append coordinate warnings to outcome messages
+    if coord_warnings and tc_id:
+        for warning in coord_warnings:
+            outcome_messages.append({
+                "role": "tool", "tool_call_id": tc_id,
+                "content": f"⚠️  {warning}",
+            })
     base_source = source
     if "@" in source:
         base_source = source.rsplit("@", 1)[0]
@@ -120,7 +129,10 @@ async def tool_crop_activity(arg: dict) -> dict:
             label = (
                 f"Cropped ({x1:.2f},{y1:.2f})-({x2:.2f},{y2:.2f}) "
                 f"→ {cw}x{ch} from {base_source}. "
-                f"Stored as crop://{crop_ids[0]}." + size_hint
+                f"Stored as crop://{crop_ids[0]}." + size_hint + "\n"
+                f"Describe what you see in this crop. If it's mostly blur, empty space, or "
+                f"doesn't contain the subject, DO NOT upscale — instead, view the full frame "
+                f"again, describe where the subject actually is, and crop that region."
             )
         else:
             all_tiny = all(cw < 300 and ch < 300 for _, _, cw, ch in crop_results)
@@ -129,6 +141,7 @@ async def tool_crop_activity(arg: dict) -> dict:
                 f"Cropped ({x1:.2f},{y1:.2f})-({x2:.2f},{y2:.2f}) "
                 f"from {base_source} ({len(crop_results)} frames). "
                 f"Stored as crop://{crop_ids[0]} through crop://{crop_ids[-1]}." + size_hint
+                + "\nDescribe what you see. If crops are empty/wrong, view full frames and re-crop."
             )
         content_parts.append({"type": "text", "text": label})
         outcome_messages.append({"role": "user", "content": content_parts})
