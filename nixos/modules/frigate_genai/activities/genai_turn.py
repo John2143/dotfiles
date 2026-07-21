@@ -199,12 +199,13 @@ async def run_genai_turn_activity(turn_arg: dict) -> dict:
             urgency = f"Only {remaining} turns remaining! "
         else:
             urgency = ""
+        tool_names = turn_arg.get("tool_names", [])
+        tool_list = ", ".join(tool_names) if tool_names else "available tools"
         state["messages"].append({
             "role": "user",
             "content": (
-                f"{urgency}You must call a function. You cannot output plain text. "
-                "Use available tools to investigate, then call set_description() or "
-                "close_subagent() with your final analysis."
+                f"{urgency}You must call a tool function. Do NOT output plain text. "
+                f"Choose from: {tool_list}. Continue your investigation."
             ),
         })
         _atomic_write(msg_path, state)

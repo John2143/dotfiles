@@ -47,7 +47,7 @@ def transcode_into_parts(
         hls_url, duration, fps_label,
     )
 
-    clip_timeout = max(30, min(300, int(duration * 15)))
+    clip_timeout = max(30, min(1800, int(duration * 15)))
 
     with tempfile.TemporaryDirectory(prefix="frigate-genai-") as tmp:
         cmd: list[str] = [

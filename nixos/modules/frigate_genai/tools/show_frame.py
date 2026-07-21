@@ -48,7 +48,7 @@ async def tool_show_frame_activity(arg: dict) -> dict:
     base_source = source
     if "@" in source:
         base_source, res_str = source.rsplit("@", 1)
-        if res_str in ("low", "high", "max"):
+        if res_str in ("tiny", "low", "med", "high", "max"):
             resolution = res_str
 
     # Parse source type and frame spec
