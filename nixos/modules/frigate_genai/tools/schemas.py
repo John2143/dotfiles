@@ -1,3 +1,25 @@
+from typing import Callable
+
+# Tool schema registry
+_TOOLS: dict[str, Callable[[], dict]] = {}
+
+def tool_schema(func: Callable[[], dict]) -> Callable[[], dict]:
+    """Register a tool schema function by name extracted from its return value."""
+    schema = func()
+    name = schema["function"]["name"]
+    _TOOLS[name] = func
+    return func
+
+def get_tool_names() -> list[str]:
+    """Return list of all registered tool names."""
+    return list(_TOOLS.keys())
+
+def get_tool_schemas(names: list[str]) -> list[dict]:
+    """Reconstruct full schemas from tool names."""
+    return [_TOOLS[name]() for name in names]
+
+
+@tool_schema
 def _tool_show_frame_schema() -> dict:
     return {
         "type": "function",
@@ -26,6 +48,7 @@ def _tool_show_frame_schema() -> dict:
     }
 
 
+@tool_schema
 def _tool_transcode_schema() -> dict:
     return {
         "type": "function",
@@ -50,6 +73,7 @@ def _tool_transcode_schema() -> dict:
         },
     }
 
+@tool_schema
 def _tool_get_snapshot_schema() -> dict:
     return {
         "type": "function",
@@ -65,6 +89,7 @@ def _tool_get_snapshot_schema() -> dict:
     }
 
 
+@tool_schema
 def _tool_set_description_schema() -> dict:
     return {
         "type": "function",
@@ -92,6 +117,7 @@ def _tool_set_description_schema() -> dict:
     }
 
 
+@tool_schema
 def _tool_compact_schema() -> dict:
     return {
         "type": "function",
@@ -109,6 +135,7 @@ def _tool_compact_schema() -> dict:
         },
     }
 
+@tool_schema
 def _tool_upscale_schema() -> dict:
     return {
         "type": "function",
@@ -139,6 +166,7 @@ def _tool_upscale_schema() -> dict:
     }
 
 
+@tool_schema
 def _tool_crop_schema() -> dict:
     return {
         "type": "function",
@@ -169,6 +197,7 @@ def _tool_crop_schema() -> dict:
     }
 
 
+@tool_schema
 def _tool_spawn_schema() -> dict:
     return {
         "type": "function",
@@ -219,6 +248,7 @@ def _tool_spawn_schema() -> dict:
     }
 
 
+@tool_schema
 def _tool_join_schema() -> dict:
     return {
         "type": "function",
@@ -241,6 +271,7 @@ def _tool_join_schema() -> dict:
     }
 
 
+@tool_schema
 def _tool_close_subagent_schema() -> dict:
     return {
         "type": "function",
@@ -266,6 +297,7 @@ def _tool_close_subagent_schema() -> dict:
         },
     }
 
+@tool_schema
 def _tool_find_keyframes_schema() -> dict:
     return {
         "type": "function",
@@ -292,6 +324,7 @@ def _tool_find_keyframes_schema() -> dict:
     }
 
 
+@tool_schema
 def _tool_frame_diff_schema() -> dict:
     return {
         "type": "function",
@@ -319,6 +352,7 @@ def _tool_frame_diff_schema() -> dict:
     }
 
 
+@tool_schema
 def _tool_tag_image_schema() -> dict:
     return {
         "type": "function",
@@ -363,6 +397,7 @@ def _tool_tag_image_schema() -> dict:
     }
 
 
+@tool_schema
 def _tool_send_ipc_schema() -> dict:
     return {
         "type": "function",
@@ -402,6 +437,7 @@ def _tool_send_ipc_schema() -> dict:
     }
 
 
+@tool_schema
 def _tool_wait_ipc_schema() -> dict:
     return {
         "type": "function",

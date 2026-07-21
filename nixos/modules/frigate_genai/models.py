@@ -151,6 +151,7 @@ class SpawnArgs(BaseFrigateModel):
 class SpawnTask(BaseFrigateModel):
     task: str
     image_refs: list[str] = []
+    max_turns: int = 8
 class SubAgentInput(BaseFrigateModel):
     """Input to SubAgentWorkflow. Built by spawn handler."""
     event_id: str

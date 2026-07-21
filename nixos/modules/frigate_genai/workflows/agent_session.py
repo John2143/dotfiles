@@ -466,7 +466,7 @@ class AgentSessionWorkflow:
         for turn in range(max_turns):
             turn_arg["turn_num"] = turn + 1
             turn_arg["max_turns"] = max_turns
-            turn_arg["tools"] = _get_tools_for_depth(depth, max_depth)
+            turn_arg["tool_names"] = [t["function"]["name"] for t in _get_tools_for_depth(depth, max_depth)]
             result = await workflow.execute_activity(
                 run_genai_turn_activity,
                 arg=turn_arg,
