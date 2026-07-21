@@ -71,21 +71,25 @@ jobs:
       run: |
         git pull --rebase origin main
         sed -i "s|\(image: ${FFMPEG_IMAGE}:\)[^ ]*|\1${NEW_TAG}|g" \
-          ${ARGO_MANIFEST_DIR}/ffmpeg-deployment.yaml
+          ${ARGO_MANIFEST_DIR}/ffmpeg-workerdeployment.yaml
         sed -i "s|\(TEMPORAL_WORKER_BUILD_ID, value: \"\)[^\"]*|\1${NEW_TAG}|g" \
-          ${ARGO_MANIFEST_DIR}/ffmpeg-deployment.yaml
+          ${ARGO_MANIFEST_DIR}/ffmpeg-workerdeployment.yaml
+        sed -i "s|\(unsafeCustomBuildID: \"\)[^\"]*|\1${NEW_TAG}|g" \
+          ${ARGO_MANIFEST_DIR}/ffmpeg-workerdeployment.yaml
         for dep in gemini ollama triggers; do
           sed -i "s|\(image: ${GENAI_IMAGE}:\)[^ ]*|\1${NEW_TAG}|g" \
-            ${ARGO_MANIFEST_DIR}/${dep}-deployment.yaml
+            ${ARGO_MANIFEST_DIR}/${dep}-workerdeployment.yaml
           sed -i "s|\(TEMPORAL_WORKER_BUILD_ID, value: \"\)[^\"]*|\1${NEW_TAG}|g" \
-            ${ARGO_MANIFEST_DIR}/${dep}-deployment.yaml
+            ${ARGO_MANIFEST_DIR}/${dep}-workerdeployment.yaml
+          sed -i "s|\(unsafeCustomBuildID: \"\)[^\"]*|\1${NEW_TAG}|g" \
+            ${ARGO_MANIFEST_DIR}/${dep}-workerdeployment.yaml
         done
     - name: Verify tags applied
       run: |
-        grep -q "TEMPORAL_WORKER_BUILD_ID, value: \"${NEW_TAG}\"" ${ARGO_MANIFEST_DIR}/ffmpeg-deployment.yaml || \
-          (echo "ERROR: ffmpeg buildId tag not found" && exit 1)
-        grep -q "TEMPORAL_WORKER_BUILD_ID, value: \"${NEW_TAG}\"" ${ARGO_MANIFEST_DIR}/gemini-deployment.yaml || \
-          (echo "ERROR: genai buildId tag not found" && exit 1)
+        grep -q "unsafeCustomBuildID: \"${NEW_TAG}\"" ${ARGO_MANIFEST_DIR}/ffmpeg-workerdeployment.yaml || \
+          (echo "ERROR: ffmpeg unsafeCustomBuildID tag not found" && exit 1)
+        grep -q "unsafeCustomBuildID: \"${NEW_TAG}\"" ${ARGO_MANIFEST_DIR}/gemini-workerdeployment.yaml || \
+          (echo "ERROR: genai unsafeCustomBuildID tag not found" && exit 1)
 
     - name: Verify image pullable (ghcr ready)
       run: |
