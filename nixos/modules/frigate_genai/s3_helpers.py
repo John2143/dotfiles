@@ -72,14 +72,20 @@ def _s3_list(prefix: str) -> list[str]:
 
 
 def _s3_delete_prefix(prefix: str) -> int:
-    """Delete all objects under prefix. Returns count deleted."""
+    """Delete all objects under prefix. Returns count deleted. Batches in chunks of 1000."""
     keys = _s3_list(prefix)
-    if keys:
+    if not keys:
+        return 0
+
+    deleted = 0
+    for i in range(0, len(keys), 1000):
+        batch = keys[i:i+1000]
         _s3_client().delete_objects(
             Bucket=_S3_BUCKET,
-            Delete={"Objects": [{"Key": k} for k in keys]},
+            Delete={"Objects": [{"Key": k} for k in batch]},
         )
-    return len(keys)
+        deleted += len(batch)
+    return deleted
 
 
 def _s3_copy_key(src: str, dst: str) -> bool:
