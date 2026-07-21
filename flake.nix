@@ -104,7 +104,6 @@
     mkHost = {
       name,
       modules,
-      pkgs ? null,
     }: let
       base = {
         inherit system;
@@ -119,7 +118,7 @@
             agenix.nixosModules.default
           ]
           ++ modules;
-      } // lib.optionalAttrs (pkgs != null) { inherit pkgs; };
+      };
       vmOverride = {
         config,
         lib,
@@ -283,21 +282,9 @@
 
           ./nixos/modules/remote-builders.nix
         ];
+      })
       // (mkHost {
         name = "nas";
-        pkgs = import nixpkgs {
-          inherit system;
-          overlays = [
-            (final: prev: {
-              vips_8_17 = prev.vips_8_17.overrideAttrs (old: {
-                buildInputs = old.buildInputs ++ [
-                  final.libraw
-                  final.libultrahdr
-                ];
-              });
-            })
-          ];
-        };
         modules = [
           inputs.disko.nixosModules.default
           ./nixos/shared-cli-configuration.nix
