@@ -497,8 +497,13 @@ class AgentSessionWorkflow:
             if result.get("description"):
                 description = result["description"]
                 confidence = result.get("confidence", "medium")
+                exit_name = "set_description"  # default
+                for tc in result.get("tool_calls", []):
+                    if tc["name"] in ("set_description", "close_subagent"):
+                        exit_name = tc["name"]
+                        break
                 trace_entries.append({
-                    "type": "tool_call", "name": "set_description",
+                    "type": "tool_call", "name": exit_name,
                     "confidence": confidence,
                     "description": description[:200],
                 })
@@ -722,15 +727,32 @@ class AgentSessionWorkflow:
                     try:
                         outcome = await handle
                     except Exception as e:
+                        # Log full exception with stack trace
                         if isinstance(e, ApplicationError) and getattr(e, 'non_retryable', False):
                             workflow.logger.info("Tool %s rejected input (non-retryable): %s", tc["name"], str(e)[:120])
                         else:
-                            workflow.logger.warning("Tool %s failed: %s", tc["name"], e)
+                            workflow.logger.error("Tool %s failed: %s", tc["name"], e, exc_info=True)
+
                         te["error"] = str(e)[:200]
+
+                        # Build detailed error message for LLM
+                        error_msg = f"Tool {tc['name']} failed: {type(e).__name__}: {e}"
+
+                        # Add hints for common errors
+                        if tc["name"] == "show_frame" and "Invalid frame source" in str(e):
+                            error_msg += (
+                                "\n\nValid formats:\n"
+                                "- frame://N (single)\n"
+                                "- frame://N,N,N@res (comma-separated)\n"
+                                "- frame://N-M@res (range)"
+                            )
+                        elif "JSON" in str(e) or "parse" in str(e).lower():
+                            error_msg += "\n\nCheck your argument syntax for missing quotes or braces."
+
                         outcome = {
                             "messages": [
                                 {"role": "tool", "tool_call_id": tc["id"],
-                                 "content": f"Error: {e}"}
+                                 "content": error_msg}
                             ],
                             "error": str(e)[:200],
                         }

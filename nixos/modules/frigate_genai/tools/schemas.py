@@ -27,7 +27,8 @@ def _tool_show_frame_schema() -> dict:
             "name": "show_frame",
             "description": (
                 "Display recording frames to your vision. frame://N jumps to any keyframe instantly "
-                "(free, fast). frame://N-M@res scans a range at @tiny (320px), @low (640px), "
+                "(free, fast). frame://N,N,N@res shows specific frames (comma-separated). "
+                "frame://N-M@res scans a range at @tiny (320px), @low (640px), "
                 "@med (960px), @high (1280px), or @max (full). "
                 "transcode://batch/frame shows a high-res frame from a transcode batch. "
                 "crop://N re-shows a crop. snapshot:// shows the low-res bounding box preview. "
@@ -39,7 +40,7 @@ def _tool_show_frame_schema() -> dict:
                 "properties": {
                     "source": {
                         "type": "string",
-                        "description": "Frame URL: frame://N, frame://N-M@res, transcode://batch/frame, crop://N, or snapshot://. Max 30 frames per call."
+                        "description": "Frame URL: frame://N (single), frame://N,N,N@res (comma-separated list), frame://N-M@res (range), transcode://batch/frame, crop://N, or snapshot://. Max 30 frames per call."
                     },
                 },
                 "required": ["source"],

@@ -726,7 +726,17 @@ async def async_main(prompts_path: str, provider_path: str, mode: str = "trigger
                     elif role == "user":
                         content = m.get("content", "")
                         if isinstance(content, list):
-                            cur_res = "high"
+                            # FIRST PASS: Parse text parts to extract actual resolution
+                            cur_res = "high"  # default
+                            for part in content:
+                                if isinstance(part, dict) and part.get("type") == "text":
+                                    txt = part.get("text", "")
+                                    res_m = re.search(r"at (\w+) resolution", txt)
+                                    if res_m:
+                                        cur_res = res_m.group(1)
+                                        break  # Use first match
+                            
+                            # SECOND PASS: Render images with correct resolution badge
                             img_parts = [p for p in content if isinstance(p, dict) and p.get("type") == "image_url"]
                             has_multi = len(img_parts) > 1
                             if has_multi:
@@ -747,9 +757,6 @@ async def async_main(prompts_path: str, provider_path: str, mode: str = "trigger
                                             html.append('<div class="text">[image: {}]</div>'.format(_escape(url[:80])))
                                     elif part.get("type") == "text":
                                         txt = part["text"]
-                                        res_m = re.search(r"at (\w+) resolution", txt)
-                                        if res_m:
-                                            cur_res = res_m.group(1)
                                         html.append('<div class="text">{}</div>'.format(_escape(txt)))
                             if has_multi:
                                 html.append('</div>')

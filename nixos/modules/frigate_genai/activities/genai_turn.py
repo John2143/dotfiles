@@ -199,12 +199,13 @@ async def run_genai_turn_activity(turn_arg: dict) -> dict:
             urgency = f"Only {remaining} turns remaining! "
         else:
             urgency = ""
+        tool_names = turn_arg.get("tool_names", [])
+        tool_list = ", ".join(tool_names) if tool_names else "available tools"
         state["messages"].append({
             "role": "user",
             "content": (
-                f"{urgency}You must call a function. You cannot output plain text. "
-                "Use available tools to investigate, then call set_description() or "
-                "close_subagent() with your final analysis."
+                f"{urgency}You must call a tool function. Do NOT output plain text. "
+                f"Choose from: {tool_list}. Continue your investigation."
             ),
         })
         _atomic_write(msg_path, state)
@@ -219,39 +220,80 @@ async def run_genai_turn_activity(turn_arg: dict) -> dict:
     log.debug("run_genai_turn: appended assistant message (tool_calls=%d)", len(msg.tool_calls))
     # Parse tool calls
     tool_calls = []
+
+    def _reject(tc_id: str, content: str) -> None:
+        """Append a tool-level error message and persist immediately."""
+        state["messages"].append({
+            "role": "tool",
+            "tool_call_id": tc_id,
+            "content": content,
+        })
+        _atomic_write(msg_path, state)
+
     for tc in msg.tool_calls:
         # LiteLLM represents Gemini thought signatures as pseudo tool calls.
         # Preserve them in assistant_msg, but they are not executable and require no tool response.
         if "__thought__" in (tc.id or ""):
             continue
-        try:
-            args = json.loads(tc.function.arguments)
-        except json.JSONDecodeError:
-            args = {}
         tc_entry = {
             "id": tc.id,
             "name": tc.function.name,
-            "args": args,
+            "args": {},
         }
+        try:
+            args = json.loads(tc.function.arguments)
+            if not isinstance(args, dict):
+                args = {}
+            tc_entry["args"] = args
+        except json.JSONDecodeError as e:
+            args = {}
+            tc_entry["error"] = "json_parse_error"
+            _reject(tc.id, (
+                f"JSON parsing failed: {e}\n\n"
+                f"Your tool call arguments were malformed. Common issues:\n"
+                f"- Missing closing quote or brace\n"
+                f"- Unescaped quotes inside strings\n"
+                f"- Trailing comma\n\n"
+                f"Fix the syntax and retry."
+            ))
+            continue  # Skip tool_calls.append — error already reported
+
         if tc.function.name == "set_description":
             confidence = args.get("confidence", "medium")
+            description = args.get("description", "")
             valid_conf = {"high", "medium", "low", "nothing_found", "wrong_tag"}
-            if confidence not in valid_conf:
+            if not description or not description.strip():
+                tc_entry["error"] = "empty_description"
+                _reject(tc.id, (
+                    "set_description() requires a non-empty description. "
+                    "Provide your analysis before concluding."
+                ))
+                continue
+            elif confidence not in valid_conf:
                 tc_entry["error"] = f"invalid_confidence: {confidence}"
             else:
-                result["description"] = args.get("description", "")
+                result["description"] = description
                 result["confidence"] = confidence
-        tool_calls.append(tc_entry)
+
         if tc.function.name == "close_subagent":
             confidence = args.get("confidence", "medium")
+            findings = args.get("findings", "")
             valid_conf = {"high", "medium", "low", "nothing_found"}
-            if confidence not in valid_conf:
+            if not findings or not findings.strip():
+                tc_entry["error"] = "empty_findings"
+                _reject(tc.id, (
+                    "close_subagent() requires non-empty findings. "
+                    "Summarize what you discovered before closing."
+                ))
+                continue
+            elif confidence not in valid_conf:
                 tc_entry["error"] = f"invalid_confidence: {confidence}"
             else:
-                result["description"] = args.get("findings", "")
+                result["description"] = findings
                 result["confidence"] = confidence
                 result["key_images"] = args.get("show_images", [])
-            continue  # Skip tool_calls.append(tc_entry) below
+
+        tool_calls.append(tc_entry)
     # Guard: reject set_description/close_subagent when batched with other tools.
     # The model must review tool results before concluding.
     exit_tools = ("set_description", "close_subagent")

@@ -41,10 +41,12 @@ async def init_agent_state_activity(init_arg: dict) -> dict:
     if data_box and len(data_box) == 4:
         box_text = f"Detected at left={data_box[0]:.2f} top={data_box[1]:.2f} width={data_box[2]:.2f} height={data_box[3]:.2f}."
         crop_hint_text = (
-            f"Frigate's detection box: x1={data_box[0]:.2f} y1={data_box[1]:.2f} "
+            f"Frigate's detection box hint: x1={data_box[0]:.2f} y1={data_box[1]:.2f} "
             f"x2={data_box[0]+data_box[2]:.2f} y2={data_box[1]+data_box[3]:.2f}. "
-            f"Use this as your INITIAL search region — the subject may have moved "
-            f"since the snapshot. VERIFY position before cropping each frame."
+            f"This is Frigate's INITIAL guess from the snapshot — the subject may have moved, "
+            f"or the detection may be inaccurate. Before cropping each frame, VIEW the full frame "
+            f"at @max and DESCRIBE where you see the subject. Crop your observed position, not "
+            f"the detection box, if they differ."
         )
     else:
         crop_hint_text = (
@@ -81,7 +83,13 @@ async def init_agent_state_activity(init_arg: dict) -> dict:
 
         + "PHASE 2 — ZOOM: After scanning, you MUST zoom in on the subject. "
         + "Pick 2-4 key frames and show them individually at @max resolution "
-        + "(e.g., show_frame('frame://45@max')). Then " + crop_hint + " "
+        + "(e.g., show_frame('frame://45@max')). BEFORE cropping, describe WHERE you see "
+        + "the subject in the full frame using normalized coordinates (0.0 = left/top edge, "
+        + "1.0 = right/bottom edge). Examples: 'person in left third: left≈0.05-0.35', "
+        + "'centered: left≈0.35-0.65', 'right side: left≈0.65-0.95'. If your observation "
+        + "MATCHES the detection box hint (x1=... x2=...), use it. If the subject is "
+        + "elsewhere or the detection box is empty, crop where you ACTUALLY see the subject. "
+        + "Then " + crop_hint + " "
         "If a cropped detail (plate, face, text) is STILL too small or blurry to read "
         "at @max resolution, upscale('crop://N') to enhance it 4x. Upscale is expensive "
         "(up to 3 min) and only accepts small tight crops — never full frames. "
@@ -90,6 +98,12 @@ async def init_agent_state_activity(init_arg: dict) -> dict:
         "Default to swinir-psnr for accurate detail; use realesrgan only on noisy or "
         "compressed frames. Never upscale an upscale://N — always go back to the "
         "original crop://N or frame://N for the cleanest source.\n\n"
+        "To validate a crop before upscaling, use spawn() with a focused validation task: "
+        "spawn(tasks=[{'task': 'Inspect crop://1. Does it clearly show a person? "
+        "Answer YES (visible and identifiable), NO (empty/blurry/wrong), or UNCLEAR "
+        "(partially visible). Give 1-sentence reason.', 'image_refs': ['crop://1'], "
+        "'max_turns': 3}]). Validation subagent returns findings via join(). "
+        "If verdict is NO or UNCLEAR, view the full frame again and re-crop.\n\n"
         "PERSISTENCE: When cropping, start WIDER than you think — you can always call "
         "compact() to erase old attempts and zoom in differently. If a crop shows "
         "nothing useful, try a different region or frame. If 3 crops in a row produce "

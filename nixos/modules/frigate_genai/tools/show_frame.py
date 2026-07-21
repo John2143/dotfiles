@@ -48,7 +48,7 @@ async def tool_show_frame_activity(arg: dict) -> dict:
     base_source = source
     if "@" in source:
         base_source, res_str = source.rsplit("@", 1)
-        if res_str in ("low", "high", "max"):
+        if res_str in ("tiny", "low", "med", "high", "max"):
             resolution = res_str
 
     # Parse source type and frame spec
@@ -91,19 +91,34 @@ async def tool_show_frame_activity(arg: dict) -> dict:
                     "content": "No snapshot available.",
                 })
     else:
-        # Determine if range (N-M) or single (N)
+        # Determine if comma-separated (N,N,N), range (N-M), or single (N)
         frames_list = []
-        if "-" in frame_spec:
+        if "," in frame_spec:
+            # Comma-separated list: frame://54,12,46,60
+            parts = [x.strip() for x in frame_spec.split(",") if x.strip()]
+            if parts:
+                try:
+                    frames_list = [int(x) for x in parts]
+                except ValueError:
+                    frames_list = []
+        elif "-" in frame_spec:
+            # Hyphenated range: frame://10-20
             try:
                 f_start, f_end = int(frame_spec.split("-")[0]), int(frame_spec.split("-")[1])
                 frames_list = list(range(f_start, f_end + 1))
             except (ValueError, IndexError):
                 frames_list = []
         elif frame_spec:
+            # Single frame: frame://54
             try:
                 frames_list = [int(frame_spec)]
             except ValueError:
                 frames_list = []
+
+        # Reject negative frame numbers before transcode override
+        if frames_list and any(f < 0 for f in frames_list):
+            raise ApplicationError(
+                f"Negative frame numbers not allowed: {source}", non_retryable=True)
 
         # For transcode source, frame_spec is "batch/frame_idx" or "batch/start-end"
         batch = 0
@@ -112,7 +127,14 @@ async def tool_show_frame_activity(arg: dict) -> dict:
             if len(parts) >= 2:
                 batch = int(parts[0])
                 frame_part = parts[1]
-                if "-" in frame_part:
+                if "," in frame_part:
+                    cparts = [x.strip() for x in frame_part.split(",") if x.strip()]
+                    if cparts:
+                        try:
+                            frames_list = [int(x) for x in cparts]
+                        except ValueError:
+                            frames_list = []
+                elif "-" in frame_part:
                     rp = frame_part.split("-")
                     frames_list = list(range(int(rp[0]), int(rp[1]) + 1))
                 else:
