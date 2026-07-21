@@ -1,9 +1,11 @@
 """AgentSessionWorkflow -- self-contained agent turn loop as Temporal child workflow."""
 
+import asyncio
 from datetime import timedelta
 
 from temporalio import workflow
 from temporalio.exceptions import ApplicationError
+from temporalio.workflow import ParentClosePolicy
 
 from frigate_genai.config import _GENAI_RETRY, _ACTIVITY_RETRY
 from frigate_genai.activities.genai_turn import run_genai_turn_activity
@@ -14,11 +16,9 @@ from frigate_genai.tools.schemas import (
     _tool_get_snapshot_schema, _tool_show_frame_schema, _tool_crop_schema,
     _tool_transcode_schema, _tool_compact_schema, _tool_set_description_schema,
     _tool_upscale_schema, _tool_spawn_schema, _tool_join_schema,
-    _tool_close_subagent_schema,
+    _tool_close_subagent_schema, _tool_send_ipc_schema, _tool_wait_ipc_schema,
 )
 
-
-# ── helpers ──────────────────────────────────────────────────────────────────
 
 def _resolve_image_refs(refs: list[str], agent_dir: str, frames_dir: str = "") -> tuple[list[str], list[str]]:
     """Convert image refs (crop://N, frame://N) to S3 keys under agent_dir.
@@ -53,8 +53,6 @@ def _resolve_image_refs(refs: list[str], agent_dir: str, frames_dir: str = "") -
             except ValueError:
                 errors.append(ref)
     return keys, errors
-
-
 def _format_spawn_findings(findings: list[dict]) -> str:
     """Format subagent findings into a parent-readable message with synthesis."""
     successes = [f for f in findings if not f.get("error")]
@@ -86,11 +84,9 @@ def _format_spawn_findings(findings: list[dict]) -> str:
         for i, f in enumerate(failures):
             lines.append(f"  [{i+1}] {f['error'][:200]}")
 
-    lines.append(
-        f"\nExamine high-confidence findings first. If multiple subagents disagree, "
-        f"re-investigate the disputed region yourself. Use spawn/join again if needed."
-    )
+    lines.append("\n--- END JOIN RESULTS ---")
     return "\n".join(lines)
+
 
 def _get_tools_for_depth(depth: int, max_depth: int) -> list[dict]:
     """Return tool schemas available at given depth. Root gets set_description + spawn + join.
@@ -105,23 +101,299 @@ def _get_tools_for_depth(depth: int, max_depth: int) -> list[dict]:
             _tool_get_snapshot_schema(), _tool_compact_schema(),
             _tool_set_description_schema(),
             _tool_spawn_schema(), _tool_join_schema(),
+            _tool_send_ipc_schema(), _tool_wait_ipc_schema(),
         ]
     elif depth < max_depth:
         return base + [
             _tool_close_subagent_schema(),
             _tool_spawn_schema(), _tool_join_schema(),
+            _tool_send_ipc_schema(), _tool_wait_ipc_schema(),
         ]
     else:
         return base + [
             _tool_close_subagent_schema(),
+            _tool_send_ipc_schema(), _tool_wait_ipc_schema(),
         ]
+
 
 # ── workflow ─────────────────────────────────────────────────────────────────
 
 @workflow.defn
 class AgentSessionWorkflow:
     """Self-contained agent turn loop. Reads/writes messages.json via activities.
-    Can be run as child workflow of GenAIWorkflow or recursively."""
+    Can be run as child workflow of GenAIWorkflow or recursively.
+    Supports bidirectional IPC via Signals/Updates with token-based routing."""
+
+    def __init__(self):
+        # ── IPC identity ──────────────────────────────────────────────────
+        self.ipc_token: str = ""
+        self.parent_ipc_token: str | None = None
+        self.parent_workflow_id: str | None = None
+        self.parent_run_id: str | None = None
+        self._parent_handle = None
+
+        # ── IPC state ─────────────────────────────────────────────────────
+        self._pending_ipc: list[dict] = []
+        self.ipc_inbox: list[dict] = []
+        self.ipc_inbox_cursor: int = 0
+        self.ipc_seen_ids: list[str] = []
+        self.ipc_seq: int = 0
+        self.ipc_reply_ready: dict[str, bool] = {}
+        self.ipc_any_ready: bool = False
+        self.ipc_closed: bool = False
+
+        # ── Child registry: token -> {workflow_id, run_id, handle, status} ──
+        self.child_registry: dict[str, dict] = {}
+
+        # ── Counters ──────────────────────────────────────────────────────
+        self.ipc_accepted: int = 0
+        self.ipc_duplicates: int = 0
+        self.ipc_rejected: int = 0
+
+        # ── Spawn/join tracking ───────────────────────────────────────────
+        self.spawn_handles: dict[str, list[tuple[dict, object]]] = {}
+        self.total_subagents: int = 0
+        self._spawn_count: int = 0
+
+    # ── IPC helpers ──────────────────────────────────────────────────────────
+
+    def _format_ipc(self, msg: dict) -> str:
+        """Format an IPC message for injection into the conversation as a user message."""
+        logical_id = msg.get("from_token", "?").rsplit(":", 1)[-1]
+        confidence = msg.get("confidence", "")
+        conf_str = f" | {confidence}" if confidence else ""
+        return f"[IPC from {logical_id} | {msg.get('kind', '?')}{conf_str}]: {msg.get('content', '')}"
+
+    def _accept_ipc(self, payload: dict) -> str:
+        """Single validation/mutation path for IPC Signals and Updates.
+        Returns: accepted, duplicate, rejected, closed, inbox_full, buffered."""
+        # Buffer if identity not yet initialized
+        if not self.ipc_token:
+            self._pending_ipc.append(payload)
+            return "buffered"
+
+        # Validate IPCMessage
+        try:
+            from frigate_genai.models import IPCMessage
+            msg = IPCMessage.model_validate(payload)
+        except Exception:
+            self.ipc_rejected += 1
+            return "rejected"
+
+        msg_dict = msg.model_dump()
+        message_id = msg_dict["message_id"]
+
+        # Check to_token matches
+        if msg_dict["to_token"] != self.ipc_token:
+            self.ipc_rejected += 1
+            return "rejected"
+
+        # Check from_token is parent or registered direct child
+        from_token = msg_dict["from_token"]
+        if from_token != self.parent_ipc_token and from_token not in self.child_registry:
+            self.ipc_rejected += 1
+            return "rejected"
+
+        # Check closed
+        if self.ipc_closed:
+            return "closed"
+
+        # Deduplicate
+        if message_id in self.ipc_seen_ids:
+            self.ipc_duplicates += 1
+            return "duplicate"
+
+        # Check inbox full
+        if len(self.ipc_inbox) >= 100:
+            self.ipc_rejected += 1
+            return "inbox_full"
+
+        # Accept
+        self.ipc_inbox.append(msg_dict)
+        self.ipc_seen_ids.append(message_id)
+        self.ipc_accepted += 1
+
+        # Trim dedupe window
+        while len(self.ipc_seen_ids) > 200:
+            self.ipc_seen_ids.pop(0)
+
+        # Signal waiters
+        self.ipc_any_ready = True
+        self.ipc_reply_ready[message_id] = True
+        if msg_dict.get("reply_to"):
+            self.ipc_reply_ready[msg_dict["reply_to"]] = True
+
+        return "accepted"
+
+    # ── IPC handlers ─────────────────────────────────────────────────────────
+
+    @workflow.signal(name="receive_ipc")
+    async def receive_ipc(self, payload: dict) -> None:
+        """Fire-and-forget IPC signal endpoint."""
+        self._accept_ipc(payload)
+
+    @workflow.update(name="receive_ipc_update")
+    async def receive_ipc_update(self, payload: dict) -> dict:
+        """External acknowledgement endpoint for IPC delivery."""
+        status = self._accept_ipc(payload)
+        return {"status": status, "message_id": payload.get("message_id", "")}
+
+    @workflow.query(name="ipc_status")
+    def ipc_status(self) -> dict:
+        """Read-only IPC state snapshot (no message content)."""
+        return {
+            "ipc_token": self.ipc_token,
+            "inbox_count": len(self.ipc_inbox),
+            "children": {t: d.get("status", "?") for t, d in self.child_registry.items()},
+            "waiter_count": len(self.ipc_reply_ready),
+            "accepted": self.ipc_accepted,
+            "duplicates": self.ipc_duplicates,
+            "rejected": self.ipc_rejected,
+        }
+
+    # ── IPC tool dispatch ────────────────────────────────────────────────────
+
+    async def _dispatch_send_ipc(self, tc: dict, outcomes: list[dict]) -> None:
+        """Handle send_ipc tool call. Resolves route and delivers signal."""
+        from frigate_genai.models import SendIPCArgs
+
+        try:
+            args = SendIPCArgs.model_validate(tc.get("args", {}))
+        except Exception as e:
+            outcomes.append({"messages": [{"role": "tool", "tool_call_id": tc["id"],
+                "content": f"send_ipc invalid: {e}"}]})
+            return
+
+        # Validate reply_to constraint
+        if args.kind != "reply" and args.reply_to is not None:
+            outcomes.append({"messages": [{"role": "tool", "tool_call_id": tc["id"],
+                "content": "invalid_reply: reply_to is only valid for replies"}]})
+            return
+
+        # Resolve route
+        to_token = args.to_token
+        is_parent = (to_token == self.parent_ipc_token)
+        is_child = (to_token in self.child_registry)
+
+        if not is_parent and not is_child:
+            outcomes.append({"messages": [{"role": "tool", "tool_call_id": tc["id"],
+                "content": f"stale_recipient: token {to_token} not registered"}]})
+            return
+
+        # Increment sequence
+        self.ipc_seq += 1
+        message_id = f"{self.ipc_token}:{self.ipc_seq}"
+
+        payload = {
+            "message_id": message_id,
+            "from_token": self.ipc_token,
+            "to_token": to_token,
+            "kind": args.kind,
+            "content": args.content,
+            "confidence": args.confidence,
+            "reply_to": args.reply_to,
+            "seq": self.ipc_seq,
+            "created_at": workflow.now().timestamp(),
+        }
+
+        # Register waiter if waiting for reply
+        if args.wait_for_reply:
+            self.ipc_reply_ready[message_id] = False
+
+        # Deliver
+        try:
+            if is_parent:
+                await self._parent_handle.signal("receive_ipc", payload)
+            else:
+                child_info = self.child_registry[to_token]
+                await child_info["handle"].signal("receive_ipc", payload)
+        except Exception:
+            outcomes.append({"messages": [{"role": "tool", "tool_call_id": tc["id"],
+                "content": f"recipient_closed: {to_token}"}]})
+            return
+
+        # Wait for reply if requested
+        if args.wait_for_reply:
+            try:
+                await workflow.wait_condition(
+                    lambda: self.ipc_reply_ready.get(message_id, False),
+                    timeout=timedelta(seconds=args.timeout_seconds),
+                )
+                # Find reply
+                reply_msg = None
+                for m in self.ipc_inbox:
+                    if m.get("kind") == "reply" and m.get("reply_to") == message_id:
+                        reply_msg = m
+                        break
+                if reply_msg:
+                    formatted = self._format_ipc(reply_msg)
+                    outcomes.append({"messages": [{"role": "tool", "tool_call_id": tc["id"],
+                        "content": formatted}]})
+                else:
+                    outcomes.append({"messages": [{"role": "tool", "tool_call_id": tc["id"],
+                        "content": "timeout: no reply received"}]})
+            except asyncio.TimeoutError:
+                outcomes.append({"messages": [{"role": "tool", "tool_call_id": tc["id"],
+                    "content": "timeout: no reply received"}]})
+            finally:
+                self.ipc_reply_ready.pop(message_id, None)
+        else:
+            outcomes.append({"messages": [{"role": "tool", "tool_call_id": tc["id"],
+                "content": f"accepted: {message_id}"}]})
+
+    async def _dispatch_wait_ipc(self, tc: dict, outcomes: list[dict]) -> None:
+        """Handle wait_ipc tool call. Returns buffered or waits for new messages."""
+        from frigate_genai.models import WaitIPCArgs
+
+        try:
+            args = WaitIPCArgs.model_validate(tc.get("args", {}))
+        except Exception as e:
+            outcomes.append({"messages": [{"role": "tool", "tool_call_id": tc["id"],
+                "content": f"wait_ipc invalid: {e}"}]})
+            return
+
+        if args.message_id:
+            # Wait for specific reply
+            mid = args.message_id
+            try:
+                await workflow.wait_condition(
+                    lambda: self.ipc_reply_ready.get(mid, False),
+                    timeout=timedelta(seconds=args.timeout_seconds),
+                )
+                replies = [m for m in self.ipc_inbox
+                           if m.get("kind") == "reply" and m.get("reply_to") == mid]
+                if replies:
+                    formatted = "\n\n".join(self._format_ipc(m) for m in replies)
+                    outcomes.append({"messages": [{"role": "tool", "tool_call_id": tc["id"],
+                        "content": formatted}]})
+                else:
+                    outcomes.append({"messages": [{"role": "tool", "tool_call_id": tc["id"],
+                        "content": "timeout: no messages received"}]})
+            except asyncio.TimeoutError:
+                outcomes.append({"messages": [{"role": "tool", "tool_call_id": tc["id"],
+                    "content": "timeout: no messages received"}]})
+        else:
+            # Wait for any new messages
+            try:
+                await workflow.wait_condition(
+                    lambda: self.ipc_any_ready,
+                    timeout=timedelta(seconds=args.timeout_seconds),
+                )
+                self.ipc_any_ready = False
+                new_msgs = self.ipc_inbox[self.ipc_inbox_cursor:][:20]
+                self.ipc_inbox_cursor += len(new_msgs)
+                if new_msgs:
+                    formatted = "\n\n".join(self._format_ipc(m) for m in new_msgs)
+                    outcomes.append({"messages": [{"role": "tool", "tool_call_id": tc["id"],
+                        "content": formatted}]})
+                else:
+                    outcomes.append({"messages": [{"role": "tool", "tool_call_id": tc["id"],
+                        "content": "timeout: no messages received"}]})
+            except asyncio.TimeoutError:
+                outcomes.append({"messages": [{"role": "tool", "tool_call_id": tc["id"],
+                    "content": "timeout: no messages received"}]})
+
+    # ── run loop ──────────────────────────────────────────────────────────────
 
     @workflow.run
     async def run(self, session_input: dict) -> dict:
@@ -140,6 +412,36 @@ class AgentSessionWorkflow:
         depth = session_input.get("depth", 0)
         max_depth = session_input.get("max_depth", 2)
 
+        # ── Initialize IPC identity ───────────────────────────────────────
+        wf_info = workflow.info()
+        if depth == 0:
+            # Root: derive token from current workflow info
+            self.ipc_token = f"ipc-v1:{wf_info.workflow_id}:{wf_info.run_id}:root"
+        else:
+            # Child: use supplied token
+            self.ipc_token = session_input.get("ipc_token", "")
+
+        self.parent_ipc_token = session_input.get("parent_ipc_token")
+        self.parent_workflow_id = session_input.get("parent_workflow_id")
+        if session_input.get("parent_run_id"):
+            self.parent_run_id = session_input["parent_run_id"]
+
+        # Create parent handle if parent info present
+        if self.parent_workflow_id and self.parent_run_id:
+            self._parent_handle = workflow.get_external_workflow_handle_for(
+                AgentSessionWorkflow.run,
+                workflow_id=self.parent_workflow_id,
+                run_id=self.parent_run_id,
+            )
+
+        # Replay buffered signals
+        if self._pending_ipc:
+            pending = list(self._pending_ipc)
+            self._pending_ipc.clear()
+            for payload in pending:
+                self._accept_ipc(payload)
+
+        # ── Turn loop state ───────────────────────────────────────────────
         turn_arg = {
             "msg_path": msg_path,
             "provider_path": provider_path,
@@ -155,10 +457,6 @@ class AgentSessionWorkflow:
         turns_max = 0
         turns_transcode = 0
         tool_failures = 0
-        # Spawn/join tracking
-        spawn_handles: dict[str, list[tuple[dict, object]]] = {}
-        total_subagents = 0
-        _spawn_count = 0
         MAX_CONCURRENT_SPAWNS = 5
         MAX_TOTAL_SUBAGENTS = 20
         trace_entries: list[dict] = []
@@ -168,7 +466,7 @@ class AgentSessionWorkflow:
         for turn in range(max_turns):
             turn_arg["turn_num"] = turn + 1
             turn_arg["max_turns"] = max_turns
-            turn_arg["tools"] = _get_tools_for_depth(depth, max_depth)
+            turn_arg["tool_names"] = [t["function"]["name"] for t in _get_tools_for_depth(depth, max_depth)]
             result = await workflow.execute_activity(
                 run_genai_turn_activity,
                 arg=turn_arg,
@@ -210,14 +508,55 @@ class AgentSessionWorkflow:
                 trace_entries.append({"type": "nudge", "reason": "no_tool_call"})
                 continue
 
+            # IPC prefix injection at turn start
+            outcomes: list[dict] = []
+            ipc_snapshot: list[dict] = []
+            if self.ipc_inbox_cursor > 0 or len(self.ipc_inbox) > self.ipc_inbox_cursor:
+                # Snapshot claimed messages for persistence
+                claimed = self.ipc_inbox[:self.ipc_inbox_cursor] if self.ipc_inbox_cursor > 0 else []
+                unclaimed = self.ipc_inbox[self.ipc_inbox_cursor:] if self.ipc_inbox_cursor < len(self.ipc_inbox) else []
+                all_ipc = claimed + unclaimed
+                for msg in all_ipc:
+                    formatted = self._format_ipc(msg)
+                    ipc_snapshot.append(msg)
+                    outcomes.append({"messages": [{"role": "user", "content": formatted}]})
+                # Snapshot-and-swap the inbox so signals during persistence land in new list
+                old_inbox = self.ipc_inbox
+                self.ipc_inbox = []
+                self.ipc_inbox_cursor = 0
+                # Persist IPC messages
+                if outcomes:
+                    try:
+                        await workflow.execute_activity(
+                            apply_tool_messages_activity,
+                            arg={"msg_path": msg_path, "outcomes": list(outcomes)},
+                            task_queue=genai_queue,
+                            start_to_close_timeout=timedelta(seconds=10),
+                            retry_policy=_ACTIVITY_RETRY,
+                        )
+                        outcomes.clear()
+                    except Exception:
+                        # Restore snapshot on failure for retry
+                        self.ipc_inbox = old_inbox + self.ipc_inbox
+                        self.ipc_inbox_cursor = len(old_inbox)
+
             # Parallel tool dispatch
             handles: list[tuple[dict, dict, object]] = []
-            outcomes: list[dict] = []
             for tc in result.get("tool_calls", []):
+                # ── send_ipc handling ─────────────────────────────────────
+                if tc["name"] == "send_ipc":
+                    await self._dispatch_send_ipc(tc, outcomes)
+                    continue
+
+                # ── wait_ipc handling ─────────────────────────────────────
+                if tc["name"] == "wait_ipc":
+                    await self._dispatch_wait_ipc(tc, outcomes)
+                    continue
+
                 # ── spawn handling ────────────────────────────────────────────
                 if tc["name"] == "spawn":
                     tasks = tc["args"].get("tasks", [])
-                    if total_subagents + len(tasks) > MAX_TOTAL_SUBAGENTS:
+                    if self.total_subagents + len(tasks) > MAX_TOTAL_SUBAGENTS:
                         outcomes.append({"messages": [{"role": "tool", "tool_call_id": tc["id"],
                             "content": f"Subagent limit ({MAX_TOTAL_SUBAGENTS}) reached. Conclude."}]})
                         continue
@@ -231,9 +570,9 @@ class AgentSessionWorkflow:
                         continue
 
                     from frigate_genai.workflows.subagent import SubAgentWorkflow
-                    _spawn_count += 1
-                    spawn_key = f"spawn_{_spawn_count:08x}"
-                    spawn_handles[spawn_key] = []
+                    self._spawn_count += 1
+                    spawn_key = f"spawn_{self._spawn_count:08x}"
+                    self.spawn_handles[spawn_key] = []
                     sd = session_input.get("subagent_dir", session_input.get("parent_agent_dir",
                          f"events/{event_id}/agent/"))
 
@@ -263,10 +602,20 @@ class AgentSessionWorkflow:
                             "content": "Spawn image_refs resolution failed:\n" + "\n".join(all_errors)}]})
                         continue
 
+                    # ── Derive parent identity for child tokens ────────────────
+                    parent_wf_id = wf_info.workflow_id
+                    parent_run_id = wf_info.run_id
+
                     # ── Start child workflows ───────────────────────────────────
+                    child_tokens = []
                     for i, st in enumerate(validated_tasks):
-                        sub_sd = f"{sd}subagent/s{total_subagents + i}/"
+                        sub_sd = f"{sd}subagent/s{self.total_subagents + i}/"
                         s3_keys, _ = _resolve_image_refs(st.image_refs, sd, frames_dir=f"events/{event_id}")
+                        child_idx = self.total_subagents + i
+                        child_token = f"ipc-v1:{parent_wf_id}:{parent_run_id}:s{child_idx}"
+                        child_workflow_id = f"{event_id}-{sd.rstrip('/').split('/')[-1]}-{spawn_key}-{i}"
+                        agent_dir_name = sd.rstrip("/").split("/")[-1] if sd.rstrip("/").split("/") else "agent"
+
                         sub_input = {
                             "event_id": event_id, "camera": camera, "label": label,
                             "task": st.task, "image_refs": st.image_refs,
@@ -274,37 +623,62 @@ class AgentSessionWorkflow:
                             "parent_agent_dir": sd, "subagent_dir": sub_sd,
                             "frames_dir": f"events/{event_id}",
                             "provider_path": provider_path, "model": model,
+                            "genai_queue": genai_queue,
+                            "prompts_path": prompts_path,
+                            "start_time": start_time, "end_time": end_time,
+                            "depth": depth + 1,
+                            "max_depth": max_depth,
+                            "max_turns": st.max_turns,
+                            "parent_workflow_id": parent_wf_id,
+                            "parent_run_id": parent_run_id,
+                            "parent_ipc_token": self.ipc_token,
+                            "ipc_token": child_token,
                         }
-                        handle = workflow.start_child_workflow(
+                        handle = await workflow.start_child_workflow(
                             SubAgentWorkflow, arg=sub_input,
-                            id=f"{event_id}-{sd.rstrip('/').split('/')[-1]}-{spawn_key}-{i}",
+                            id=child_workflow_id,
                             task_queue=genai_queue,
+                            parent_close_policy=ParentClosePolicy.TERMINATE,
                         )
-                        spawn_handles[spawn_key].append((tc, handle))
-                    total_subagents += len(validated_tasks)
+                        self.spawn_handles[spawn_key].append((tc, handle))
+                        self.child_registry[child_token] = {
+                            "workflow_id": child_workflow_id,
+                            "run_id": handle.first_execution_run_id,
+                            "handle": handle,
+                            "status": "running",
+                        }
+                        child_tokens.append(child_token)
+                    self.total_subagents += len(validated_tasks)
                     outcomes.append({"messages": [{"role": "tool", "tool_call_id": tc["id"],
                         "content": f"Spawned {len(validated_tasks)} subagents. Key: {spawn_key}. "
+                                   f"Child tokens: {', '.join(child_tokens)}. "
                                    f"Call join(spawn_key='{spawn_key}') to collect results."}]})
                     continue
 
                 # ── join handling ─────────────────────────────────────────────
                 if tc["name"] == "join":
                     spawn_key = tc["args"]["spawn_key"]
-                    if spawn_key not in spawn_handles:
+                    if spawn_key not in self.spawn_handles:
                         outcomes.append({"messages": [{"role": "tool", "tool_call_id": tc["id"],
                             "content": f"Unknown spawn_key: {spawn_key}"}]})
                         continue
+
+                    # Concurrent join via asyncio.gather
+                    pairs = self.spawn_handles[spawn_key]
+                    handles_list = [h for _, h in pairs]
+                    results = await asyncio.gather(*handles_list, return_exceptions=True)
+
                     findings = []
-                    for _, handle in spawn_handles[spawn_key]:
-                        try:
-                            sub_result = await handle
+                    for (orig_tc, _), sub_result in zip(pairs, results):
+                        if isinstance(sub_result, Exception):
+                            findings.append({"error": str(sub_result), "task": "unknown"})
+                        else:
                             findings.append(dict(sub_result))
-                        except Exception as e:
-                            findings.append({"error": str(e), "task": "unknown"})
+
                     fmt = _format_spawn_findings(findings)
                     outcomes.append({"messages": [{"role": "tool", "tool_call_id": tc["id"],
                         "content": fmt}]})
-                    del spawn_handles[spawn_key]
+                    del self.spawn_handles[spawn_key]
                     continue
 
                 # ── normal tool dispatch ──────────────────────────────────────
@@ -406,6 +780,33 @@ class AgentSessionWorkflow:
             description = f"Agentic failed: max turns ({max_turns}) exceeded without set_description"
             confidence = "low"
             workflow.logger.warning("Agent: max turns exceeded for %s", event_id)
+
+        # ── Cleanup ────────────────────────────────────────────────────────
+        self.ipc_closed = True
+        # Wake all waiters
+        for key in list(self.ipc_reply_ready.keys()):
+            self.ipc_reply_ready[key] = True
+
+        # Cancel running children
+        cancel_handles = []
+        for token, info in list(self.child_registry.items()):
+            if info.get("status") == "running":
+                try:
+                    info["handle"].cancel()
+                    cancel_handles.append(info["handle"])
+                    info["status"] = "cancelled"
+                except Exception:
+                    info["status"] = "cancelled"
+
+        # Await cancelled handles
+        if cancel_handles:
+            await asyncio.gather(*cancel_handles, return_exceptions=True)
+
+        # Clear registries
+        self.child_registry.clear()
+
+        # Wait for all handlers to finish
+        await workflow.wait_condition(workflow.all_handlers_finished)
 
         return {
             "description": description,

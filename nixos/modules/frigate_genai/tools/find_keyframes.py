@@ -165,8 +165,8 @@ def _compute_differences(
                 ry2 = max(0, min(th_img - 1, int(cy + half_h)))
                 if rx2 - rx1 >= 4 and ry2 - ry1 >= 4:
                     roi_box = (rx1, ry1, rx2, ry2)
-            except Exception:
-                pass
+            except Exception as e:
+                log.debug("ROI box computation failed for data_box=%s: %s", data_box, e)
 
     # Compute pair scores
     scores: list[list[float]] = []

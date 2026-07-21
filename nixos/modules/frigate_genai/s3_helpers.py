@@ -72,14 +72,20 @@ def _s3_list(prefix: str) -> list[str]:
 
 
 def _s3_delete_prefix(prefix: str) -> int:
-    """Delete all objects under prefix. Returns count deleted."""
+    """Delete all objects under prefix. Returns count deleted. Batches in chunks of 1000."""
     keys = _s3_list(prefix)
-    if keys:
+    if not keys:
+        return 0
+
+    deleted = 0
+    for i in range(0, len(keys), 1000):
+        batch = keys[i:i+1000]
         _s3_client().delete_objects(
             Bucket=_S3_BUCKET,
-            Delete={"Objects": [{"Key": k} for k in keys]},
+            Delete={"Objects": [{"Key": k} for k in batch]},
         )
-    return len(keys)
+        deleted += len(batch)
+    return deleted
 
 
 def _s3_copy_key(src: str, dst: str) -> bool:
@@ -162,12 +168,16 @@ def _deserialize_messages(messages: list, agent_dir: str) -> list:
                         fname = url[2:-2]  # strip [[ and ]]
                         base = agent_dir.rstrip("/")
                         img_key = f"{base}/{fname}"
-                        raw = _s3_get(img_key) if is_s3 else None
-                        p = Path(agent_dir) / fname
-                        raw = p.read_bytes() if p.exists() else None
+                        if is_s3:
+                            raw = _s3_get(img_key)
+                        else:
+                            p = Path(agent_dir) / fname
+                            raw = p.read_bytes() if p.exists() else None
                         if raw:
                             b64 = base64.b64encode(raw).decode("ascii")
                             part["image_url"]["url"] = f"data:image/jpeg;base64,{b64}"
+                        else:
+                            log.warning("Failed to load image %s from %s", fname, "S3" if is_s3 else "disk")
     return result
 
 

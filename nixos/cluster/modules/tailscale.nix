@@ -23,17 +23,9 @@
         "--login-server=${config.custom.headscaleServer}"
       ];
 
-      # Preauth key for auto-joining the tailnet
-      # Generated on the Home Pi after Headscale is provisioned
-      authKeyFile = config.age.secrets."hetzner/headscale-preauth-key".path;
-    };
 
-    # agenix secret: Headscale preauth key
-    age.secrets."hetzner/headscale-preauth-key" = {
-      file = ../secrets/hetzner/headscale-preauth-key.age;
-      owner = "root";
-      group = "root";
-      mode = "0400";
+    # Preauth key enrollment is handled dynamically by post_deploy.py
+    # (create_kubecontrol_preauth_key) — no static authKeyFile needed.
     };
   };
 }

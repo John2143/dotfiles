@@ -216,7 +216,17 @@
       };
     };
     # cam08 is a direct RTSP camera (not routed through the Reolink NVR).
-    cam08 = {name = "Camera 8"; rtspPath = "rtsp://\${EUFY_USER}:\${EUFY_PASS}@192.168.5.59/live0"; detectWidth = 1920; detectHeight = 1080; detectFps = 1; motionMask = ["0.56,0,0.466,0.023,0.467,0.172,0.602,0.235,0.625,0.129,0.619,0" "0.674,0.62,0.593,0.541,0.558,0.535,0.508,0.532,0.457,0.577,0.412,0.726,0.401,0.861,0.392,0.966,0.419,0.99,0.429,1,0.784,0.999" "0.712,0.005,0.715,0.066,0.995,0.07,0.997,0.002"]; motionThreshold = 49; motionContourArea = 10; improveContrast = true;};
+    cam08 = {
+      name = "Camera 8";
+      rtspPath = "rtsp://\${EUFY_USER}:\${EUFY_PASS}@192.168.5.59/live0";
+      detectWidth = 1920;
+      detectHeight = 1080;
+      detectFps = 1;
+      motionMask = ["0.712,0.005,0.715,0.066,0.995,0.07,0.997,0.002"];
+      motionThreshold = 36;
+      motionContourArea = 10;
+      improveContrast = false;
+    };
 
 
 

@@ -42,6 +42,9 @@
       enable = true;
       role = "server";
       tokenFile = config.age.secrets.k3s-local-token.path;
+      extraFlags = lib.mkDefault (toString [
+        "--tls-san=192.168.5.10"
+      ]);
     };
     # Clean resolv.conf for k3s pods — strips the Tailscale MagicDNS search
     # domain (ts.2143.me) to prevent ndots:5 expansion from prepending it

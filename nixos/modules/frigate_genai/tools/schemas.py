@@ -1,3 +1,25 @@
+from typing import Callable
+
+# Tool schema registry
+_TOOLS: dict[str, Callable[[], dict]] = {}
+
+def tool_schema(func: Callable[[], dict]) -> Callable[[], dict]:
+    """Register a tool schema function by name extracted from its return value."""
+    schema = func()
+    name = schema["function"]["name"]
+    _TOOLS[name] = func
+    return func
+
+def get_tool_names() -> list[str]:
+    """Return list of all registered tool names."""
+    return list(_TOOLS.keys())
+
+def get_tool_schemas(names: list[str]) -> list[dict]:
+    """Reconstruct full schemas from tool names."""
+    return [_TOOLS[name]() for name in names]
+
+
+@tool_schema
 def _tool_show_frame_schema() -> dict:
     return {
         "type": "function",
@@ -26,6 +48,7 @@ def _tool_show_frame_schema() -> dict:
     }
 
 
+@tool_schema
 def _tool_transcode_schema() -> dict:
     return {
         "type": "function",
@@ -50,6 +73,7 @@ def _tool_transcode_schema() -> dict:
         },
     }
 
+@tool_schema
 def _tool_get_snapshot_schema() -> dict:
     return {
         "type": "function",
@@ -65,6 +89,7 @@ def _tool_get_snapshot_schema() -> dict:
     }
 
 
+@tool_schema
 def _tool_set_description_schema() -> dict:
     return {
         "type": "function",
@@ -92,6 +117,7 @@ def _tool_set_description_schema() -> dict:
     }
 
 
+@tool_schema
 def _tool_compact_schema() -> dict:
     return {
         "type": "function",
@@ -109,6 +135,7 @@ def _tool_compact_schema() -> dict:
         },
     }
 
+@tool_schema
 def _tool_upscale_schema() -> dict:
     return {
         "type": "function",
@@ -139,6 +166,7 @@ def _tool_upscale_schema() -> dict:
     }
 
 
+@tool_schema
 def _tool_crop_schema() -> dict:
     return {
         "type": "function",
@@ -169,6 +197,7 @@ def _tool_crop_schema() -> dict:
     }
 
 
+@tool_schema
 def _tool_spawn_schema() -> dict:
     return {
         "type": "function",
@@ -219,6 +248,7 @@ def _tool_spawn_schema() -> dict:
     }
 
 
+@tool_schema
 def _tool_join_schema() -> dict:
     return {
         "type": "function",
@@ -241,6 +271,7 @@ def _tool_join_schema() -> dict:
     }
 
 
+@tool_schema
 def _tool_close_subagent_schema() -> dict:
     return {
         "type": "function",
@@ -266,6 +297,7 @@ def _tool_close_subagent_schema() -> dict:
         },
     }
 
+@tool_schema
 def _tool_find_keyframes_schema() -> dict:
     return {
         "type": "function",
@@ -292,6 +324,7 @@ def _tool_find_keyframes_schema() -> dict:
     }
 
 
+@tool_schema
 def _tool_frame_diff_schema() -> dict:
     return {
         "type": "function",
@@ -319,6 +352,7 @@ def _tool_frame_diff_schema() -> dict:
     }
 
 
+@tool_schema
 def _tool_tag_image_schema() -> dict:
     return {
         "type": "function",
@@ -358,6 +392,72 @@ def _tool_tag_image_schema() -> dict:
                     },
                 },
                 "required": ["tags"],
+            },
+        },
+    }
+
+
+@tool_schema
+def _tool_send_ipc_schema() -> dict:
+    return {
+        "type": "function",
+        "function": {
+            "name": "send_ipc",
+            "description": (
+                "Send a message to a parent or sibling agent. Use for findings, "
+                "questions, replies, or termination signals. Messages are validated "
+                "by an IPC token system; only registered agents in the same run can communicate. "
+                "Set wait_for_reply=True to block until the recipient responds."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "to_token": {"type": "string",
+                        "description": "Recipient IPC token (from spawn results or parent)."},
+                    "kind": {"type": "string",
+                        "enum": ["finding", "question", "reply", "terminate"],
+                        "description": "Message kind: finding (report), question (ask), reply (answer), terminate (end)."},
+                    "content": {"type": "string",
+                        "description": "Message body (1-8192 bytes)."},
+                    "confidence": {"type": "string",
+                        "enum": ["high", "medium", "low", "nothing_found"],
+                        "description": "Confidence for finding/reply kinds."},
+                    "reply_to": {"type": "string",
+                        "description": "Message ID being replied to (required for reply kind)."},
+                    "wait_for_reply": {"type": "boolean",
+                        "description": "Block until recipient sends a reply."},
+                    "timeout_seconds": {"type": "integer",
+                        "minimum": 1, "maximum": 300, "default": 30,
+                        "description": "Max wait time for wait_for_reply."},
+                },
+                "required": ["to_token", "kind", "content"],
+                "additionalProperties": False,
+            },
+        },
+    }
+
+
+@tool_schema
+def _tool_wait_ipc_schema() -> dict:
+    return {
+        "type": "function",
+        "function": {
+            "name": "wait_ipc",
+            "description": (
+                "Wait for incoming IPC messages. Without a message_id, returns up to 20 "
+                "unread messages from any registered agent. With a message_id, waits for "
+                "a specific reply. Returns 'timeout: no messages received' if nothing arrives."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "message_id": {"type": "string",
+                        "description": "Optional: wait for a reply to this specific message."},
+                    "timeout_seconds": {"type": "integer",
+                        "minimum": 1, "maximum": 300, "default": 30,
+                        "description": "Max wait time."},
+                },
+                "additionalProperties": False,
             },
         },
     }

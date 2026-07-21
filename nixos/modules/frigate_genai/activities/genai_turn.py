@@ -127,23 +127,33 @@ async def run_genai_turn_activity(turn_arg: dict) -> dict:
             extra_body["thinking_enabled"] = True
     client, model_name = _resolve_provider(provider_cfg, model)
     from frigate_genai.tools.schemas import (
-        _tool_find_keyframes_schema, _tool_frame_diff_schema, _tool_tag_image_schema,
+        _tool_close_subagent_schema,
         _tool_compact_schema,
         _tool_crop_schema,
+        _tool_find_keyframes_schema,
+        _tool_frame_diff_schema,
         _tool_get_snapshot_schema,
         _tool_set_description_schema,
         _tool_show_frame_schema,
+        _tool_tag_image_schema,
         _tool_transcode_schema,
         _tool_upscale_schema,
+        _tool_send_ipc_schema, _tool_wait_ipc_schema,
+        get_tool_schemas,
     )
-    tools = turn_arg.get("tools")
-    if tools is None:
-        tools = [
-            _tool_find_keyframes_schema(), _tool_frame_diff_schema(), _tool_tag_image_schema(),
-            _tool_get_snapshot_schema(), _tool_show_frame_schema(), _tool_crop_schema(),
-            _tool_transcode_schema(), _tool_compact_schema(), _tool_set_description_schema(),
-            _tool_upscale_schema(),
-        ]
+    tool_names = turn_arg.get("tool_names")
+    if tool_names is not None:
+        tools = get_tool_schemas(tool_names)
+    else:
+        # Fallback for old workflow calls (backward compatibility during transition)
+        tools = turn_arg.get("tools")
+        if tools is None:
+            tools = [
+                _tool_find_keyframes_schema(), _tool_frame_diff_schema(), _tool_tag_image_schema(),
+                _tool_get_snapshot_schema(), _tool_show_frame_schema(), _tool_crop_schema(),
+                _tool_transcode_schema(), _tool_compact_schema(), _tool_set_description_schema(),
+                _tool_upscale_schema(), _tool_send_ipc_schema(), _tool_wait_ipc_schema(),
+            ]
 
 
     from openai import APIStatusError, RateLimitError

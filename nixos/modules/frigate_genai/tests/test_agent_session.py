@@ -7,17 +7,47 @@ import sys
 import types
 import unittest
 from pathlib import Path
+
+class _ParentClosePolicy:
+    TERMINATE = 1
+    ABANDON = 2
+    REQUEST_CANCEL = 3
 from unittest.mock import patch
 
 
+class _FakeChildHandle:
+    """Mock ChildWorkflowHandle for spawn tests."""
+    def __init__(self, child_id, result=None):
+        self.child_id = child_id
+        self._result = result or {}
+        self.first_execution_run_id = f"run-{child_id}"
+        self._signals = []
+        self._cancelled = False
+
+    async def signal(self, name, payload):
+        self._signals.append((name, payload))
+
+    def cancel(self):
+        self._cancelled = True
+
+    def __await__(self):
+        async def _result():
+            return self._result
+        return _result().__await__()
+
+
 class _FakeWorkflow:
+    ParentClosePolicy = _ParentClosePolicy
+
     def __init__(self, genai_activity, apply_activity, outcome):
         self._genai_activity = genai_activity
         self._apply_activity = apply_activity
         self._outcome = outcome
         self.applied_outcomes = None
         self.child_workflows = []
+        self._child_handles = []
         self.logger = logging.getLogger(__name__)
+        self._external_signals = []
 
     @staticmethod
     def defn(cls):
@@ -27,18 +57,57 @@ class _FakeWorkflow:
     def run(fn):
         return fn
 
+    @staticmethod
+    def signal(**kw):
+        return lambda fn: fn
+
+    @staticmethod
+    def update(**kw):
+        return lambda fn: fn
+
+    @staticmethod
+    def query(**kw):
+        return lambda fn: fn
+
+    @staticmethod
+    def info():
+        class _Info:
+            workflow_id = "test-wf-id"
+            run_id = "test-run-id"
+        return _Info()
+
+    @staticmethod
+    def now():
+        import datetime
+        return datetime.datetime(2026, 1, 1, 0, 0, 0, tzinfo=datetime.timezone.utc)
+
     def set_current_details(self, _details):
         pass
+
+    @staticmethod
+    def all_handlers_finished():
+        return True
 
     def start_activity(self, _activity, **_kwargs):
         async def result():
             return self._outcome
-
         return result()
 
-    def start_child_workflow(self, _workflow_type, arg=None, **kwargs):
-        self.child_workflows.append(kwargs.get("id", "unknown"))
-        return asyncio.Future()
+    async def start_child_workflow(self, _workflow_type, arg=None, **kwargs):
+        child_id = kwargs.get("id", "unknown")
+        self.child_workflows.append(child_id)
+        handle = _FakeChildHandle(child_id)
+        self._child_handles.append(handle)
+        return handle
+
+    @staticmethod
+    def get_external_workflow_handle_for(run_fn, workflow_id=None, run_id=None):
+        class _ExternalHandle:
+            def __init__(self):
+                self.signals = []
+            async def signal(self, name, payload):
+                self.signals.append((name, payload))
+        return _ExternalHandle()
 
     async def execute_activity(self, activity, **kwargs):
         if activity is self._genai_activity:
@@ -51,6 +120,12 @@ class _FakeWorkflow:
             self.applied_outcomes = kwargs["arg"]["outcomes"]
             return None
         raise AssertionError(f"Unexpected activity: {activity!r}")
+
+    @staticmethod
+    async def wait_condition(fn, timeout=None):
+        if fn():
+            return
+        raise asyncio.TimeoutError()
 
 
 class AgentSessionToolPairingTests(unittest.TestCase):
@@ -113,9 +188,9 @@ class AgentSessionToolPairingTests(unittest.TestCase):
             "_tool_transcode_schema", "_tool_compact_schema", "_tool_set_description_schema",
             "_tool_upscale_schema", "_tool_spawn_schema", "_tool_join_schema",
             "_tool_close_subagent_schema",
+            "_tool_send_ipc_schema", "_tool_wait_ipc_schema",
         ):
             setattr(schemas, name, lambda: {})
-
         return {
             "temporalio": temporalio,
             "temporalio.exceptions": exceptions,
@@ -144,8 +219,20 @@ class ResolveImageRefsTests(unittest.TestCase):
         wf = types.ModuleType("temporalio.workflow")
         wf.defn = staticmethod(lambda cls: cls)
         wf.run = staticmethod(lambda fn: fn)
+        wf.signal = staticmethod(lambda **kw: lambda fn: fn)
+        wf.update = staticmethod(lambda **kw: lambda fn: fn)
+        wf.query = staticmethod(lambda **kw: lambda fn: fn)
+        wf.info = staticmethod(lambda: type("_Info", (), {"workflow_id": "test-wf", "run_id": "test-run"})())
+        wf.now = staticmethod(lambda: __import__("datetime").datetime(2026, 1, 1))
+        wf.wait_condition = staticmethod(lambda fn, timeout=None: __import__("asyncio").sleep(0))
+        wf.all_handlers_finished = staticmethod(lambda: True)
+        wf.get_external_workflow_handle_for = staticmethod(lambda *a, **kw: type("_ExtHandle", (), {"signal": lambda s, n, p: None})())
+        wf.start_activity = staticmethod(lambda *a, **kw: __import__("asyncio").sleep(0))
+        wf.start_child_workflow = staticmethod(lambda *a, **kw: __import__("asyncio").sleep(0))
+        wf.execute_activity = staticmethod(lambda *a, **kw: __import__("asyncio").sleep(0))
+        wf.set_current_details = staticmethod(lambda d: None)
+        wf.ParentClosePolicy = _ParentClosePolicy
         temporalio.workflow = wf
-
         exceptions = types.ModuleType("temporalio.exceptions")
         exceptions.ApplicationError = type("ApplicationError", (Exception,), {})
         temporalio.exceptions = exceptions
@@ -170,9 +257,9 @@ class ResolveImageRefsTests(unittest.TestCase):
             "_tool_transcode_schema", "_tool_compact_schema", "_tool_set_description_schema",
             "_tool_upscale_schema", "_tool_spawn_schema", "_tool_join_schema",
             "_tool_close_subagent_schema",
+            "_tool_send_ipc_schema", "_tool_wait_ipc_schema",
         ):
             setattr(schemas, name, lambda: {})
-
         return {
             "temporalio": temporalio,
             "temporalio.workflow": wf,
@@ -302,9 +389,9 @@ class SpawnValidationTests(unittest.TestCase):
             "_tool_transcode_schema", "_tool_compact_schema", "_tool_set_description_schema",
             "_tool_upscale_schema", "_tool_spawn_schema", "_tool_join_schema",
             "_tool_close_subagent_schema",
+            "_tool_send_ipc_schema", "_tool_wait_ipc_schema",
         ):
             setattr(schemas, name, lambda: {})
-
         models = types.ModuleType("frigate_genai.models")
         class _SpawnTask:
             """Stub for frigate_genai.models.SpawnTask using manual validation."""

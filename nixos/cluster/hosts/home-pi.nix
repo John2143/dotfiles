@@ -53,9 +53,9 @@
 
   # Connect to the local Headscale instance running on this host
   custom.headscaleServer = "http://localhost:6767";
-  # Advertise home LAN subnet so Hetzner nodes (Headscale #1) can reach the
-  # home cluster (192.168.5.0/24) for remote_write and Loki/Tempo push.
-  services.tailscale.extraUpFlags = [ "--advertise-routes=192.168.5.0/24" ];
+  # Advertise k3s VIP (192.168.5.10/32) so cloud control-plane nodes
+  # can reach the home cluster API over the Tailscale route.
+  services.tailscale.extraUpFlags = [ "--advertise-routes=192.168.5.10/32" ];
 
   security.sudo.wheelNeedsPassword = false;
 

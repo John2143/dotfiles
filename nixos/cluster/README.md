@@ -10,6 +10,29 @@
 
 
 
+## Kubernetes Infrastructure Tailnet
+
+**Headscale instance**: `headscale.9s.pics:6767` on home-pi (v0.28.0)
+**Base domain**: `ts.9s.pics`
+**Policy**: Deny-by-default ACL — only `tag:kube-control` nodes can reach each other on TCP/6443 + internet access for DERP relays
+**Nodes**: home-pi + tagged cloud control-plane nodes (`hetzner-ashburn-k3s`, `hetzner-hillsboro-k3s`, `do-nyc-k3s`)
+**Home API access**: home-pi advertises `192.168.5.10/32` (k3s VIP); cloud nodes reach `https://192.168.5.10:6443` via the route
+**Enrollment**: One-use preauth key with `tag:kube-control`, created per deployment by `create_kubecontrol_preauth_key()` in `post_deploy.py`
+**Teardown**: `headscale nodes delete -i <ID>` via `delete_headscale_node()` before cloud resource destruction
+
+### Linkerd multicluster notes
+- Service-mirror deployments MUST use `hostNetwork: true` to resolve MagicDNS names (`*.ts.9s.pics`)
+- Kubeconfig secrets use MagicDNS FQDNs: `https://<hostname>.ts.9s.pics:6443`
+- Home cluster API: `https://192.168.5.10:6443` (VIP, TLS SAN added to k3s certs)
+
+### Availability dependency
+home-pi is a single point of failure for MagicDNS resolution and the 192.168.5.10 route. During home-pi downtime (power loss, ISP outage):
+- Existing peer-to-peer WireGuard tunnels between cloud nodes survive (kernel-level, no coordination needed)
+- MagicDNS names (`*.ts.9s.pics`) stop resolving
+- The home k8s VIP becomes unreachable from cloud nodes
+- Cloud-to-home Linkerd multicluster will be offline during home-pi outages
+
+
 ### Per-Node IP Topology (Split-IP Firewall)
 
 ```
@@ -20,11 +43,11 @@ Primary IP (Hetzner DHCP) — locked down
 
 Floating IP (Hetzner Cloud, movable between nodes)
 
-  ├─ HTTP/HTTPS (80, 443)
-  ├─ k3s API (6443)
   ├─ Game servers (3478, 9987, 30033, 8080)
   └─ All other ports DROP
 ```
+
+**Note**: k3s API (6443) is no longer exposed publicly — API access is via Tailscale only.
 
 Both IPs detected at runtime:
 - Primary = IP with default route (`ip route get 8.8.8.8`)

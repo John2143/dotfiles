@@ -49,7 +49,6 @@
   networking.firewall.allowedTCPPorts = [
     80   # HTTP (k3s ingress)
     443  # HTTPS (k3s ingress)
-    6443 # k3s API server
   ];
   networking.firewall.allowedUDPPorts = [
     8472 # flannel VXLAN (k3s)

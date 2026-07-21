@@ -2,9 +2,9 @@
 All models use extra="forbid" to catch typos at deserialization time.
 """
 
-from typing import Optional
+from typing import Literal, Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, model_validator
 
 
 class BaseFrigateModel(BaseModel):
@@ -36,6 +36,9 @@ class AgentSessionInput(BaseFrigateModel):
     start_time: float
     end_time: float
     genai_queue: str
+    ipc_token: Optional[str] = None
+    parent_ipc_token: Optional[str] = None
+    parent_workflow_id: Optional[str] = None
 
 
 class AgentSessionOutput(BaseFrigateModel):
@@ -149,8 +152,6 @@ class SpawnTask(BaseFrigateModel):
     task: str
     image_refs: list[str] = []
     max_turns: int = 8
-
-
 class SubAgentInput(BaseFrigateModel):
     """Input to SubAgentWorkflow. Built by spawn handler."""
     event_id: str
@@ -171,6 +172,10 @@ class SubAgentInput(BaseFrigateModel):
     max_depth: int = 2
     max_turns: int = 8
     frames_dir: str = ""
+    parent_workflow_id: str
+    parent_run_id: str
+    parent_ipc_token: str
+    ipc_token: str
 
 
 class SubAgentOutput(BaseFrigateModel):
@@ -192,3 +197,65 @@ class CloseSubagentArgs(BaseFrigateModel):
 
 class JoinArgs(BaseFrigateModel):
     spawn_key: str
+
+class IPCMessage(BaseFrigateModel):
+    message_id: str
+    from_token: str
+    to_token: str
+    kind: Literal["finding", "question", "reply", "terminate"]
+    content: str
+    confidence: Optional[Literal["high", "medium", "low", "nothing_found"]] = None
+    reply_to: Optional[str] = None
+    seq: int
+    created_at: float
+
+    @model_validator(mode="after")
+    def _validate_ipc_message(self):
+        content_bytes = self.content.encode("utf-8")
+        if len(content_bytes) < 1 or len(content_bytes) > 8192:
+            raise ValueError("content must be 1..8192 UTF-8 bytes")
+        if self.seq <= 0:
+            raise ValueError("seq must be positive")
+        if self.kind == "reply":
+            if not self.reply_to:
+                raise ValueError("reply requires reply_to")
+        else:
+            if self.reply_to is not None:
+                raise ValueError("reply_to is only valid for replies")
+        return self
+
+
+class SendIPCArgs(BaseFrigateModel):
+    to_token: str
+    kind: Literal["finding", "question", "reply", "terminate"]
+    content: str
+    confidence: Optional[Literal["high", "medium", "low", "nothing_found"]] = None
+    reply_to: Optional[str] = None
+    wait_for_reply: bool = False
+    timeout_seconds: int = 30
+
+    @model_validator(mode="after")
+    def _validate_send_ipc(self):
+        content_bytes = self.content.encode("utf-8")
+        if len(content_bytes) < 1 or len(content_bytes) > 8192:
+            raise ValueError("content must be 1..8192 UTF-8 bytes")
+        if self.timeout_seconds < 0 or self.timeout_seconds > 300:
+            raise ValueError("timeout_seconds must be 0..300")
+        if self.kind == "reply":
+            if not self.reply_to:
+                raise ValueError("reply requires reply_to")
+        else:
+            if self.reply_to is not None:
+                raise ValueError("reply_to is only valid for replies")
+        return self
+
+
+class WaitIPCArgs(BaseFrigateModel):
+    message_id: Optional[str] = None
+    timeout_seconds: int = 30
+
+    @model_validator(mode="after")
+    def _validate_wait_ipc(self):
+        if self.timeout_seconds < 0 or self.timeout_seconds > 300:
+            raise ValueError("timeout_seconds must be 0..300")
+        return self

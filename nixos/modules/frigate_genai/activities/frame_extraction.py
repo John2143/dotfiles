@@ -77,8 +77,8 @@ def transcode_into_parts(
                 log.error("ffmpeg failed for %s: %s", hls_url, stderr)
                 raise  # fatal — do not retry
         except subprocess.TimeoutExpired:
-            log.error("ffmpeg timed out after %ds for %s", clip_timeout, hls_url)
-            raise  # fatal — do not retry
+            log.warning("ffmpeg timed out after %ds for %s (Frigate VOD not ready?)", clip_timeout, hls_url)
+            return []  # transient — caller will retry
 
         frames = []
         for p in sorted(Path(tmp).glob("frame_*.jpg")):
@@ -120,14 +120,9 @@ async def transcode_into_parts_activity(input_data: dict) -> tuple[str, int]:
         event_id, camera, duration, event_prefix,
     )
 
-    try:
-        frames = await _run_with_heartbeat(
-            transcode_into_parts, camera, start_time, end_time, 1,
-        )
-    except Exception:
-        raise ApplicationError(
-            f"Transcode failed (fatal) for {event_id}", non_retryable=True,
-        )
+    frames = await _run_with_heartbeat(
+        transcode_into_parts, camera, start_time, end_time, 1,
+    )
     if not frames:
         raise ApplicationError(
             f"Recording not ready for {event_id}", non_retryable=False,
