@@ -20,7 +20,6 @@ let
       builtins.foldl' (acc: fname: acc // mkLink fname) { } files;
 
   skillLinks = builtins.foldl' (acc: name: acc // mkSkillLinks name) { } skillNames;
-  yunwuModels = import ./yunwu-models.nix { inherit lib; };
 in
 {
   home.file = skillLinks // {
@@ -296,8 +295,6 @@ in
           api: openai-completions
           apiKey: LITELLM_EDITOR_KEY
 
-  ${yunwuModels.toOmpYaml yunwuModels.models}
-
     '';
     ".omp/agent/config.yml".text = ''
       # Fish is the default shell on *most* machines in this flake. A few
@@ -328,17 +325,7 @@ in
         - google
 
 
-      enabledModels:
-        - "litellm/*"
-        - "vast-vllm/*"
-        - "deepseek/*"
-        - "office-vllm/*"
-        #- "office-ollama/*"       # disabled 2026-05-31
-        #- "office-ollama-cpu/*"   # disabled 2026-05-31
-        - "anthropic/*"
-        - "openrouter/*"
-        - "openai/*"
-        - "google/*"
+      enabledModels: []
       retry:
         enabled: true
         maxRetries: 3
