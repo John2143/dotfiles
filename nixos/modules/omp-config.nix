@@ -294,6 +294,8 @@ in
           baseUrl: https://llm.2143.me/v1
           api: openai-completions
           apiKey: LITELLM_EDITOR_KEY
+          discovery:
+            type: openai-models-list
 
     '';
     ".omp/agent/config.yml".text = ''
