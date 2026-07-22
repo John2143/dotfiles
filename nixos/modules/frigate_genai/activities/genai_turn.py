@@ -47,13 +47,13 @@ async def _run_with_heartbeat(func, *args, interval: float = 2.0):
 
 
 def _model_weights(gemini_models: list[str]) -> list[int]:
-    """Return selection weights: flash-lite=3, pro=3, base-flash=1."""
+    """Return selection weights: flash-lite=3, base-flash=1, pro=1 (2:1 flash:pro ratio)."""
     weights = []
     for m in gemini_models:
         if "flash-lite" in m:
             weights.append(3)
         elif "pro" in m:
-            weights.append(3)
+            weights.append(1)  # Reduced from 3 to 1
         else:
             weights.append(1)
     return weights
