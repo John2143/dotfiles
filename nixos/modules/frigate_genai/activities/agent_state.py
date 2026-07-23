@@ -216,7 +216,11 @@ async def init_agent_state_activity(init_arg: dict) -> dict:
         "- Batch tag_image() calls — tag all inspected sources in one call, not one per frame.\n"
         "- Use find_keyframes() and frame_diff() (free, no API cost) before expensive tool calls.\n"
         "- Spawn subagents only for genuinely independent detail work (plates + face + cargo).\n"
-        "- Conclude after you have adequate evidence — don't inspect every frame."
+        "- Conclude after you have adequate evidence — don't inspect every frame.\n\n"
+        "ACCURACY: Follow all instructions precisely. Verify coordinates before cropping. "
+        "Double-check bounding boxes are within frame dimensions. Re-read tool schemas "
+        "before calling unfamiliar tools. Describe what you see before deciding what to do. "
+        "When uncertain, gather more evidence rather than guessing."
     )
     user_text = (
         f"{label} on {camera}. {max_frames} recording frames (indices 0-{max_frames - 1}).\n\n"
@@ -244,7 +248,7 @@ async def init_agent_state_activity(init_arg: dict) -> dict:
         display_name = "display_001.jpg"
         _s3_put(f"{agent_prefix}/{display_name}", snapshot_data)
         init_messages = [
-            {"role": "system", "content": system_prompt},
+            {"role": "system", "content": system_prompt, "cache_control": {"type": "ephemeral"}},
             {"role": "user", "content": "A new detection was recorded. Inspect the snapshot."},
             {"role": "assistant", "content": None, "tool_calls": [
                 {"id": "seed_snap", "type": "function", "function": {
@@ -258,7 +262,7 @@ async def init_agent_state_activity(init_arg: dict) -> dict:
         ]
     else:
         init_messages = [
-            {"role": "system", "content": system_prompt},
+            {"role": "system", "content": system_prompt, "cache_control": {"type": "ephemeral"}},
             {"role": "user", "content": user_text},
         ]
 
