@@ -375,9 +375,11 @@
     model = {
       # Downgrade: path = "/config/model_cache/yolov9-c-640.onnx"; model_type = "yolo-generic"; width = 640; height = 640; input_tensor = "nchw"; input_dtype = "float";
 
-      # 2026-04-15 base: plus://3468817eacc0ca053c0256a2113b1c04 (yolonas 640x640, generic)
-      # 2026-07-05 fine-tuned: plus://452c00578621c33a32a1d0a100276e5d (640x640, 155 more annotated images)
-      path = "plus://452c00578621c33a32a1d0a100276e5d";
+      # 2026.1-Apr-15 base: plus://3468817eacc0ca053c0256a2113b1c04 (yolonas 640x640, generic)
+      # 2026.1-Jul-05 fine-tuned: plus://452c00578621c33a32a1d0a100276e5d (640x640, 155 more annotated images)
+      # 2026.1-Jul-15 "plus://452c00578621c33a32a1d0a100276e5d";
+      # 2026.2-Jul-22
+      path = "plus://7132ccf17b6cec25b827d04c5bb0b78d";
     };
     face_recognition = {
       enabled = true;
