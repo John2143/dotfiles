@@ -17,6 +17,8 @@ let
   #aman = "TODO: cat ~/.ssh/age.pub on aman and paste here";
   #term = "TODO: cat ~/.ssh/age.pub on term and paste here";
   nas = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIPzgxUuaZUG9Dr5ZTZImKqt3SUSPVD/FLO2wKQfwz98A john@nas";
+  #big = "TODO: cat ~/.ssh/age.pub on big and paste here";
+  #github = "TODO: cat ~/.ssh/age.pub on github and paste here";
   # NOTE: mac is a work computer. Only grant it keys that are work-appropriate
   # (LLM API keys, admin tools). Do NOT grant: hass-credentials, ntfy-topic-url,
   # restic passwords, smb credentials, gocryptfs, NAS, or personal secrets.
@@ -109,9 +111,7 @@ in {
   "attic-jwt-secret.age".publicKeys = [office arch nas];
 
   # Attic admin token — lets each machine authenticate to atticd for
-  # push/pull. Generated once on the NAS with atticd-atticadm make-token.
-  # Encrypt to all NixOS hosts that import shared-cli-configuration.nix.
-  "attic-admin-token.age".publicKeys = [office arch closet secu nas pite vpin ]; # aman term];
+  "attic-admin-token.age".publicKeys = [office arch closet secu nas pite vpin]; # aman term big github];
   # ntfy.sh topic URL for OMP agent notifications. Topic name is not a
   # cryptographic secret (public server, anyone with the name can publish),
   # but keeping it out of the Nix store avoids accidental exposure.
@@ -171,4 +171,8 @@ in {
   "github-token.age".publicKeys = [office arch];
 
   "frigate-plus.age".publicKeys = [arch];
+
+  # k3s token for the CI cluster (github VM). Generated with:
+  #   cd ~/dotfiles/secrets && echo -n "$(head -c 32 /dev/urandom | base64)" | agenix -e k3s-ci-token.age -i ~/.ssh/age
+  "k3s-ci-token.age".publicKeys = [office arch]; # github once age key exists
 }

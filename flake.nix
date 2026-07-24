@@ -312,6 +312,16 @@
           ./nixos/modules/remote-builders.nix
         ];
       })
+      // (mkHost {
+        name = "github";
+        modules = [
+          ./nixos/shared-cli-configuration.nix
+          ./nixos/github-configuration.nix
+          ./nixos/tailscale.nix
+
+          ./nixos/modules/attic.nix
+        ];
+      })
       // {
         installer = nixpkgs.lib.nixosSystem {
           inherit system;
