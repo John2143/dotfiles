@@ -59,18 +59,20 @@ def _start_workflow_sync(event: dict) -> None:
     asyncio.run_coroutine_threadsafe(_start(), loop)
 
 
-def _build_workflow_input(event: dict) -> dict | None:
+def _build_workflow_input(event: dict, bypass_pause: bool = False) -> dict | None:
     """Build the workflow input dict from an MQTT event. Model selection
     happens in the Temporal workflow via select_model_activity.
     Returns None if the event should be skipped (paused globally or per-label).
+    Set bypass_pause=True to ignore pause flags (e.g. manual reprocess).
     """
     label = event.get("label", "")
-    if _s3_get("events/_paused/genai") is not None:
-        log.info("Global pause active, skipping event %s (%s/%s)", event.get("id"), event.get("camera"), label)
-        return None
-    if label and _s3_get(f"events/_paused/genai-{label}") is not None:
-        log.info("Label pause active for '%s', skipping event %s", label, event.get("id"))
-        return None
+    if not bypass_pause:
+        if _s3_get("events/_paused/genai") is not None:
+            log.info("Global pause active, skipping event %s (%s/%s)", event.get("id"), event.get("camera"), label)
+            return None
+        if label and _s3_get(f"events/_paused/genai-{label}") is not None:
+            log.info("Label pause active for '%s', skipping event %s", label, event.get("id"))
+            return None
     input_data = {
         "data_box": event.get("data", {}).get("box"),
         "event_id": event["id"],

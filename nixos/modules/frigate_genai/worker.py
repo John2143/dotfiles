@@ -492,7 +492,7 @@ async def async_main(prompts_path: str, provider_path: str, mode: str = "trigger
                 log.debug("No existing workflow %s to cancel", workflow_id)
             camera = event.get("camera", "")
             label = event.get("label", "")
-            input_data = _build_workflow_input(event)
+            input_data = _build_workflow_input(event, bypass_pause=True)
             if input_data is None:
                 return f"Skipping {event_id} ({camera}/{label}): paused (global or per-label)"
             await _temporal_client.start_workflow(
