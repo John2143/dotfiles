@@ -178,7 +178,10 @@ async def run_genai_turn_activity(turn_arg: dict) -> dict:
 
     prompt_tok = response.usage.prompt_tokens
     comp_tok = response.usage.completion_tokens
-    cached_tok = getattr(response.usage, "cached_tokens", 0) or 0
+    # LiteLLM reports cached tokens under prompt_tokens_details.cached_tokens
+    # for Gemini; fall back to usage.cached_tokens for other providers.
+    details = getattr(response.usage, "prompt_tokens_details", None)
+    cached_tok = getattr(details, "cached_tokens", 0) if details else getattr(response.usage, "cached_tokens", 0) or 0
     log.info("GenAI turn: event=%s prompt=%d comp=%d cached=%d",
              event_id, prompt_tok, comp_tok, cached_tok)
 
