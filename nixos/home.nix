@@ -432,33 +432,6 @@ in {
         { _args = [(mkLua ''mainMod .. " + XF86AudioLowerVolume"'') (mkLua ''hl.dsp.exec_cmd([[fish -c "~/.config/focussed-vol-adjust.sh 0.05-"]])'')]; }
         { _args = [(mkLua ''mainMod .. " + XF86AudioMute"'') (mkLua ''hl.dsp.exec_cmd([[fish -c "~/.config/focussed-vol-adjust.sh toggle"]])'')]; }
 
-        # Macro pad F18 group — lights
-        { _args = ["F18" (mkLua ''hl.dsp.exec_cmd("hass-macro light-lamp")'')]; }
-        { _args = ["CTRL + F18" (mkLua ''hl.dsp.exec_cmd("hass-macro light-dresser")'')]; }
-        { _args = ["ALT + F18" (mkLua ''hl.dsp.exec_cmd("hass-macro light-ac")'')]; }
-        { _args = ["SUPER + F18" (mkLua ''hl.dsp.exec_cmd("hass-macro light-bedroom")'')]; }
-
-        # Macro pad F19 group — climate
-        { _args = ["F19" (mkLua ''hl.dsp.exec_cmd("hass-macro thermostat-toggle")'')]; }
-        { _args = ["CTRL + F19" (mkLua ''hl.dsp.exec_cmd("hass-macro thermostat-down")'')]; }
-        { _args = ["ALT + F19" (mkLua ''hl.dsp.exec_cmd("hass-macro thermostat-up")'')]; }
-        { _args = ["SUPER + F19" (mkLua ''hl.dsp.exec_cmd("hass-macro ac-toggle")'')]; }
-        { _args = ["CTRL + ALT + F19" (mkLua ''hl.dsp.exec_cmd("hass-macro fan-toggle")'')]; }
-
-        # Macro pad F20 group — display
-        { _args = ["F20" (mkLua ''hl.dsp.dpms({ action = "enable" })'')]; }
-        { _args = ["CTRL + F20" (mkLua ''hl.dsp.dpms({ action = "disable" })'')]; }
-        # Macro pad F21 group — Home Assistant toggles
-        { _args = ["F21" (mkLua ''hl.dsp.exec_cmd("hass-macro dyson-fan")'')]; }
-        { _args = ["CTRL + F21" (mkLua ''hl.dsp.exec_cmd("hass-macro desk-light")'')]; }
-        #
-        # ── Adding a new macropad bind? ──────────────────────────────────
-        # 1. Add the keyd mapping in arch-configuration.nix (services.keyd).
-        # 2. If it controls Home Assistant, add a `hass-macro` case there too.
-        # 3. Add the Hyprland bind here (same F-key + modifier as in keyd).
-        #    F-key syntax: "F18" / "CTRL + F18" / "ALT + F18" / "SUPER + F18"
-        #    Command syntax: hl.dsp.exec_cmd("hass-macro <name>")
-        # ─────────────────────────────────────────────────────────────────
 
         # TeamSpeak mute: Prior mutes mic, Next mutes sound
         { _args = ["Prior" (mkLua ''hl.dsp.exec_cmd("teamspeak-mute-status --toggle && pkill -RTMIN+10 waybar")'')]; }

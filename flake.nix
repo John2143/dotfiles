@@ -192,6 +192,7 @@
 
           ./nixos/modules/remote-builders.nix
           ./nixos/modules/waybar-popup.nix
+          ./nixos/modules/keybind.nix
         ];
       })
       // (mkHost {
