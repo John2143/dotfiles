@@ -474,6 +474,10 @@ in {
         { _args = [(mkLua ''mainMod .. " + Z"'') (mkLua ''hl.dsp.exec_cmd([[fish -c 'ydotool key 28:1 28:0; ydotool type "/hideout"; ydotool key 28:1 28:0;']])'')]; }
         { _args = [(mkLua ''mainMod .. " + X"'') (mkLua ''hl.dsp.exec_cmd([[fish -c 'ydotool key 28:1 28:0; ydotool type "/menagerie"; ydotool key 28:1 28:0;']])'')]; }
 
+        # PoE inventory tools
+        { _args = ["F11" (mkLua ''hl.dsp.exec_cmd([[little_oil empty]])'')]; }
+        { _args = ["F12" (mkLua ''hl.dsp.exec_cmd([[little_oil reset_inv]])'')]; }
+
         # Autoclicker stop hotkey
         { _args = [(mkLua ''mainMod .. " + Escape"'') (mkLua ''hl.dsp.exec_cmd([[fish -c 'stop-autoclicker']])'')]; }
         # Notify slurp result

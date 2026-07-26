@@ -181,6 +181,18 @@ let
     def ts3_cmd(sock, cmd):
         """Send a command, return response text."""
         try:
+            # Drain any unsolicited notifications buffered since last command
+            try:
+                sock.setblocking(False)
+                sock.recv(65536)
+            except BlockingIOError:
+                pass
+            except OSError:
+                pass
+            finally:
+                sock.setblocking(True)
+                sock.settimeout(5)
+
             sock.sendall(f"{cmd}\n".encode())
             resp = b""
             sock.settimeout(2)
@@ -211,7 +223,9 @@ let
             if "connection_lost" in resp:
                 return DISCONNECTED_JSON, False
             m = re.search(r"client_input_muted=(\d+)", resp)
-            muted = m.group(1) if m else "0"
+            if m is None:
+                return DISCONNECTED_JSON, False
+            muted = m.group(1)
             state_cache["input_muted"] = muted
             if muted == "1":
                 return MIC_MUTED_JSON, True
@@ -226,7 +240,9 @@ let
             if "connection_lost" in resp:
                 return DISCONNECTED_JSON, False
             m = re.search(r"client_input_muted=(\d+)", resp)
-            muted = m.group(1) if m else "0"
+            if m is None:
+                return DISCONNECTED_JSON, False
+            muted = m.group(1)
             state_cache["input_muted"] = muted
             if muted == "1":
                 return MIC_MUTED_JSON, True
@@ -245,7 +261,9 @@ let
             if "connection_lost" in resp:
                 return DISCONNECTED_JSON, False
             m = re.search(r"client_output_muted=(\d+)", resp)
-            muted = m.group(1) if m else "0"
+            if m is None:
+                return DISCONNECTED_JSON, False
+            muted = m.group(1)
             state_cache["output_muted"] = muted
             if muted == "1":
                 return SOUND_MUTED_JSON, True
@@ -261,7 +279,9 @@ let
             if "connection_lost" in resp:
                 return "", False
             m = re.search(r"client_input_muted=(\d+)", resp)
-            cur = m.group(1) if m else "0"
+            if m is None:
+                return "", False
+            cur = m.group(1)
             new = "0" if cur == "1" else "1"
             state_cache["input_muted"] = new  # optimistically set before confirm
             resp = ts3_cmd(sock, f"clientupdate client_input_muted={new}")
@@ -293,7 +313,9 @@ let
             if "connection_lost" in resp:
                 return "", False
             m = re.search(r"client_output_muted=(\d+)", resp)
-            cur = m.group(1) if m else "0"
+            if m is None:
+                return "", False
+            cur = m.group(1)
             new = "0" if cur == "1" else "1"
             state_cache["output_muted"] = new  # optimistically set before confirm
             resp = ts3_cmd(sock, f"clientupdate client_output_muted={new}")
@@ -316,6 +338,17 @@ let
                 ), True
         else:
             return "", True
+
+
+    def disconnect_ts3(ts3_sock):
+        """Close ts3_sock and return None. Resets global state_cache."""
+        try:
+            ts3_sock.close()
+        except Exception:
+            pass
+        state_cache["input_muted"] = None
+        state_cache["output_muted"] = None
+        return None, None
 
 
     def main():
@@ -342,13 +375,34 @@ let
         ts3_sock = None
         clid = None
         last_attempt = 0.0
+        last_ts3_activity = 0.0
 
         while True:
             now = time.time()
             if ts3_sock is None and now - last_attempt >= 5:
                 last_attempt = now
                 ts3_sock, clid = ts3_connect()
+                if ts3_sock is not None:
+                    last_ts3_activity = now
 
+            # Keepalive: probe TS3 every 4 min of inactivity
+            if ts3_sock is not None and now - last_ts3_activity >= 240:
+                try:
+                    resp = ts3_cmd(ts3_sock, "whoami")
+                    if "error id=0" not in resp:
+                        print(
+                            f"Keepalive failed: {resp.strip()}",
+                            file=sys.stderr, flush=True,
+                        )
+                        ts3_sock, clid = disconnect_ts3(ts3_sock)
+                    else:
+                        last_ts3_activity = now
+                except Exception as e:
+                    print(
+                        f"Keepalive error: {e}",
+                        file=sys.stderr, flush=True,
+                    )
+                    ts3_sock, clid = disconnect_ts3(ts3_sock)
             try:
                 readable, _, _ = select.select(
                     [server], [], [], 1.0,
@@ -365,15 +419,10 @@ let
                         result, ok = handle_request(
                             ts3_sock, clid, data,
                         )
+                        if ts3_sock is not None:
+                            last_ts3_activity = now
                         if not ok:
-                            try:
-                                ts3_sock.close()
-                            except Exception:
-                                pass
-                            ts3_sock = None
-                            clid = None
-                            state_cache["input_muted"] = None
-                            state_cache["output_muted"] = None
+                            ts3_sock, clid = disconnect_ts3(ts3_sock)
                         if result:
                             client.sendall(result.encode())
                     client.close()
@@ -382,35 +431,6 @@ let
                         f"Client error: {e}",
                         file=sys.stderr, flush=True,
                     )
-
-            # Health-check TS3 connection via MSG_PEEK
-            if ts3_sock is not None:
-                try:
-                    ts3_sock.setblocking(False)
-                    try:
-                        ts3_sock.recv(1, socket.MSG_PEEK)
-                    except BlockingIOError:
-                        pass
-                except (
-                    ConnectionResetError,
-                    BrokenPipeError,
-                    OSError,
-                ) as e:
-                    print(
-                        f"TS3 connection lost: {e}",
-                        file=sys.stderr, flush=True,
-                    )
-                    try:
-                        ts3_sock.close()
-                    except Exception:
-                        pass
-                    ts3_sock = None
-                    clid = None
-                    state_cache["input_muted"] = None
-                    state_cache["output_muted"] = None
-                finally:
-                    ts3_sock and ts3_sock.setblocking(True)
-                    ts3_sock and ts3_sock.settimeout(5)
 
 
     if __name__ == "__main__":
