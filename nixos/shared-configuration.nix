@@ -179,6 +179,7 @@
     '';
   };
 in {
+  hardware.uinput.enable = true;
   # setup my two input channels
   nixpkgs.config = {
     permittedInsecurePackages = [
