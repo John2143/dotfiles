@@ -12,7 +12,7 @@ import tempfile
 import time
 import urllib.request as _urllib_request
 from concurrent.futures import ThreadPoolExecutor
-from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
+from http.server import HTTPServer, ThreadingHTTPServer, BaseHTTPRequestHandler
 
 import paho.mqtt.client as mqtt
 from temporalio.client import Client
