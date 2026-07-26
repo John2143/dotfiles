@@ -12,7 +12,7 @@ import tempfile
 import time
 import urllib.request as _urllib_request
 from concurrent.futures import ThreadPoolExecutor
-from http.server import HTTPServer, BaseHTTPRequestHandler
+from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 
 import paho.mqtt.client as mqtt
 from temporalio.client import Client
@@ -915,7 +915,7 @@ async def async_main(prompts_path: str, provider_path: str, mode: str = "trigger
 
         http_host = os.environ.get("HTTP_HOST", "0.0.0.0")
         http_port = int(os.environ.get("HTTP_PORT", "8080"))
-        http_server = HTTPServer((http_host, http_port), ReprocessHandler)
+        http_server = ThreadingHTTPServer((http_host, http_port), ReprocessHandler)
         http_thread = threading.Thread(target=http_server.serve_forever, daemon=True)
         http_thread.start()
         log.info("HTTP reprocess endpoint on http://%s:%d", http_host, http_port)
