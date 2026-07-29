@@ -17,7 +17,7 @@ let
   #aman = "TODO: cat ~/.ssh/age.pub on aman and paste here";
   #term = "TODO: cat ~/.ssh/age.pub on term and paste here";
   nas = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIPzgxUuaZUG9Dr5ZTZImKqt3SUSPVD/FLO2wKQfwz98A john@nas";
-  #big = "TODO: cat ~/.ssh/age.pub on big and paste here";
+  big = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAILdR/pLJq0bYfttAU2BFr3kVzCIUW3+eBADCtJXIQWJ/ john@big";
   #github = "TODO: cat ~/.ssh/age.pub on github and paste here";
   # NOTE: mac is a work computer. Only grant it keys that are work-appropriate
   # (LLM API keys, admin tools). Do NOT grant: hass-credentials, ntfy-topic-url,
@@ -138,7 +138,7 @@ in {
   #   ssh-keygen -t ed25519 -f /tmp/build-cluster-key -N "" -C "build-cluster"
   #   cat /tmp/build-cluster-key.pub  → paste into remote-builders.nix
   #   agenix -e build-cluster-key.age -i ~/.ssh/age < /tmp/build-cluster-key
-  "build-cluster-key.age".publicKeys = [office arch closet secu nas pite vpin];
+  "build-cluster-key.age".publicKeys = [office arch closet secu nas pite vpin big];
 
   "unifi-credentials.age".publicKeys = [office arch];
   # Reolink camera RTSP credentials — used by secu for 24/7 monitoring grid.
@@ -149,7 +149,7 @@ in {
   # Create:
   #   echo -e "CAMERA_USER=admin\nCAMERA_PASSWORD=yourpassword" | \
   #     agenix -e camera-credentials.age -i ~/.ssh/age
-  "camera-credentials.age".publicKeys = [secu office arch];
+  "camera-credentials.age".publicKeys = [secu office arch big];
   # Home Assistant webhook URLs — triggered by apcupsd on power-loss/return.
   # HA webhooks are unauthenticated (the URL itself is the secret).
   # Create 4 webhooks in HA (Settings → Automations → Webhooks), then:
@@ -170,7 +170,7 @@ in {
   "reolink-nvr.age".publicKeys = [office arch closet];
   "github-token.age".publicKeys = [office arch];
 
-  "frigate-plus.age".publicKeys = [arch];
+  "frigate-plus.age".publicKeys = [arch office];
 
   # k3s token for the CI cluster (github VM). Generated with:
   #   cd ~/dotfiles/secrets && echo -n "$(head -c 32 /dev/urandom | base64)" | agenix -e k3s-ci-token.age -i ~/.ssh/age
