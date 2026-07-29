@@ -41,7 +41,6 @@ in {
   "restic-password-office.age".publicKeys = [office arch];
   "restic-password-closet.age".publicKeys = [closet office arch];
   "restic-password-secu.age".publicKeys = [secu office arch];
-  "restic-password-big.age".publicKeys = [big office arch];
   # Private SSH key for the backup user on the NAS (all backup clients need this).
   # Generate once: ssh-keygen -t ed25519 -f /tmp/backup-key -N "" -C "backup@nas"
   # Then: agenix -e backup-ssh-key.age -i ~/.ssh/age  (paste the private key)
