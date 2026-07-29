@@ -26,6 +26,11 @@
     efi.canTouchEfiVariables = true;
   };
 
+  boot.kernelModules = [
+    "target_core_mod"
+    "iscsi_target_mod"
+  ];
+
   swapDevices = [
     {
       device = "/swapfile";
