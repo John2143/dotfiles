@@ -146,6 +146,11 @@ nixpkgs.overlays = [
     "zswap.zpool=zsmalloc"
     "zswap.max_pool_percent=30"
   ];
+  boot.kernelModules = [
+    "target_core_mod"
+    "iscsi_target_mod"
+  ];
+
 
   virtualisation.podman = {
     enable = true;

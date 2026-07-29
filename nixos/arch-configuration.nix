@@ -38,6 +38,11 @@
   };
   boot.supportedFilesystems = ["ntfs"];
   boot.binfmt.emulatedSystems = ["aarch64-linux"];
+  boot.kernelModules = [
+    "target_core_mod"
+    "iscsi_target_mod"
+  ];
+
   services.displayManager.lemurs = {
     enable = true;
   };

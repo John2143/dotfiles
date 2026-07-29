@@ -1,15 +1,13 @@
-# Disko configuration for the big machine.
+# Disko configuration for the big machine (Proxmox VM, SeaBIOS / GRUB).
 #
 # Partition layout (/dev/sda, GPT):
-#   sda1: ESP    (1G,  vfat,  label=BOOT, mount=/boot)
-#   sda2: root   (rest, ext4,  label=NIXROOT, mount=/)
+#   sda1: BIOS boot   (1M,   EF02,  no fs — GRUB core image)
+#   sda2: root        (rest, ext4,  label=NIXROOT, mount=/)
 #
 # Install:
 #   sudo nix --experimental-features "nix-command flakes" \
 #     run github:nix-community/disko -- --mode disko ./nixos/modules/disko_big.nix
 #   sudo mount /dev/disk/by-label/NIXROOT /mnt
-#   sudo mkdir -p /mnt/boot
-#   sudo mount /dev/disk/by-label/BOOT /mnt/boot
 #   sudo nixos-install --flake .#big
 {
   disko.devices = {
@@ -20,16 +18,9 @@
         content = {
           type = "gpt";
           partitions = {
-            ESP = {
-              type = "EF00";
-              size = "1G";
-              content = {
-                type = "filesystem";
-                format = "vfat";
-                mountpoint = "/boot";
-                mountOptions = ["umask=0077"];
-                extraArgs = ["-n" "BOOT"];
-              };
+            boot = {
+              type = "EF02";
+              size = "1M";
             };
             root = {
               size = "100%";
