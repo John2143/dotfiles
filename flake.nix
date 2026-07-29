@@ -306,13 +306,10 @@
           ./nixos/shared-cli-configuration.nix
           ./nixos/big-configuration.nix
           ./nixos/modules/disko_big.nix
-          ./nixos/modules/k3s-agent.nix
-          ./nixos/modules/restic-backup.nix
           ./nixos/tailscale.nix
 
-          ./nixos/modules/attic.nix
-
-          ./nixos/modules/remote-builders.nix
+          ## POST-INSTALL: uncomment after age key + secrets re-encrypt ##
+          #./nixos/modules/big-post-install.nix
         ];
       })
       // (mkHost {
