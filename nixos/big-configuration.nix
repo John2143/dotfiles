@@ -17,7 +17,6 @@
   home-manager.users."john" = import ./home-cli.nix;
 
   boot.loader.grub.enable = true;
-  boot.loader.grub.device = "/dev/sda";
 
   # 192 GB RAM — no zram or swap needed
   # zswap would add CPU overhead for no benefit
