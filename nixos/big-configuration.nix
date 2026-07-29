@@ -99,6 +99,7 @@
   # === k3s worker labels ===
   services.k3s.extraFlags = [
     "--node-label=workload-type=general"
+    "--node-label=node.longhorn.io/create-default-disk=true"
   ];
 
   # Firewall — k3s ports
