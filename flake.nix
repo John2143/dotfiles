@@ -302,8 +302,10 @@
       // (mkHost {
         name = "big";
         modules = [
+          inputs.disko.nixosModules.default
           ./nixos/shared-cli-configuration.nix
           ./nixos/big-configuration.nix
+          ./nixos/modules/disko_big.nix
           ./nixos/modules/k3s-agent.nix
           ./nixos/modules/restic-backup.nix
           ./nixos/tailscale.nix
