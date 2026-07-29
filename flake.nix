@@ -309,7 +309,7 @@
           ./nixos/tailscale.nix
 
           ## POST-INSTALL: uncomment after age key + secrets re-encrypt ##
-          #./nixos/modules/big-post-install.nix
+          ./nixos/modules/big-post-install.nix
         ];
       })
       // (mkHost {

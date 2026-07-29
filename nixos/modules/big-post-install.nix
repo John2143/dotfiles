@@ -9,7 +9,6 @@
 }: {
   imports = [
     ./k3s-agent.nix
-    ./restic-backup.nix
     ./attic.nix
     ./remote-builders.nix
   ];
