@@ -77,7 +77,6 @@
 
   # === k3s worker labels ===
   services.k3s.extraFlags = [
-    "--node-label=kubernetes.io/role=worker"
     "--node-label=workload-type=general"
   ];
 
