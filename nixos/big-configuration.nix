@@ -1,3 +1,24 @@
+# Big Machine — Proxmox VM (32 cores, 128 GB RAM, virtio, SeaBIOS)
+#
+# === INSTALL FROM LIVE CD ===
+#   sudo nix --experimental-features "nix-command flakes" run github:nix-community/disko -- --mode disko ./nixos/modules/disko_big.nix
+#   sudo mount /dev/disk/by-label/NIXROOT /mnt
+#   sudo nixos-install --flake .#big
+#
+# === POST-INSTALL (age key + secrets) ===
+#   1. On big:  ssh-keygen -f ~/.ssh/age -N "" -C "john@big" && cat ~/.ssh/age.pub
+#   2. On office: paste into secrets/secrets.nix as big = "...", add big to:
+#      - k3s-local-token, attic-admin-token, build-cluster-key publicKeys
+#      - agenix -r -i ~/.ssh/age && git commit -am "add big" && git push
+#   3. On big:  git pull && uncomment big-post-install.nix in flake.nix
+#      sudo nixos-rebuild switch --flake .#big
+#
+# === GOTCHAS ===
+#   - Do NOT set boot.loader.grub.device; disko already provides boot.loader.grub.devices.
+#     Setting both causes "duplicate devices in mirroredBoots" assertion failure.
+#   - k3s 1.35+ rejects custom labels in the kubernetes.io namespace. Use node-role. prefix.
+#   - Secrets must be re-encrypted with the new host's age key before post-install rebuild.
+
 {
   config,
   lib,
