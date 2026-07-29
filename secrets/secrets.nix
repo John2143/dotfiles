@@ -29,7 +29,7 @@ let
   allKeys = [office arch mac];
 in {
   # Readable only by the office machine (k3s agent token).
-  "k3s-local-token.age".publicKeys = [office arch pite nas closet];
+  "k3s-local-token.age".publicKeys = [office arch pite nas closet big];
   # ArgoCD admin password — initial admin secret from the K3s cluster.
   # Retrieve with: ssh closet kubectl get secret -n argocd argocd-initial-admin-secret -o jsonpath='{.data.password}' | base64 -d
   "argo-admin-password.age".publicKeys = [office arch closet];
@@ -111,7 +111,7 @@ in {
   "attic-jwt-secret.age".publicKeys = [office arch nas];
 
   # Attic admin token — lets each machine authenticate to atticd for
-  "attic-admin-token.age".publicKeys = [office arch closet secu nas pite vpin]; # aman term big github];
+  "attic-admin-token.age".publicKeys = [office arch closet secu nas pite vpin big];
   # ntfy.sh topic URL for OMP agent notifications. Topic name is not a
   # cryptographic secret (public server, anyone with the name can publish),
   # but keeping it out of the Nix store avoids accidental exposure.
