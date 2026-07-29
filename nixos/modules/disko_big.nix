@@ -50,6 +50,7 @@
             content = {
               type = "filesystem";
               format = "ext4";
+              extraArgs = ["-L" "LONGHORN"];
               mountpoint = "/var/lib/longhorn";
             };
           };
