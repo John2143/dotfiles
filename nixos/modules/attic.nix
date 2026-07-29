@@ -4,8 +4,8 @@
   ...
 }: let
   cacheName = "2143nix";
-  server = "nas";
-  endpoint = "http://nas:8280";
+  server = "nas.local";
+  endpoint = "http://nas.local:8280";
 in {
   # ── Nix substituter ────────────────────────────────────────────────
   # Our Attic cache is primary (first in list = highest priority).
