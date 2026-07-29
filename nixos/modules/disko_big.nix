@@ -1,25 +1,24 @@
 # Disko configuration for the big machine (Proxmox VM, SeaBIOS / GRUB).
 #
-# Boot disk (/dev/sda, GPT):
-#   sda1: BIOS boot   (1M,   EF02,  no fs — GRUB core image)
-#   sda2: root        (rest, ext4,  label=NIXROOT, mount=/)
+# Stable by-id paths (resistant to /dev/sdX reordering):
+#   scsi-0QEMU_QEMU_HARDDISK_drive-scsi0 → boot disk  (100G,  GPT+ext4)
+#   scsi-0QEMU_QEMU_HARDDISK_drive-scsi1 → data disk  (2TB,  GPT+ext4)
 #
-# Data disk (/dev/sdb, passthrough virtio SCSI):
-#   sdb1: longhorn    (rest, ext4,  mount=/var/lib/longhorn)
+# Partition layout:
+#   boot:  scsi0-part1: BIOS boot  (1M,   EF02)
+#          scsi0-part2: root       (rest, ext4,  label=NIXROOT,  mount=/)
+#   data:  scsi1-part1: longhorn   (rest, ext4,  label=LONGHORN,  mount=/var/lib/longhorn)
 #
 # Install:
 #   sudo nix --experimental-features "nix-command flakes" \
 #     run github:nix-community/disko -- --mode disko ./nixos/modules/disko_big.nix
 #   sudo mount /dev/disk/by-label/NIXROOT /mnt
 #   sudo nixos-install --flake .#big
-#
-# Verify disk path after Proxmox disk changes:
-#   lsblk -o NAME,SIZE && ls -la /dev/disk/by-id/ | grep scsi
 {
   disko.devices = {
     disk = {
       main = {
-        device = "/dev/sda";
+        device = "/dev/disk/by-id/scsi-0QEMU_QEMU_HARDDISK_drive-scsi0";
         type = "disk";
         content = {
           type = "gpt";
@@ -41,7 +40,7 @@
         };
       };
       data = {
-        device = "/dev/sdb";
+        device = "/dev/disk/by-id/scsi-0QEMU_QEMU_HARDDISK_drive-scsi1";
         type = "disk";
         content = {
           type = "gpt";
