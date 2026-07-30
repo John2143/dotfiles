@@ -476,9 +476,9 @@ class AgentSessionWorkflow:
                 retry_policy=_GENAI_RETRY,
             )
 
-            pt = result.get("prompt_tokens", 0)
-            ct = result.get("completion_tokens", 0)
-            cached = result.get("cached_tokens", 0)
+            pt = result.get("prompt_tokens") or 0
+            ct = result.get("completion_tokens") or 0
+            cached = result.get("cached_tokens") or 0
             total_cost["prompt"] += pt
             total_cost["completion"] += ct
             total_cost["cached"] += cached
