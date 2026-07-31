@@ -357,6 +357,20 @@ in
       }
     '';
 
+    # File ignore patterns — gitignore-style globs that OMP silently
+    # skips during tab completion, @-file pickers, and tool operations.
+    # Does NOT filter bash commands; the system prompt reminds the model
+    # to scope find/grep away from these paths instead.
+    ".omp/agent/settings.json".text = ''
+      {
+        "ignorePatterns": [
+          "**/.direnv/**",
+          "**/ai_research/**"
+        }
+        ]
+      }
+    '';
+
     # Tool-call approval hook. Loaded only when `--hook=<path>` is
     # passed -- intentionally NOT in `.omp/agent/extensions/` so default
     # `omp` stays auto. Use the `omp-safe` fish function to opt in.
