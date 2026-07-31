@@ -296,6 +296,9 @@ nixpkgs.overlays = [
     "--kube-controller-manager-arg=node-monitor-grace-period=20s"
     "--kube-controller-manager-arg=node-monitor-period=2s"
     "--node-label=node.longhorn.io/create-default-disk=true"
+    # Reserve 2 CPU + 3 GiB RAM for OS functions (ZFS, Samba, Immich run
+    # natively on NAS; k3s must not starve them — 2026-07-31 OOM panic).
+    "--kubelet-arg=system-reserved=cpu=2,memory=3Gi"
   ];
 
   # ================
