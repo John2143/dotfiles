@@ -14,7 +14,7 @@
     ./arch-hardware-configuration.nix
     ./modules/user-john.nix
     ./modules/vllm.nix
-    ./modules/frigate.nix
+    # ./modules/frigate.nix  # migrated to k8s on big (2026-08-01); file kept for rollback
     ./modules/teamspeak.nix
     ./modules/nut-ups.nix
 
