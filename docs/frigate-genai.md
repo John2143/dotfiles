@@ -7,9 +7,8 @@ Frigate GenAI watches Frigate NVR's MQTT event stream, starts a Temporal workflo
 ---
 
 ## Architecture diagram
-
 ```
-Frgate NVR ──MQTT──> triggers pod (Temporal workflow starter)
+Frigate NVR (k8s Deployment on big, 0.16.1-tensorrt) ──MQTT──> triggers pod (Temporal workflow starter)
     │                    │
     │              Temporal Server
     │                    │ (SPIRE X.509 mTLS)
@@ -542,7 +541,7 @@ Re-run after significant changes (new model added, prompt overhaul, retry policy
 | Gemini API | via `llm.2143.me` | Vision LLM | Ollama (weighted rotation) |
 | Ollama | via `llm.2143.me` | Local vision LLM | Gemini |
 | Frigate NVR MQTT | `mosquitto:1883` | Event ingestion | MQTT QoS 1 (broker queues events) |
-| Frigate NVR API | `arch.ts.2143.me:5000` | HLS frame extraction, sub_label update | None — critical path |
+| Frigate NVR API | `http://frigate.default.svc.cluster.local:5000` (in-cluster; NodePort `:30500` for UI) | HLS frame extraction, sub_label update | None — critical path |
 | SeaweedFS S3 | `seaweedfs-filer:8333` | Frame/artifact storage | None — critical path |
 | Temporal Server | `temporal-frontend:7233` | Workflow orchestration | None — critical path |
 | LiteLLM | `llm.2143.me` | LLM API proxy | None — critical path |
