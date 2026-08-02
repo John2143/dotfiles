@@ -483,7 +483,7 @@ async def async_main(prompts_path: str, provider_path: str, mode: str = "trigger
         log.info("Health endpoint on http://%s:%d", _health_host, _health_port)
 
     # MQTT — starts workflows via Temporal client
-    if mode in ('triggers', 'mqtt-listener'):
+    if mode == 'mqtt-listener':
         client_mqtt = build_mqtt_client(asyncio.get_running_loop())
 
     if mode == "dashboard":
@@ -938,5 +938,5 @@ async def async_main(prompts_path: str, provider_path: str, mode: str = "trigger
             await asyncio.Event().wait()
     except asyncio.CancelledError:
         log.info("Workers shutting down")
-        if mode in ('triggers', 'mqtt-listener'):
+        if mode == 'mqtt-listener':
             client_mqtt.disconnect()
