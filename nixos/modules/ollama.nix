@@ -1,7 +1,7 @@
 # Ollama module — local model serving, ROCm on office/arch.
 #
 # Users download models directly with `ollama pull <model>`.
-# Models are stored on the root NVMe at /var/lib/ollama/models.
+# Models are stored on the local data NVMe at /mnt/share/ollama/models.
 #
 # === Usage ===
 #
@@ -28,6 +28,7 @@
       enable = true;
       host = "0.0.0.0";
       openFirewall = true;
+      modelsDir = "/mnt/share/ollama/models";
       environmentVariables = {
         OLLAMA_KEEP_ALIVE = "5m";
         OLLAMA_NUM_PARALLEL = "1";
@@ -59,6 +60,8 @@
     systemd.tmpfiles.rules = [
       "d /var/lib/ollama        0755 john users -"
       "d /var/lib/ollama/models 0755 john users -"
+      "d /mnt/share/ollama      0755 john users -"
+      "d /mnt/share/ollama/models 0755 john users -"
     ];
   };
 }
