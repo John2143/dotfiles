@@ -432,6 +432,13 @@ async def async_main(prompts_path: str, provider_path: str, mode: str = "trigger
             deployment_config=deployment_config,
         )
         mode_tasks = [asyncio.create_task(w.run()) for w in [main_worker, ollama_worker]]
+    elif mode == "mqtt-listener":
+        # No Temporal worker — MQTT client starts workflows via async_main.
+        # Health HTTP handled by the mode != "dashboard" branch below.
+        mode_tasks = []  # MQTT runs on its own thread, not via asyncio
+    elif mode == "dashboard":
+        # No Temporal worker, no MQTT. HTTP dashboard started below.
+        mode_tasks = []
 
     # ── Health HTTP server (all modes) ──────────────────────────────────
     class _HealthHandler(BaseHTTPRequestHandler):
@@ -467,7 +474,7 @@ async def async_main(prompts_path: str, provider_path: str, mode: str = "trigger
                     f'frigate_genai_worker_info{{version="{build_id}",healthy="{"1" if _stats["temporal_connected"] else "0"}"}} 1\n'
                     .encode()
                 )
-    if mode != "triggers":
+    if mode != "dashboard":  # dashboard has its own ReprocessHandler with healthz
         _health_port = int(os.environ.get("HTTP_PORT", "8080"))
         _health_host = os.environ.get("HTTP_HOST", "0.0.0.0")
         _health_server = HTTPServer((_health_host, _health_port), _HealthHandler)
@@ -476,11 +483,11 @@ async def async_main(prompts_path: str, provider_path: str, mode: str = "trigger
         log.info("Health endpoint on http://%s:%d", _health_host, _health_port)
 
     # MQTT — starts workflows via Temporal client
-    if mode == 'triggers':
+    if mode in ('triggers', 'mqtt-listener'):
         client_mqtt = build_mqtt_client(asyncio.get_running_loop())
 
-    if mode == 'triggers':
-        log.info("Frigate GenAI sidecar running, waiting for events...")
+    if mode == "dashboard":
+        log.info("Dashboard server running, waiting for requests...")
 
         async def _do_reprocess(event_id: str, event: dict) -> str:
             workflow_id = f"genai-{event_id}"
@@ -921,8 +928,15 @@ async def async_main(prompts_path: str, provider_path: str, mode: str = "trigger
         log.info("HTTP reprocess endpoint on http://%s:%d", http_host, http_port)
 
     try:
-        await asyncio.gather(*mode_tasks)
+        if mode == "mqtt-listener":
+            # Keep event loop alive for MQTT callbacks
+            await asyncio.Event().wait()
+        elif mode_tasks:
+            await asyncio.gather(*mode_tasks)
+        elif mode == "dashboard":
+            # HTTP thread keeps process alive; wait indefinitely
+            await asyncio.Event().wait()
     except asyncio.CancelledError:
         log.info("Workers shutting down")
-        if mode == 'triggers':
+        if mode in ('triggers', 'mqtt-listener'):
             client_mqtt.disconnect()

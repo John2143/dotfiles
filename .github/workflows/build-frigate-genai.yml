@@ -84,12 +84,27 @@ jobs:
           sed -i "s|\(unsafeCustomBuildID: \"\)[^\"]*|\1${NEW_TAG}|g" \
             ${ARGO_MANIFEST_DIR}/${dep}-workerdeployment.yaml
         done
+        # Plain Deployments (not WorkerDeployments) — may not exist on first run after creation
+        for dep in mqtt-listener dashboard; do
+          if [ -f "${ARGO_MANIFEST_DIR}/${dep}-deployment.yaml" ]; then
+            sed -i "s|\(image: ${GENAI_IMAGE}:\)[^ ]*|\1${NEW_TAG}|g" \
+              ${ARGO_MANIFEST_DIR}/${dep}-deployment.yaml
+          fi
+        done
     - name: Verify tags applied
       run: |
         grep -q "unsafeCustomBuildID: \"${NEW_TAG}\"" ${ARGO_MANIFEST_DIR}/ffmpeg-workerdeployment.yaml || \
           (echo "ERROR: ffmpeg unsafeCustomBuildID tag not found" && exit 1)
         grep -q "unsafeCustomBuildID: \"${NEW_TAG}\"" ${ARGO_MANIFEST_DIR}/gemini-workerdeployment.yaml || \
           (echo "ERROR: genai unsafeCustomBuildID tag not found" && exit 1)
+        if [ -f ${ARGO_MANIFEST_DIR}/mqtt-listener-deployment.yaml ]; then
+          grep -q "image: ${GENAI_IMAGE}:${NEW_TAG}" ${ARGO_MANIFEST_DIR}/mqtt-listener-deployment.yaml || \
+            (echo "ERROR: mqtt-listener image tag not found" && exit 1)
+        fi
+        if [ -f ${ARGO_MANIFEST_DIR}/dashboard-deployment.yaml ]; then
+          grep -q "image: ${GENAI_IMAGE}:${NEW_TAG}" ${ARGO_MANIFEST_DIR}/dashboard-deployment.yaml || \
+            (echo "ERROR: dashboard image tag not found" && exit 1)
+        fi
 
     - name: Verify image pullable (ghcr ready)
       run: |
@@ -135,28 +150,36 @@ jobs:
     - name: Prepare env
       run: |
         echo "GENAI_IMAGE=ghcr.io/$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')/frigate-genai-genai" >> $GITHUB_ENV
-    - name: Pull and smoke-test genai worker
+    - name: Pull and smoke-test genai worker modes
       run: |
         echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
         docker pull "${GENAI_IMAGE}:${NEW_TAG}"
-        docker run --rm \
-          "${GENAI_IMAGE}:${NEW_TAG}" \
-          --mode=triggers > /dev/null 2> /tmp/genai-worker-stderr &
-        PID=$!
-        for i in $(seq 1 30); do
-          sleep 2
-          if grep -q "Connecting to Temporal" /tmp/genai-worker-stderr 2>/dev/null; then
-            echo "SUCCESS: genai worker initialized and attempting Temporal connection"
-            exit 0
-          fi
-          if ! kill -0 $PID 2>/dev/null; then
-            echo "ERROR: genai worker crashed before reaching Temporal connect step"
-            cat /tmp/genai-worker-stderr
-            exit 1
+        for mode in triggers mqtt-listener dashboard; do
+          echo "--- testing mode=${mode} ---"
+          docker run --rm \
+            "${GENAI_IMAGE}:${NEW_TAG}" \
+            --mode=${mode} > /dev/null 2> /tmp/genai-worker-stderr &
+          PID=$!
+          PASSED=0
+          for i in $(seq 1 30); do
+            sleep 2
+            if grep -q "Connecting to Temporal" /tmp/genai-worker-stderr 2>/dev/null; then
+              echo "SUCCESS: mode=${mode} initialized and attempting Temporal connection"
+              PASSED=1
+              break
+            fi
+            if ! kill -0 $PID 2>/dev/null; then
+              echo "ERROR: mode=${mode} crashed before reaching Temporal connect step"
+              cat /tmp/genai-worker-stderr
+              exit 1
+            fi
+          done
+          kill $PID 2>/dev/null || true
+          wait $PID 2>/dev/null || true
+          if [ "$PASSED" -ne 1 ]; then
+            echo "WARNING: mode=${mode} did not reach Temporal connect within 60s (PID still alive)"
           fi
         done
-        echo "WARNING: genai worker did not reach Temporal connect within 60s (PID still alive)"
-
   validate-imports:
     needs: build
     if: github.event_name == 'push'
