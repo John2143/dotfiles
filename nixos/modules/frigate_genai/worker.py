@@ -516,13 +516,15 @@ async def async_main(prompts_path: str, provider_path: str, mode: str = "trigger
         log.info("Dashboard server running, waiting for requests...")
 
         async def _do_reprocess(event_id: str, event: dict, model: str | None = None) -> str:
-            workflow_id = f"genai-{event_id}"
+            # Cancel any live workflow for this event (mqtt-started runs use the
+            # canonical ID). Best effort: a fresh live run may not exist.
+            canonical_workflow_id = f"genai-{event_id}"
             try:
-                handle = _temporal_client.get_workflow_handle(workflow_id)
+                handle = _temporal_client.get_workflow_handle(canonical_workflow_id)
                 await handle.cancel()
-                log.info("Cancelled old workflow %s for reprocess", workflow_id)
+                log.info("Cancelled old workflow %s for reprocess", canonical_workflow_id)
             except Exception:
-                log.debug("No existing workflow %s to cancel", workflow_id)
+                log.debug("No existing workflow %s to cancel", canonical_workflow_id)
             camera = event.get("camera", "")
             label = event.get("label", "")
             input_data = _build_workflow_input(event, bypass_pause=True)
@@ -530,6 +532,10 @@ async def async_main(prompts_path: str, provider_path: str, mode: str = "trigger
                 return f"Skipping {event_id} ({camera}/{label}): paused (global or per-label)"
             if model:
                 input_data["model"] = model
+            # Unique ID: the new run never races the cancelled run's close for
+            # the same workflow ID (which previously surfaced as
+            # "Workflow execution already started").
+            workflow_id = f"genai-{event_id}-re-{int(time.time() * 1000)}"
             await _temporal_client.start_workflow(
                 "GenAIWorkflow",
                 input_data,
