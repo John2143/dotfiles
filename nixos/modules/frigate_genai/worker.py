@@ -11,6 +11,7 @@ import subprocess
 import tempfile
 import time
 import urllib.request as _urllib_request
+import urllib.parse
 from concurrent.futures import ThreadPoolExecutor
 from http.server import HTTPServer, ThreadingHTTPServer, BaseHTTPRequestHandler
 
@@ -117,6 +118,11 @@ img{border-radius:4px;max-height:60px}
 <h1>Frigate GenAI Reprocess</h1>
 <div class="toggle-wrap"><span id="toggle-btn" class="toggle" onclick="togglePause()"></span><span id="toggle-label" class="toggle-label">Ollama on</span></div>
 <div class="toggle-wrap"><span id="genai-toggle-btn" class="toggle" onclick="toggleGenaiPause()"></span><span id="genai-toggle-label" class="toggle-label">GenAI running</span></div>
+<div style="margin-bottom:12px">
+  <label for="model-input" style="color:#888;font-size:12px;margin-right:6px">Model:</label>
+  <input id="model-input" list="model-list" placeholder="auto" style="background:#1a1a2e;color:#c8c8d0;border:1px solid #3d3d5e;padding:4px 8px;border-radius:4px;font-size:12px;width:200px">
+  <datalist id="model-list"></datalist>
+</div>
 <div id="stats" class="loading" style="margin-bottom:12px">Loading stats...</div>
 <div id="app" class="loading">Loading events...</div>
 <script>
@@ -128,7 +134,7 @@ async function load() {
     const events = await r.json();
     const filtered = events.filter(e => DESCRIBE.includes(e.label) && e.has_clip && e.end_time);
     if (!filtered.length) { app.innerHTML = '<p>No eligible events found.</p>'; return; }
-    let html = '<table><tr><th>Snapshot</th><th>Camera</th><th>Label</th><th>Duration</th><th>Description</th><th></th><th></th></tr>';
+    let html = '<table><tr><th>Snapshot</th><th>Camera</th><th>Label</th><th>Duration</th><th>Description</th><th></th><th></th><th></th></tr>';
     for (const e of filtered) {
       const dur = (e.end_time - e.start_time).toFixed(1) + "s";
       const desc = (e.data?.description || "").substring(0, 120);
@@ -140,6 +146,7 @@ async function load() {
       html += '<td class="desc" title="' + (e.data?.description || "").replace(/"/g,"&quot;") + '">' + (desc || "—") + '</td>';
       html += '<td><a href="/agent/' + e.id + '" class="btn" target="_blank">View</a></td>';
       html += '<td><button class="btn" onclick="reprocess(\'' + e.id + '\',this)">Reprocess</button></td>';
+      html += '<td><button class="btn" onclick="reprocessWithModel(\'' + e.id + '\',this)">Reprocess w/ model</button></td>';
       html += '</tr>';
     }
     html += '</table>';
@@ -155,6 +162,17 @@ async function reprocess(id, btn) {
     else { btn.textContent = "Failed"; btn.classList.add("err"); }
   } catch(e) { btn.textContent = "Error"; btn.classList.add("err"); }
   setTimeout(() => { btn.textContent = "Reprocess"; btn.classList.remove("ok","err"); btn.disabled = false; }, 5000);
+}
+async function reprocessWithModel(id, btn) {
+  const model = document.getElementById("model-input").value.trim();
+  if (!model) { btn.textContent = "No model"; btn.classList.add("err"); setTimeout(() => {btn.textContent="Reprocess w/ model"; btn.classList.remove("err");}, 2000); return; }
+  btn.textContent = "..."; btn.disabled = true;
+  try {
+    const r = await fetch("/reprocess/" + id + "?model=" + encodeURIComponent(model), { method: "POST" });
+    if (r.ok) { btn.textContent = "Sent!"; btn.classList.add("ok"); }
+    else { btn.textContent = "Failed"; btn.classList.add("err"); }
+  } catch(e) { btn.textContent = "Error"; btn.classList.add("err"); }
+  setTimeout(() => { btn.textContent = "Reprocess w/ model"; btn.classList.remove("ok","err"); btn.disabled = false; }, 5000);
 }
 async function loadStats() {
   try {
@@ -218,6 +236,14 @@ load();
 
 def _escape(s: str) -> str:
     return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace('"', "&quot;")
+
+
+def _provider_models() -> list[str]:
+    """Return the configured model list from the baked provider.json."""
+    try:
+        return load_json("/var/lib/frigate-genai-sidecar/provider.json").get("model", [])
+    except Exception:
+        return []
 
 
 def _temporal_tls_config() -> TLSConfig | None:
@@ -489,7 +515,7 @@ async def async_main(prompts_path: str, provider_path: str, mode: str = "trigger
     if mode == "dashboard":
         log.info("Dashboard server running, waiting for requests...")
 
-        async def _do_reprocess(event_id: str, event: dict) -> str:
+        async def _do_reprocess(event_id: str, event: dict, model: str | None = None) -> str:
             workflow_id = f"genai-{event_id}"
             try:
                 handle = _temporal_client.get_workflow_handle(workflow_id)
@@ -502,6 +528,8 @@ async def async_main(prompts_path: str, provider_path: str, mode: str = "trigger
             input_data = _build_workflow_input(event, bypass_pause=True)
             if input_data is None:
                 return f"Skipping {event_id} ({camera}/{label}): paused (global or per-label)"
+            if model:
+                input_data["model"] = model
             await _temporal_client.start_workflow(
                 "GenAIWorkflow",
                 input_data,
@@ -512,8 +540,9 @@ async def async_main(prompts_path: str, provider_path: str, mode: str = "trigger
                     SearchAttributePair(_SEARCH_LABEL, label),
                 ]),
                 memo={"event_id": event_id, "camera": camera, "label": label,
-                      "duration": int(event.get("end_time", event.get("start_time", 0)) - event.get("start_time", 0))})
-            return f"Reprocessing {event_id} ({camera}/{label})"
+                      "duration": int(event.get("end_time", event.get("start_time", 0)) - event.get("start_time", 0)),
+                      "model": model or ""})
+            return f"Reprocessing {event_id} ({camera}/{label})" + (f" with {model}" if model else "")
 
         class ReprocessHandler(BaseHTTPRequestHandler):
             def log_message(self, fmt, *args):
@@ -531,11 +560,15 @@ async def async_main(prompts_path: str, provider_path: str, mode: str = "trigger
 
             def do_GET(self):
                 if self.path == "/":
+                    models = _provider_models()
+                    options = "".join(f'<option value="{_escape(m)}">' for m in models)
+                    html = UI_HTML.replace('<datalist id="model-list"></datalist>',
+                                            f'<datalist id="model-list">{options}</datalist>')
                     self.send_response(200)
                     self._cors()
                     self.send_header("Content-type", "text/html; charset=utf-8")
                     self.end_headers()
-                    self.wfile.write(UI_HTML.encode())
+                    self.wfile.write(html.encode())
                 elif self.path == "/api/stats":
                     self.send_response(200)
                     self._cors()
@@ -863,7 +896,19 @@ async def async_main(prompts_path: str, provider_path: str, mode: str = "trigger
 
             def do_POST(self):
                 if self.path.startswith("/reprocess/"):
-                    event_id = self.path.split("/reprocess/", 1)[1]
+                    path_with_query = self.path.split("/reprocess/", 1)[1]
+                    event_id = path_with_query.split("?", 1)[0]
+                    query = urllib.parse.urlsplit(self.path).query
+                    model = urllib.parse.parse_qs(query).get("model", [None])[0]
+                    model = model or None  # empty string → None (auto)
+                    if model is not None and model not in _provider_models():
+                        self.send_response(400)
+                        self._cors()
+                        self.send_header("Content-type", "text/plain")
+                        self.end_headers()
+                        avail = ", ".join(_provider_models())
+                        self.wfile.write(f"Model '{model}' not in configured list: [{avail}]".encode())
+                        return
                     try:
                         resp = _urllib_request.urlopen(_frigate_url(f"/api/events/{event_id}"), timeout=10)
                         event = json.loads(resp.read())
@@ -874,7 +919,7 @@ async def async_main(prompts_path: str, provider_path: str, mode: str = "trigger
                             self.end_headers()
                             self.wfile.write(b"Temporal not connected")
                             return
-                        msg = asyncio.run(_do_reprocess(event_id, event))
+                        msg = asyncio.run(_do_reprocess(event_id, event, model))
                         self.send_response(200)
                         self._cors()
                         self.send_header("Content-type", "text/plain")

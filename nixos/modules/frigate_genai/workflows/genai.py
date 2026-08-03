@@ -55,7 +55,7 @@ class GenAIWorkflow:
 
             workflow.logger.info("GenAI workflow started: %s", log_ctx)
 
-            # Step 0: select model (car override is in input_data already)
+            # Step 0: select model (manual override from dashboard "Reprocess w/ model" is in input_data already)
             model = input_data.get("model")
             if model is None:
                 model = await workflow.execute_activity(
