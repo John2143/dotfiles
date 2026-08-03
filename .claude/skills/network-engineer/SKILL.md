@@ -257,7 +257,7 @@ Upstairs Switch (CRS310):
   sfp-sfpplus1  → Upstairs-Core sfp-sfpplus4       (uplink, 10G)
   ether1        → Reolink NVR                      (192.168.1.67, PoE)
   ether6        → Brother printer                  (192.168.5.6)
-  sfp-sfpplus2  → NOT RUNNING (was old core uplink)
+  sfp-sfpplus2  → bigp Proxmox 10G NIC       (192.168.5.19; VM big .68 shares this link)
 
 
 
@@ -302,7 +302,7 @@ See the `## IPv6` section for the fix.
 mikrotik-connect r '/ip firewall nat print terse where chain=dstnat'
 ```
 
-Baseline (captured 2026-05-29, live-confirmed 2026-05-29):
+Baseline (captured 2026-05-29, live-confirmed 2026-08-03):
 
 | WAN Port(s) | Proto | MikroTik → | Final Target | K8s NodePort | Service |
 |------------|-------|-----------|-------------|-------------|---------|
@@ -319,8 +319,15 @@ Baseline (captured 2026-05-29, live-confirmed 2026-05-29):
 | 25 | TCP | **VIP (.10):25** | stalwart-mail:25 (k8s) | — | SMTP (Stalwart) |
 | 587 | TCP | **VIP (.10):587** | stalwart-mail:587 (k8s) | — | Submission (Stalwart) |
 | 993 | TCP | **VIP (.10):993** | stalwart-mail:993 (k8s) | — | IMAPS (Stalwart) |
+| 7881 | TCP | **VIP (.10):7881** | LiveKit WebRTC signal (k8s) | — | LiveKit |
+| 50000-60000 | UDP | **VIP (.10):50000-60000** | LiveKit WebRTC media (k8s) | — | LiveKit media |
+| 3478 | TCP/UDP | **VIP (.10):3478** | Coturn TURN (k8s) | — | TURN |
+| 5349 | TCP | **VIP (.10):5349** | Coturn TURN TLS (k8s) | — | TURN TLS |
+| 7233 | TCP | **VIP (.10):7233** | Temporal gRPC mTLS (k8s) | — | Temporal |
+| 4143 | TCP | closet (.36):4143 | Linkerd multicluster gateway (k8s) | — | Linkerd MCS |
 
 **Note:** The Headscale port 6767 forward lives on the Verizon router (192.168.0.1), not the MikroTik. home-pi (192.168.0.154) sits on the WAN subnet (192.168.0.0/24) directly behind the Verizon router. The MikroTik has a secondary DHCP WAN IP at 192.168.0.152 (not to be confused with home-pi).
+**Fix (2026-08-03):** the 5432 dst-nat rule was re-pointed from a dead target (`.35`) to closet `.36` — postgres answers on `.36`. Note: RouterOS 7.19 `find`/`where` on port/protocol properties (`dst-port`, `to-ports`, `protocol`) matches nothing; select 5432-style rules via `find to-addresses=...` instead.
 ## Subnet Layout
 
 ```
@@ -332,6 +339,15 @@ Baseline (captured 2026-05-29, live-confirmed 2026-05-29):
 
 Router bridges all subnets. Inter-subnet routing is automatic (no NAT between 1.0/24 and 5.0/24).
 
+### DHCP Allocation (192.168.5.0/24)
+
+One server (`dchp1`) on bridge, **30m leases**. Pool `dhcp` = **192.168.5.50 – 192.168.5.254** (205 addrs, ~28 used). Everything **below .50 is never served by DHCP** — the safe static range.
+
+- Static infra below pool: .1 router, .2 office, .3 upstairs, .4 core, .5 upstairs-core, .6 Brother printer, .8 GL-KVM, .9 pite, .10 kube-vip VIP, .19 bigp (Proxmox), .36 closet, .76 arch, .140 secu, .175 nas (static lease)
+- Static reservations inside the pool: .127 (UPS), .165/.170 (presence sensors) — the server won't re-lease those
+- Cameras on 1.0/24 use static leases via `make-static` (no pool covers 1.0/24)
+- Rule of thumb: "is 192.168.5.X safe to assign statically?" → X < 50 has zero DHCP overlap; still check ARP/leases for the current holder of X
+
 ## Cameras (Reolink)
 
 Reolink cameras — ONVIF/RTSP, not UniFi. All cameras on dedicated 1.0/24 camera subnet.
@@ -341,6 +357,17 @@ WAN egress blocked for entire 1.0/24 subnet via firewall. secu (192.168.5.140) h
 ```
 mikrotik-connect r '/ip dhcp-server lease make-static [find host-name=Side]'
 ```
+
+## Proxmox (bigp) + big VM
+
+| Host | IP | MAC | Role | Notes |
+|------|-----|-----|------|-------|
+| bigp | 192.168.5.19 (static, below DHCP pool) | 2C:EA:7F:E7:13:98 (Dell) | Proxmox hypervisor | PVE 9.2.2 / Debian 13. Ports 22, 3128 (spiceproxy), 8006 (pveproxy). Upstairs closet, 10G link. |
+| big | 192.168.5.68 (DHCP) | BC:24:11:19:22:F9 (Dell) | NixOS VM on bigp | k3s worker, tailscale node `big`. Shares bigp's physical port. |
+
+- **bigp and big share one physical link** (big = VM bridged onto bigp's NIC → upstairs switch sfp-sfpplus2). Different SSH host keys is expected (VM ≠ hypervisor); don't read it as two machines.
+- Likely iDRAC: 192.168.5.254 (`idrac-6V3QK93`, 2C:EA:7F:7B:12:75) — Dell OUI matches bigp; confirm association.
+- PVE API (`/api2/json/*`) needs a ticket; 8006 cert is self-signed (`curl -k`).
 
 ## UniFi (APs + Controller)
 
@@ -365,7 +392,7 @@ set-inform http://192.168.5.175:8080/inform
 
 ### Controller
 
-UniFi controller runs in k3s on closet (namespace: default), managed via ArgoCD.
+UniFi controller runs in k3s (namespace: default), managed via ArgoCD. Currently schedules on node **big** (NixOS VM on bigp); historically on closet.
 Single deployment with MongoDB as a sidecar container — no separate MongoDB pod.
 
 | Resource | Details |
@@ -378,6 +405,7 @@ Single deployment with MongoDB as a sidecar container — no separate MongoDB po
 | **L2 discovery (LB)** | `unifi-discovery` → 10001/UDP (NodePort 31640), external IPs .175,.36,.76 |
 | **Config PVC** | `unifi-data` (10Gi, Longhorn 3 replicas) |
 | **Version** | 10.4.57 (2026-07-18) |
+| **VM pitfall** | mongodb sidecar crash-looping with exitCode **132 (SIGILL)** = VM CPU type lacks AVX (mongo 7.0 requires it). Fix: set the Proxmox VM CPU type to `host` or `x86-64-v2/v3`. Hit 2026-08-03 on big. |
 
 ### Accessing the UniFi Controller
 
@@ -395,6 +423,7 @@ curl -sk https://192.168.5.10:30443/status
 
 **API (programmatic access):**
 Login endpoint is **`/api/login`** (NOT `/api/auth/login` — that's for UniFi OS consoles). Credentials: `/run/agenix/unifi-credentials` (updated post-reset).
+If `/api/login` returns **HTTP 400**, the controller pod may be crash-looping (see VM pitfall) — check `ssh closet 'kubectl get pods -n default | grep unifi'` before debugging the script.
 
 **Via kubectl:**
 ```
@@ -481,7 +510,7 @@ chain=srcnat action=masquerade out-interface=2GWAN dst-address=!192.168.0.0/24
 ## k3s Cluster
 
 **Control plane:** 3-node HA (closet, arch, nas) with embedded etcd. **kube-vip VIP `192.168.5.10`** provides a floating IP for the API server — any control-plane node can hold it. **Dual-stack** (IPv4 + IPv6) with static ULA addresses (`fd00:1::/64`) for stable node-ip.
-Agents: office (.209), pite (.213) — 5 nodes total.
+Agents: office (.209), pite (.213), big (.68, NixOS VM on bigp, joined 2026-07-29) — 6 nodes total.
 
 Pod network: `10.42.0.0/24` (IPv4) + `fd42:42:42::/56` (IPv6) flannel VXLAN. Key services:
 
