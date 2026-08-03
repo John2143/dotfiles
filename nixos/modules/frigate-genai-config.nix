@@ -118,7 +118,8 @@ let
       "gemini/gemini-2.5-flash"
       "gemini/gemini-2.5-flash-lite"
       "gemini/gemini-2.5-pro"
-      "ollama/qwen3-vl-64k"
+      "ollama/gemma4:e4b"
+      # "ollama/qwen3-vl-64k"  # paused — qwen3-vl-64k superseded by gemma4:e4b (2026-08-03)
     ];
     api_key_env = "LITELLM_FRIGATE_KEY";
     base_url = "https://llm.2143.me/v1";
