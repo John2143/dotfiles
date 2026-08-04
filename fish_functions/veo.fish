@@ -153,6 +153,12 @@ while test "$vid_status" = "processing"
   set vid_status (printf '%s\n' $status_resp | jq -r '.status // empty' 2>/dev/null)
   if test -z "$vid_status"
     echo "veo: bad status response" >&2
+    set -l stat_err (printf '%s\n' $status_resp | jq -r '.error.message // empty' 2>/dev/null)
+    if test -n "$stat_err"
+      echo "  $stat_err" >&2
+    else if test -n "$status_resp"
+      echo "  "(printf '%s\n' $status_resp | head -c 300) >&2
+    end
     if set -q _flag_debug
       printf '%s\n' $status_resp >&2
     end
