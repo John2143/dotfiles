@@ -51,11 +51,11 @@ if set -q _flag_timeout; and test -n "$_flag_timeout"
   set timeout "$_flag_timeout"
 end
 # Optional seed image (first frame). Veo image conditioning accepts one image
-# per generation; encode it as base64 with a mime type.
-set -l image_b64 ""
+# per generation; it is base64-encoded into the request body below.
+set -l image_file ""
 set -l image_mime ""
 if set -q _flag_image; and test -n "$_flag_image"
-  set -l image_file "$_flag_image"
+  set image_file "$_flag_image"
   if not test -f "$image_file"
     echo "veo: image file not found: $image_file" >&2
     return 1
@@ -67,18 +67,13 @@ if set -q _flag_image; and test -n "$_flag_image"
       set image_mime "image/png"
     case .webp
       set image_mime "image/webp"
+    case .heic
+      set image_mime "image/heic"
+    case .heif
+      set image_mime "image/heif"
     case '*'
-      echo "veo: unsupported image type (use .jpg, .png or .webp)" >&2
+      echo "veo: unsupported image type (use .jpg, .png, .webp, .heic or .heif)" >&2
       return 1
-  end
-  if test (uname) = Darwin
-    set image_b64 (base64 -b 0 < "$image_file")
-  else
-    set image_b64 (base64 -w0 < "$image_file")
-  end
-  if test -z "$image_b64"
-    echo "veo: could not base64-encode image: $image_file" >&2
-    return 1
   end
 end
 
@@ -96,13 +91,32 @@ for bin in curl jq
 end
 
 # Build the request body with jq so prompts with quotes/newlines are safe.
-set -l body (jq -n --arg model "$model" --arg prompt "$prompt" --arg seconds "$seconds" --arg size "$size" --arg b64 "$image_b64" --arg mime "$image_mime" \
-  '{model: $model, prompt: $prompt, seconds: $seconds, size: $size} + (if ($b64 | length) > 0 then {input_reference: {bytesBase64Encoded: $b64, mimeType: $mime}} else {} end)')
+# Use a temp file for the body (and base64) so large seed images don't blow
+# the OS argv limit — a 1.9MB HEIC becomes ~2.6MB of base64.
+set -l tmpdir (mktemp -d /tmp/veo.XXXXXX)
+set -l b64file "$tmpdir/img.b64"
+set -l bodyfile "$tmpdir/body.json"
+: > "$b64file"
+if test -n "$image_file"
+  if test (uname) = Darwin
+    base64 -b 0 < "$image_file" > "$b64file"
+  else
+    base64 -w0 < "$image_file" > "$b64file"
+  end
+  if not test -s "$b64file"
+    echo "veo: could not base64-encode image: $image_file" >&2
+    command rm -rf "$tmpdir"
+    return 1
+  end
+end
+jq -n --rawfile b64 "$b64file" --arg model "$model" --arg prompt "$prompt" --arg seconds "$seconds" --arg size "$size" --arg mime "$image_mime" \
+  '{model: $model, prompt: $prompt, seconds: $seconds, size: $size} + (if ($b64 | length) > 0 then {input_reference: {bytesBase64Encoded: $b64, mimeType: $mime}} else {} end)' > "$bodyfile"
 
 set -l create_resp (curl -s "$base_url/videos" \
   -H "Authorization: Bearer $api_key" \
   -H "Content-Type: application/json" \
-  -d "$body")
+  -d "@$bodyfile")
+command rm -rf "$tmpdir"
 if test -z "$create_resp"
   echo "veo: create request failed (network error?)" >&2
   return 1
