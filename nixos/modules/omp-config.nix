@@ -296,6 +296,25 @@ in
           apiKey: LITELLM_EDITOR_KEY
           discovery:
             type: openai-models-list
+          modelOverrides:
+            deepseek/deepseek-v4-flash:
+              reasoning: true
+              compat:
+                requiresReasoningContentForToolCalls: true
+                allowsSyntheticReasoningContentForToolCalls: false
+                requiresAssistantContentForToolCalls: true
+                extraBody:
+                  thinking:
+                    type: enabled
+            deepseek/deepseek-v4-pro:
+              reasoning: true
+              compat:
+                requiresReasoningContentForToolCalls: true
+                allowsSyntheticReasoningContentForToolCalls: false
+                requiresAssistantContentForToolCalls: true
+                extraBody:
+                  thinking:
+                    type: enabled
 
     '';
     ".omp/agent/config.yml".text = ''
@@ -366,7 +385,6 @@ in
         "ignorePatterns": [
           "**/.direnv/**",
           "**/ai_research/**"
-        }
         ]
       }
     '';
@@ -445,7 +463,6 @@ in
       - Destructive operations (rm -rf, force-push, drop table, discarding uncommitted work) require confirmation.
       - Never bypass git checks with --no-verify or --no-gpg-sign.
       - Never read, print, or commit any credential-bearing files (age secrets, .env, private keys, API tokens, certificates). Reading a decrypted secret means it must be rotated — avoid that cost entirely. If a file path, directory name, or read target matches any of these patterns, do NOT read it: secrets/, keys/, certs/, credentials/, tokens/, .ssh/, .config/sops/, /run/agenix/, or files matching *secret*, *key*, *token*, *credential*, *password*, *.env, *.pem, *.key, *.p12, *.cert, *.crt, *.age. When in doubt about whether a file might be a secret, err on the side of not reading it.
-‣dotfiles/nixos/modules/omp-config.nix
       - nixos-rebuild switch, home-manager switch, and nix-collect-garbage mutate the running system; confirm before running.
       - Never curl ... | sh or wget ... | bash. Download, inspect, then run.
       - Clean up background jobs you spawn before yielding.
@@ -478,7 +495,6 @@ in
 
 
       - Before yielding, check if the user gave no input (empty response) to your last question. If so, ensure all outstanding TODO (/todo) items are cleared — outstanding TODOs cause the prompt to auto-continue with no user direction.
-- Push back when my ideas are bad. Give me your honest read, not what you think I want to hear. Never overrule me or go behind my back — all decisions are mine.
       <stakes>
       Your work has real consequences. Mistakes can waste time, money, or break systems.
       Questions you did not research thoroughly: bad advice shipped. Edge cases you ignored: problems at 3am.
