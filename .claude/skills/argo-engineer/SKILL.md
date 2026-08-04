@@ -271,7 +271,7 @@ These rules are **mandatory** and must never be violated:
 
 ### Home Cluster (`~/repos/argo/`)
 
-Kubernetes: k3s HA (embedded etcd) on closet/arch/nas with kube-vip VIP at `192.168.5.10`.
+Kubernetes: k3s HA (embedded etcd) on closet/arch/nas with MetalLB announcing the API VIP `192.168.5.10` (Service `kubernetes-api`) + all LoadBalancer IPs on `192.168.6.0/24`.
 Access via SSH to control-plane nodes (no direct kubectl from the workstation unless context switch).
 
 ```

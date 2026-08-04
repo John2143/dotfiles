@@ -137,9 +137,14 @@ digraph G {
     u7proxgs -> iphones [style=dotted, color=gray, weight=0]
 
     // ── pite (wired via office switch) ──
-    pite [shape=box, label="pite\nk3s canary\n192.168.5.213", fillcolor="#c8e6c9", style=filled]
+    pite [shape=box, label="pite\nk3s worker / canary\n192.168.5.9", fillcolor="#c8e6c9", style=filled]
 
     office -> pite [label=" ether1 1G"]
+
+    // ── big (NixOS VM on bigp, wired) ──
+    big [shape=box, label="big\nk3s worker / BGP speaker\n192.168.5.68\n(VM on bigp)", fillcolor="#c8e6c9", style=filled]
+
+    core -> big [label=" (VM uplink)"]
 
     // ── Legend ──
     subgraph cluster_legend {

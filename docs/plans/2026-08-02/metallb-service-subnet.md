@@ -1,7 +1,7 @@
-# MetalLB Deployment — BGP mode, replace kube-vip (v3 — verified)
+# MetalLB Deployment — BGP mode, replace kube-vip (v3.4 — executed)
 
 - **Date:** 2026-08-02
-- **Status:** Plan only — nothing implemented yet
+- **Status:** **DONE — executed 2026-08-04.** All 15 services on MetalLB `.6.x` IPs, kube-vip removed, 5/5 BGP sessions (arch/closet/nas/big/pite), API VIP `.10` MetalLB-announced. Commit trail: dotfiles `4346345` (servicelb off) → `59eac0a` (pite repoint); argo `0e3acb8`…`5d9e8e3` (Step 5 conversions) → `bd45396` (API takeover) → `5086984` (kube-vip removal).
 - **Supersedes:** `docs/plans/2026-08-02/metallb-service-subnet.md` (v2) and `docs/plans/2026-07-20/metallb-service-subnet.md` (v1)
 - **Verification:** every fact below was independently verified 2026-08-02 by 5 parallel read-only research agents (router, MetalLB internals, k3s internals, live service inventory, docs inventory) — see Appendix A for the evidence ledger.
 

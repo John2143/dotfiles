@@ -302,32 +302,34 @@ See the `## IPv6` section for the fix.
 mikrotik-connect r '/ip firewall nat print terse where chain=dstnat'
 ```
 
-Baseline (captured 2026-05-29, live-confirmed 2026-08-03):
+Baseline (captured 2026-05-29; **post-MetalLB migration, live-confirmed 2026-08-04**):
 
 | WAN Port(s) | Proto | MikroTik → | Final Target | K8s NodePort | Service |
 |------------|-------|-----------|-------------|-------------|---------|
-| 80, 443 | TCP | **kube-vip VIP (.10):80,443** | traefik LB | 31316, 30908 | HTTP/HTTPS ingress |
-| 9987 | UDP | **VIP (.10):30087** | ts-voice:30087 | 30087 | Teamspeak voice |
-| 30033 | TCP | **VIP (.10):30034** | ts-files:30034 | 30034 | Teamspeak file transfer |
-|| 5432 | TCP | **closet (.36):5432** | Postgres (NixOS bare-metal) | — | PostgreSQL |
+| 80, 443 | TCP | **MetalLB .6.11:80,443** | traefik (k8s LB) | 31316, 30908 | HTTP/HTTPS ingress |
+| 9987 | UDP | **MetalLB .6.15:9987** | ts-voice | 30087 | Teamspeak voice |
+| 30033 | TCP | **MetalLB .6.16:30033** | ts-files | 30034 | Teamspeak file transfer |
+| 5432 | TCP | **closet (.36):5432** | Postgres (NixOS bare-metal) | — | PostgreSQL |
 | 25565 | TCP | nas (.175):32565 | minecraft-game:32565 | 32565 | Minecraft (k8s) |
 | 32565 | TCP | nas (.175):32565 | minecraft-game:32565 | 32565 | Minecraft alternate |
-| 11753 | TCP | **VIP (.10):31753** | openrct2-game:31753 | 31753 | OpenRCT2 |
+| 11753 | TCP | **MetalLB .6.17:11753** | openrct2-game | 31753 | OpenRCT2 |
 | 6767 | Both | Verizon→home-pi:6767 | home-pi Headscale | (direct) | Headscale control |
-| 30478 | UDP | **VIP (.10):30478** | headscale-stun:30478 | 30478 | Headscale STUN/DERP |
+| 30478 | UDP | **MetalLB .6.18:3478** | headscale-stun | — | Headscale STUN/DERP |
 | 18080 | TCP | arch (.76):18080 | Monero P2P (bare-metal) | — | Monero |
-| 25 | TCP | **VIP (.10):25** | stalwart-mail:25 (k8s) | — | SMTP (Stalwart) |
-| 587 | TCP | **VIP (.10):587** | stalwart-mail:587 (k8s) | — | Submission (Stalwart) |
-| 993 | TCP | **VIP (.10):993** | stalwart-mail:993 (k8s) | — | IMAPS (Stalwart) |
-| 7881 | TCP | **VIP (.10):7881** | LiveKit WebRTC signal (k8s) | — | LiveKit |
-| 50000-60000 | UDP | **VIP (.10):50000-60000** | LiveKit WebRTC media (k8s) | — | LiveKit media |
-| 3478 | TCP/UDP | **VIP (.10):3478** | Coturn TURN (k8s) | — | TURN |
-| 5349 | TCP | **VIP (.10):5349** | Coturn TURN TLS (k8s) | — | TURN TLS |
-| 7233 | TCP | **VIP (.10):7233** | Temporal gRPC mTLS (k8s) | — | Temporal |
-| 4143 | TCP | closet (.36):4143 | Linkerd multicluster gateway (k8s) | — | Linkerd MCS |
+| 25 | TCP | **MetalLB .6.13:25** | stalwart-mail | — | SMTP (Stalwart) |
+| 587 | TCP | **MetalLB .6.13:587** | stalwart-mail | — | Submission (Stalwart) |
+| 993 | TCP | **MetalLB .6.13:993** | stalwart-mail | — | IMAPS (Stalwart) |
+| 7881 | TCP | **MetalLB .6.22:7881** | LiveKit WebRTC signal | — | LiveKit |
+| 50000-60000 | UDP | **MetalLB .6.22:50000-60000** | LiveKit WebRTC media | — | LiveKit media |
+| 3478 | TCP/UDP | **MetalLB .6.21:3478** | Coturn TURN | — | TURN |
+| 5349 | TCP | **MetalLB .6.21:5349** | Coturn TURN TLS | — | TURN TLS |
+| 7233 | TCP | **MetalLB .6.20:7233** | Temporal gRPC mTLS | — | Temporal |
+| 4143 | TCP | closet (.36):4143 | Linkerd multicluster gateway | — | Linkerd MCS |
+
+**No dst-nat (LAN-only):** mimir-lb `.6.23:8080`, loki-push-lb `.6.24:3100`, unifi-web `.6.25:8443`.
 
 **Note:** The Headscale port 6767 forward lives on the Verizon router (192.168.0.1), not the MikroTik. home-pi (192.168.0.154) sits on the WAN subnet (192.168.0.0/24) directly behind the Verizon router. The MikroTik has a secondary DHCP WAN IP at 192.168.0.152 (not to be confused with home-pi).
-**Fix (2026-08-03):** the 5432 dst-nat rule was re-pointed from a dead target (`.35`) to closet `.36` — postgres answers on `.36`. Note: RouterOS 7.19 `find`/`where` on port/protocol properties (`dst-port`, `to-ports`, `protocol`) matches nothing; select 5432-style rules via `find to-addresses=...` instead.
+**Migration (2026-08-04):** all k8s dst-nat targets moved from the kube-vip VIP `.10` to MetalLB `.6.x` LB IPs. **Fix (2026-08-03):** the 5432 dst-nat rule was re-pointed from a dead target (`.35`) to closet `.36` — postgres answers on `.36`. Note: RouterOS 7.19 `find`/`where` on port/protocol properties (`dst-port`, `to-ports`, `protocol`) matches nothing — select rules by **rule number from a fresh `print`** (`set <number> ...`) or via `find to-addresses=...` instead.
 ## Subnet Layout
 
 ```
@@ -381,14 +383,15 @@ mikrotik-connect r '/ip dhcp-server lease make-static [find host-name=Side]'
 
 APs discover the controller via L2 broadcast (UDP 10001) or manual `set-inform`.
 Device communication uses the `unifi-inform` LoadBalancer service (TCP 8080) on
-the k3s node IPs **192.168.5.175, 192.168.5.36, or 192.168.5.76**.
-**Do NOT use `192.168.5.10` for inform** — that's the kube-vip VIP (k3s API only, inform LB not bound there).
+the MetalLB IP **192.168.6.10** (BGP-announced).
+**Post-migration (2026-08-04): inform = `192.168.6.10`** — use it for `set-inform`; `.10` is now the MetalLB-announced k3s API VIP (6443 only, no inform LB bound there).
 
 To re-point an AP after controller rebuild:
 ```bash
 ssh ubnt@<ap-ip>
-set-inform http://192.168.5.175:8080/inform
+set-inform http://192.168.6.10:8080/inform
 ```
+
 
 ### Controller
 
@@ -400,9 +403,9 @@ Single deployment with MongoDB as a sidecar container — no separate MongoDB po
 | **Pod** | `unifi-*` (1 replica, 2 containers: unifi + mongodb) |
 | **Image** | `lscr.io/linuxserver/unifi-network-application:10.4.57-ls136` |
 | **MongoDB** | Sidecar (`mongo:7.0`), dedicated PVC `unifi-mongodb-data` (5Gi, Longhorn 3 replicas) |
-| **Web UI (NodePort)** | `unifi-web` → 8443/TCP, **NodePort 30443** on every k3s node |
-| **Device inform (LB)** | `unifi-inform` → 8080/TCP (NodePort 31455), external IPs .175,.36,.76 |
-| **L2 discovery (LB)** | `unifi-discovery` → 10001/UDP (NodePort 31640), external IPs .175,.36,.76 |
+| **Web UI (LB)** | `unifi-web` → 8443/TCP, **MetalLB `192.168.6.25`** (NodePort 30443 kept) |
+| **Device inform (LB)** | `unifi-inform` → 8080/TCP, **MetalLB `192.168.6.10`** (NodePort kept) |
+| **L2 discovery (LB)** | `unifi-discovery` → 10001/UDP, **MetalLB `192.168.6.12`** (NodePort kept) |
 | **Config PVC** | `unifi-data` (10Gi, Longhorn 3 replicas) |
 | **Version** | 10.4.57 (2026-07-18) |
 | **VM pitfall** | mongodb sidecar crash-looping with exitCode **132 (SIGILL)** = VM CPU type lacks AVX (mongo 7.0 requires it). Fix: set the Proxmox VM CPU type to `host` or `x86-64-v2/v3`. Hit 2026-08-03 on big. |
@@ -411,13 +414,13 @@ Single deployment with MongoDB as a sidecar container — no separate MongoDB po
 
 **Web UI (primary method):**
 ```
-https://192.168.5.10:30443
+https://192.168.6.25:8443
 ```
-Any k3s node IP on port 30443 works. Certificate is self-signed. Admin account is local (no Ubiquiti SSO).
+Any k3s node IP on port 30443 (NodePort) also works. Certificate is self-signed. Admin account is local (no Ubiquiti SSO).
 
 Health check (no auth required):
 ```
-curl -sk https://192.168.5.10:30443/status
+curl -sk https://192.168.6.25:8443/status
 # {"meta":{"rc":"ok","up":true,"server_version":"10.4.57","uuid":"...","data":[]}
 ```
 
@@ -509,22 +512,30 @@ chain=srcnat action=masquerade out-interface=2GWAN dst-address=!192.168.0.0/24
 
 ## k3s Cluster
 
-**Control plane:** 3-node HA (closet, arch, nas) with embedded etcd. **kube-vip VIP `192.168.5.10`** provides a floating IP for the API server — any control-plane node can hold it. **Dual-stack** (IPv4 + IPv6) with static ULA addresses (`fd00:1::/64`) for stable node-ip.
-Agents: office (.209), pite (.213), big (.68, NixOS VM on bigp, joined 2026-07-29) — 6 nodes total.
+**Control plane:** 3-node HA (closet, arch, nas) with embedded etcd. **MetalLB** (BGP + frr-k8s, since 2026-08-04) announces the API VIP `192.168.5.10` (Service `kubernetes-api` + custom EndpointSlice over closet/arch/nas, port 6443) and all LoadBalancer service IPs on the `192.168.6.0/24` service pool. **Dual-stack** (IPv4 + IPv6) with static ULA addresses (`fd00:1::/64`) for stable node-ip.
+Agents: office (.209, wifi — never a BGP speaker), pite (.9), big (.68, NixOS VM on bigp, joined 2026-07-29) — 6 nodes total.
 
-Pod network: `10.42.0.0/24` (IPv4) + `fd42:42:42::/56` (IPv6) flannel VXLAN. Key services:
+Pod network: `10.42.0.0/16` (IPv4) + `fd42:42:42::/56` (IPv6) flannel VXLAN. Key services (LB IPs are MetalLB-announced, live 2026-08-04):
 
-| Service | Type | External IP / NodePort | Notes |
-|---------|------|----------------------|-------|
-| traefik | LoadBalancer | 192.168.5.10, fd00:1::35/226/175 | HTTP:31316, HTTPS:30908 |
-| unifi-web | NodePort | :30443 | UniFi controller web UI |
-| unifi-inform | LB | :8080 (closet, arch, nas) | UniFi device adoption |
-| unifi-discovery | LB | :10001/UDP (closet, arch, nas) | UniFi L2 discovery |
-| ts-voice | NodePort | :30087/UDP | Teamspeak voice |
-| ts-files | NodePort | :30034/TCP | Teamspeak file transfer |
-| minecraft-game | NodePort | :32565/TCP | Minecraft |
-| openrct2-game | NodePort | :31753/TCP | OpenRCT2 |
-| headscale-stun | NodePort | :30478/UDP | STUN for Headscale DERP |
+| Service | Type | External IP | Notes |
+|---------|------|-------------|-------|
+| kubernetes-api | LoadBalancer | 192.168.5.10:6443 | k3s API (MetalLB, custom EndpointSlice) |
+| traefik | LoadBalancer | 192.168.6.11 | HTTP/HTTPS ingress (annotation-pinned) |
+| stalwart | LoadBalancer | 192.168.6.13 | SMTP/IMAP (25/587/993) |
+| unifi-inform | LoadBalancer | 192.168.6.10:8080 | UniFi device adoption |
+| unifi-discovery | LoadBalancer | 192.168.6.12:10001/UDP | UniFi L2 discovery |
+| unifi-web | LoadBalancer | 192.168.6.25:8443 | UniFi controller web UI |
+| ts-voice | LoadBalancer | 192.168.6.15:9987/UDP | Teamspeak voice |
+| ts-files | LoadBalancer | 192.168.6.16:30033 | Teamspeak file transfer |
+| openrct2-game | LoadBalancer | 192.168.6.17:11753 | OpenRCT2 |
+| headscale-stun | LoadBalancer | 192.168.6.18:3478/UDP | STUN for Headscale DERP |
+| mosquitto | LoadBalancer | 192.168.6.19:1883 | MQTT |
+| temporal-frontend | LoadBalancer | 192.168.6.20:7233 | Temporal gRPC |
+| coturn | LoadBalancer | 192.168.6.21:3478,5349 | TURN (scaled to 0 — dormant) |
+| livekit | LoadBalancer | 192.168.6.22:7881,50000-60000 | LiveKit (scaled to 0 — dormant) |
+| mimir-lb | LoadBalancer | 192.168.6.23:8080 | Mimir push/query (LAN-only) |
+| loki-push-lb | LoadBalancer | 192.168.6.24:3100 | Loki push (LAN-only) |
+| minecraft-game | NodePort | :32565/TCP | Minecraft (unchanged, nodePort path) |
 
 Query live: `ssh closet 'kubectl get nodes,pods,svc -A'`
 
@@ -541,96 +552,95 @@ Query live: `ssh closet 'kubectl get nodes,pods,svc -A'`
 
 1. **home-pi on WAN subnet:** Connected directly to Verizon router (192.168.0.154), not behind MikroTik NAT. Headscale traffic bypasses the MikroTik entirely. home-pi cannot reach LAN devices unless via Tailscale routes.
 
-2. **kube-vip VIP 192.168.5.10:** Floating IP for k3s API. Advertised via BGP (migrated from ARP 2026-06-17) to MikroTik AS 65001. The leader pod adds the VIP to loopback and announces a `/32` route. Standby pods maintain BGP sessions but don't advertise. The VIP NEVER appears as a secondary address on physical interfaces — this prevents Flannel VXLAN FDB corruption. Config: `argo/workloads/kube-vip/daemonset.yaml`. AS layout: kube-vip nodes AS 65000, MikroTik AS 65001. See BGP section.
+2. **MetalLB BGP (migrated from kube-vip 2026-08-04):** MetalLB (v0.16.1, frr-k8s) announces the k3s API VIP `192.168.5.10` (Service `kubernetes-api` + custom EndpointSlice) and all `.6.x` LoadBalancer IPs via BGP to MikroTik AS 65001. **5 speaker peers** (arch/closet/nas/big/pite; office is wifi — excluded). No leader lease, no loopback VIP — kube-proxy DNATs every announced IP to service endpoints on all nodes. Config: `argo/workloads/metallb/*.yaml`. AS layout: MetalLB nodes AS 65000, MikroTik AS 65001. See BGP section.
 
 3. **ULA IPv6 (fd00:1::/64):** Site-local IPv6 on MikroTik bridge. All 3 k3s servers have static ULA addresses (.36, .76, .175) for stable dual-stack node-ip. Survives ISP prefix delegation changes.
-4. **k3s pod network uses flannel VXLAN:** 10.42.0.0/24 + fd42:42:42::/56 dual-stack overlay.
+4. **k3s pod network uses flannel VXLAN:** 10.42.0.0/16 + fd42:42:42::/56 dual-stack overlay.
 
-## BGP (kube-vip — since 2026-06-17)
+## BGP (MetalLB + frr-k8s — since 2026-08-04)
 
-kube-vip floats the VIP 192.168.5.10 via BGP instead of ARP. This prevents VXLAN FDB corruption that previously caused cross-node pod network outages.
+MetalLB (v0.16.1) announces the k3s API VIP `192.168.5.10` and every LoadBalancer service IP on `192.168.6.0/24` via BGP to the MikroTik (AS 65001). frr-k8s runs one FRR daemon per node; every **speaker node** advertises **all** service prefixes — no leader lease, no loopback VIP. The router installs each `/32` with 5 next-hops (one active path, the rest as failover backups — RouterOS 7.19 picks a single active path, not ECMP). Traffic lands on the node with the active route, and kube-proxy DNATs it to the service's endpoints.
 
 ### Topology
 
 ```
-kube-vip pods (AS 65000, hostNetwork, port 179)
-  arch    (192.168.5.76)  ──┐
-  closet  (192.168.5.36)  ──┼── BGP peering ── MikroTik (AS 65001, 192.168.5.1)
-  nas     (192.168.5.175) ──┘         │
-                                      │ /32 route
-                                      ▼
-                              192.168.5.10/32 → leader's real IP
-```
+MetalLB speakers (AS 65000, hostNetwork, port 179)
+  arch    (192.168.5.76)   ──┐
+  closet  (192.168.5.36)   ──┼── BGP peering ── MikroTik (AS 65001, 192.168.5.1)
+  nas     (192.168.5.175)  ──┤
+  big     (192.168.5.68)   ──┤
+  pite    (192.168.5.9)    ──┘
+office (.209) is wifi — intentionally NOT a speaker.
 
-The leader pod wins a Kubernetes lease (`kube-system/kube-vip`), adds the VIP to loopback, and announces it via BGP. Standby pods maintain idle sessions. If the leader dies, a new leader wins the lease and re-announces — failover takes 5-15 seconds.
+Each speaker advertises every allocated /32 (.5.10 API VIP + all .6.x LB IPs).
+```
 
 ### Live Status
 
 ```bash
-# Check BGP sessions
+# MetalLB's view of the 5 sessions (all should be Established):
+ssh closet.local 'kubectl get bgpsessionstates -n metallb-system'
+
+# Router's view (5 lines with E flag, names ~"metallb*"):
 mikrotik-connect r '/routing bgp session print'
-# Look for: state=established. Leader has prefix-count=1, standbys have prefix-count=0.
 
-# Check VIP route
-mikrotik-connect r '/ip route print where dst-address=192.168.5.10/32'
-# Shows gateway=<leader-ip>, DAb flags (dynamic, active, bgp)
+# A service route (5 gateways, one active DAb):
+mikrotik-connect r '/ip route print where dst-address=192.168.6.11/32'
 
-# Which node is leader?
-ssh closet.local 'kubectl get lease -n kube-system kube-vip -o jsonpath="{.spec.holderIdentity}"'
+# FRR's own view (per node):
+kubectl --context closet-as-developer exec -n metallb-system deploy/metallb-frr-k8s -- vtysh -c 'show bgp summary'
 
-# Verify VIP on leader's loopback
-ssh <leader>.local 'ip addr show lo | grep 192.168.5.10'
-# Should show: inet 192.168.5.10/32 scope host lo
+# Current allocations:
+ssh closet.local 'kubectl get svc -A | grep 192.168.6'
 ```
 
 ### Adding/Removing Nodes
 
-**Add a control-plane node to BGP:**
+**Add a node as BGP speaker (wired worker or control-plane):**
 ```bash
-# 1. Add BGP connection on MikroTik
-mikrotik-connect r '/routing bgp connection add name=kube-vip-<node> as=65001 local.address=192.168.5.1 local.role=ebgp remote.address=192.168.5.<IP> remote.as=65000'
+# 1. Add the peer to argo/workloads/metallb/bgppeer.yaml
+#    (myASN 65000, peerASN 65001, peerAddress 192.168.5.1) — commit + push + sync.
 
-# 2. Ensure firewall port 179 is open on the new node's NixOS config
-#    (dotfiles/nixos/<node>-configuration.nix)
+# 2. Add the BGP connection on the MikroTik:
+mikrotik-connect r '/routing bgp connection add name=metallb-<node> as=65001 local.address=192.168.5.1 local.role=ebgp remote.address=192.168.5.<IP> remote.as=65000'
 
-# 3. The kube-vip DaemonSet uses nodeAffinity for control-plane nodes,
-#    so the pod will auto-deploy. It reads bgp_peers from env var.
+# 3. Ensure firewall port 179 is open on the node's NixOS config
+#    (dotfiles/nixos/<node>-configuration.nix).
 ```
 
-**Remove a node:**
-```bash
-mikrotik-connect r '/routing bgp connection remove [find name=kube-vip-<node>]'
-```
+**Remove a node:** drop its entry from `bgppeer.yaml` (commit + sync) and remove the router connection (`remove [find name=metallb-<node>]`). If office ever gets wired: untaint `wifi`, add the peer + router connection — it becomes a 6th speaker automatically.
 
 ### Troubleshooting
 
 ```bash
 # BGP session won't establish?
-ssh <node>.local 'ss -tlnp | grep 179'           # Is kube-vip listening?
-ssh <node>.local 'iptables -L INPUT -n | grep 179' # Firewall open?
-ssh closet.local 'kubectl logs -n kube-system -l app=kube-vip --tail=30' | grep -i bgp
+ssh closet.local 'kubectl get bgpsessionstates -n metallb-system'    # which peer is down?
+ssh closet.local 'kubectl logs -n metallb-system -l app.kubernetes.io/component=speaker --tail=30'
+ssh closet.local 'kubectl exec -n metallb-system deploy/metallb-frr-k8s -- vtysh -c "show bgp summary"'
 
-# VIP unreachable?
-# Check leader lease, BGP route, loopback VIP (three commands above).
-
-# Force leader failover (test only):
-ssh closet.local 'kubectl delete lease -n kube-system kube-vip'
-
-# VXLAN FDB contaminated again? (shouldn't happen with BGP, but check):
-for node in closet arch nas; do
-  ssh closet.local "kubectl debug node/$node -it --profile=sysadmin --image=nicolaka/netshoot:latest -- nsenter -t 1 -n -- bridge fdb show dev flannel.1 | grep '192.168.5.10'"
-done
-# Should return nothing. If not, see headscale-flannel-fix plan.
+# Service IP unreachable?
+# 1. Does it have endpoints? MetalLB will NOT announce a svc with zero endpoints.
+ssh closet.local "kubectl get endpointslices -A -l kubernetes.io/service-name=<svc>"
+# 2. Is the /32 in the router's table?
+mikrotik-connect r '/ip route print where dst-address=192.168.6.X/32'
+# 3. Kube-proxy DNAT (speaker nodes need no .6.x FIB route — PREROUTING DNAT precedes routing):
+ssh <node>.local 'iptables -t nat -L KUBE-SERVICES -n | grep 192.168.6.X'
 ```
+
+**RouterOS 7.19 quirks:**
+- `find`/`where` on port/protocol properties (`dst-port`, `to-ports`, `protocol`) matches nothing — select nat rules by **rule number from a fresh `print`** (`set <number> ...`).
+- BGP session objects persist under their original connection name after the connection is removed (RouterOS reuses session objects by remote IP) — verify by remote address / uptime, not name.
 
 ### Configs Location
 
 | Component | File |
 |-----------|------|
-| kube-vip DaemonSet (args, env) | `argo/workloads/kube-vip/daemonset.yaml` |
+| MetalLB chart app (frr-k8s enabled) | `argo/apps/metallb.yaml` |
+| Pool / peers / advertisement | `argo/workloads/metallb/{ipaddresspool,bgppeer,bgpadvertisement}.yaml` |
+| k8s API VIP Service + EndpointSlice | `argo/workloads/metallb/kubernetes-api-lb.yaml` |
 | MikroTik BGP connections | on router (`mikrotik-connect r /routing bgp connection print`) |
 | Firewall port 179 | `dotfiles/nixos/<host>-configuration.nix` → `networking.firewall.allowedTCPPorts` |
-| MikroTik dst-nat (VIP targets) | on router (`mikrotik-connect r /ip firewall nat print where chain=dstnat`) |
+| MikroTik dst-nat (.6.x targets) | on router (`mikrotik-connect r /ip firewall nat print where chain=dstnat`) |
 ## Config Backup & Restore
 Full config exports are saved in the dotfiles repo (`~/dotfiles/network-configs/`) for
 disaster recovery. These are RouterOS script files (`.rsc`) — plain text, one command

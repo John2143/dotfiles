@@ -3,7 +3,7 @@
 # This module assumes:
 #   - closet runs --cluster-init (embedded etcd bootstrap)
 #   - arch + nas join via --server https://closet.local:6443
-#   - All three advertise 192.168.5.0/24 as a tailscale subnet route for kube-vip VIP.
+#   - All three advertise 192.168.5.0/24 as a tailscale subnet route for the MetalLB-announced .10 API VIP.
 #
 # Every server node imports this identically. Node-specific flags
 # (--node-ip, --cluster-init, --server, dual-stack CIDRs) go in the
@@ -55,7 +55,7 @@
     '';
 
     # Tailscale subnet route — advertises LAN to tailnet so tailscale
-    # clients can reach the kube-vip VIP (192.168.5.10) for k8s services.
+    # clients can reach the MetalLB-announced API VIP (192.168.5.10) for k8s services.
     # Approved in headscale admin UI per-node.
     services.tailscale.extraUpFlags = [ "--advertise-routes=192.168.5.0/24" ];
 
