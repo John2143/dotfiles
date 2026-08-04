@@ -122,6 +122,7 @@
       # Dual-stack pod and service networks (IPv4 + IPv6)
       # Join existing cluster via VIP (MetalLB-announced .10)
       "--server=https://192.168.5.10:6443"
+      "--disable=servicelb"
       "--cluster-cidr=10.42.0.0/16,fd42:42:42::/56"
       "--service-cidr=10.43.0.0/16,fd42:42:43::/112"
       # Dual-stack nodes must use explicit IPv4+IPv6 addresses
@@ -149,6 +150,9 @@
           kubernetesGateway:
             enabled: true
             experimentalChannel: true
+        service:
+          annotations:
+            metallb.io/loadBalancerIPs: "192.168.6.11"
       '';
     };
   };

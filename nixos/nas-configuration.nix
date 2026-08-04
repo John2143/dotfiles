@@ -282,6 +282,7 @@ nixpkgs.overlays = [
   # NAS uses the 10GbE interface at 192.168.5.175 (the 1GbE at .176 is being retired).
   services.k3s.extraFlags = lib.concatStringsSep " " [
     "--server=https://192.168.5.10:6443"
+    "--disable=servicelb"
     "--tls-san=nas.local"
     "--tls-san=closet.local"
     "--tls-san=192.168.5.175"
