@@ -1,11 +1,11 @@
-# DESCRIPTION: Generate a video with Google Veo via the litellm proxy. Usage: veo "prompt" [--key sk-...] [--seconds 8] [--size 1280x720] [--model veo-3.1] [-o out.mp4] [--poll-interval 5] [--timeout 600] [--debug]
+# DESCRIPTION: Generate a video with Google Veo via the litellm proxy. Usage: veo "prompt" [--image seed.jpg] [--key sk-...] [--seconds 8] [--size 1280x720] [--model veo-3.1] [-o out.mp4] [--poll-interval 5] [--timeout 600] [--debug]
 set -l _pre_vars (set --names -x)
 
 # Key resolution: --key flag > $LITELLM_EDITOR_KEY > $LITELLM_MASTER_KEY >
 # /run/agenix/llm-runtime-keys (this machine's managed keys).
 set -l base_url "https://llm.2143.me/v1"
 
-argparse --name=veo 'k/key=' 'm/model=' 's/seconds=' 'z/size=' 'o/output=' 'i/poll-interval=' 't/timeout=' 'd/debug' -- $argv
+argparse --name=veo 'image=' 'k/key=' 'm/model=' 's/seconds=' 'z/size=' 'o/output=' 'i/poll-interval=' 't/timeout=' 'd/debug' -- $argv
 or return 1
 
 set -l api_key "$_flag_key"
@@ -50,10 +50,41 @@ set -l timeout 600
 if set -q _flag_timeout; and test -n "$_flag_timeout"
   set timeout "$_flag_timeout"
 end
+# Optional seed image (first frame). Veo image conditioning accepts one image
+# per generation; encode it as base64 with a mime type.
+set -l image_b64 ""
+set -l image_mime ""
+if set -q _flag_image; and test -n "$_flag_image"
+  set -l image_file "$_flag_image"
+  if not test -f "$image_file"
+    echo "veo: image file not found: $image_file" >&2
+    return 1
+  end
+  switch (string lower (path extension "$image_file"))
+    case .jpg .jpeg
+      set image_mime "image/jpeg"
+    case .png
+      set image_mime "image/png"
+    case .webp
+      set image_mime "image/webp"
+    case '*'
+      echo "veo: unsupported image type (use .jpg, .png or .webp)" >&2
+      return 1
+  end
+  if test (uname) = Darwin
+    set image_b64 (base64 -b 0 < "$image_file")
+  else
+    set image_b64 (base64 -w0 < "$image_file")
+  end
+  if test -z "$image_b64"
+    echo "veo: could not base64-encode image: $image_file" >&2
+    return 1
+  end
+end
 
 set -l prompt (string join ' ' $argv)
 if test -z "$prompt"
-  echo "usage: veo \"prompt\" [--key sk-...] [--seconds 8] [--size 1280x720] [--model veo-3.1] [-o out.mp4] [--poll-interval 5] [--timeout 600] [--debug]" >&2
+  echo "usage: veo \"prompt\" [--image seed.jpg] [--key sk-...] [--seconds 8] [--size 1280x720] [--model veo-3.1] [-o out.mp4] [--poll-interval 5] [--timeout 600] [--debug]" >&2
   return 1
 end
 
@@ -65,8 +96,8 @@ for bin in curl jq
 end
 
 # Build the request body with jq so prompts with quotes/newlines are safe.
-set -l body (jq -n --arg model "$model" --arg prompt "$prompt" --arg seconds "$seconds" --arg size "$size" \
-  '{model: $model, prompt: $prompt, seconds: $seconds, size: $size}')
+set -l body (jq -n --arg model "$model" --arg prompt "$prompt" --arg seconds "$seconds" --arg size "$size" --arg b64 "$image_b64" --arg mime "$image_mime" \
+  '{model: $model, prompt: $prompt, seconds: $seconds, size: $size} + (if ($b64 | length) > 0 then {input_reference: {bytesBase64Encoded: $b64, mimeType: $mime}} else {} end)')
 
 set -l create_resp (curl -s "$base_url/videos" \
   -H "Authorization: Bearer $api_key" \
