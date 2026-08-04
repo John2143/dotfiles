@@ -43,10 +43,13 @@
       shutdownGracePeriod = "20s";
       shutdownGracePeriodCriticalPods = "10s";
     };
-    # BGP (MetalLB speaker) — workers carry MetalLB speakers, so the
-    # router's BGP sessions terminate on these hosts.
+    # MetalLB — workers carry speakers (BGP to the router, memberlist
+    # gossip between speakers) and the frr-k8s webhook/statuscleaner pod
+    # (hostNetwork) can land here.
     networking.firewall.allowedTCPPorts = [
-      179
+      179    # BGP (MetalLB speaker)
+      7946   # MetalLB speaker memberlist gossip
+      19443  # frr-k8s validation webhook
     ];
     # Clean resolv.conf for k3s pods — strips the Tailscale MagicDNS search
     # domain (ts.2143.me) to prevent ndots:5 expansion from prepending it

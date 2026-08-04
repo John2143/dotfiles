@@ -81,6 +81,9 @@
       10250  # kubelet
       2379   # etcd client (k3s server-to-server)
       2380   # etcd peer (k3s server-to-server)
+      179    # BGP (MetalLB speaker)
+      7946   # MetalLB speaker memberlist gossip
+      19443  # frr-k8s validation webhook (statuscleaner pod, hostNetwork)
     ];
     networking.firewall.allowedUDPPorts = [
       8472   # k3s flannel VXLAN
