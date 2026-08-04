@@ -80,6 +80,8 @@
 
   services.openssh.enable = true;
   users.users."john".openssh.authorizedKeys.keys = sshKeys;
+  # Proxmox guest agent — enables qm guest exec / graceful shutdown from hypervisor
+  services.qemuGuest.enable = true;
 
   services.avahi = {
     enable = true;
