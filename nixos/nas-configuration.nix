@@ -561,7 +561,7 @@ nixpkgs.overlays = [
       2283 # immich (immich-server)
       25565 # minecraft (paperMC)
       5580 # matter-server (hostNetwork pod)
-      179 # BGP for kube-vip
+      179 # BGP (MetalLB speaker)
       8280 # attic nix cache — nas-configuration.nix:557
       10250 # kubelet (k3s agent)
       9100 # node_exporter (Prometheus metrics)

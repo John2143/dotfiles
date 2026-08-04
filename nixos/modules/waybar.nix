@@ -494,10 +494,10 @@
     name = "temporal-status";
     runtimeInputs = [ pkgs.coreutils ];
     text = ''
-      if timeout 1 bash -c "exec 3<>/dev/tcp/192.168.5.10/32682" 2>/dev/null; then
-        ${pkgs.jq}/bin/jq -nc '{text: "T", class: "connected", tooltip: "Temporal: connected (192.168.5.10:32682)"}'
+      if timeout 1 bash -c "exec 3<>/dev/tcp/192.168.6.20/7233" 2>/dev/null; then
+        ${pkgs.jq}/bin/jq -nc '{text: "T", class: "connected", tooltip: "Temporal: connected (192.168.6.20:7233)"}'
       else
-        ${pkgs.jq}/bin/jq -nc '{text: "T", class: "disconnected", tooltip: "Temporal: unreachable (192.168.5.10:32682)"}'
+        ${pkgs.jq}/bin/jq -nc '{text: "T", class: "disconnected", tooltip: "Temporal: unreachable (192.168.6.20:7233)"}'
       fi
     '';
   };

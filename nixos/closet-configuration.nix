@@ -120,7 +120,7 @@
       "--tls-san=192.168.5.35"
       "--tls-san=192.168.5.10"
       # Dual-stack pod and service networks (IPv4 + IPv6)
-      # Join existing cluster via VIP (kube-vip LB on .10)
+      # Join existing cluster via VIP (MetalLB-announced .10)
       "--server=https://192.168.5.10:6443"
       "--cluster-cidr=10.42.0.0/16,fd42:42:42::/56"
       "--service-cidr=10.43.0.0/16,fd42:42:43::/112"
@@ -153,7 +153,7 @@
     };
   };
   # Tailscale subnet route — advertises LAN to tailnet so tailscale
-  # clients can reach the kube-vip VIP (192.168.5.10) for k8s services.
+  # clients can reach the MetalLB-announced .10 VIP for k8s services.
   # Approved in headscale admin UI.
   services.tailscale.extraUpFlags = [ "--advertise-routes=192.168.5.0/24" ];
   # Keep Longhorn data mount active during k3s shutdown so iSCSI can
@@ -189,7 +189,7 @@
     2380 # etcd peer (k3s join)
     5432 # Postgres
     5580 # matter-server (hostNetwork pod)
-    179 # BGP for kube-vip
+    179 # BGP (MetalLB speaker)
   ];
   networking.firewall.allowedUDPPorts = [
     8472 # flannel VXLAN (k3s)

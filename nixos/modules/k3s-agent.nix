@@ -43,6 +43,11 @@
       shutdownGracePeriod = "20s";
       shutdownGracePeriodCriticalPods = "10s";
     };
+    # BGP (MetalLB speaker) — workers carry MetalLB speakers, so the
+    # router's BGP sessions terminate on these hosts.
+    networking.firewall.allowedTCPPorts = [
+      179
+    ];
     # Clean resolv.conf for k3s pods — strips the Tailscale MagicDNS search
     # domain (ts.2143.me) to prevent ndots:5 expansion from prepending it
     # to external hostnames. Keeps 100.100.100.100 as the upstream so pods

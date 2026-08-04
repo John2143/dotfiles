@@ -599,7 +599,7 @@ async def async_main(prompts_path: str, provider_path: str, mode: str = "trigger
                     self.wfile.write(json.dumps({
                         "connected": stats["temporal_connected"],
                         "task_queue": TASK_QUEUE,
-                        "server": os.environ.get("TEMPORAL_ADDRESS", "192.168.5.10:32682"),
+                        "server": os.environ.get("TEMPORAL_ADDRESS", "192.168.6.20:7233"),
                         "events_processed": stats["events_processed"],
                     }).encode())
                 elif self.path.startswith("/api/events/") and self.path.endswith("/snapshot.jpg"):
