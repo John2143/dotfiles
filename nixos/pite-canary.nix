@@ -96,7 +96,7 @@
         static_configs = [
           {
             targets = [
-              "192.168.5.10:30034" # TeamSpeak file transfer
+              "192.168.6.16:30033" # TeamSpeak file transfer
               "192.168.5.9:9100" # self (node_exporter)
             ];
           }
@@ -118,10 +118,10 @@
       }
     ];
     # Remote write to home-cluster Mimir for long-term storage.
-    # Uses kube-vip NodePort (192.168.5.10 is the control-plane VIP).
+    # Uses the MetalLB service IP (192.168.6.23 is mimir-lb).
     remoteWrite = [
       {
-        url = "http://192.168.5.10:30674/api/v1/push";
+        url = "http://192.168.6.23:8080/api/v1/push";
         headers = {"X-Scope-OrgID" = "anonymous";};
       }
     ];

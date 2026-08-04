@@ -21,7 +21,7 @@ import urllib.request
 # ── Configuration ──────────────────────────────────────────────────
 
 PROM_URL = "http://localhost:9090"
-MIMIR_URL = "http://192.168.5.10:30674/prometheus"
+MIMIR_URL = "http://192.168.6.23:8080/prometheus"
 OUTPUT = "/var/www/status/index.html"
 KUBECONFIG = "/var/lib/status-page/kubeconfig"
 TIMEOUT = 10     # seconds per instant query
@@ -43,7 +43,7 @@ SERVICE_NAMES = {
     "https://i.2143.me": "i.2143.me",
     "https://files.john2143.com": "files.john2143.com",
     "https://2143.me/user": "2143.me/user",
-    "192.168.5.10:30034": "TS file xfer",
+    "192.168.6.16:30033": "TS file xfer",
     "192.168.5.9:9100": "pite node_exporter",
 }
 
@@ -54,7 +54,7 @@ SERVICE_ORDER = [
     "https://i.2143.me",
     "https://files.john2143.com",
     "https://2143.me/user",
-    "192.168.5.10:30034",
+    "192.168.6.16:30033",
     "192.168.5.9:9100",
 ]
 
