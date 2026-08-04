@@ -5,7 +5,8 @@
   ...
 }: let
   # All builders in the cluster.
-  # x86_64 builders: office (kvm + nixos-test), arch (cuda), nas (storage).
+  # x86_64 builders: office (kvm + nixos-test), arch (cuda), nas (storage),
+  # big (64-core Proxmox VM).
   # aarch64 builders: pite (Pi 4, 1.8G), vpin (Pi 3/4, 3.7G).
   # Capabilities: kvm = can run VMs, nixos-test = can run NixOS tests,
   # cuda = has CUDA toolkit, big-parallel = can handle large builds.
@@ -20,6 +21,11 @@
       maxJobs = 2;
       system = "x86_64-linux";
       supportedFeatures = ["cuda" "big-parallel"];
+    };
+    big = {
+      maxJobs = 8;
+      system = "x86_64-linux";
+      supportedFeatures = ["big-parallel"];
     };
     nas = {
       maxJobs = 2;
