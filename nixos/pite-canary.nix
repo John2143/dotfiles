@@ -98,6 +98,16 @@
             targets = [
               "192.168.6.16:30033" # TeamSpeak file transfer
               "192.168.5.9:9100" # self (node_exporter)
+              # MetalLB service IPs (post-migration 2026-08-04) — per-service status
+              "192.168.6.10:8080" # unifi-inform
+              "192.168.6.11:443" # traefik (HTTPS)
+              "192.168.6.13:25" # stalwart (SMTP)
+              "192.168.6.17:11753" # openrct2-game
+              "192.168.6.19:1883" # mosquitto
+              "192.168.6.20:7233" # temporal-frontend
+              "192.168.6.23:8080" # mimir-lb
+              "192.168.6.24:3100" # loki-push-lb
+              "192.168.6.25:8443" # unifi-web
             ];
           }
         ];
