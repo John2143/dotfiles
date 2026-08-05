@@ -2,40 +2,58 @@
 # Alerts (journald, exit != 0) on: pool not healthy, SMART health not PASSED,
 # pending/uncorrectable sectors > 0, or reallocated-sector growth vs the
 # previous run (state in /var/lib/nas-disk-health).
-# Physical disks sda-sdf only. sdg-sdl are Longhorn iSCSI volumes (no SMART).
+#
+# Iterates /dev/disk/by-id/ata-* whole disks — sdX letters shift across
+# reboots (WD SSD was sdf, then sdb after a reboot), so names must be stable.
+# sdg-sdl are Longhorn iSCSI volumes (no ata-* by-id) and are skipped.
+#
+# Notes:
+# - smartctl -H exits 32 on drives with marginal attributes even when health
+#   prints PASSED (Seagate ST8000DM004 airflow-temp history); combined with
+#   `set -o pipefail` that made pipelines fail, so output is captured and
+#   grepped from a variable instead of chaining in a condition.
+# - awk (gawk) is explicitly added to the service PATH.
 { config, lib, pkgs, ... }:
 
 let
   healthScript = pkgs.writeShellScript "nas-disk-health" ''
     set -uo pipefail
-    disks="sda sdb sdc sdd sde sdf"
+    shopt -s nullglob
     state=/var/lib/nas-disk-health
     problems=0
 
-    if ! zpool status -x 2>/dev/null | grep -q "all pools are healthy"; then
+    poolstatus=$(zpool status -x 2>/dev/null)
+    if ! echo "$poolstatus" | grep -q "all pools are healthy"; then
       echo "DISK-HEALTH-ALERT: zpool not healthy" >&2
       problems=1
     fi
 
-    for d in $disks; do
-      dev=/dev/$d
-      if ! smartctl -H "$dev" 2>/dev/null | grep -qi "PASSED"; then
-        echo "DISK-HEALTH-ALERT: $dev SMART health not PASSED" >&2
+    for dev in /dev/disk/by-id/ata-*; do
+      case "$dev" in
+        *-part*) continue ;; # partition symlinks would double-scan the same disk
+      esac
+      name=$(basename "$dev")
+      smart=$(smartctl -a "$dev" 2>/dev/null)
+
+      if ! echo "$smart" | grep -qi "PASSED"; then
+        echo "DISK-HEALTH-ALERT: $name SMART health not PASSED" >&2
         problems=1
       fi
-      pending=$(smartctl -a "$dev" 2>/dev/null | awk '/Current_Pending_Sector/ {print $NF}')
+
+      pending=$(echo "$smart" | grep "Current_Pending_Sector" | awk '{print $NF}')
       if [ -n "$pending" ] && [ "$pending" -gt 0 ] 2>/dev/null; then
-        echo "DISK-HEALTH-ALERT: $dev has $pending pending sectors" >&2
+        echo "DISK-HEALTH-ALERT: $name has $pending pending sectors" >&2
         problems=1
       fi
-      realloc=$(smartctl -a "$dev" 2>/dev/null | awk '/Reallocated_Sector_Ct/ {print $NF}')
+
+      realloc=$(echo "$smart" | grep "Reallocated_Sector_Ct" | awk '{print $NF}')
       prev=""
-      [ -f "$state/$d" ] && prev=$(cat "$state/$d")
+      [ -f "$state/$name" ] && prev=$(cat "$state/$name")
       if [ -n "$realloc" ] && [ -n "$prev" ] && [ "$realloc" -gt "$prev" ] 2>/dev/null; then
-        echo "DISK-HEALTH-ALERT: $dev reallocated sectors grew $prev -> $realloc" >&2
+        echo "DISK-HEALTH-ALERT: $name reallocated sectors grew $prev -> $realloc" >&2
         problems=1
       fi
-      [ -n "$realloc" ] && echo "$realloc" > "$state/$d"
+      [ -n "$realloc" ] && echo "$realloc" > "$state/$name"
     done
 
     if [ "$problems" -eq 0 ]; then
@@ -47,7 +65,7 @@ in
 {
   systemd.services.nas-disk-health = {
     description = "Daily disk health check (zpool status + SMART)";
-    path = [ pkgs.smartmontools pkgs.zfs ];
+    path = [ pkgs.smartmontools pkgs.zfs pkgs.gawk ];
     serviceConfig = {
       Type = "oneshot";
       StateDirectory = "nas-disk-health";
