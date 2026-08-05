@@ -54,10 +54,10 @@
       nameserver 100.100.100.100
     '';
 
-    # Tailscale subnet route — advertises LAN to tailnet so tailscale
-    # clients can reach the MetalLB-announced API VIP (192.168.5.10) for k8s services.
-    # Approved in headscale admin UI per-node.
-    services.tailscale.extraUpFlags = [ "--advertise-routes=192.168.5.0/24" ];
+    # Tailscale subnet route — advertises LAN + service subnets to the tailnet:
+    # 192.168.5.0/24 (MetalLB-announced API VIP .10) and 192.168.6.0/24
+    # (MetalLB LoadBalancer services, e.g. traefik at .6.11). Approved in headscale per-node.
+    services.tailscale.extraUpFlags = [ "--advertise-routes=192.168.6.0/24,192.168.5.0/24" ];
 
     # k3s needs avahi for mDNS server discovery (closet.local, arch.local, nas.local)
     systemd.services.k3s = {

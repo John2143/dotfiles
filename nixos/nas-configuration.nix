@@ -290,6 +290,13 @@ nixpkgs.overlays = [
   # k3s server — join existing cluster via mDNS (bootstrap without tailscale dependency).
   # NAS runs k3s on ZFS — keep ZFS mounted until k3s drains Longhorn volumes.
   custom.k3sStorageAfter = ["zfs-mount.service"];
+  # Preserve the tailscale advertised routes + exit node on a future rebuild:
+  # mkForce overrides the shared k3s-server.nix route flag, which would otherwise
+  # silently drop nas's exit-node advertisement.
+  services.tailscale.extraUpFlags = lib.mkForce [
+    "--advertise-routes=192.168.6.0/24,192.168.5.0/24"
+    "--advertise-exit-node"
+  ];
 
   # Dual-stack cluster CIDRs mirror closet's init node config.
   # NAS uses the 10GbE interface at 192.168.5.175 (the 1GbE at .176 is being retired).

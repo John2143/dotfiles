@@ -156,10 +156,10 @@
       '';
     };
   };
-  # Tailscale subnet route — advertises LAN to tailnet so tailscale
-  # clients can reach the MetalLB-announced .10 VIP for k8s services.
-  # Approved in headscale admin UI.
-  services.tailscale.extraUpFlags = [ "--advertise-routes=192.168.5.0/24" ];
+  # Tailscale subnet route — advertises LAN + service subnets to the tailnet:
+  # 192.168.5.0/24 (MetalLB API VIP .10) and 192.168.6.0/24 (traefik LB .6.11).
+  # Approved in headscale per-node.
+  services.tailscale.extraUpFlags = [ "--advertise-routes=192.168.6.0/24,192.168.5.0/24" ];
   # Keep Longhorn data mount active during k3s shutdown so iSCSI can
   # logout cleanly before the filesystem unmounts.
   custom.k3sStorageAfter = ["mnt-longhorn.mount"];

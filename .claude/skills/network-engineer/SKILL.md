@@ -557,6 +557,8 @@ Query live: `ssh closet 'kubectl get nodes,pods,svc -A'`
 3. **ULA IPv6 (fd00:1::/64):** Site-local IPv6 on MikroTik bridge. All 3 k3s servers have static ULA addresses (.36, .76, .175) for stable dual-stack node-ip. Survives ISP prefix delegation changes.
 4. **k3s pod network uses flannel VXLAN:** 10.42.0.0/16 + fd42:42:42::/56 dual-stack overlay.
 
+5. **Tailnet service DNS (since 2026-08-05):** `*.ts.2143.me` service names (cameras, home, temporal, …) resolve via headscale MagicDNS `extra_records` to the traefik LB `192.168.6.11`; `192.168.6.0/24` is reachable from the tailnet via the subnet route advertised by arch + closet (approved in headscale). Device names (arch/closet/nas/…) are MagicDNS-generated and unaffected.
+
 ## BGP (MetalLB + frr-k8s — since 2026-08-04)
 
 MetalLB (v0.16.1) announces the k3s API VIP `192.168.5.10` and every LoadBalancer service IP on `192.168.6.0/24` via BGP to the MikroTik (AS 65001). frr-k8s runs one FRR daemon per node; every **speaker node** advertises **all** service prefixes — no leader lease, no loopback VIP. The router installs each `/32` with 5 next-hops (one active path, the rest as failover backups — RouterOS 7.19 picks a single active path, not ECMP). Traffic lands on the node with the active route, and kube-proxy DNATs it to the service's endpoints.
