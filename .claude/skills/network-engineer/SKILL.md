@@ -75,7 +75,7 @@ with open('/run/agenix/unifi-credentials') as f:
             k, v = line.strip().split('=', 1)
             creds[k] = v.strip('"')
 ctx = ssl.create_default_context(); ctx.check_hostname = False; ctx.verify_mode = ssl.CERT_NONE
-base = 'https://192.168.5.10:30443'
+base = 'https://192.168.6.25:8443'
 cj = http.cookiejar.CookieJar()
 opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(cj), urllib.request.HTTPSHandler(context=ctx))
 data = json.dumps({'username': creds['UNIFI_USERNAME'], 'password': creds['UNIFI_PASSWORD'], 'remember': True}).encode()
@@ -250,7 +250,7 @@ Upstairs-Core Switch (CRS305):
 Office Switch (CRS310):
   sfp-sfpplus2  → Core sfp-sfpplus3               (10G uplink)
   sfp-sfpplus1  → U7ProXGSOffice                  (10GbE, 192.168.5.171)
-  ether1        → pite                            (192.168.5.213)
+  ether1        → pite                            (192.168.5.9)
 
 
 Upstairs Switch (CRS310):
@@ -345,7 +345,7 @@ Router bridges all subnets. Inter-subnet routing is automatic (no NAT between 1.
 
 One server (`dchp1`) on bridge, **30m leases**. Pool `dhcp` = **192.168.5.50 – 192.168.5.254** (205 addrs, ~28 used). Everything **below .50 is never served by DHCP** — the safe static range.
 
-- Static infra below pool: .1 router, .2 office, .3 upstairs, .4 core, .5 upstairs-core, .6 Brother printer, .8 GL-KVM, .9 pite, .10 kube-vip VIP, .19 bigp (Proxmox), .36 closet, .76 arch, .140 secu, .175 nas (static lease)
+- Static infra below pool: .1 router, .2 office, .3 upstairs, .4 core, .5 upstairs-core, .6 Brother printer, .8 GL-KVM, .9 pite, .10 API VIP (MetalLB kubernetes-api), .19 bigp (Proxmox), .36 closet, .76 arch, .140 secu, .175 nas (static lease)
 - Static reservations inside the pool: .127 (UPS), .165/.170 (presence sensors) — the server won't re-lease those
 - Cameras on 1.0/24 use static leases via `make-static` (no pool covers 1.0/24)
 - Rule of thumb: "is 192.168.5.X safe to assign statically?" → X < 50 has zero DHCP overlap; still check ARP/leases for the current holder of X
@@ -381,7 +381,7 @@ mikrotik-connect r '/ip dhcp-server lease make-static [find host-name=Side]'
 | U7 Lite | 192.168.5.173 (DHCP) | U7 Lite | 1C:0B:8B:50:FF:7E | Blue Room | 1GbE (router ether6) |
 | U7-Mesh | 192.168.5.198 (DHCP) | U7-Mesh | 8C:ED:E1:EC:89:CA | — | Wireless mesh |
 
-APs discover the controller via L2 broadcast (UDP 10001) or manual `set-inform`.
+APs normally discover the controller via L2 broadcast (UDP 10001) — but **broadcast discovery does NOT reach this containerized controller** (kube-proxy can only DNAT unicast to the LB IPs; broadcasts are dropped at the nodes). Always use manual `set-inform` to (re)point an AP.
 Device communication uses the `unifi-inform` LoadBalancer service (TCP 8080) on
 the MetalLB IP **192.168.6.10** (BGP-announced).
 **Post-migration (2026-08-04): inform = `192.168.6.10`** — use it for `set-inform`; `.10` is now the MetalLB-announced k3s API VIP (6443 only, no inform LB bound there).
@@ -395,7 +395,7 @@ set-inform http://192.168.6.10:8080/inform
 
 ### Controller
 
-UniFi controller runs in k3s (namespace: default), managed via ArgoCD. Currently schedules on node **big** (NixOS VM on bigp); historically on closet.
+UniFi controller runs in k3s (namespace: default), managed via ArgoCD. Currently schedules on node **arch** (preferred nodeAffinity on workload-type; moved 2026-08-04 during the MetalLB INFORM_HOST rollout); historically on big/closet.
 Single deployment with MongoDB as a sidecar container — no separate MongoDB pod.
 
 | Resource | Details |
@@ -588,7 +588,7 @@ mikrotik-connect r '/routing bgp session print'
 mikrotik-connect r '/ip route print where dst-address=192.168.6.11/32'
 
 # FRR's own view (per node):
-kubectl --context closet-as-developer exec -n metallb-system deploy/metallb-frr-k8s -- vtysh -c 'show bgp summary'
+kubectl --context closet-as-developer exec -n metallb-system ds/metallb-frr-k8s -c frr -- vtysh -c 'show bgp summary'
 
 # Current allocations:
 ssh closet.local 'kubectl get svc -A | grep 192.168.6'
@@ -616,7 +616,7 @@ mikrotik-connect r '/routing bgp connection add name=metallb-<node> as=65001 loc
 # BGP session won't establish?
 ssh closet.local 'kubectl get bgpsessionstates -n metallb-system'    # which peer is down?
 ssh closet.local 'kubectl logs -n metallb-system -l app.kubernetes.io/component=speaker --tail=30'
-ssh closet.local 'kubectl exec -n metallb-system deploy/metallb-frr-k8s -- vtysh -c "show bgp summary"'
+ssh closet.local 'kubectl exec -n metallb-system ds/metallb-frr-k8s -c frr -- vtysh -c "show bgp summary"'
 
 # Service IP unreachable?
 # 1. Does it have endpoints? MetalLB will NOT announce a svc with zero endpoints.
