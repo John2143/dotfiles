@@ -375,6 +375,17 @@ When answering a question or diagnosing a problem:
 
 ---
 
+## Observability stack
+
+Alloy (`observability` ns, DaemonSet, clustered) is the single cluster telemetry agent for metrics, logs, and traces.
+
+- **Metrics → Mimir** remote-write at `mimir.observability.svc:8080/api/v1/push`. Jobs: `kubelet` + `cadvisor` (role=node discovery, kubelet `:10250`, `bearer_token_file` = SA token, `tls_config.insecure_skip_verify`; cadvisor uses `/metrics/cadvisor`), `kube-state-metrics` (chart app, `kube-state-metrics` ns, :8080), `traefik` (:9100), `temporal` (relabel forces `<podIP>:9090`), `keda` (`keda-operator-metrics-apiserver.keda.svc:8080`), `metallb-frr`/`metallb-speaker` (HTTPS :9140/:9120, bearer token; dropped if 401), `observability` (static: mimir / loki-read / loki-write / loki-backend / tempo / grafana / alloy :12345).
+- **Traces → Tempo**: `otelcol.receiver.otlp` listens on `alloy.observability.svc:4317` (grpc) / `4318` (http) → batch → `otelcol.exporter.otlp` → `tempo.observability.svc:4317` (insecure).
+- **Log positions** persist at hostPath `/var/lib/alloy` (`alloy.storagePath` + `volumes.extra`); log components (`loki.source.kubernetes`, `loki.source.kubernetes_events`) are clustered.
+- **Loki retention** is 90d: `loki.limits_config.retention_period: 2160h` + `loki.compactor.retention_enabled: true` in `apps/loki.yaml`.
+- **Traefik tracing** is configured via the `traefik` HelmChartConfig in `dotfiles/nixos/closet-configuration.nix` (`tracing.otlp.grpc.endpoint: alloy.observability.svc:4317`); it only takes effect on a closet `nixos-rebuild switch` (user-owned).
+- Quick health check: `curl -s 'http://192.168.6.23:8080/prometheus/api/v1/query?query=count%20by%20(job)(up)'` → jobs `kubelet` (6), `cadvisor` (6), `kube-state-metrics`, `traefik`, `temporal` (4), `keda`, `observability` (7).
+
 ## Safety Quick Reference
 
 | Action | Allowed? | Notes |

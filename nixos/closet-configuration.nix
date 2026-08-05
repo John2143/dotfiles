@@ -150,6 +150,14 @@
           kubernetesGateway:
             enabled: true
             experimentalChannel: true
+        tracing:
+          otlp:
+            enabled: true
+            grpc:
+              endpoint: "alloy.observability.svc:4317"
+              insecure: true
+          serviceName: traefik
+          sampleRate: 1.0
         service:
           annotations:
             metallb.io/loadBalancerIPs: "192.168.6.11"
