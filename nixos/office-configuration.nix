@@ -17,7 +17,6 @@
     #./waybar.nix
     ./modules/esrgan-upscaler.nix
     ./modules/nut-ups.nix
-    ./modules/restic-backup.nix
 
     # inputs.home-manager.nixosModules.default
   ];

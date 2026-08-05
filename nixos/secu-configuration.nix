@@ -17,7 +17,6 @@
   imports = [
     ./secu-hardware-configuration.nix
     ./modules/user-john.nix
-    ./modules/restic-backup.nix
     #./modules/ollama.nix
     # inputs.home-manager.nixosModules.default
   ];

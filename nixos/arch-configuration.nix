@@ -17,7 +17,6 @@
     # ./modules/frigate.nix  # migrated to k8s on big (2026-08-01); file kept for rollback
     ./modules/teamspeak.nix
     ./modules/nut-ups.nix
-    ./modules/restic-backup.nix
 
     # inputs.home-manager.nixosModules.default
   ];
