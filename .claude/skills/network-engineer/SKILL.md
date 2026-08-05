@@ -693,6 +693,9 @@ When answering a question or diagnosing a problem:
 5. **Cross-reference with NixOS configs** when you need to understand what a host *should* be running vs. what it *is* running.
 6. **For wireless-specific questions** (signal strength, AP association, channel utilization), use the UniFi controller API or web UI — the MikroTik router has no visibility into WiFi client details.
 7. **k3s queries** go through `ssh closet 'kubectl ...'` when the local kubeconfig context for closet is unavailable (the default kubeconfig context points to the DigitalOcean cluster).
+8. **Validate LB/BGP paths from OUTSIDE the system under test.** Cluster nodes DNAT `.6.x` traffic locally (kube-proxy PREROUTING precedes routing), so `curl` from office/big/pite proves nothing about the router path. Use a non-cluster device: an AP, the WAN, or a LAN host whose route actually crosses the router. (Home-pi on 192.168.0.x is NOT such a host — the Verizon router has no route to `.6.0/24`; its timeouts say nothing.)
+9. **Check BOTH ends before declaring a path broken.** A `syn-sent` in the router's connection table means the router saw the packet — it does NOT mean forwarding failed. Verify the receiving side (e.g. `cat /proc/net/nf_conntrack` on the speaker node for the VIP:port) before concluding breakage. In 2026-08-04's migration this exact trap caused a false "router forwarding broken" alarm.
+10. **ICMP on a MetalLB BGP VIP always times out** — no interface owns the VIP and kube-proxy only DNATs TCP/UDP. A failed `ping` to `.6.x` is expected, not a symptom.
 
 ## Safety
 

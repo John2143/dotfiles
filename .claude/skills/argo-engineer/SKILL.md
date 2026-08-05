@@ -292,6 +292,20 @@ ssh closet.local kubectl get pods -A
 ssh nas sudo k3s kubectl get nodes
 ```
 
+### MetalLB Operations (home cluster, since 2026-08-04)
+
+MetalLB (v0.16.1, frr-k8s, BGP mode) assigns `.6.x` IPs to LoadBalancer services; the router announces them and kube-proxy DNATs to pods. Hard-won rules:
+
+- **Allocate a new service IP:** add `metallb.io/loadBalancerIPs: "192.168.6.X"` + `metallb.io/address-pool: service-subnet` annotations (never `spec.loadBalancerIP`). Pick the next free IP in `.6.10–.50` (see network-engineer skill table). Keep the nodePort.
+- **Zero endpoints = not announced.** A svc without Ready endpoints (e.g. `replicas: 0`) gets NO IP announcement — that's correct MetalLB behavior, not a bug. `kubectl get svc` shows the IP allocated but the router has no route.
+- **Deleting an LB svc leaves a stuck finalizer** (`service.kubernetes.io/load-balancer-cleanup`) on k3s (no cloud-provider, servicelb disabled). `kubectl delete svc` reports success but the svc lingers; remove the finalizer:
+  `kubectl patch svc <name> --type=json -p='[{"op":"remove","path":"/metadata/finalizers"}]'`
+- **vtysh access (FRR view of BGP):** frr-k8s is a **DaemonSet**, not a Deployment, and vtysh lives in the `frr` container:
+  `kubectl exec -n metallb-system ds/metallb-frr-k8s -c frr -- vtysh -c 'show bgp summary'`
+- **BGP session truth:** `kubectl get bgpsessionstates -n metallb-system` (5 Established: arch/closet/nas/big/pite; office is wifi-excluded). RBAC note: `closet-as-developer` cannot read `metallb.io` CRs — use `ssh closet.local 'kubectl ...'`.
+- **Change flow:** local file → commit → push → refresh app-of-apps hard → sync the child app explicitly (`argocd.argoproj.io/refresh: hard` + `{"operation":{"sync":...}}`). Children do NOT auto-pick-up new revisions despite autoSync.
+- **Validating an LB path:** node-local curls are NOT proof — cluster nodes DNAT locally. Validate from a non-cluster device (APs, WAN, or a routed LAN host) to exercise the router's BGP forwarding.
+
 ### DigitalOcean Cluster (`~/repos/2143-k8s/`)
 
 Kubernetes: DOKS (DigitalOcean managed Kubernetes).
