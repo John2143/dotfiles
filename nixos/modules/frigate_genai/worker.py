@@ -112,12 +112,15 @@ img{border-radius:4px;max-height:60px}
 .toggle.on::after{transform:translateX(18px);background:#0f0f1a}
 .toggle-label{font-size:12px;color:#888}
 .toggle-label.on{color:#4ade80}
+.toggle.unknown{background:#b45309;border-color:#b45309;cursor:default}
+.toggle.unknown::after{transform:translateX(9px)}
+.toggle-label.unknown{color:#fbbf24}
 </style>
 </head>
 <body>
 <h1>Frigate GenAI Reprocess</h1>
-<div class="toggle-wrap"><span id="toggle-btn" class="toggle" onclick="togglePause()"></span><span id="toggle-label" class="toggle-label">Ollama on</span></div>
-<div class="toggle-wrap"><span id="genai-toggle-btn" class="toggle" onclick="toggleGenaiPause()"></span><span id="genai-toggle-label" class="toggle-label">GenAI running</span></div>
+<div class="toggle-wrap"><span id="toggle-btn" class="toggle unknown" onclick="togglePause()"></span><span id="toggle-label" class="toggle-label unknown">Ollama …</span></div>
+<div class="toggle-wrap"><span id="genai-toggle-btn" class="toggle unknown" onclick="toggleGenaiPause()"></span><span id="genai-toggle-label" class="toggle-label unknown">GenAI …</span></div>
 <div style="margin-bottom:12px">
   <label for="model-input" style="color:#888;font-size:12px;margin-right:6px">Model:</label>
   <input id="model-input" list="model-list" placeholder="auto" style="background:#1a1a2e;color:#c8c8d0;border:1px solid #3d3d5e;padding:4px 8px;border-radius:4px;font-size:12px;width:200px">
@@ -188,14 +191,16 @@ async function loadPause() {
   try {
     const r = await fetch("/api/pause");
     const d = await r.json();
-    if (d.paused) { setPause(true); }
-  } catch(e) {}
+    setPause(!!d.paused);
+  } catch(e) {} /* backend unreachable → keep undefined state */
 }
 
 async function togglePause() {
+  const btn = document.getElementById("toggle-btn");
+  if (btn.classList.contains("unknown")) return;
   const r = await fetch("/api/pause", {method:"POST"});
   const d = await r.json();
-  setPause(d.paused);
+  setPause(!!d.paused);
 }
 
 function setPause(paused) {
@@ -210,13 +215,15 @@ async function loadGenaiPause() {
   try {
     const r = await fetch("/api/genai-pause");
     const d = await r.json();
-    setGenaiPause(d.global);
-  } catch(e) {}
+    setGenaiPause(!!d.global);
+  } catch(e) {} /* backend unreachable → keep undefined state */
 }
 async function toggleGenaiPause() {
+  const btn = document.getElementById("genai-toggle-btn");
+  if (btn.classList.contains("unknown")) return;
   const r = await fetch("/api/genai-pause", {method:"POST"});
   const d = await r.json();
-  setGenaiPause(d.paused);
+  setGenaiPause(!!d.paused);
 }
 function setGenaiPause(paused) {
   const btn = document.getElementById("genai-toggle-btn");

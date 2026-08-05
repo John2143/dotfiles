@@ -73,8 +73,8 @@
     qpwgraph
 
     #plasma5Packages.kdeconnect-kde
-    kdePackages.ark
-    kdePackages.gwenview
+    #kdePackages.ark
+    #kdePackages.gwenview
     #warp-terminal # agent terminal
 
     #wineWowPackages.stable
@@ -93,7 +93,7 @@
     winetricks
     slurp # use mouse to get a point on screen
     grim # minimal screenshot program
-    swappy # screenshot editor
+    #swappy # screenshot editor
     pkgs-stable.wf-recorder # screen recording
     pkgs-stable.normcap # OCR screen recognition
     hyprpicker # color picker
@@ -104,21 +104,21 @@
     # also clang ICE in rusty-v8 on unstable, so pull from stable
     pkgs-stable.yt-dlp # youtube-dl
     pkgs-stable.mpv # video player
-    nicotine-plus # soulseek client
+    #nicotine-plus # soulseek client
 
     #mullvad-vpn # vpn  # DISABLED: gitlab.gnome.org 503 for gtk-doc dependency
     #plex-desktop # plex
     #rustdesk
     #spotify # music
-    (prismlauncher.override {
-      jdks = [
-        temurin-bin-21
-        temurin-bin-8
-        temurin-bin-17
-      ];
-    })
-    r2modman # game modding
-    rusty-path-of-building # Path of Exile build planner
+    #(prismlauncher.override {
+      #jdks = [
+        #temurin-bin-21
+        #temurin-bin-8
+        #temurin-bin-17
+      #];
+    #})
+    #r2modman # game modding
+    #rusty-path-of-building # Path of Exile build planner
     #bitwarden-desktop # password manager
     kind
     pkgs-stable.mongodb-compass
@@ -134,7 +134,7 @@
     easyeffects
     evremap
     imagemagick
-    godot # game engine / gdscript
+    #godot # game engine / gdscript
     gdtoolkit_4 # gdscript linter/formatter
     protonup-qt
 
@@ -147,9 +147,9 @@
   # If we are on office computer, then also add the following:
   optionalPackagesOffice = with pkgs; [
     amdgpu_top # gpu stats
-    kicad # PCB Hardware Layout
-    blender
-    openscad # parametric 3D CAD
+    #kicad # PCB Hardware Layout
+    #blender
+    #openscad # parametric 3D CAD
     #wine-wayland # wine
   ];
 
