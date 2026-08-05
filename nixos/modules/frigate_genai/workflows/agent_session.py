@@ -471,7 +471,8 @@ class AgentSessionWorkflow:
                 run_genai_turn_activity,
                 arg=turn_arg,
                 task_queue=genai_queue,
-                start_to_close_timeout=timedelta(seconds=300),
+                schedule_to_start_timeout=timedelta(hours=1),
+                start_to_close_timeout=timedelta(seconds=600),
                 heartbeat_timeout=timedelta(seconds=15),
                 retry_policy=_GENAI_RETRY,
             )

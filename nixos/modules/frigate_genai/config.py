@@ -45,7 +45,7 @@ _GENAI_RETRY = RetryPolicy(
     initial_interval=timedelta(seconds=1),
     maximum_interval=timedelta(seconds=60),
     backoff_coefficient=2.0,
-    non_retryable_error_types=["ValueError", "TypeError", "RuntimeError"],
+    non_retryable_error_types=["ValueError", "TypeError", "RuntimeError", "FileNotFoundError"],
 )
 
 _EXTRACT_RETRY = RetryPolicy(

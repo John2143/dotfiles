@@ -43,11 +43,15 @@ def _s3_client():
 
 
 def _s3_get(key: str) -> bytes | None:
-    """Download object from S3. Returns None if not found."""
+    """Download object from S3. Returns None only when the key is missing
+    (404/NoSuchKey); any other error propagates so transient failures retry."""
+    from botocore.exceptions import ClientError
     try:
         return _s3_client().get_object(Bucket=_S3_BUCKET, Key=key)["Body"].read()
-    except Exception:
-        return None
+    except ClientError as e:
+        if e.response["Error"]["Code"] in ("404", "NoSuchKey"):
+            return None
+        raise
 
 
 def _s3_put(key: str, data: bytes) -> None:
