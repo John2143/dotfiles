@@ -281,6 +281,7 @@ nixpkgs.overlays = [
       "tank/seaweedfs-data" = {
         autosnap = true;
         daily = 14;
+        hourly = 0;
         monthly = 6;
       };
     };
