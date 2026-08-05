@@ -52,7 +52,9 @@ in
       Type = "oneshot";
       StateDirectory = "nas-disk-health";
     };
-    script = healthScript;
+    script = ''
+      ${healthScript}
+    '';
   };
 
   systemd.timers.nas-disk-health = {
