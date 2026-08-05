@@ -132,6 +132,7 @@
   networking.firewall.allowPing = true;
 
   networking.firewall.allowedTCPPorts = [
+    8080  # lobby-server (Steam Lobby demo, WAN forward)
     10250 # kubelet (k3s agent)
   ];
   networking.firewall.allowedUDPPorts = [
