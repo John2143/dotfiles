@@ -126,6 +126,7 @@ nixpkgs.overlays = [
     ./modules/user-john.nix
     ./modules/disko_nas.nix
     ./modules/nut-ups.nix
+    ./modules/nas-disk-health.nix
   ];
   fileSystems."/".neededForBoot = lib.mkForce true;
   home-manager.users."john" = import ./home-cli.nix;
@@ -138,13 +139,16 @@ nixpkgs.overlays = [
   boot.kernel.sysctl = {
     "kernel.hardlockup_panic" = "1";
     "kernel.softlockup_panic" = "1";
+    "kernel.panic_on_rcu_stall" = "1";
     "vm.swappiness" = "100";
   };
+  systemd.watchdog.runtimeTime = "30s";
   boot.kernelParams = [
     "zswap.enabled=1"
     "zswap.compressor=zstd"
     "zswap.zpool=zsmalloc"
     "zswap.max_pool_percent=30"
+    "zfs.zfs_arc_max=6442450944"
   ];
   boot.kernelModules = [
     "target_core_mod"
@@ -270,6 +274,14 @@ nixpkgs.overlays = [
         autosnap = true;
         daily = 30;
         monthly = 12;
+      };
+      # SeaweedFS chunk store (photos, frigate-genai). No app-level redundancy;
+      # snapshots are the only history — 3 files already have permanent errors
+      # from a prior crash. No hourly tier on a 778G busy dataset; daily covers it.
+      "tank/seaweedfs-data" = {
+        autosnap = true;
+        daily = 14;
+        monthly = 6;
       };
     };
   };

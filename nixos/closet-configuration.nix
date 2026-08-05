@@ -16,6 +16,7 @@
     ./modules/user-john.nix
     #./modules/ollama.nix
     ./modules/nut-ups.nix
+    ./modules/restic-backup.nix
     # inputs.home-manager.nixosModules.default
   ];
   home-manager.users."john" = import ./home-cli.nix;
