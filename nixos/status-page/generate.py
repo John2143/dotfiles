@@ -322,21 +322,41 @@ def get_remote_write():
 
 
 def get_alerts():
-    """Return list of firing alert dicts: name, severity, summary."""
+    """Return list of firing alert dicts: name, severity, summary.
+    Merges pite Prometheus alerts with Mimir ruler alerts (deduped by name+summary)."""
     data = fetch_json(f"{PROM_URL}/api/v1/alerts")
-    if not data:
-        return []
     alerts = []
-    for a in data.get("data", {}).get("alerts", []):
-        if a.get("state") != "firing":
-            continue
-        labels = a.get("labels", {})
-        annotations = a.get("annotations", {})
-        alerts.append({
-            "name": labels.get("alertname", "Unknown"),
-            "severity": labels.get("severity", "none"),
-            "summary": annotations.get("summary", ""),
-        })
+    if data:
+        for a in data.get("data", {}).get("alerts", []):
+            if a.get("state") != "firing":
+                continue
+            labels = a.get("labels", {})
+            annotations = a.get("annotations", {})
+            alerts.append({
+                "name": labels.get("alertname", "Unknown"),
+                "severity": labels.get("severity", "none"),
+                "summary": annotations.get("summary", ""),
+            })
+
+    # Mimir ruler alerts (cluster-scoped) — dedupe against pite's list
+    mimir_data = fetch_json(f"{MIMIR_URL}/api/v1/alerts")
+    seen = {(a["name"], a["summary"]) for a in alerts}
+    if mimir_data:
+        for a in mimir_data.get("data", {}).get("alerts", []):
+            if a.get("state") != "firing":
+                continue
+            labels = a.get("labels", {})
+            annotations = a.get("annotations", {})
+            name = labels.get("alertname", "Unknown")
+            summary = annotations.get("summary", "")
+            if (name, summary) in seen:
+                continue
+            seen.add((name, summary))
+            alerts.append({
+                "name": name,
+                "severity": labels.get("severity", "none"),
+                "summary": summary,
+            })
     return alerts
 
 
@@ -379,6 +399,56 @@ def get_k8s_pods():
             "age": parts[5],
         })
     return pods
+
+def get_cluster():
+    """Query Mimir for k3s cluster health + LGTM self-metrics.
+    Returns (k8s_rows, lgtm_rows, rejects_s):
+      k8s_rows: [{node, ready, kubelet_up}]
+      lgtm_rows: [{component, instance, up}]
+      rejects_s: Mimir rate-limited sample discards per second."""
+    ready_map = {
+        r["metric"].get("node", "?"): (r["value"][1] == "1")
+        for r in mimir_instant(
+            'kube_node_status_condition{condition="Ready",status="true"}')
+    }
+    kubelet_map = {
+        r["metric"].get("instance", "?").split(":")[0]: (r["value"][1] == "1")
+        for r in mimir_instant('up{job="kubelet"}')
+    }
+
+    k8s_rows = []
+    for node in sorted(set(list(ready_map.keys()) + list(kubelet_map.keys()))):
+        k8s_rows.append({
+            "node": node,
+            "ready": ready_map.get(node, False),
+            "kubelet_up": kubelet_map.get(node, False),
+        })
+
+    lgtm_rows = []
+    for r in mimir_instant('up{job="observability"}'):
+        inst = r["metric"].get("instance", "?")
+        lgtm_rows.append({
+            "component": inst.split(".")[0],
+            "instance": inst,
+            "up": r["value"][1] == "1",
+        })
+    lgtm_rows.sort(key=lambda c: c["component"])
+
+    # Mimir discards due to rate limiting — last value of a 5m window
+    rejects_s = 0.0
+    now = time.time()
+    results = mimir_range(
+        'rate(cortex_discarded_samples_total{reason="rate_limited"}[5m])',
+        now - 300, now, step="30s",
+    )
+    for r in results:
+        values = r.get("values", [])
+        if values:
+            try:
+                rejects_s += float(values[-1][1])
+            except (ValueError, IndexError):
+                pass
+    return k8s_rows, lgtm_rows, rejects_s
 
 
 # ── Formatting helpers ───────────────────────────────────────────────
@@ -469,6 +539,39 @@ def render_service_rows(services):
     return "\n".join(rows)
 
 
+def render_cluster_rows(k8s_rows):
+    if not k8s_rows:
+        return '<tr><td colspan="3">No cluster data in Mimir.</td></tr>'
+    rows = []
+    for r in k8s_rows:
+        ready = '<span class="up">Ready</span>' if r["ready"] else '<span class="down">NOT READY</span>'
+        kubelet = '<span class="up">UP</span>' if r["kubelet_up"] else '<span class="down">DOWN</span>'
+        rows.append(
+            f'<tr>'
+            f'<td>{html.escape(r["node"])}</td>'
+            f'<td>{ready}</td>'
+            f'<td>{kubelet}</td>'
+            f'</tr>'
+        )
+    return "\n".join(rows)
+
+
+def render_lgtm_rows(lgtm_rows):
+    if not lgtm_rows:
+        return '<tr><td colspan="3">No LGTM metrics in Mimir.</td></tr>'
+    rows = []
+    for c in lgtm_rows:
+        badge = '<span class="up">UP</span>' if c["up"] else '<span class="down">DOWN</span>'
+        rows.append(
+            f'<tr>'
+            f'<td>{html.escape(c["component"])}</td>'
+            f'<td>{html.escape(c["instance"])}</td>'
+            f'<td>{badge}</td>'
+            f'</tr>'
+        )
+    return "\n".join(rows)
+
+
 def render_cert_rows(certs):
     if not certs:
         return '<tr><td colspan="2">No SSL certificates monitored.</td></tr>'
@@ -543,7 +646,7 @@ def render_alert_rows(alerts):
     return "\n".join(rows)
 
 
-def render_summary(nodes, services, pods, certs, alerts):
+def render_summary(nodes, services, pods, certs, alerts, rejects_s):
     """Render summary badge bar."""
     nodes_up = sum(1 for n in nodes if n["up"])
     nodes_total = len(nodes)
@@ -559,17 +662,17 @@ def render_summary(nodes, services, pods, certs, alerts):
     certs_total = len(certs)
     alert_count = len(alerts)
     alert_text = "None!" if alert_count == 0 else f"{alert_count} FIRING"
+    reject_text = fmt_count(rejects_s) if rejects_s else "0"
 
     return (
-        f'│ Nodes  │ Services │ Pods    │ Certs      │ Alerts {alert_count}  │\n'
-        f'│ {nodes_up}/{nodes_total} UP │ {svc_up}/{svc_total} UP  │ {pods_text} │ {certs_ok}/{certs_total} valid  │ {alert_text}     │'
+        f'│ Nodes  │ Services │ Pods    │ Certs      │ Alerts {alert_count}  │ Mimir rejects/s │\n'
+        f'│ {nodes_up}/{nodes_total} UP │ {svc_up}/{svc_total} UP  │ {pods_text} │ {certs_ok}/{certs_total} valid  │ {alert_text}     │ {reject_text}          │'
     )
 
-
-def render_html(nodes, services, certs, rw, pods, alerts, errors):
+def render_html(nodes, services, certs, rw, pods, alerts, errors, k8s_rows, lgtm_rows, rejects_s):
     """Generate full HTML page."""
     now = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
-    summary = render_summary(nodes, services, pods, certs, alerts)
+    summary = render_summary(nodes, services, pods, certs, alerts, rejects_s)
 
     error_html = ""
     if errors:
@@ -688,6 +791,26 @@ def render_html(nodes, services, certs, rw, pods, alerts, errors):
 {render_service_rows(services)}
   </table>
 
+  <h2>K8S CLUSTER <span class="muted">(via Mimir)</span></h2>
+  <table>
+    <tr>
+      <th>Node</th>
+      <th>Ready</th>
+      <th>Kubelet</th>
+    </tr>
+{render_cluster_rows(k8s_rows)}
+  </table>
+
+  <h2>LGTM HEALTH <span class="muted">(observability stack)</span></h2>
+  <table>
+    <tr>
+      <th>Component</th>
+      <th>Instance</th>
+      <th>Status</th>
+    </tr>
+{render_lgtm_rows(lgtm_rows)}
+  </table>
+
   <h2>SSL CERTIFICATES</h2>
   <table>
     <tr>
@@ -759,8 +882,10 @@ def main():
 
     alerts = get_alerts()
 
+    k8s_rows, lgtm_rows, rejects_s = get_cluster()
+
     # Render
-    html_content = render_html(nodes, services, certs, rw, pods, alerts, errors)
+    html_content = render_html(nodes, services, certs, rw, pods, alerts, errors, k8s_rows, lgtm_rows, rejects_s)
 
     # Write
     os.makedirs(os.path.dirname(OUTPUT), exist_ok=True)
@@ -773,7 +898,8 @@ def main():
     pod_status = "unreachable" if pods is None else f"{len(pods)} unhealthy"
     print(
         f"status-page: nodes={nodes_up}/{len(nodes)} services={svc_up}/{len(services)} "
-        f"pods={pod_status} alerts={len(alerts)} errors={len(errors)}"
+        f"pods={pod_status} alerts={len(alerts)} errors={len(errors)} "
+        f"cluster_nodes={len(k8s_rows)} lgtm={len(lgtm_rows)} rejects_s={rejects_s:.2f}"
     )
 
 
