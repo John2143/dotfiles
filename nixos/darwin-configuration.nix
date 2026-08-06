@@ -43,7 +43,7 @@
 
   _module.args.pkgs-stable = import inputs.nixpkgs-stable {
     inherit (pkgs.stdenv.hostPlatform) system;
-    inherit (config.nixpkgs) config;
+    config = { allowUnfree = true; };
   };
 
   environment.systemPackages = with pkgs;
@@ -57,6 +57,8 @@
       btop
       acli
       pipx
+      google-cloud-sdk
+      tesseract
       inputs.agenix.packages.${pkgs.stdenv.hostPlatform.system}.default
       inputs.claude-code-nix.packages.${pkgs.stdenv.hostPlatform.system}.default
       inputs.node-rally-tools.packages.${pkgs.stdenv.hostPlatform.system}.default
@@ -191,6 +193,7 @@
 
   system.activationScripts.postActivation.text = ''
     mkdir -p /Users/jschmidt/Screenshots
+    chown jschmidt:staff /Users/jschmidt/Screenshots
   '';
 
   users.users.jschmidt = {
