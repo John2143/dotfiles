@@ -153,6 +153,8 @@ nixpkgs.overlays = [
   boot.kernelModules = [
     "target_core_mod"
     "iscsi_target_mod"
+    # Fan/voltage monitoring (IT8728F on Z77X-UD3H) — lets us read fan RPMs.
+    "it87"
   ];
 
 
