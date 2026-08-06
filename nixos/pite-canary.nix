@@ -212,13 +212,8 @@
           ${pkgs.gnused}/bin/sed -i "s|NTFY_PLACEHOLDER|$NTFY_URL|g" /run/alertmanager/config.yml
     '';
     serviceConfig = {
-      ExecStart = lib.mkForce [
-        ""
-        "${pkgs.prometheus-alertmanager}/bin/alertmanager \
-          --config.file=/run/alertmanager/config.yml \
-          --storage.path=/var/lib/prometheus/alertmanager \
-          --web.listen-address=127.0.0.1:9093"
-      ];
+      ExecStart = lib.mkForce
+        "${pkgs.prometheus-alertmanager}/bin/alertmanager --config.file=/run/alertmanager/config.yml --storage.path=/var/lib/prometheus/alertmanager --web.listen-address=127.0.0.1:9093";
     };
   };
 
