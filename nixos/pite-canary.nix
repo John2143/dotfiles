@@ -189,7 +189,7 @@
   ];
 
   # ── Alertmanager — ntfy-only, config generated at runtime ──────
-  systemd.services.prometheus-alertmanager = {
+  systemd.services.alertmanager = {
     preStart = ''
           NTFY_URL=$(cat /run/agenix/ntfy-topic-url 2>/dev/null || echo "https://ntfy.sh/2143-site-outages")
 
