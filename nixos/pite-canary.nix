@@ -315,8 +315,7 @@
     description = "Regenerate status page every 30s";
     wantedBy = ["timers.target"];
     timerConfig = {
-      OnUnitActiveSec = "30s";
-      OnBootSec = "10s";
+      OnCalendar = "*:*:0/30";  # every 30 s at :00 and :30 — wall-clock, survives rebuilds
       Persistent = true;
     };
   };
