@@ -34,8 +34,8 @@ if [ (uname) = "Linux" ]
         alias nob="fish -c 'nh os boot'"
         alias noss="fish -c 'nh os switch --fallback'"
         alias nobs="fish -c 'nh os boot --fallback'"
-        alias nosss='sudo nixos-rebuild switch --flake ~/dotfiles --builders "" --option substituters "http://nas.local:8280/2143nix https://cache.nixos.org" --fallback'
-        alias nobbb='sudo nixos-rebuild boot --flake ~/dotfiles --builders "" --option substituters "http://nas.local:8280/2143nix https://cache.nixos.org" --fallback'
+        alias nosss='sudo nixos-rebuild switch --flake ~/dotfiles --builders "" --option substituters "http://nas:8280/2143nix https://cache.nixos.org" --fallback'
+        alias nobbb='sudo nixos-rebuild boot --flake ~/dotfiles --builders "" --option substituters "http://nas:8280/2143nix https://cache.nixos.org" --fallback'
 
 
         alias update="fish -c 'cd ~/dotfiles/; nix flake update'"

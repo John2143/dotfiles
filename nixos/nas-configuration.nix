@@ -538,7 +538,7 @@ nixpkgs.overlays = [
     settings = {
       listen = "[::]:8280";
       allowed-hosts = ["nas.ts.2143.me" "nas.ts.2143.me:8280" "nas" "nas:8280" "nas.local" "nas.local:8280" "localhost" "localhost:8280" "100.64.0.14" "100.64.0.14:8280"];
-      api-endpoint = "http://nas.local:8280/";
+      api-endpoint = "http://nas:8280/";
       database.url = "sqlite:///tank/atticd/db/server.db?mode=rwc";
 
       storage = {

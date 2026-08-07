@@ -4,8 +4,13 @@
   ...
 }: let
   cacheName = "2143nix";
-  server = "nas.local";
-  endpoint = "http://nas.local:8280";
+  # Resolve via Tailscale MagicDNS ("nas" -> 100.64.0.14), NOT mDNS
+  # "nas.local": mDNS is flaky over WiFi, yields AAAA-only records on
+  # arch, and the NAS itself cannot resolve its own .local name, so its
+  # own builds could never read from its own cache. MagicDNS resolves on
+  # every host — including the NAS, via its /etc/hosts 127.0.0.2 nas.
+  server = "nas";
+  endpoint = "http://nas:8280";
 in {
   # ── Nix substituter ────────────────────────────────────────────────
   # Our Attic cache is primary (first in list = highest priority).
@@ -50,8 +55,9 @@ in {
   system.activationScripts.atticNetrc = {
     deps = [ "agenix" ];
     text = ''
-      printf 'machine %s password %s\nmachine localhost password %s\n' \
+      printf 'machine %s password %s\nmachine nas.local password %s\nmachine localhost password %s\n' \
         ${lib.escapeShellArg server} \
+        "$(cat /run/agenix/attic-admin-token)" \
         "$(cat /run/agenix/attic-admin-token)" \
         "$(cat /run/agenix/attic-admin-token)" \
         > /run/agenix/attic-netrc
