@@ -457,6 +457,7 @@ class AgentSessionWorkflow:
         turns_max = 0
         turns_transcode = 0
         tool_failures = 0
+        consecutive_blank = 0
         MAX_CONCURRENT_SPAWNS = 5
         MAX_TOTAL_SUBAGENTS = 20
         trace_entries: list[dict] = []
@@ -510,8 +511,21 @@ class AgentSessionWorkflow:
                 })
                 break
 
+            if not result.get("text_only"):
+                consecutive_blank = 0
             if result.get("text_only"):
                 trace_entries.append({"type": "nudge", "reason": "no_tool_call"})
+                consecutive_blank += 1
+                if consecutive_blank >= 4:
+                    last_text = (result.get("assistant_message") or {}).get("content") or ""
+                    if isinstance(last_text, str) and last_text.strip():
+                        description = last_text.strip()[:500]
+                    else:
+                        description = "Agentic failed: no tool calls across 4 consecutive turns"
+                    confidence = "low"
+                    trace_entries.append({"type": "tool_call", "name": "set_description",
+                                          "confidence": confidence, "description": description[:200]})
+                    break
                 continue
 
             # IPC prefix injection at turn start

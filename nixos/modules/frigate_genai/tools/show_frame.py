@@ -8,7 +8,13 @@ from temporalio import activity
 from temporalio.exceptions import ApplicationError
 
 from frigate_genai.config import _RES_LEVELS
-from frigate_genai.s3_helpers import _find_tc_id, _load_state, _s3_get, _s3_put
+from frigate_genai.s3_helpers import (
+    _build_image_tool_result,
+    _find_tc_id,
+    _load_state,
+    _s3_get,
+    _s3_put,
+)
 
 log = logging.getLogger("frigate-genai-sidecar")
 
@@ -77,13 +83,12 @@ async def tool_show_frame_activity(arg: dict) -> dict:
             img.save(buf, "JPEG", quality=85)
             _s3_put(f"{agent_dir}/{fname}", buf.getvalue())
             ref = f"[[{fname}]]"
-            outcome_messages.append({
-                "role": "user",
-                "content": [
-                    {"type": "image_url", "image_url": {"url": ref}},
-                    {"type": "text", "text": f"Detection snapshot ({img.width}x{img.height})."},
-                ],
-            })
+            outcome_messages.extend(_build_image_tool_result(
+                tc_id,
+                f"Detection snapshot ({img.width}x{img.height}).",
+                [{"type": "image_url", "image_url": {"url": ref}}],
+                f"Detection snapshot ({img.width}x{img.height}).",
+            ))
         else:
             if tc_id:
                 outcome_messages.append({
@@ -154,7 +159,7 @@ async def tool_show_frame_activity(arg: dict) -> dict:
             if resolution is None:
                 n_frames = len(frames_list)
                 if n_frames == 1:
-                    resolution = "max"
+                    resolution = "high"
                 elif n_frames <= 9:
                     resolution = "high"
                 elif n_frames <= 19:
@@ -209,7 +214,7 @@ async def tool_show_frame_activity(arg: dict) -> dict:
                 if src_type == "transcode":
                     label_text += f" From transcode batch {batch}."
                 img_content.append({"type": "text", "text": label_text})
-                outcome_messages.append({"role": "user", "content": img_content})
+                outcome_messages.extend(_build_image_tool_result(tc_id, label_text, img_content))
 
     frames_shown = len(img_content) - 1 if img_content else 0  # subtract label text
 

@@ -10,6 +10,7 @@ _S3_BUCKET = "frigate-genai"
 
 # ── Agent loop constants ──────────────────────────────────────────────
 MAX_TURNS = 100
+MAX_OUTPUT_TOKENS = 2048
 
 # ── Temporal task queues ──────────────────────────────────────────────
 TASK_QUEUE = "genai-tasks"
@@ -41,7 +42,7 @@ _ACTIVITY_RETRY = RetryPolicy(
 )
 
 _GENAI_RETRY = RetryPolicy(
-    maximum_attempts=20,
+    maximum_attempts=10,
     initial_interval=timedelta(seconds=1),
     maximum_interval=timedelta(seconds=60),
     backoff_coefficient=2.0,

@@ -65,7 +65,7 @@ async def tool_compact_activity(arg: dict) -> dict:
             text = content
         else:
             text = ""
-        if text.strip() and role == "user":
+        if text.strip() and role in ("user", "tool"):
             conv_lines.append(f"[Tool result] {text.strip()}")
 
     all_keys = _s3_list(agent_dir + "/")
@@ -141,7 +141,9 @@ async def tool_compact_activity(arg: dict) -> dict:
                 f"{k}: '{d}'" for k, d in (not_useful[:3])
             ))
         summary_text += "\n\n" + "\n".join(tag_lines)
-    outcome_messages.append({"role": "user", "content": summary_text})
+    # Compact receipt: summary + guidance as a single tool-role message (no user
+    # message with images — images were stripped). Tool receipts are preserved
+    # in future compactions via the extraction loop above.
 
     # Strip image_url parts from messages BEFORE the compact-calling assistant
     strip_end = compact_assistant_idx if compact_assistant_idx is not None else len(state["messages"]) - 1
@@ -154,7 +156,7 @@ async def tool_compact_activity(arg: dict) -> dict:
                     if isinstance(p, dict) and p.get("type") != "image_url"
                 ]
 
-    tool_result = "Context compacted. Summary prepared, images removed. Use crop://N or upscale://N to re-view crops; use show_frame at @high resolution to re-examine frames."
+    tool_result = summary_text + "\n\nContext compacted. Summary prepared, images removed. Use crop://N or upscale://N to re-view crops; use show_frame at @high resolution to re-examine frames."
     outcome_messages.append({
         "role": "tool", "tool_call_id": tc_id, "content": tool_result,
     })

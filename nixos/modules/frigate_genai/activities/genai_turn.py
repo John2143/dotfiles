@@ -13,6 +13,7 @@ import os
 import random
 
 from temporalio import activity
+from temporalio.exceptions import ApplicationError
 
 from frigate_genai.s3_helpers import (
     _atomic_write,
@@ -23,6 +24,41 @@ from frigate_genai.s3_helpers import (
 )
 
 log = logging.getLogger("frigate-genai-sidecar")
+
+_IMAGE_PLACEHOLDER = "[image display removed — re-view with show_frame() or crop://N]"
+
+
+def _retain_recent_images(messages: list[dict], keep_last: int = 8) -> list[dict]:
+    """Return a new list of messages with image_url parts stripped from every
+    message except the last `keep_last` messages that contain images. Text parts
+    are always kept; a message left with no parts gets a placeholder text part.
+    Never mutates the input messages or their content lists."""
+    result = list(messages)
+    img_idxs = [i for i, m in enumerate(messages)
+                if isinstance(m.get("content"), list)
+                and any(isinstance(p, dict) and p.get("type") == "image_url"
+                        for p in m["content"])]
+    if len(img_idxs) <= keep_last:
+        return result
+    for i in range(img_idxs[-keep_last]):
+        m = messages[i]
+        content = m.get("content")
+        if not isinstance(content, list):
+            continue
+        kept = [p for p in content
+                if not (isinstance(p, dict) and p.get("type") == "image_url")]
+        if not kept:
+            kept = [{"type": "text", "text": _IMAGE_PLACEHOLDER}]
+        new_m = dict(m)
+        new_m["content"] = kept
+        result[i] = new_m
+    return result
+
+
+def _build_nudge(urgency: str, tool_names: list[str]) -> str:
+    tool_list = ", ".join(tool_names) if tool_names else "available tools"
+    return (f"{urgency}You must call a tool function. Do NOT output plain text. "
+            f"Choose from: {tool_list}. Continue your investigation.")
 
 
 async def _run_with_heartbeat(func, *args, interval: float = 2.0):
@@ -109,6 +145,10 @@ async def run_genai_turn_activity(turn_arg: dict) -> dict:
         _atomic_write(msg_path, state)
 
     # Deserialize [[filename]] refs → base64 data URIs for LLM call
+    # Retention cap: strip images from all but the last 8 image-bearing
+    # messages in the SENT copy, before base64 deserialize (also skips their S3
+    # reads). Persisted state is never mutated.
+    messages = _retain_recent_images(messages)
     messages_with_images = _deserialize_messages(messages, agent_dir)
 
     # Load provider config
@@ -164,6 +204,7 @@ async def run_genai_turn_activity(turn_arg: dict) -> dict:
                 messages=messages_with_images,
                 tools=tools,
                 tool_choice="auto",
+                max_tokens=MAX_OUTPUT_TOKENS,
                 extra_body=extra_body if extra_body else None,
             ),
             interval=8.0,
@@ -172,6 +213,10 @@ async def run_genai_turn_activity(turn_arg: dict) -> dict:
         log.warning("Model %s rate-limited (429): %s", model, _first_line(str(e)))
         raise
     except APIStatusError as e:
+        if e.status_code in (400, 401, 403, 404, 413):
+            raise ApplicationError(
+                f"LLM API error (HTTP {e.status_code}): {_first_line(str(e))}",
+                non_retryable=True)
         log.warning("LLM API error (HTTP %s): %s", e.status_code, _first_line(str(e)))
         raise
     msg = response.choices[0].message
@@ -182,8 +227,9 @@ async def run_genai_turn_activity(turn_arg: dict) -> dict:
     # for Gemini; fall back to usage.cached_tokens for other providers.
     details = getattr(response.usage, "prompt_tokens_details", None)
     cached_tok = getattr(details, "cached_tokens", 0) if details else getattr(response.usage, "cached_tokens", 0) or 0
-    log.info("GenAI turn: event=%s prompt=%d comp=%d cached=%d",
-             event_id, prompt_tok, comp_tok, cached_tok)
+    finish_reason = response.choices[0].finish_reason
+    log.info("GenAI turn: event=%s prompt=%d comp=%d cached=%d finish=%s",
+             event_id, prompt_tok, comp_tok, cached_tok, finish_reason)
 
     result = {
         "prompt_tokens": prompt_tok,
@@ -196,21 +242,19 @@ async def run_genai_turn_activity(turn_arg: dict) -> dict:
         assistant_msg = msg.model_dump(exclude_none=True)
         result["assistant_message"] = assistant_msg
         result["text_only"] = True
-        state["messages"].append(assistant_msg)
+        content = assistant_msg.get("content") or ""
+        # Skip persisting empty/thinking-only assistant messages so the history
+        # doesn't accumulate blanks that are re-sent every turn.
+        if isinstance(content, str) and content.strip():
+            state["messages"].append(assistant_msg)
         remaining = max_turns - turn_num
-        if remaining <= 10:
-            urgency = f"Only {remaining} turns remaining! "
-        else:
-            urgency = ""
-        tool_names = turn_arg.get("tool_names", [])
-        tool_list = ", ".join(tool_names) if tool_names else "available tools"
-        state["messages"].append({
-            "role": "user",
-            "content": (
-                f"{urgency}You must call a tool function. Do NOT output plain text. "
-                f"Choose from: {tool_list}. Continue your investigation."
-            ),
-        })
+        urgency = f"Only {remaining} turns remaining! " if remaining <= 10 else ""
+        nudge_content = _build_nudge(urgency, turn_arg.get("tool_names", []))
+        last = state["messages"][-1] if state["messages"] else None
+        # Dedupe consecutive nudges (identical content) so a blank streak adds
+        # exactly one nudge, not one per turn.
+        if not (last and last.get("role") == "user" and last.get("content") == nudge_content):
+            state["messages"].append({"role": "user", "content": nudge_content})
         _atomic_write(msg_path, state)
         return result
 

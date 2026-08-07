@@ -11,6 +11,7 @@ from PIL import Image
 from temporalio import activity
 
 from frigate_genai.s3_helpers import (
+    _build_image_tool_result,
     _find_tc_id,
     _load_state,
     _resolve_source_key,
@@ -122,14 +123,11 @@ async def tool_upscale_activity(arg: dict) -> dict:
     _s3_put(f"{agent_dir}/{fname}", jpeg_bytes)
 
     # Show inline to the model
-    outcome_messages.append({
-        "role": "user",
-        "content": [
-            {"type": "image_url", "image_url": {"url": f"[[{fname}]]"}},
-            {"type": "text", "text":
-                f"Upscaled {source} 4x with {model} → {img.width}x{img.height}. "
-                f"Stored as upscale://{up_idx}."},
-        ],
-    })
+    outcome_messages.extend(_build_image_tool_result(
+        tc_id,
+        f"Upscaled {source} 4x with {model} → {img.width}x{img.height}. Stored as upscale://{up_idx}.",
+        [{"type": "image_url", "image_url": {"url": f"[[{fname}]]"}}],
+        "Upscaled image above.",
+    ))
     return {"source": source, "model": model, "upscale_id": up_idx,
             "width": img.width, "height": img.height, "messages": outcome_messages}

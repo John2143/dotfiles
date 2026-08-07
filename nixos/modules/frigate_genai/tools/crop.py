@@ -7,6 +7,7 @@ from temporalio.exceptions import ApplicationError
 from frigate_genai.tools.crop_helpers import validate_crop_coords
 
 from frigate_genai.s3_helpers import (
+    _build_image_tool_result,
     _find_tc_id,
     _load_state,
     _s3_get,
@@ -29,10 +30,12 @@ async def tool_crop_activity(arg: dict) -> dict:
     tc_id = _find_tc_id(state, "crop")
     source = tool_args.get("source", "")
     outcome_messages = []
-    x1_raw = float(tool_args.get("x1", 0))
-    y1_raw = float(tool_args.get("y1", 0))
-    x2_raw = float(tool_args.get("x2", 1))
-    y2_raw = float(tool_args.get("y2", 1))
+    missing = [k for k in ("x1", "y1", "x2", "y2") if k not in tool_args]
+    if missing:
+        raise ApplicationError(
+            f"crop() requires all four coordinates, missing: {', '.join(missing)}",
+            non_retryable=True)
+    x1_raw, y1_raw, x2_raw, y2_raw = (float(tool_args[k]) for k in ("x1", "y1", "x2", "y2"))
     x1, y1, x2, y2, coord_warnings = validate_crop_coords(x1_raw, y1_raw, x2_raw, y2_raw)
 
     if x1 >= x2 or y1 >= y2:
@@ -144,7 +147,14 @@ async def tool_crop_activity(arg: dict) -> dict:
                 + "\nDescribe what you see. If crops are empty/wrong, view full frames and re-crop."
             )
         content_parts.append({"type": "text", "text": label})
-        outcome_messages.append({"role": "user", "content": content_parts})
+        outcome_messages.extend(_build_image_tool_result(
+            tc_id,
+            f"Cropped ({x1:.2f},{y1:.2f})-({x2:.2f},{y2:.2f}) from {base_source} "
+            f"→ crop://{crop_ids[0]}"
+            + (f" through crop://{crop_ids[-1]}" if len(crop_results) > 1 else "")
+            + ".",
+            content_parts,
+        ))
     else:
         if tc_id:
             outcome_messages.append({

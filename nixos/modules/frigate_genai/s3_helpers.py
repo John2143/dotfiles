@@ -221,6 +221,21 @@ def _resolve_source_key(source: str, agent_dir: str, frames_dir: str) -> str | N
     return None
 
 
+def _build_image_tool_result(tc_id: str, summary: str,
+                             image_parts: list[dict], label: str = "") -> list[dict]:
+    """Build the two-message result for an image-bearing tool call: a tool-role
+    text receipt and a user-role message with the image parts. Gemini
+    functionResponse parts are text-only, so images must live in a user message.
+    `label` (optional) is appended as a trailing text part of the user message."""
+    user_parts = list(image_parts)
+    if label:
+        user_parts.append({"type": "text", "text": label})
+    return [
+        {"role": "tool", "tool_call_id": tc_id, "content": summary},
+        {"role": "user", "content": user_parts},
+    ]
+
+
 _stats: dict = {
     "events_processed": 0,
     "last_event": None,

@@ -417,7 +417,7 @@ ArgoCD syncs the old image tag back. Kubernetes Recreate strategy terminates the
 
 ### Workers scale but workflows fail with 502
 
-LiteLLM proxy transient outage. The retry policy (20 attempts, 19 min window) handles most. If persistent:
+LiteLLM proxy transient outage. The retry policy (10 attempts, ~7 min window) handles most. If persistent:
 - Check LiteLLM pods: `kubectl get pods -l app=litellm`
 - Check LiteLLM logs: `kubectl logs -l app=litellm --tail=50 | grep -i error`
 - Verify API keys in `frigate-genai-worker-creds` secret
