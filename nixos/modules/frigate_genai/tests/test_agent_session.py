@@ -190,7 +190,10 @@ class AgentSessionToolPairingTests(unittest.TestCase):
             "_tool_close_subagent_schema",
             "_tool_send_ipc_schema", "_tool_wait_ipc_schema",
         ):
-            setattr(schemas, name, lambda: {})
+            setattr(schemas, name, lambda name=name: {
+                "type": "function",
+                "function": {"name": name, "parameters": {"type": "object", "properties": {}}},
+            })
         return {
             "temporalio": temporalio,
             "temporalio.exceptions": exceptions,
@@ -391,7 +394,10 @@ class SpawnValidationTests(unittest.TestCase):
             "_tool_close_subagent_schema",
             "_tool_send_ipc_schema", "_tool_wait_ipc_schema",
         ):
-            setattr(schemas, name, lambda: {})
+            setattr(schemas, name, lambda name=name: {
+                "type": "function",
+                "function": {"name": name, "parameters": {"type": "object", "properties": {}}},
+            })
         models = types.ModuleType("frigate_genai.models")
         class _SpawnTask:
             """Stub for frigate_genai.models.SpawnTask using manual validation."""
