@@ -14,6 +14,7 @@ import random
 
 from temporalio import activity
 from temporalio.exceptions import ApplicationError
+from frigate_genai.config import MAX_OUTPUT_TOKENS
 
 from frigate_genai.s3_helpers import (
     _atomic_write,

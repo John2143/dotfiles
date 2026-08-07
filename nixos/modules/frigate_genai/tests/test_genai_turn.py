@@ -103,6 +103,21 @@ class BuildNudgeTests(unittest.TestCase):
         self.assertTrue(out.startswith("Only 3 turns remaining! "))
 
 
+class GenaiTurnModuleNamespaceTests(unittest.TestCase):
+    """Guard against NameError-in-hot-path regressions: every name the activity
+    body references must be bound in the module namespace at import time."""
+
+    def test_hot_path_names_bound(self):
+        import frigate_genai.activities.genai_turn as gt
+
+        for name in ("MAX_OUTPUT_TOKENS", "_retain_recent_images",
+                     "_build_nudge", "ApplicationError",
+                     "run_genai_turn_activity"):
+            self.assertTrue(
+                hasattr(gt, name),
+                f"frigate_genai.activities.genai_turn missing {name!r}")
+
+
 class BuildImageToolResultTests(unittest.TestCase):
 
     def test_two_message_shape(self):
