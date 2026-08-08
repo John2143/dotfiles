@@ -520,6 +520,7 @@ nixpkgs.overlays = [
     description = "Ensure Attic cache 2143nix exists and is configured";
     after = ["atticd.service"];
     requires = ["atticd.service"];
+    wantedBy = ["multi-user.target"];
     serviceConfig.Type = "oneshot";
     serviceConfig.RemainAfterExit = true;
     script = ''
@@ -528,10 +529,9 @@ nixpkgs.overlays = [
       if ! ${pkgs.attic-client}/bin/attic cache info 2143nix >/dev/null 2>&1; then
         ${pkgs.attic-client}/bin/attic cache create 2143nix
       fi
-      ${pkgs.attic-client}/bin/attic cache configure 2143nix --priority 41
+      ${pkgs.attic-client}/bin/attic cache configure 2143nix --priority 25
     '';
   };
-
   services.atticd = {
     enable = true;
     environmentFile = config.age.secrets.attic-jwt-secret.path;
