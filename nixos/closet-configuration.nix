@@ -161,6 +161,8 @@
         service:
           annotations:
             metallb.io/loadBalancerIPs: "192.168.6.11"
+          spec:
+            externalTrafficPolicy: Local
       '';
     };
   };
