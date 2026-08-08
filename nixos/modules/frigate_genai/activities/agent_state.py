@@ -6,7 +6,7 @@ import logging
 
 from temporalio import activity
 
-from frigate_genai.config import _S3_BUCKET
+from frigate_genai.config import _S3_BUCKET, QUICK_LABELS
 from frigate_genai.s3_helpers import (
     _atomic_write,
     _s3_client,
@@ -19,6 +19,21 @@ from frigate_genai.s3_helpers import (
 log = logging.getLogger("frigate-genai-sidecar")
 
 
+_QUICK_PASS_PROMPT = (
+    "You are a fast vehicle analyst. MANY vehicle events are queued — "
+    "complete this one in at most 2-3 tool calls.\n\n"
+    "1. The snapshot below is a low-res preview. View ONE recording frame at "
+    "@high — prefer the keyframe indices in the note above, else frame://N "
+    "near the snapshot timestamp.\n"
+    "2. Extract the EXTRACTION FOCUS details visible in that frame.\n"
+    "3. Call set_description() immediately with your findings, citing the frame "
+    "number. If a plate or badge is unreadable at @high, crop() it ONCE at most — "
+    "never upscale, never scan ranges, never transcode, never spawn.\n\n"
+    "If the first frame shows nothing useful, try ONE other frame, then conclude "
+    "with what you have. Never speculate beyond what is visible."
+)
+
+
 @activity.defn(name="init_agent_state")
 async def init_agent_state_activity(init_arg: dict) -> dict:
     """Initialize agent state in S3: loads prompts, composes system prompt,
@@ -29,6 +44,7 @@ async def init_agent_state_activity(init_arg: dict) -> dict:
     event_id = init_arg["event_id"]
     camera = init_arg["camera"]
     label = init_arg["label"]
+    quick_mode = label in QUICK_LABELS
     event_prefix = init_arg["frames_dir"]  # "events/{event_id}"
 
     prompts = load_json(init_arg["prompts_path"])
@@ -71,52 +87,55 @@ async def init_agent_state_activity(init_arg: dict) -> dict:
         )
         crop_hint = "crop() close-ups: faces, hands, clothing, items carried, bags, tools. Crop TIGHT — one subject per crop, not the whole scene."
         bisect_hint = "Bisect when behavior changes or the subject disappears."
-    system_prompt = (
-        prefix
-        + "\n\n"
-        + "WORK IN TWO PHASES. NEVER skip phase 2.\n\n"
-        + "PHASE 1 — SCAN: For clips with ≤5 frames, view EVERY frame at "
-        + "@high — token cost is trivial and low-res views miss details. "
-        "For longer clips, scan batches of 5-10 at @low first. "
-        "When you find something worth inspecting, transcode() that region "
-        "to extract HD frames.\n\n"
+    if quick_mode:
+        system_prompt = _QUICK_PASS_PROMPT
+    else:
+        system_prompt = (
+            prefix
+            + "\n\n"
+            + "WORK IN TWO PHASES. NEVER skip phase 2.\n\n"
+            + "PHASE 1 — SCAN: For clips with ≤5 frames, view EVERY frame at "
+            + "@high — token cost is trivial and low-res views miss details. "
+            "For longer clips, scan batches of 5-10 at @low first. "
+            "When you find something worth inspecting, transcode() that region "
+            "to extract HD frames.\n\n"
 
-        + "PHASE 2 — ZOOM: After scanning, you MUST zoom in on the subject. "
-        + "Pick 2-4 key frames and show them individually at @high resolution by default "
-        + "(e.g., show_frame('frame://45')), escalating to @max only to read small text "
-        + "or fine detail (plates, faces, labels). BEFORE cropping, describe WHERE you see "
-        + "the subject in the full frame using normalized coordinates (0.0 = left/top edge, "
-        + "1.0 = right/bottom edge). Examples: 'person in left third: left≈0.05-0.35', "
-        + "'centered: left≈0.35-0.65', 'right side: left≈0.65-0.95'. If your observation "
-        + "MATCHES the detection box hint (x1=... x2=...), use it. If the subject is "
-        + "elsewhere or the detection box is empty, crop where you ACTUALLY see the subject. "
-        + "Then " + crop_hint + " "
-        "If a cropped detail (plate, face, text) is STILL too small or blurry to read "
-        "at @max resolution, upscale('crop://N') to enhance it 4x. Upscale is expensive "
-        "(up to 3 min) and only accepts small tight crops — never full frames. "
-        "Use it only when you have already zoomed and cropped and the detail remains "
-        "unreadable, and you can name what you expect to read from it. "
-        "Default to swinir-psnr for accurate detail; use realesrgan only on noisy or "
-        "compressed frames. Never upscale an upscale://N — always go back to the "
-        "original crop://N or frame://N for the cleanest source.\n\n"
-        "To validate a crop before upscaling, use spawn() with a focused validation task: "
-        "spawn(tasks=[{'task': 'Inspect crop://1. Does it clearly show a person? "
-        "Answer YES (visible and identifiable), NO (empty/blurry/wrong), or UNCLEAR "
-        "(partially visible). Give 1-sentence reason.', 'image_refs': ['crop://1'], "
-        "'max_turns': 3}]). Validation subagent returns findings via join(). "
-        "If verdict is NO or UNCLEAR, view the full frame again and re-crop.\n\n"
-        "PERSISTENCE: When cropping, start WIDER than you think — you can always call "
-        "compact() to erase old attempts and zoom in differently. If a crop shows "
-        "nothing useful, try a different region or frame. If 3 crops in a row produce "
-        "tiny (<200px) or empty results, your coordinate estimation is off — compact "
-        "and retry with wider bounds. Compact is FREE: it drops old compressed images "
-        "to free context space, preserving your text findings. Report what you found "
-        "AND what you searched for but couldn't find. "
-        + bisect_hint + " Track every movement. "
-        + "NEVER call set_description() until you have searched every visible region "
-        "across 2-3 key frames. Report what you found AND what you searched for "
-        "but couldn't find. If you upscaled, review the upscaled result before concluding."
-    )
+            + "PHASE 2 — ZOOM: After scanning, you MUST zoom in on the subject. "
+            + "Pick 2-4 key frames and show them individually at @high resolution by default "
+            + "(e.g., show_frame('frame://45')), escalating to @max only to read small text "
+            + "or fine detail (plates, faces, labels). BEFORE cropping, describe WHERE you see "
+            + "the subject in the full frame using normalized coordinates (0.0 = left/top edge, "
+            + "1.0 = right/bottom edge). Examples: 'person in left third: left≈0.05-0.35', "
+            + "'centered: left≈0.35-0.65', 'right side: left≈0.65-0.95'. If your observation "
+            + "MATCHES the detection box hint (x1=... x2=...), use it. If the subject is "
+            + "elsewhere or the detection box is empty, crop where you ACTUALLY see the subject. "
+            + "Then " + crop_hint + " "
+            "If a cropped detail (plate, face, text) is STILL too small or blurry to read "
+            "at @max resolution, upscale('crop://N') to enhance it 4x. Upscale is expensive "
+            "(up to 3 min) and only accepts small tight crops — never full frames. "
+            "Use it only when you have already zoomed and cropped and the detail remains "
+            "unreadable, and you can name what you expect to read from it. "
+            "Default to swinir-psnr for accurate detail; use realesrgan only on noisy or "
+            "compressed frames. Never upscale an upscale://N — always go back to the "
+            "original crop://N or frame://N for the cleanest source.\n\n"
+            "To validate a crop before upscaling, use spawn() with a focused validation task: "
+            "spawn(tasks=[{'task': 'Inspect crop://1. Does it clearly show a person? "
+            "Answer YES (visible and identifiable), NO (empty/blurry/wrong), or UNCLEAR "
+            "(partially visible). Give 1-sentence reason.', 'image_refs': ['crop://1'], "
+            "'max_turns': 3}]). Validation subagent returns findings via join(). "
+            "If verdict is NO or UNCLEAR, view the full frame again and re-crop.\n\n"
+            "PERSISTENCE: When cropping, start WIDER than you think — you can always call "
+            "compact() to erase old attempts and zoom in differently. If a crop shows "
+            "nothing useful, try a different region or frame. If 3 crops in a row produce "
+            "tiny (<200px) or empty results, your coordinate estimation is off — compact "
+            "and retry with wider bounds. Compact is FREE: it drops old compressed images "
+            "to free context space, preserving your text findings. Report what you found "
+            "AND what you searched for but couldn't find. "
+            + bisect_hint + " Track every movement. "
+            + "NEVER call set_description() until you have searched every visible region "
+            "across 2-3 key frames. Report what you found AND what you searched for "
+            "but couldn't find. If you upscaled, review the upscaled result before concluding."
+        )
 
     spawn_guidance = (
         "\n\nSPAWN/JOIN -- PARALLEL SUBAGENTS:\n"
@@ -132,7 +151,8 @@ async def init_agent_state_activity(init_arg: dict) -> dict:
         "- Max 5 subagents per spawn.\n"
         "- Only spawn() when you have specific tasks -- don't spawn for trivial checks."
     )
-    system_prompt += spawn_guidance
+    if not quick_mode:
+        system_prompt += spawn_guidance
 
     if camera_desc:
         system_prompt += f"\n\n{camera_desc}"
@@ -210,31 +230,39 @@ async def init_agent_state_activity(init_arg: dict) -> dict:
     specialist = _specialist_prefixes.get(label, _default_prefix.format(label=label))
     system_prompt = specialist + "\n\n" + system_prompt
 
-    # Cost-minimization additions
-    system_prompt += (
-        "\n\nCOST: Every image you view costs tokens. Minimize cost:\n"
-        "- Scan 5+ frames at @low first; upgrade to @high/@max only for frames with the subject.\n"
-        "- Batch tag_image() calls — tag all inspected sources in one call, not one per frame.\n"
-        "- Use find_keyframes() and frame_diff() (free, no API cost) before expensive tool calls.\n"
-        "- Spawn subagents only for genuinely independent detail work (plates + face + cargo).\n"
-        "- Conclude after you have adequate evidence — don't inspect every frame.\n\n"
-        "ACCURACY: Follow all instructions precisely. Verify coordinates before cropping. "
-        "Double-check bounding boxes are within frame dimensions. Re-read tool schemas "
-        "before calling unfamiliar tools. Describe what you see before deciding what to do. "
-        "When uncertain, gather more evidence rather than guessing."
-    )
-    user_text = (
-        f"{label} on {camera}. {max_frames} recording frames (indices 0-{max_frames - 1}).\n\n"
-        f"{box_text}\n\n"
-        f"The snapshot is a low-res bounding box preview ~3s into the clip. "
-        f"START HERE: show the recording frame closest to the snapshot's timestamp "
-        f"at @high resolution (use @max only for fine detail), then crop() the EXACT detection region "
-        f"from the box above. Never crop arbitrary corners when the box tells you "
-        f"where to look. Do NOT view frames at @tiny or @low unless you have 15+ "
-        f"frames to scan — for short clips, every frame should be at @high. "
-        f"If the snapshot frame falls between recording frames, transcode() a 1-2s "
-        f"window around the snapshot timestamp to extract HD frames."
-    )
+    if not quick_mode:
+        system_prompt += (
+            "\n\nCOST: Every image you view costs tokens. Minimize cost:\n"
+            "- Scan 5+ frames at @low first; upgrade to @high/@max only for frames with the subject.\n"
+            "- Batch tag_image() calls — tag all inspected sources in one call, not one per frame.\n"
+            "- Use find_keyframes() and frame_diff() (free, no API cost) before expensive tool calls.\n"
+            "- Spawn subagents only for genuinely independent detail work (plates + face + cargo).\n"
+            "- Conclude after you have adequate evidence — don't inspect every frame.\n\n"
+            "ACCURACY: Follow all instructions precisely. Verify coordinates before cropping. "
+            "Double-check bounding boxes are within frame dimensions. Re-read tool schemas "
+            "before calling unfamiliar tools. Describe what you see before deciding what to do. "
+            "When uncertain, gather more evidence rather than guessing."
+        )
+    if quick_mode:
+        user_text = (
+            f"{label} on {camera}. {max_frames} recording frames (indices 0-{max_frames - 1}).\n\n"
+            f"{box_text}\n\n"
+            f"Quick pass: view ONE frame at @high (keyframe note above), extract the "
+            f"vehicle details, then call set_description()."
+        )
+    else:
+        user_text = (
+            f"{label} on {camera}. {max_frames} recording frames (indices 0-{max_frames - 1}).\n\n"
+            f"{box_text}\n\n"
+            f"The snapshot is a low-res bounding box preview ~3s into the clip. "
+            f"START HERE: show the recording frame closest to the snapshot's timestamp "
+            f"at @high resolution (use @max only for fine detail), then crop() the EXACT detection region "
+            f"from the box above. Never crop arbitrary corners when the box tells you "
+            f"where to look. Do NOT view frames at @tiny or @low unless you have 15+ "
+            f"frames to scan — for short clips, every frame should be at @high. "
+            f"If the snapshot frame falls between recording frames, transcode() a 1-2s "
+            f"window around the snapshot timestamp to extract HD frames."
+        )
 
     agent_prefix = f"{event_prefix}/agent"
     # Clean old display files from S3

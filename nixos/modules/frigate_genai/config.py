@@ -11,6 +11,10 @@ _S3_BUCKET = "frigate-genai"
 # ── Agent loop constants ──────────────────────────────────────────────
 MAX_TURNS = 100
 MAX_OUTPUT_TOKENS = 2048
+MAX_TURNS_QUICK = 3
+# Quick-pass labels: high-volume labels get a bounded agent session
+# (max_turns=MAX_TURNS_QUICK) plus a fast-conclusion system prompt.
+QUICK_LABELS = {"car"}
 
 # ── Temporal task queues ──────────────────────────────────────────────
 TASK_QUEUE = "genai-tasks"

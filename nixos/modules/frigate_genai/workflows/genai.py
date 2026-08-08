@@ -9,6 +9,8 @@ from temporalio.workflow import ParentClosePolicy
 
 from frigate_genai.config import (
     MAX_TURNS,
+    MAX_TURNS_QUICK,
+    QUICK_LABELS,
     TASK_QUEUE,
     FFMPEG_TASK_QUEUE,
     GEMINI_TASK_QUEUE,
@@ -171,7 +173,7 @@ class GenAIWorkflow:
                     "event_id": event_id,
                     "camera": camera,
                     "label": label,
-                    "max_turns": MAX_TURNS,
+                    "max_turns": MAX_TURNS_QUICK if label in QUICK_LABELS else MAX_TURNS,
                     "max_frames": max_frames,
                     "start_time": start_time,
                     "end_time": end_time,

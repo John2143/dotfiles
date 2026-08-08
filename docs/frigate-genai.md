@@ -442,6 +442,8 @@ LLM response > 300s. The genai activity has `start_to_close_timeout=300s` (5 min
 
 Baseline from 2,000 GenAIWorkflow executions (July 10-12, 2026). Source: `analyze_jobs.py` against Temporal history API.
 
+**Quick-pass labels** (`QUICK_LABELS` in `config.py`, currently `car`): high-volume labels get a bounded agent session (`MAX_TURNS_QUICK` = 3 turns) with a fast-conclusion system prompt — view one frame at `@high`, extract make/model/color/plate if visible, then `set_description()` — instead of the full two-phase deep dive.
+
 ### Overall health
 
 | Metric | Value |
