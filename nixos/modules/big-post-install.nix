@@ -10,9 +10,12 @@
 }: {
   imports = [
     ./k3s-agent.nix
+    ./restic-backup.nix
     ./attic.nix
     ./remote-builders.nix
   ];
+
+  custom.backup.enable = true;
 
   # ── NVIDIA Tesla P4 (Proxmox passthrough) — kube GPU foundation ──
   # Pascal card: MUST use the legacy_580 driver branch — nvidiaPackages.stable

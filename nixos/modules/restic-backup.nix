@@ -23,7 +23,7 @@
 # 4. Set up backup directories on the NAS. ChrootDirectory requires
 #    /tank/backups to be root-owned; per-host subdirs are owned by backup:
 #      sudo chown root:root /tank/backups && sudo chmod 755 /tank/backups
-#      for h in arch office closet secu; do
+#      for h in arch office closet secu big; do
 #        sudo zfs create tank/backups/$h          # or: sudo mkdir /tank/backups/$h
 #        sudo chown backup:backup /tank/backups/$h
 #      done
