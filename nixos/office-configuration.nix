@@ -134,8 +134,10 @@
   networking.firewall.allowedTCPPorts = [
     8080  # lobby-server (Steam Lobby demo, WAN forward)
     10250 # kubelet (k3s agent)
+    5580 # matter-server (hostNetwork pod)
   ];
   networking.firewall.allowedUDPPorts = [
+    5540 # matter-server (hostNetwork pod)
     8472 # flannel VXLAN (k3s)
   ];
   networking.firewall.allowedTCPPortRanges = [

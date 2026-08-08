@@ -30,6 +30,10 @@
     9093 # Alertmanager (internal only — bound to 127.0.0.1)
     9115 # Blackbox exporter probes
     3030 # nginx status page
+    5580 # matter-server (hostNetwork pod)
+  ];
+  networking.firewall.allowedUDPPorts = [
+    5540 # matter-server (hostNetwork pod)
   ];
 
   # ── Prometheus — SERVER mode, 2d retention ─────────────────────

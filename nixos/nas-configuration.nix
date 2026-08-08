@@ -600,6 +600,7 @@ nixpkgs.overlays = [
     allowedUDPPorts = [
       111 # rpcbind (NFS)
       20048 # rpc.mountd (NFS)
+      5540 # matter-server (hostNetwork pod)
       8472 # flannel VXLAN
     ];
   };

@@ -107,8 +107,10 @@
   # Firewall — k3s ports
   networking.firewall.allowedTCPPorts = [
     10250 # kubelet
+    5580 # matter-server (hostNetwork pod)
   ];
   networking.firewall.allowedUDPPorts = [
+    5540 # matter-server (hostNetwork pod)
     8472 # flannel VXLAN
   ];
   networking.firewall.allowedTCPPortRanges = [

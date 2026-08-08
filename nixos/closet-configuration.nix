@@ -204,6 +204,7 @@
     179 # BGP (MetalLB speaker)
   ];
   networking.firewall.allowedUDPPorts = [
+    5540 # matter-server (hostNetwork pod)
     8472 # flannel VXLAN (k3s)
   ];
   networking.firewall.allowedTCPPortRanges = [
