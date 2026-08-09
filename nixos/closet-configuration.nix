@@ -176,6 +176,7 @@ spec:
       otlp:
         enabled: true
         grpc:
+          enabled: true
           endpoint: "alloy.observability.svc:4317"
           insecure: true
       serviceName: traefik
