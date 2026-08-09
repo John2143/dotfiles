@@ -149,6 +149,7 @@ metadata:
   name: traefik
   namespace: kube-system
 spec:
+  valuesContent: |
     access:
       enabled: true
       format: json
