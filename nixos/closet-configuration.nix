@@ -138,60 +138,63 @@
       "--kube-controller-manager-arg=node-cidr-mask-size-ipv4=24"
       "--kube-controller-manager-arg=node-cidr-mask-size-ipv6=64"
     ];
-    manifests.traefik-config.content = {
-      apiVersion = "helm.cattle.io/v1";
-      kind = "HelmChartConfig";
-      metadata = {
-        name = "traefik";
-        namespace = "kube-system";
-      };
-      spec.valuesContent = ''
-        image:
-          repository: "docker.io/traefik"
-          tag: "3.7.10"
-        accessLog:
-          enabled: true
-          format: json
-          fields:
-            headers:
-              defaultMode: drop
-        entryPoints:
-          websecure:
-            http:
-              underscoreHeadersStrategy: reject
-        experimental:
-          plugins:
-            bouncer:
-              moduleName: github.com/maxlerebourg/crowdsec-bouncer-traefik-plugin
-              version: v1.7.1
-        deployment:
-          additionalVolumes:
-            - name: crowdsec-bouncer-key
-              secret:
-                secretName: crowdsec-bouncer-key
-          additionalVolumeMounts:
-            - name: crowdsec-bouncer-key
-              mountPath: /etc/traefik/secrets
-              readOnly: true
-        providers:
-          kubernetesGateway:
-            enabled: true
-            experimentalChannel: true
-        tracing:
-          otlp:
-            enabled: true
-            grpc:
-              endpoint: "alloy.observability.svc:4317"
-              insecure: true
-          serviceName: traefik
-          sampleRate: 1.0
-        service:
-          annotations:
-            metallb.io/loadBalancerIPs: "192.168.6.11"
-          spec:
-            externalTrafficPolicy: Local
-      '';
-    };
+    # Raw manifest via `source` (not `content`): pkgs.formats.yaml in current
+    # nixpkgs emits a `%YAML 1.1` directive that the k3s helm-controller's
+    # yaml parser rejects ("line 1: did not find expected <document start>").
+    # `source` symlinks the file verbatim, bypassing the format generator.
+    manifests.traefik-config.source = builtins.toFile "traefik-config.yaml" ''
+apiVersion: helm.cattle.io/v1
+kind: HelmChartConfig
+metadata:
+  name: traefik
+  namespace: kube-system
+spec:
+  valuesContent: |
+    image:
+      repository: "docker.io/traefik"
+      tag: "3.7.10"
+    accessLog:
+      enabled: true
+      format: json
+      fields:
+        headers:
+          defaultMode: drop
+    entryPoints:
+      websecure:
+        http:
+          underscoreHeadersStrategy: reject
+    experimental:
+      plugins:
+        bouncer:
+          moduleName: github.com/maxlerebourg/crowdsec-bouncer-traefik-plugin
+          version: v1.7.1
+    deployment:
+      additionalVolumes:
+        - name: crowdsec-bouncer-key
+          secret:
+            secretName: crowdsec-bouncer-key
+      additionalVolumeMounts:
+        - name: crowdsec-bouncer-key
+          mountPath: /etc/traefik/secrets
+          readOnly: true
+    providers:
+      kubernetesGateway:
+        enabled: true
+        experimentalChannel: true
+    tracing:
+      otlp:
+        enabled: true
+        grpc:
+          endpoint: "alloy.observability.svc:4317"
+          insecure: true
+      serviceName: traefik
+      sampleRate: 1.0
+    service:
+      annotations:
+        metallb.io/loadBalancerIPs: "192.168.6.11"
+      spec:
+        externalTrafficPolicy: Local
+'';
   };
   # Tailscale subnet route — advertises LAN + service subnets to the tailnet:
   # 192.168.5.0/24 (MetalLB API VIP .10) and 192.168.6.0/24 (traefik LB .6.11).
