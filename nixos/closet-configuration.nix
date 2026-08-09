@@ -149,29 +149,23 @@ metadata:
   name: traefik
   namespace: kube-system
 spec:
-    image:
-      repository: "rancher/mirrored-library-traefik"
-      tag: "3.7.4"
-    accessLog:
+    access:
       enabled: true
       format: json
-      fields:
-        headers:
-          defaultMode: drop
     experimental:
       plugins:
         bouncer:
           moduleName: github.com/maxlerebourg/crowdsec-bouncer-traefik-plugin
           version: v1.7.1
+    additionalVolumeMounts:
+      - name: crowdsec-bouncer-key
+        mountPath: /etc/traefik/secrets
+        readOnly: true
     deployment:
       additionalVolumes:
         - name: crowdsec-bouncer-key
           secret:
             secretName: crowdsec-bouncer-key
-      additionalVolumeMounts:
-        - name: crowdsec-bouncer-key
-          mountPath: /etc/traefik/secrets
-          readOnly: true
     providers:
       kubernetesGateway:
         enabled: true
