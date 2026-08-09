@@ -149,20 +149,15 @@ metadata:
   name: traefik
   namespace: kube-system
 spec:
-  valuesContent: |
     image:
-      repository: "docker.io/traefik"
-      tag: "3.7.10"
+      repository: "rancher/mirrored-library-traefik"
+      tag: "3.7.4"
     accessLog:
       enabled: true
       format: json
       fields:
         headers:
           defaultMode: drop
-    entryPoints:
-      websecure:
-        http:
-          underscoreHeadersStrategy: reject
     experimental:
       plugins:
         bouncer:
