@@ -146,6 +146,33 @@
         namespace = "kube-system";
       };
       spec.valuesContent = ''
+        image:
+          repository: "docker.io/traefik"
+          tag: "3.7.10"
+        accessLog:
+          enabled: true
+          format: json
+          fields:
+            headers:
+              defaultMode: drop
+        entryPoints:
+          websecure:
+            http:
+              underscoreHeadersStrategy: reject
+        experimental:
+          plugins:
+            bouncer:
+              moduleName: github.com/maxlerebourg/crowdsec-bouncer-traefik-plugin
+              version: v1.7.1
+        deployment:
+          additionalVolumes:
+            - name: crowdsec-bouncer-key
+              secret:
+                secretName: crowdsec-bouncer-key
+          additionalVolumeMounts:
+            - name: crowdsec-bouncer-key
+              mountPath: /etc/traefik/secrets
+              readOnly: true
         providers:
           kubernetesGateway:
             enabled: true
