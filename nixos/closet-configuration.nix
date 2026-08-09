@@ -150,9 +150,10 @@ metadata:
   namespace: kube-system
 spec:
   valuesContent: |
-    access:
-      enabled: true
-      format: json
+    logs:
+      access:
+        enabled: true
+        format: json
     experimental:
       plugins:
         bouncer:
