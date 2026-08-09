@@ -83,4 +83,32 @@ in
       Persistent = true;
     };
   };
+
+  # smartctl_exporter: Prometheus metrics for SMART health (bad sectors,
+  # reallocated/pending/uncorrectable counts) scraped by Grafana Alloy on
+  # port 9633. Uses stable ata-* by-id names (sdX letters shift across
+  # reboots); Longhorn iSCSI volumes (sdg-sdl, no ata-* by-id) are skipped.
+  systemd.services.smartctl-exporter = {
+    description = "smartctl_exporter for Prometheus (SMART metrics)";
+    wantedBy = [ "multi-user.target" ];
+    after = [ "network.target" ];
+    path = [ pkgs.smartmontools ];
+    serviceConfig = {
+      ExecStart = pkgs.writeShellScript "smartctl-exporter-start" ''
+        set -o errexit
+        devices=()
+        for dev in /dev/disk/by-id/ata-*; do
+          case "$dev" in
+            *-part*) continue ;;
+          esac
+          devices+=(--smartctl.device "$dev")
+        done
+        exec ${pkgs.prometheus-smartctl-exporter}/bin/smartctl_exporter \
+          --smartctl.path=${pkgs.smartmontools}/bin/smartctl \
+          --web.listen-address=0.0.0.0:9633 \
+          "''${devices[@]}"
+      '';
+      Restart = "on-failure";
+    };
+  };
 }
