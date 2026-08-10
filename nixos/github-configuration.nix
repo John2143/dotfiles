@@ -1,10 +1,9 @@
-# GitHub runner VM — Proxmox VM (2 cores, 4 GB RAM, OVMF/UEFI, virtio)
+# GitHub runner VM — Proxmox VM (2 cores, 4 GB RAM, SeaBIOS, virtio)
 #
 # === INSTALL FROM LIVE CD ===
-#   On bigp: qm create 101 --name github-nixos --machine q35 --bios ovmf --cpu host \
+#   On bigp: qm create 101 --name github-nixos --machine q35 --cpu host \
 #     --sockets 1 --cores 2 --memory 4096 --net0 virtio,firewall=1,bridge=vmbr0 \
 #     --scsihw virtio-scsi-single --scsi0 local-lvm:25,iothread=1 \
-#     --efidisk0 local-lvm:1,efitype=4m,pre-enrolled-keys=1 \
 #     --ide2 local:iso/nixos-minimal-26.05.5845.b3fe9581c906-x86_64-linux.iso,media=cdrom \
 #     --serial0 socket --agent 1 --ostype l26 --boot order=ide2\;scsi0
 #   On installer: clone https://github.com/John2143/dotfiles.git, then
@@ -17,7 +16,8 @@
 #     sudo nixos-install --no-root-passwd --flake /tmp/dotfiles#github
 #
 # === GOTCHAS ===
-#   - systemd-boot requires OVMF firmware (--bios ovmf), NOT SeaBIOS/GRUB like big.
+#   - SeaBIOS + GRUB, like big — disko's EF02 partition provides grub.devices.
+#     Do NOT set boot.loader.grub.device (duplicate-device assertion).
 #   - Podman dockerCompat asserts it conflicts with virtualisation.docker.
 #   - The podman socket group is hard-coded to "podman"; the runner user must be in it.
 {
@@ -34,8 +34,9 @@
     ./modules/user-john.nix
   ];
 
-  boot.loader.systemd-boot.enable = true;
-  boot.loader.efi.canTouchEfiVariables = true;
+  boot.loader.grub.enable = true;
+  # disko provides boot.loader.grub.devices from the EF02 partition — do NOT set
+  # boot.loader.grub.device (big-configuration.nix gotcha: duplicate-device assertion).
 
   boot.initrd.availableKernelModules = [
     "virtio_pci"
