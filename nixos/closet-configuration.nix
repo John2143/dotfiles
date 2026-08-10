@@ -206,6 +206,8 @@ data:
   hosts.split-horizon: |
     192.168.6.11 2143.me argocd.ts.2143.me au.2143.me cameras.ts.2143.me cams.ts.2143.me chat.2143.me files-ui.ts.2143.me home.ts.2143.me images.2143.me immich.ts.2143.me llm.2143.me longhorn.ts.2143.me m.2143.me matrix.2143.me net.2143.me pihole.ts.2143.me prod.rots.2143.me rots.2143.me status.2143.me temporal.ts.2143.me unifi.ts.2143.me
     192.168.6.11 john2143.com argo-webhook.john2143.com auth.john2143.com cameras.john2143.com containerstore.john2143.com element.john2143.com files.john2143.com grafana.john2143.com livekit.john2143.com mattermost.john2143.com net.john2143.com pvp.john2143.com seafile.john2143.com temporal.john2143.com
+    192.168.6.13 imap.m.2143.me smtp.m.2143.me
+    192.168.6.20 temporal-grpc.john2143.com
   split-horizon.server: |
     2143.me:53 john2143.com:53 {
         hosts /etc/coredns/custom/hosts.split-horizon {
