@@ -187,6 +187,35 @@ spec:
       spec:
         externalTrafficPolicy: Local
 '';
+    # Split-horizon DNS for pods: public hostnames resolve to the internal
+    # traefik LB (192.168.6.11) instead of the public IP, so pod traffic never
+    # hairpins through the router (see argo/docs/2026-08-10-auto-instrumentation.md).
+    # k3s's coredns chart mounts a `coredns-custom` ConfigMap at
+    # /etc/coredns/custom (volume custom-config-volume, optional) and the
+    # Corefile imports `*.server` at top level + `*.override` in the `.:53`
+    # block. The hosts plugin matches literal names — every public hostname is
+    # enumerated (not a wildcard). `.server` (not `.override`): a hosts-format
+    # blob inside `.:53` would be invalid Corefile and take down cluster DNS.
+    manifests.coredns-custom.source = builtins.toFile "coredns-custom.yaml" ''
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: coredns-custom
+  namespace: kube-system
+data:
+  hosts.split-horizon: |
+    192.168.6.11 2143.me argocd.ts.2143.me au.2143.me cameras.ts.2143.me cams.ts.2143.me chat.2143.me files-ui.ts.2143.me home.ts.2143.me images.2143.me immich.ts.2143.me llm.2143.me longhorn.ts.2143.me m.2143.me matrix.2143.me net.2143.me pihole.ts.2143.me prod.rots.2143.me rots.2143.me status.2143.me temporal.ts.2143.me unifi.ts.2143.me
+    192.168.6.11 john2143.com argo-webhook.john2143.com auth.john2143.com cameras.john2143.com containerstore.john2143.com element.john2143.com files.john2143.com grafana.john2143.com livekit.john2143.com mattermost.john2143.com net.john2143.com pvp.john2143.com seafile.john2143.com temporal.john2143.com
+  split-horizon.server: |
+    2143.me:53 john2143.com:53 {
+        hosts /etc/coredns/custom/hosts.split-horizon {
+            ttl 60
+            reload 15s
+            fallthrough
+        }
+        forward . /etc/resolv.conf
+    }
+'';
   };
   # Tailscale subnet route — advertises LAN + service subnets to the tailnet:
   # 192.168.5.0/24 (MetalLB API VIP .10) and 192.168.6.0/24 (traefik LB .6.11).
