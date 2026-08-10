@@ -226,6 +226,11 @@
     isSystemUser = true;
     group = "github-runner";
     extraGroups = ["podman"]; # the podman module hard-codes SocketGroup = "podman"; no docker group exists
+    # Rootless podman (docker build/pull runs client-side as this user) needs uid/gid
+    # mapping ranges to unpack image layers — without them: "insufficient UIDs or GIDs
+    # available in user namespace ... Check /etc/subuid and /etc/subgid"
+    subUidRanges = [{startUid = 1000000; count = 65536;}];
+    subGidRanges = [{startGid = 1000000; count = 65536;}];
   };
 
   # Runner workspace on disk, not the /run tmpfs default (RAM pressure on a 4G box).
