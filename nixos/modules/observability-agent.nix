@@ -22,6 +22,11 @@ in
   };
 
   config = lib.mkIf cfg.enable {
+
+    # Open the scrape port: the exporter binds 0.0.0.0:9633 but NixOS's
+    # firewall defaults to deny, so pite's Prometheus (job=smartctl, LAN
+    # targets 192.168.5.x:9633) would be refused on every host.
+    networking.firewall.allowedTCPPorts = [ 9633 ];
     # smartctl_exporter — Prometheus metrics for SMART health (bad sectors,
     # reallocated/pending/uncorrectable counts) scraped on port 9633.
     # Uses stable ata-* by-id names; Longhorn iSCSI volumes (no ata-* by-id)
