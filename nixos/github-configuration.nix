@@ -254,15 +254,13 @@
       # tar/gzip are already on the module's default PATH — do not duplicate them.
       pkgs.curl
       pkgs.wget
-      pkgs.jq
-      pkgs.unzip
-      pkgs.xz
-      pkgs.gnused
+      # the module's dockerCompat wrapper is an internal runCommand; reproduce it on the
+      # service PATH so workflows can call `docker`. Route through the rootful podman
+      # service socket (--remote) — client-side rootless podman needs subuid/newuidmap/
+      # fuse-overlayfs plumbing; the socket server runs as root and avoids all of it.
+      (pkgs.writeShellScriptBin "docker" "exec ${pkgs.podman}/bin/podman --remote --url unix:///run/podman/podman.sock \"$@\"")
       pkgs.gawk
       pkgs.kubectl
-      # the module's dockerCompat wrapper is an internal runCommand; reproduce it on the
-      # service PATH so workflows can call `docker`
-      (pkgs.writeShellScriptBin "docker" "exec ${pkgs.podman}/bin/podman \"$@\"")
     ];
     serviceOverrides = {
       # module defaults (ProtectSystem=strict, PrivateUsers, syscall filter) break podman/docker
