@@ -208,6 +208,19 @@
     autoPrune.enable = true; # weekly; keeps the 25G disk from filling with CI images
   };
 
+  # podman 5 reads `unqualified-search-registries`; the nixpkgs module only emits legacy
+  # [[registry]] aliases, so `docker build` of short names (e.g. FROM rust:1.97-alpine)
+  # fails with "no unqualified-search registries are defined". Override the generated file.
+  environment.etc."containers/registries.conf" = lib.mkForce {
+    text = ''
+      unqualified-search-registries = ["docker.io"]
+      [[registry]]
+      location = "docker.io"
+      [[registry]]
+      location = "quay.io"
+    '';
+  };
+
   users.groups.github-runner = {};
   users.users.github-runner = {
     isSystemUser = true;
