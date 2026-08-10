@@ -19,6 +19,7 @@ import json
 import re
 import sys
 import time
+import os
 import urllib.request
 import urllib.error
 import urllib.parse
@@ -39,6 +40,11 @@ FETCH_CONCURRENCY = 5
 PAGE_DELAY = 0.2  # seconds between pages
 MAX_HISTORY_BYTES = 50 * 1024 * 1024  # 50MB
 CHECKPOINT_STALE_SECONDS = 3600  # 1 hour
+CAMERAS_BASE = "https://cameras.ts.2143.me"
+
+# Mirrors config.py:_S3_BUCKET — hardcoded here to keep this module stdlib-only.
+S3_BUCKET = "frigate-genai"
+
 
 
 # ── Payload decoding ───────────────────────────────────────────────────
@@ -127,6 +133,7 @@ class WorkflowSummary:
     task_queue: str
     history_length: int
     search_attributes: dict[str, Any] = field(default_factory=dict)
+    memo: dict[str, Any] = field(default_factory=dict)
     parent_workflow_id: str | None = None
     parent_run_id: str | None = None
 
@@ -195,8 +202,8 @@ def _parse_workflow_summary(entry: dict) -> WorkflowSummary:
     """Extract WorkflowSummary from a list API entry."""
     wf = entry.get("execution", {})
     wf_type = entry.get("type", {}).get("name", "Unknown")
-    status = entry.get("status", "STATUS_UNSPECIFIED")
     sa = decode_search_attributes(entry.get("searchAttributes"))
+    memo = decode_payload(entry.get("memo", {}).get("fields", {}) or {})
     close_time = entry.get("closeTime", "")
     start_time = entry.get("startTime", "")
     parent = entry.get("parentExecution") or {}
@@ -208,19 +215,45 @@ def _parse_workflow_summary(entry: dict) -> WorkflowSummary:
         start_time=start_time,
         close_time=close_time,
         task_queue=entry.get("taskQueue", ""),
-        history_length=int(entry.get("historyLength", 0)),
         search_attributes=sa,
+        memo=memo,
         parent_workflow_id=parent.get("workflowId"),
         parent_run_id=parent.get("runId"),
     )
 
 
+
+def parse_agent_stats(memo: dict) -> dict:
+    """Flatten the AgentTurns/AgentTokens/AgentConfidence memo strings into
+    per-column values. Returns dict with keys: turns, turns_low, turns_high,
+    turns_max, turns_transcode, tokens_in, tokens_out, tokens_cached,
+    confidence, agent_summary. Missing/empty fields default to ''."""
+    turns = dict(re.findall(r"(\w+)=(-?\d+)", memo.get("AgentTurns", "")))
+    tokens = dict(re.findall(r"(\w+)=(-?\d+)", memo.get("AgentTokens", "")))
+    return {
+        "turns": turns.get("turns", ""),
+        "turns_low": turns.get("low", ""),
+        "turns_high": turns.get("high", ""),
+        "turns_max": turns.get("max", ""),
+        "turns_transcode": turns.get("transcode", ""),
+        "tokens_in": tokens.get("in", ""),
+        "tokens_out": tokens.get("out", ""),
+        "tokens_cached": tokens.get("cached", ""),
+        "confidence": memo.get("AgentConfidence", ""),
+        "agent_summary": memo.get("AgentSummary", ""),
+    }
+
 async def collect_workflows(
     limit: int,
     checkpoint_path: Path | None = None,
     resume: bool = True,
+    include_all: bool = False,
 ) -> list[WorkflowSummary]:
-    """Paginate through the Temporal list API to collect root GenAIWorkflow executions."""
+    """Paginate through the Temporal list API to collect workflows.
+
+    Default: only root GenAIWorkflow executions (the analysis baseline).
+    With include_all=True: every workflow (roots + children, all types),
+    with `limit` capping the total collected."""
     roots: list[WorkflowSummary] = []
     children_lookup: dict[str, list[WorkflowSummary]] = {}
     next_token = ""
@@ -276,6 +309,7 @@ async def collect_workflows(
                         "task_queue": r.task_queue,
                         "history_length": r.history_length,
                         "search_attributes": r.search_attributes,
+                        "memo": r.memo,
                         "parent_workflow_id": r.parent_workflow_id,
                         "parent_run_id": r.parent_run_id,
                     }
@@ -311,7 +345,7 @@ async def collect_workflows(
 
             summary = _parse_workflow_summary(entry)
 
-            if wf_type == "GenAIWorkflow":
+            if include_all or wf_type == "GenAIWorkflow":
                 if len(roots) >= limit:
                     break
                 if wf_id not in roots_by_id:
@@ -354,6 +388,147 @@ async def collect_workflows(
         checkpoint_path.unlink()
 
     return roots
+
+
+# ── All-workflow export ────────────────────────────────────────────────
+
+def _event_id_from_summary(s: WorkflowSummary) -> str:
+    """memo['event_id'], else workflow_id with the 'genai-' prefix stripped
+    and any '-re-{ts}' re-run suffix removed."""
+    memo_eid = s.memo.get("event_id")
+    if memo_eid:
+        return str(memo_eid)
+    wf_id = s.workflow_id
+    if wf_id.startswith("genai-"):
+        wf_id = wf_id[len("genai-"):]
+    return wf_id.split("-re-")[0]
+
+
+async def fetch_frigate_descriptions(
+    summaries: list[WorkflowSummary], cache_dir: Path, no_cache: bool,
+) -> dict[str, str]:
+    """Fetch the final description (as shown on the dashboard) for COMPLETED
+    root GenAIWorkflows from Frigate. Returns {workflow_id: description}."""
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    cache_file = cache_dir / "frigate_descriptions.json"
+    descriptions: dict[str, str] = {}
+    if not no_cache and cache_file.exists():
+        try:
+            descriptions = json.loads(cache_file.read_text())
+        except Exception:
+            descriptions = {}
+
+    targets = [
+        s for s in summaries
+        if s.workflow_type == "GenAIWorkflow"
+        and s.status == "WORKFLOW_EXECUTION_STATUS_COMPLETED"
+        and s.workflow_id not in descriptions
+    ]
+    sem = asyncio.Semaphore(FETCH_CONCURRENCY)
+    failures = 0
+
+    async def _fetch_one(s: WorkflowSummary) -> None:
+        nonlocal failures
+        event_id = _event_id_from_summary(s)
+        url = f"{CAMERAS_BASE}/api/events/{event_id}"
+        async with sem:
+            data = await http_get_json_safe(url)
+        if data is None:
+            failures += 1
+            descriptions[s.workflow_id] = ""
+            return
+        desc = (data.get("data") or {}).get("description") or ""
+        descriptions[s.workflow_id] = desc
+
+    await asyncio.gather(*[_fetch_one(s) for s in targets])
+    if failures:
+        print(
+            f"[descriptions] {failures} Frigate fetch failures (empty descriptions)",
+            file=sys.stderr,
+        )
+    cache_file.write_text(json.dumps(descriptions))
+    return descriptions
+
+
+async def fetch_agent_logs(
+    summaries: list[WorkflowSummary], output_dir: Path, no_cache: bool,
+) -> int:
+    """Download each event's non-image agent artifacts from S3 to
+    output_dir/agent_logs/{event_id}/. Returns count of events downloaded."""
+    import boto3
+    from botocore.config import Config
+
+    s3 = boto3.client(
+        "s3",
+        endpoint_url=os.environ["S3_ENDPOINT"],
+        aws_access_key_id=os.environ["S3_ACCESS_KEY"],
+        aws_secret_access_key=os.environ["S3_SECRET_KEY"],
+        config=Config(
+            connect_timeout=5,
+            read_timeout=5,
+            retries={"max_attempts": 2},
+        ),
+    )
+
+    targets = [
+        s for s in summaries
+        if s.workflow_type == "GenAIWorkflow"
+        and s.status == "WORKFLOW_EXECUTION_STATUS_COMPLETED"
+    ]
+    sem = asyncio.Semaphore(FETCH_CONCURRENCY)
+    downloaded = 0
+    key_failures = 0
+
+    def _list_keys(prefix: str) -> list[str]:
+        resp = s3.list_objects_v2(Bucket=S3_BUCKET, Prefix=prefix)
+        return [o["Key"] for o in resp.get("Contents", [])]
+
+    def _get_key(key: str) -> bytes:
+        return s3.get_object(Bucket=S3_BUCKET, Key=key)["Body"].read()
+
+    async def _fetch_event(s: WorkflowSummary) -> None:
+        nonlocal downloaded, key_failures
+        event_id = _event_id_from_summary(s)
+        agent_dir = output_dir / "agent_logs" / event_id
+        if not no_cache and (agent_dir / "trace.txt").exists():
+            return
+        prefix = f"events/{event_id}/agent/"
+        try:
+            keys = await asyncio.to_thread(_list_keys, prefix)
+        except Exception as e:
+            print(
+                f"[agent-logs] {event_id}: list failed: {e}",
+                file=sys.stderr,
+            )
+            return
+        text_keys = [k for k in keys if not k.lower().endswith(".jpg")]
+        if not text_keys:
+            return
+
+        agent_dir.mkdir(parents=True, exist_ok=True)
+
+        async def _get_one(key: str) -> None:
+            nonlocal key_failures
+            async with sem:
+                try:
+                    body = await asyncio.to_thread(_get_key, key)
+                except Exception as e:
+                    key_failures += 1
+                    print(f"[agent-logs] {key}: get failed: {e}", file=sys.stderr)
+                    return
+            rel = key[len(prefix):]
+            (agent_dir / rel).write_bytes(body)
+
+        await asyncio.gather(*[_get_one(k) for k in text_keys])
+        downloaded += 1
+
+    await asyncio.gather(*[_fetch_event(s) for s in targets])
+    print(
+        f"[agent-logs] Downloaded {downloaded} event dirs"
+        f" ({key_failures} key failures)",
+        file=sys.stderr,
+    )
+    return downloaded
 
 
 # ── History fetching ───────────────────────────────────────────────────
@@ -974,6 +1149,120 @@ def _sa(sa: dict[str, Any], key: str, default: str = "") -> str:
     return str(val) if val else default
 
 
+ALL_CSV_COLUMNS = [
+    "workflow_id", "run_id", "workflow_type", "status", "start_time",
+    "close_time", "duration_seconds", "parent_workflow_id", "camera",
+    "label", "model", "event_duration_seconds", "tool_failures",
+    "transcode", "confidence", "turns", "turns_low", "turns_high",
+    "turns_max", "turns_transcode", "tokens_in", "tokens_out",
+    "tokens_cached", "description", "agent_summary",
+]
+
+
+def _mean(values: list[float]) -> float | None:
+    return round(sum(values) / len(values), 2) if values else None
+
+
+def _median(values: list[float]) -> float | None:
+    if not values:
+        return None
+    sv = sorted(values)
+    n = len(sv)
+    mid = sv[n // 2] if n % 2 else (sv[n // 2 - 1] + sv[n // 2]) / 2
+    return round(mid, 2)
+
+
+def write_all_csv(
+    summaries: list[WorkflowSummary],
+    descriptions: dict[str, str],
+    output_dir: Path,
+) -> None:
+    """Write temporal_all_workflows.csv (one row per workflow, all types)
+    plus temporal_summary.json with by-status and completed-root stats."""
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    rows: list[list[Any]] = []
+    for s in summaries:
+        stats = parse_agent_stats(s.memo)
+        sa = s.search_attributes
+        rows.append([
+            s.workflow_id,
+            s.run_id,
+            s.workflow_type,
+            s.status,
+            s.start_time,
+            s.close_time,
+            _parse_duration(s.start_time, s.close_time),
+            s.parent_workflow_id or "",
+            _sa(sa, "Camera"),
+            _sa(sa, "Label"),
+            _sa(sa, "Model"),
+            _sa(sa, "Duration"),
+            _sa(sa, "ToolFailures"),
+            _sa(sa, "Transcode"),
+            _sa(sa, "Confidence"),
+            stats["turns"],
+            stats["turns_low"],
+            stats["turns_high"],
+            stats["turns_max"],
+            stats["turns_transcode"],
+            stats["tokens_in"],
+            stats["tokens_out"],
+            stats["tokens_cached"],
+            descriptions.get(s.workflow_id, ""),
+            stats["agent_summary"],
+        ])
+
+    all_path = output_dir / "temporal_all_workflows.csv"
+    with open(all_path, "w", newline="") as f:
+        writer = csv.writer(f)
+        writer.writerow(ALL_CSV_COLUMNS)
+        writer.writerows(rows)
+
+    # temporal_summary.json
+    by_status: dict[str, int] = {}
+    for s in summaries:
+        st = s.status.replace("WORKFLOW_EXECUTION_STATUS_", "") or s.status
+        by_status[st] = by_status.get(st, 0) + 1
+
+    completed_roots = [
+        s for s in summaries
+        if s.workflow_type == "GenAIWorkflow"
+        and s.status == "WORKFLOW_EXECUTION_STATUS_COMPLETED"
+    ]
+    turns_vals: list[float] = []
+    tokens_in_vals: list[float] = []
+    tokens_out_vals: list[float] = []
+    conf_counts: dict[str, int] = {}
+    for s in completed_roots:
+        stats = parse_agent_stats(s.memo)
+        try:
+            turns_vals.append(float(stats["turns"]))
+            tokens_in_vals.append(float(stats["tokens_in"]))
+            tokens_out_vals.append(float(stats["tokens_out"]))
+        except (TypeError, ValueError):
+            pass
+        conf = stats["confidence"]
+        if conf:
+            conf_counts[conf] = conf_counts.get(conf, 0) + 1
+
+    summary = {
+        "total_workflows": len(summaries),
+        "by_status": by_status,
+        "completed_roots": {
+            "count": len(completed_roots),
+            "mean_turns": _mean(turns_vals),
+            "median_turns": _median(turns_vals),
+            "mean_tokens_in": _mean(tokens_in_vals),
+            "mean_tokens_out": _mean(tokens_out_vals),
+            "confidence": conf_counts,
+        },
+    }
+    (output_dir / "temporal_summary.json").write_text(
+        json.dumps(summary, indent=2)
+    )
+
+
 def write_csvs(
     analyses: list[WorkflowAnalysis],
     failures: list[FailureRow],
@@ -1242,6 +1531,20 @@ async def main() -> None:
         "--no-resume", action="store_true",
         help="Ignore checkpoint.json and start collection from scratch",
     )
+    parser.add_argument(
+        "--all", action="store_true",
+        help="Export every workflow (roots + children) with memo stats; "
+             "skips history/failure analysis",
+    )
+    parser.add_argument(
+        "--descriptions", action="store_true",
+        help="With --all: fetch final descriptions from Frigate for completed roots",
+    )
+    parser.add_argument(
+        "--s3-agent-logs", action="store_true",
+        help="With --all: download agent trace/messages/tags from S3 for "
+             "completed events (requires S3_ENDPOINT/S3_ACCESS_KEY/S3_SECRET_KEY env)",
+    )
 
     args = parser.parse_args()
 
@@ -1250,6 +1553,76 @@ async def main() -> None:
     checkpoint_path = cache_dir / "checkpoint.json"
 
     start_time = time.time()
+
+    if args.all:
+        # Export mode: every workflow (roots + children) with memo stats.
+        all_summaries = await collect_workflows(
+            limit=args.limit,
+            checkpoint_path=checkpoint_path,
+            resume=not args.no_resume,
+            include_all=True,
+        )
+        print(
+            f"Collected {len(all_summaries)} workflows (roots + children).",
+            file=sys.stderr,
+        )
+
+        descriptions: dict[str, str] = {}
+        if args.descriptions:
+            print("Fetching Frigate descriptions...", file=sys.stderr)
+            descriptions = await fetch_frigate_descriptions(
+                all_summaries, cache_dir, no_cache=args.no_cache
+            )
+
+        if args.s3_agent_logs:
+            print("Downloading agent logs from S3...", file=sys.stderr)
+            downloaded = await fetch_agent_logs(
+                all_summaries, output_dir, no_cache=args.no_cache
+            )
+            print(
+                f"Downloaded agent logs for {downloaded} events.",
+                file=sys.stderr,
+            )
+
+        print("Writing export files...", file=sys.stderr)
+        write_all_csv(all_summaries, descriptions, output_dir)
+
+        total = len(all_summaries)
+        completed = sum(
+            1 for s in all_summaries
+            if s.status == "WORKFLOW_EXECUTION_STATUS_COMPLETED"
+        )
+        failed = sum(
+            1 for s in all_summaries
+            if s.status == "WORKFLOW_EXECUTION_STATUS_FAILED"
+        )
+        terminated = sum(
+            1 for s in all_summaries
+            if s.status == "WORKFLOW_EXECUTION_STATUS_TERMINATED"
+        )
+        cancelled = sum(
+            1 for s in all_summaries
+            if s.status == "WORKFLOW_EXECUTION_STATUS_CANCELED"
+        )
+        other = total - completed - failed - terminated - cancelled
+        print()
+        print("=== Temporal Job Analysis (all workflows) ===")
+        print(f"Total workflows: {total}")
+        if completed:
+            print(f"  Completed:   {completed:>5} ({completed/total*100:.1f}%)")
+        if failed:
+            print(f"  Failed:      {failed:>5} ({failed/total*100:.1f}%)")
+        if terminated:
+            print(f"  Terminated:  {terminated:>5} ({terminated/total*100:.1f}%)")
+        if cancelled:
+            print(f"  Cancelled:   {cancelled:>5} ({cancelled/total*100:.1f}%)")
+        if other:
+            print(f"  Other:       {other:>5} ({other/total*100:.1f}%)")
+        print()
+        elapsed = time.time() - start_time
+        print(f"CSVs written to: {output_dir.resolve()}/", file=sys.stderr)
+        print(f"Total time: {elapsed:.1f}s", file=sys.stderr)
+        return
 
     # Step 1: Collect workflows
     print(f"Collecting up to {args.limit} GenAIWorkflow executions...", file=sys.stderr)
