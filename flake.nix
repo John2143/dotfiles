@@ -365,8 +365,10 @@
       // (mkHost {
         name = "github";
         modules = [
+          inputs.disko.nixosModules.default
           ./nixos/shared-cli-configuration.nix
           ./nixos/github-configuration.nix
+          ./nixos/modules/disko_github.nix
           ./nixos/tailscale.nix
 
           ./nixos/modules/attic.nix
