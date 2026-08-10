@@ -58,6 +58,25 @@
               "192.168.5.209:9100" # office
               "192.168.5.68:9100" # big
               "localhost:9100"
+              "100.64.0.12:9100" # secu (tailscale; offline 4d as of 2026-08-10)
+              "100.64.0.7:9100" # vpin (tailscale, us-mullvad-vpin)
+            ];
+          }
+        ];
+      }
+      # SMART health metrics (smartctl_exporter on :9633) — every host with
+      # physical disks. Hosts without ata-* disks serve zero SMART series.
+      {
+        job_name = "smartctl";
+        static_configs = [
+          {
+            targets = [
+              "192.168.5.36:9633" # closet
+              "192.168.5.76:9633" # arch
+              "192.168.5.175:9633" # nas
+              "192.168.5.209:9633" # office
+              "192.168.5.68:9633" # big
+              "100.64.0.12:9633" # secu
             ];
           }
         ];

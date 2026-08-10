@@ -173,6 +173,11 @@
           ./nixos/modules/remote-builders.nix
 
           ./nixos/modules/waybar-popup.nix
+          ./nixos/modules/observability-agent.nix
+
+          {
+            services.observability-agent.enable = true;
+          }
         ];
       })
       // (mkHost {
@@ -193,6 +198,12 @@
           ./nixos/modules/remote-builders.nix
           ./nixos/modules/waybar-popup.nix
           ./nixos/modules/keybind.nix
+          ./nixos/modules/observability-agent.nix
+
+          {
+            services.observability-agent.enable = true;
+            services.observability-agent.enableNvidiaGpu = true;
+          }
         ];
       })
       // (mkHost {
@@ -209,6 +220,11 @@
           ./nixos/modules/attic.nix
 
           ./nixos/modules/remote-builders.nix
+          ./nixos/modules/observability-agent.nix
+
+          {
+            services.observability-agent.enable = true;
+          }
         ];
       })
       // (mkHost {
@@ -222,6 +238,11 @@
           ./nixos/modules/attic.nix
           ./nixos/modules/remote-builders.nix
           ./nixos/pite-canary.nix
+          ./nixos/modules/observability-agent.nix
+
+          {
+            services.observability-agent.enable = true;
+          }
         ];
       })
       // (mkHost {
@@ -240,6 +261,11 @@
               allowInterfaces = ["end0" "wlan0"];
             };
           })
+          ./nixos/modules/observability-agent.nix
+
+          {
+            services.observability-agent.enable = true;
+          }
         ];
       })
       // (mkHost {
@@ -252,6 +278,11 @@
 
           ./nixos/modules/attic.nix
           ./nixos/modules/remote-builders.nix
+          ./nixos/modules/observability-agent.nix
+
+          {
+            services.observability-agent.enable = true;
+          }
         ];
       })
       // (mkHost {
@@ -263,6 +294,11 @@
           ./nixos/tailscale.nix
 
           ./nixos/modules/attic.nix
+          ./nixos/modules/observability-agent.nix
+
+          {
+            services.observability-agent.enable = true;
+          }
         ];
       })
       // (mkHost {
@@ -282,6 +318,11 @@
           ./nixos/modules/attic.nix
 
           ./nixos/modules/remote-builders.nix
+          ./nixos/modules/observability-agent.nix
+
+          {
+            services.observability-agent.enable = true;
+          }
         ];
       })
       // (mkHost {
@@ -297,6 +338,11 @@
           ./nixos/modules/attic.nix
 
           ./nixos/modules/remote-builders.nix
+          ./nixos/modules/observability-agent.nix
+
+          {
+            services.observability-agent.enable = true;
+          }
         ];
       })
       // (mkHost {
@@ -309,6 +355,11 @@
           ./nixos/tailscale.nix
 
           ./nixos/modules/big-post-install.nix
+          ./nixos/modules/observability-agent.nix
+
+          {
+            services.observability-agent.enable = true;
+          }
         ];
       })
       // (mkHost {
@@ -319,6 +370,11 @@
           ./nixos/tailscale.nix
 
           ./nixos/modules/attic.nix
+          ./nixos/modules/observability-agent.nix
+
+          {
+            services.observability-agent.enable = true;
+          }
         ];
       })
       // {
