@@ -251,7 +251,7 @@ in {
     xdgOpenUsePortal = true;
     config = {
       Hyprland = {
-        default = ["gtk"];
+        default = ["hyprland" "gtk"];
       };
     };
   };
@@ -303,7 +303,7 @@ in {
   programs.hyprland = {
     enable = true;
     xwayland.enable = true;
-    #enableNvidiaPatches = true;
+    withUWSM = true;
   };
   security.polkit.enable = true;
 
