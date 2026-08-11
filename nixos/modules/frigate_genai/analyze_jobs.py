@@ -204,6 +204,7 @@ def _parse_workflow_summary(entry: dict) -> WorkflowSummary:
     wf_type = entry.get("type", {}).get("name", "Unknown")
     sa = decode_search_attributes(entry.get("searchAttributes"))
     memo = decode_payload(entry.get("memo", {}).get("fields", {}) or {})
+    status = entry.get("status", "STATUS_UNSPECIFIED")
     close_time = entry.get("closeTime", "")
     start_time = entry.get("startTime", "")
     parent = entry.get("parentExecution") or {}
@@ -215,6 +216,7 @@ def _parse_workflow_summary(entry: dict) -> WorkflowSummary:
         start_time=start_time,
         close_time=close_time,
         task_queue=entry.get("taskQueue", ""),
+        history_length=int(entry.get("historyLength", 0)),
         search_attributes=sa,
         memo=memo,
         parent_workflow_id=parent.get("workflowId"),

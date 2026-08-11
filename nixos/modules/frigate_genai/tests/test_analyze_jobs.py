@@ -9,6 +9,7 @@ analyze_jobs.py imports only stdlib, so no stubs are needed.
 
 import base64
 import csv
+import json
 import os
 import sys
 import tempfile
@@ -84,10 +85,13 @@ class TestParseAgentStats(unittest.TestCase):
 
 class TestDecodePayload(unittest.TestCase):
     def test_json_plain_payload_decodes_to_string(self):
-        data_b64 = base64.b64encode(b"turns=2 low=1").decode("utf-8")
+        # Temporal stores memo strings as base64(json.dumps(value)).
+        data_b64 = base64.b64encode(
+            json.dumps("turns=2 low=1").encode("utf-8")
+        ).decode("utf-8")
         payload = {
             "metadata": {
-                "encoding": base64.b64encode(b"json/plain").decode("utf-8")
+                "encoding": base64.b64encode(b"json/plain").decode("utf-8"),
             },
             "data": data_b64,
         }
@@ -156,7 +160,12 @@ class TestWriteAllCsv(unittest.TestCase):
     def test_summary_json_written(self):
         with tempfile.TemporaryDirectory() as tmp:
             out = Path(tmp)
-            s = _summary(memo={"AgentTurns": "turns=2 low=0", "AgentTokens": "in=5 out=1"})
+            s = _summary(
+                memo={
+                    "AgentTurns": "turns=2 low=0",
+                    "AgentTokens": "in=5 out=1",
+                },
+            )
             write_all_csv([s], {}, out)
             summary = json.loads((out / "temporal_summary.json").read_text())
             self.assertEqual(summary["total_workflows"], 1)
