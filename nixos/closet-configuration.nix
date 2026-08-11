@@ -138,10 +138,10 @@
       "--kube-controller-manager-arg=node-cidr-mask-size-ipv4=24"
       "--kube-controller-manager-arg=node-cidr-mask-size-ipv6=64"
       # Reserve RAM for OS + k3s server (etcd/Longhorn/iscsid are host
-      # processes, not pods). Leaves ~6 GiB for kube pods — mirror of NAS
-      # system-reserved fix. 2026-08-11: hard hangs/reboots under memory
-      # pressure (io pressure avg10 >57%, 145 MiB free before crash).
-      "--kubelet-arg=system-reserved=cpu=1,memory=1700Mi"
+      # processes, not pods). 7.7 GiB total - 4.7 GiB reserved = ~3 GiB for
+      # kube pods. 2026-08-11: hard hangs/reboots under memory pressure
+      # (host observability agents + etcd alone consume ~4.7 GiB).
+      "--kubelet-arg=system-reserved=cpu=1,memory=4700Mi"
     ];
     # Raw manifest via `source` (not `content`): pkgs.formats.yaml in current
     # nixpkgs emits a `%YAML 1.1` directive that the k3s helm-controller's
@@ -169,10 +169,22 @@ spec:
         mountPath: /etc/traefik/secrets
         readOnly: true
     deployment:
+      replicas: 2
       additionalVolumes:
         - name: crowdsec-bouncer-key
           secret:
             secretName: crowdsec-bouncer-key
+    nodeSelector:
+      node-role.kubernetes.io/control-plane: "true"
+    affinity:
+      podAntiAffinity:
+        preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchLabels:
+                  app.kubernetes.io/name: traefik
+              topologyKey: kubernetes.io/hostname
     providers:
       kubernetesGateway:
         enabled: true
