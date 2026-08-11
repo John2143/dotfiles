@@ -273,7 +273,8 @@ in {
   # Runner workspace on disk, not the /run tmpfs default (RAM pressure on a 4G box).
   systemd.tmpfiles.rules = [
     "d /var/lib/github-runner-work 0755 github-runner github-runner -"
-    "d /var/lib/github-runner-work-personal 0755 github-runner github-runner -"
+    "d /var/lib/github-runner-work-john2143-com 0755 github-runner github-runner -"
+    "d /var/lib/github-runner-work-dotfiles 0755 github-runner github-runner -"
   ];
 
   services.github-runners."2143-labs" = {
@@ -286,14 +287,28 @@ in {
     workDir = "/var/lib/github-runner-work";
   } // runnerCommon;
 
-  services.github-runners."personal" = {
+  # Personal-account repos are served by REPO-level runners — GitHub has no
+  # user/account-level runner entity (registration endpoint is per-repo:
+  # /repos/{owner}/{repo}/actions/runners/registration-token). One instance per
+  # repo that needs self-hosted CI; both share the same repo-scope classic PAT.
+  services.github-runners."john2143-com" = {
     enable = true;
-    url = "https://github.com/John2143"; # personal account URL — NOT an org/repo URL
+    url = "https://github.com/John2143/john2143.com"; # repo URL — two segments = repos/ endpoint
     tokenFile = config.age.secrets.github-personal-token.path;
-    name = "github-personal"; # unique within the account; service unit: github-runner-personal
+    name = "github-personal"; # unique within the repo; service unit: github-runner-john2143-com
     replace = true;
     extraLabels = ["nixos"];
-    workDir = "/var/lib/github-runner-work-personal";
+    workDir = "/var/lib/github-runner-work-john2143-com";
+  } // runnerCommon;
+
+  services.github-runners."dotfiles" = {
+    enable = true;
+    url = "https://github.com/John2143/dotfiles";
+    tokenFile = config.age.secrets.github-personal-token.path;
+    name = "github-dotfiles"; # service unit: github-runner-dotfiles
+    replace = true;
+    extraLabels = ["nixos"];
+    workDir = "/var/lib/github-runner-work-dotfiles";
   } // runnerCommon;
 
   system.stateVersion = "25.11";
