@@ -137,6 +137,11 @@
       # Keep standard per-node subnet sizing across families
       "--kube-controller-manager-arg=node-cidr-mask-size-ipv4=24"
       "--kube-controller-manager-arg=node-cidr-mask-size-ipv6=64"
+      # Reserve RAM for OS + k3s server (etcd/Longhorn/iscsid are host
+      # processes, not pods). Leaves ~6 GiB for kube pods — mirror of NAS
+      # system-reserved fix. 2026-08-11: hard hangs/reboots under memory
+      # pressure (io pressure avg10 >57%, 145 MiB free before crash).
+      "--kubelet-arg=system-reserved=cpu=1,memory=1700Mi"
     ];
     # Raw manifest via `source` (not `content`): pkgs.formats.yaml in current
     # nixpkgs emits a `%YAML 1.1` directive that the k3s helm-controller's
