@@ -170,6 +170,7 @@ in {
   "nut-ups-password.age".publicKeys = [closet nas office arch];
   "reolink-nvr.age".publicKeys = [office arch closet];
   "github-token.age".publicKeys = [office arch github];
+  "github-personal-token.age".publicKeys = [office arch github];
 
   "frigate-plus.age".publicKeys = [arch office];
 

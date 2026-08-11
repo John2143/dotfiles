@@ -27,7 +27,36 @@
   sshKeys,
   modulesPath,
   ...
-}: {
+}: let
+  # Shared options for both runners — keep the org and personal instances in lockstep.
+  runnerCommon = {
+    user = "github-runner";
+    group = "github-runner";
+    extraPackages = [
+      pkgs.podman
+      # GitHub-hosted parity: plain `run:` steps call these bare. bash/coreutils/git/
+      # tar/gzip are already on the module's default PATH — do not duplicate them.
+      pkgs.curl
+      pkgs.wget
+      # the module's dockerCompat wrapper is an internal runCommand; reproduce it on the
+      # service PATH so workflows can call `docker`. Route through the rootful podman
+      # service socket (--remote) — client-side rootless podman needs subuid/newuidmap/
+      # fuse-overlayfs plumbing; the socket server runs as root and avoids all of it.
+      (pkgs.writeShellScriptBin "docker" "exec ${pkgs.podman}/bin/podman --remote --url unix:///run/podman/podman.sock \"$@\"")
+      pkgs.gawk
+      pkgs.kubectl
+    ];
+    serviceOverrides = {
+      # module defaults (ProtectSystem=strict, PrivateUsers, syscall filter) break podman/docker
+      ProtectSystem = lib.mkForce false;
+      ProtectHome = lib.mkForce false;
+      PrivateUsers = lib.mkForce false;
+      RestrictAddressFamilies = lib.mkForce ["AF_INET" "AF_INET6" "AF_UNIX" "AF_NETLINK" "AF_PACKET"];
+      RestrictNamespaces = lib.mkForce false;
+      SystemCallFilter = lib.mkForce [];
+    };
+  };
+in {
   imports = [
     (modulesPath + "/profiles/qemu-guest.nix") # Proxmox VM virtio drivers
     ./github-hardware-configuration.nix # fileSystems owned by disko (see modules/disko_github.nix)
@@ -199,6 +228,14 @@
     group = "root";
   };
 
+  # ── GitHub Actions personal runner (John2143) ────────────────────
+  age.secrets.github-personal-token = {
+    file = ../secrets/github-personal-token.age;
+    mode = "0400";
+    owner = "root";
+    group = "root";
+  };
+
   # Podman with docker-compat — container builds in CI jobs.
   # dockerCompat asserts it conflicts with virtualisation.docker; do NOT enable both.
   virtualisation.podman = {
@@ -236,6 +273,7 @@
   # Runner workspace on disk, not the /run tmpfs default (RAM pressure on a 4G box).
   systemd.tmpfiles.rules = [
     "d /var/lib/github-runner-work 0755 github-runner github-runner -"
+    "d /var/lib/github-runner-work-personal 0755 github-runner github-runner -"
   ];
 
   services.github-runners."2143-labs" = {
@@ -245,33 +283,18 @@
     name = "github"; # org-unique runner name; service unit: github-runner-2143-labs
     replace = true; # re-registration succeeds if a stale "github" runner lingers
     extraLabels = ["nixos"];
-    user = "github-runner";
-    group = "github-runner";
     workDir = "/var/lib/github-runner-work";
-    extraPackages = [
-      pkgs.podman
-      # GitHub-hosted parity: plain `run:` steps call these bare. bash/coreutils/git/
-      # tar/gzip are already on the module's default PATH — do not duplicate them.
-      pkgs.curl
-      pkgs.wget
-      # the module's dockerCompat wrapper is an internal runCommand; reproduce it on the
-      # service PATH so workflows can call `docker`. Route through the rootful podman
-      # service socket (--remote) — client-side rootless podman needs subuid/newuidmap/
-      # fuse-overlayfs plumbing; the socket server runs as root and avoids all of it.
-      (pkgs.writeShellScriptBin "docker" "exec ${pkgs.podman}/bin/podman --remote --url unix:///run/podman/podman.sock \"$@\"")
-      pkgs.gawk
-      pkgs.kubectl
-    ];
-    serviceOverrides = {
-      # module defaults (ProtectSystem=strict, PrivateUsers, syscall filter) break podman/docker
-      ProtectSystem = lib.mkForce false;
-      ProtectHome = lib.mkForce false;
-      PrivateUsers = lib.mkForce false;
-      RestrictAddressFamilies = lib.mkForce ["AF_INET" "AF_INET6" "AF_UNIX" "AF_NETLINK" "AF_PACKET"];
-      RestrictNamespaces = lib.mkForce false;
-      SystemCallFilter = lib.mkForce [];
-    };
-  };
+  } // runnerCommon;
+
+  services.github-runners."personal" = {
+    enable = true;
+    url = "https://github.com/John2143"; # personal account URL — NOT an org/repo URL
+    tokenFile = config.age.secrets.github-personal-token.path;
+    name = "github-personal"; # unique within the account; service unit: github-runner-personal
+    replace = true;
+    extraLabels = ["nixos"];
+    workDir = "/var/lib/github-runner-work-personal";
+  } // runnerCommon;
 
   system.stateVersion = "25.11";
 }
