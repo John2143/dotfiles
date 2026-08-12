@@ -23,6 +23,12 @@
   home-manager.users."john" = import ./home.nix;
   services.getty.autologinUser = "john";
 
+  # age identity must be reachable in the initrd: NixOS 26.x runs agenix
+  # activation inside initrd-nixos-activation-start, before @home (and thus
+  # /home/john/.ssh/age) is mounted. Mirror the cluster-host pattern
+  # (cluster/hosts/ssh.nix): keyfile at /etc/ssh/age-identity on the root fs.
+  age.identityPaths = ["/etc/ssh/age-identity"];
+
   # Use the systemd-boot EFI boot loader.;
   boot.loader = {
     efi.canTouchEfiVariables = true;
