@@ -169,7 +169,7 @@ spec:
         mountPath: /etc/traefik/secrets
         readOnly: true
     deployment:
-      replicas: 2
+      replicas: 3
       additionalVolumes:
         - name: crowdsec-bouncer-key
           secret:
