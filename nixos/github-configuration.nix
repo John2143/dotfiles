@@ -281,6 +281,32 @@ in {
     "d /var/lib/github-runner-work-dotfiles 0755 github-runner github-runner -"
   ];
 
+  # CI bulk storage — 100G ZFS disk (tank/vm-101-cache, ext4 "ci-cache")
+  # attached as scsi1 by the hypervisor. Mounted at /var/lib/containers
+  # (podman's default graphroot) so image layers + build cache live off the
+  # 25G boot disk; the runner workspaces are bind-mounted onto subdirs of the
+  # same disk. The work dirs are created on the disk during provisioning.
+  fileSystems."/var/lib/containers" = {
+    device = "/dev/disk/by-uuid/8a989915-27d7-4659-826c-83d84df88925";
+    fsType = "ext4";
+    options = [ "defaults" ];
+  };
+  fileSystems."/var/lib/github-runner-work" = {
+    device = "/var/lib/containers/work-2143-labs";
+    fsType = "none";
+    options = [ "bind" ];
+  };
+  fileSystems."/var/lib/github-runner-work-john2143-com" = {
+    device = "/var/lib/containers/work-john2143-com";
+    fsType = "none";
+    options = [ "bind" ];
+  };
+  fileSystems."/var/lib/github-runner-work-dotfiles" = {
+    device = "/var/lib/containers/work-dotfiles";
+    fsType = "none";
+    options = [ "bind" ];
+  };
+
   services.github-runners."2143-labs" = {
     enable = true;
     url = "https://github.com/2143-Labs"; # org URL — a repo URL breaks org-wide tokens with 404
