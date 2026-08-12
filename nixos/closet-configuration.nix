@@ -138,10 +138,11 @@
       "--kube-controller-manager-arg=node-cidr-mask-size-ipv4=24"
       "--kube-controller-manager-arg=node-cidr-mask-size-ipv6=64"
       # Reserve RAM for OS + k3s server (etcd/Longhorn/iscsid are host
-      # processes, not pods). 7.7 GiB total - 4.7 GiB reserved = ~3 GiB for
-      # kube pods. 2026-08-11: hard hangs/reboots under memory pressure
-      # (host observability agents + etcd alone consume ~4.7 GiB).
-      "--kubelet-arg=system-reserved=cpu=1,memory=4700Mi"
+      # processes, not pods). 7.7 GiB total - 2.7 GiB reserved = ~5 GiB for
+      # kube pods (HA must run here — USB hardware affinity; user priority).
+      # WARNING: host procs measured ~4.7 GiB, so this overcommits and the
+      # OOM hang may return until the 32 GB upgrade lands.
+      "--kubelet-arg=system-reserved=cpu=1,memory=2700Mi"
     ];
     # Raw manifest via `source` (not `content`): pkgs.formats.yaml in current
     # nixpkgs emits a `%YAML 1.1` directive that the k3s helm-controller's
