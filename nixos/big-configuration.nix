@@ -47,6 +47,69 @@
     dockerCompat = true;
   };
 
+  # ── Volatile/growing data off the 100G root disk ───────────────────────
+  # /tmp is RAM-backed (tmpfs): ephemeral by design, so it can never fill
+  # the root disk, and it's faster than any disk. The 2T scsi1 disk is 100%
+  # longhorn's (see modules/disko_big.nix), so it's left alone here.
+  boot.tmp.useTmpfs = true;
+  boot.tmp.tmpfsSize = "16G";
+
+  # Weekly TRIM. Only reclaims space on the Proxmox thin pool if the VM's
+  # disks have `discard=on` (otherwise QEMU silently drops guest discards).
+  services.fstrim.enable = true;
+
+  # ── Growing /var dirs relocated onto the 2T longhorn zvol ───────────────
+  # Bind-mounts the persistent/growing /var dirs onto the 2T scsi1 disk
+  # (mounted at /var/lib/longhorn by disko_big.nix). Longhorn only manages
+  # its own subdirs (replicas/, engine-binaries/), so a .system/ subtree is
+  # safe and keeps free-space accounting accurate (same filesystem).
+  # `nofail` + `depends` keep boot safe: nothing mounts before the zvol is
+  # up, and a missing disk can never brick boot. Source dirs are created by
+  # the tmpfiles rule below and persist on the zvol's ext4.
+  #
+  # NOTE: on the first `nixos-rebuild switch`, migrate existing data first
+  # (with the relevant service stopped), e.g.:
+  #   rsync -a /var/lib/rancher/     /var/lib/longhorn/.system/rancher/     # k3s
+  #   rsync -a /var/lib/containers/  /var/lib/longhorn/.system/containers/  # podman
+  # The originals stay on the root disk until you delete them.
+  fileSystems."/var/log" = {
+    device = "/var/lib/longhorn/.system/log";
+    fsType = "none";
+    options = [ "bind" "nofail" ];
+    depends = [ "/var/lib/longhorn" ];
+  };
+  fileSystems."/var/cache" = {
+    device = "/var/lib/longhorn/.system/cache";
+    fsType = "none";
+    options = [ "bind" "nofail" ];
+    depends = [ "/var/lib/longhorn" ];
+  };
+  fileSystems."/var/tmp" = {
+    device = "/var/lib/longhorn/.system/tmp";
+    fsType = "none";
+    options = [ "bind" "nofail" ];
+    depends = [ "/var/lib/longhorn" ];
+  };
+  fileSystems."/var/lib/containers" = {
+    device = "/var/lib/longhorn/.system/containers";
+    fsType = "none";
+    options = [ "bind" "nofail" ];
+    depends = [ "/var/lib/longhorn" ];
+  };
+  fileSystems."/var/lib/rancher" = {
+    device = "/var/lib/longhorn/.system/rancher";
+    fsType = "none";
+    options = [ "bind" "nofail" ];
+    depends = [ "/var/lib/longhorn" ];
+  };
+  systemd.tmpfiles.rules = [
+    "d /var/lib/longhorn/.system/log 0755 root root -"
+    "d /var/lib/longhorn/.system/cache 0755 root root -"
+    "d /var/lib/longhorn/.system/tmp 1777 root root -"
+    "d /var/lib/longhorn/.system/containers 0711 root root -"
+    "d /var/lib/longhorn/.system/rancher 0755 root root -"
+  ];
+
   networking.hostName = compName;
   networking.networkmanager.enable = true;
 
