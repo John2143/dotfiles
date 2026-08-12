@@ -45,6 +45,10 @@
       (pkgs.writeShellScriptBin "docker" "exec ${pkgs.podman}/bin/podman --remote --url unix:///run/podman/podman.sock \"$@\"")
       pkgs.gawk
       pkgs.kubectl
+      # skopeo — nix-built container tarballs are pushed with `skopeo copy docker-archive://…`
+      # (brickBreaker-reimagined, bevy2025, openfrontpro, openfrontAPIDiscordBots, rots-authserver);
+      # the workflows' `sudo apt-get install skopeo` steps can't run here (no sudo).
+      pkgs.skopeo
     ];
     serviceOverrides = {
       # module defaults (ProtectSystem=strict, PrivateUsers, syscall filter) break podman/docker
