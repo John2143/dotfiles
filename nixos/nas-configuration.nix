@@ -140,6 +140,7 @@ nixpkgs.overlays = [
     "kernel.hardlockup_panic" = "1";
     "kernel.softlockup_panic" = "1";
     "kernel.panic_on_rcu_stall" = "1";
+    "kernel.panic" = "10";
     "vm.swappiness" = "100";
   };
   systemd.watchdog.runtimeTime = "30s";
@@ -148,6 +149,7 @@ nixpkgs.overlays = [
     "zswap.compressor=zstd"
     "zswap.zpool=zsmalloc"
     "zswap.max_pool_percent=30"
+    "panic=10"
     "zfs.zfs_arc_max=6442450944"
   ];
   boot.kernelModules = [

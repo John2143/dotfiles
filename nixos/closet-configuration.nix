@@ -38,10 +38,16 @@
     }
   ];
   zramSwap.enable = true;
+  zramSwap.memoryPercent = 75;
   virtualisation.podman = {
     enable = true;
     dockerCompat = true;
   };
+
+  # Reboot 10s after a kernel panic instead of hanging; panic console text is
+  # captured to efi pstore and survives the reboot in /var/lib/systemd/pstore.
+  boot.kernel.sysctl."kernel.panic" = 10;
+  boot.kernelParams = [ "panic=10" ];
 
   # (cam04 restream moved to Frigate's ffmpeg with NVR sub-stream — no separate service needed)
 
@@ -138,11 +144,13 @@
       "--kube-controller-manager-arg=node-cidr-mask-size-ipv4=24"
       "--kube-controller-manager-arg=node-cidr-mask-size-ipv6=64"
       # Reserve RAM for OS + k3s server (etcd/Longhorn/iscsid are host
-      # processes, not pods). 7.7 GiB total - 2.7 GiB reserved = ~5 GiB for
+      # processes, not pods). 7.7 GiB total - 4 GiB reserved ≈ 3.4 GiB for
       # kube pods (HA must run here — USB hardware affinity; user priority).
-      # WARNING: host procs measured ~4.7 GiB, so this overcommits and the
-      # OOM hang may return until the 32 GB upgrade lands.
-      "--kubelet-arg=system-reserved=cpu=1,memory=2700Mi"
+      # Host procs measure ~4.7 GiB — 4096Mi matches measured usage so the
+      # kubelet evicts pods before the host OOMs (2700Mi overcommitted and
+      # the OOM hang returned; 5120Mi would leave only ~2.4 GiB for pods on
+      # a control-plane hosting argocd/cert-manager/keda).
+      "--kubelet-arg=system-reserved=cpu=1,memory=4096Mi"
     ];
     # Raw manifest via `source` (not `content`): pkgs.formats.yaml in current
     # nixpkgs emits a `%YAML 1.1` directive that the k3s helm-controller's
