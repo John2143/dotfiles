@@ -49,6 +49,11 @@
       # (brickBreaker-reimagined, bevy2025, openfrontpro, openfrontAPIDiscordBots, rots-authserver);
       # the workflows' `sudo apt-get install skopeo` steps can't run here (no sudo).
       pkgs.skopeo
+      # cachix — cachix-action v10's `nix-env -iA cachix` installs to
+      # ~/.nix-profile/bin which is NOT on the service PATH, so the action's
+      # bare `cachix use/push` calls fail with "Unable to locate executable".
+      # Pre-installing it on PATH makes the action's install step a harmless no-op.
+      pkgs.cachix
     ];
     serviceOverrides = {
       # module defaults (ProtectSystem=strict, PrivateUsers, syscall filter) break podman/docker
