@@ -37,6 +37,7 @@ from frigate_genai.config import (
     BUILD_ID,
     _SEARCH_CAMERA,
     _SEARCH_LABEL,
+    _SEARCH_EVENT_ID,
     _frigate_url,
 )
 from frigate_genai.s3_helpers import (
@@ -523,15 +524,37 @@ async def async_main(prompts_path: str, provider_path: str, mode: str = "trigger
         log.info("Dashboard server running, waiting for requests...")
 
         async def _do_reprocess(event_id: str, event: dict, model: str | None = None) -> str:
-            # Cancel any live workflow for this event (mqtt-started runs use the
-            # canonical ID). Best effort: a fresh live run may not exist.
-            canonical_workflow_id = f"genai-{event_id}"
+            # Cancel every running GenAIWorkflow for this event (canonical +
+            # previous -re- runs) and wait for them to close, so the new run is
+            # the sole writer of events/<event_id>/agent/messages.json and its
+            # cleanup (archive + delete of events/<event_id>/) can't race us.
+            handles = []
             try:
-                handle = _temporal_client.get_workflow_handle(canonical_workflow_id)
-                await handle.cancel()
-                log.info("Cancelled old workflow %s for reprocess", canonical_workflow_id)
-            except Exception:
-                log.debug("No existing workflow %s to cancel", canonical_workflow_id)
+                async for wf in _temporal_client.list_workflows(
+                    query=f'EventId = "{event_id}" and ExecutionStatus = "Running"'
+                ):
+                    handles.append(_temporal_client.get_workflow_handle(wf.id, run_id=wf.run_id))
+            except Exception as e:
+                log.warning("Failed to list running workflows for %s: %s", event_id, e)
+            for handle in handles:
+                try:
+                    await handle.cancel()
+                except Exception:
+                    pass
+            deadline = time.monotonic() + 60
+            while handles and time.monotonic() < deadline:
+                closed = True
+                for h in handles:
+                    try:
+                        desc = await h.describe()
+                        if "RUNNING" in str(desc.status):
+                            closed = False
+                            break
+                    except Exception:
+                        pass  # handle not found -> workflow closed
+                if closed:
+                    break
+                await asyncio.sleep(2)
             camera = event.get("camera", "")
             label = event.get("label", "")
             input_data = _build_workflow_input(event, bypass_pause=True)
@@ -551,6 +574,7 @@ async def async_main(prompts_path: str, provider_path: str, mode: str = "trigger
                 search_attributes=TypedSearchAttributes([
                     SearchAttributePair(_SEARCH_CAMERA, camera),
                     SearchAttributePair(_SEARCH_LABEL, label),
+                    SearchAttributePair(_SEARCH_EVENT_ID, event_id),
                 ]),
                 memo={"event_id": event_id, "camera": camera, "label": label,
                       "duration": int(event.get("end_time", event.get("start_time", 0)) - event.get("start_time", 0)),

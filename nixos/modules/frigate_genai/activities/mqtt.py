@@ -10,7 +10,7 @@ import paho.mqtt.client as mqtt
 from temporalio.client import Client
 from temporalio.common import TypedSearchAttributes, SearchAttributePair
 
-from frigate_genai.config import TASK_QUEUE, _SEARCH_CAMERA, _SEARCH_LABEL
+from frigate_genai.config import TASK_QUEUE, _SEARCH_CAMERA, _SEARCH_LABEL, _SEARCH_EVENT_ID
 from frigate_genai.s3_helpers import _s3_get, _s3_put, _stats
 
 log = logging.getLogger("frigate-genai-sidecar")
@@ -46,6 +46,7 @@ def _start_workflow_sync(event: dict) -> None:
                 search_attributes=TypedSearchAttributes([
                     SearchAttributePair(_SEARCH_CAMERA, camera),
                     SearchAttributePair(_SEARCH_LABEL, label),
+                    SearchAttributePair(_SEARCH_EVENT_ID, event_id),
                 ]),
                 memo={"event_id": event_id, "camera": camera, "label": label,
                       "duration": int(event.get("end_time", event.get("start_time", 0)) - event.get("start_time", 0))})

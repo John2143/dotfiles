@@ -17,7 +17,6 @@ from temporalio.exceptions import ApplicationError
 from frigate_genai.config import MAX_OUTPUT_TOKENS
 
 from frigate_genai.s3_helpers import (
-    _atomic_write,
     _deserialize_messages,
     _first_line,
     _load_state,
@@ -129,28 +128,18 @@ async def run_genai_turn_activity(turn_arg: dict) -> dict:
     label = turn_arg["label"]
 
     # Load state from S3 or disk
-    state, agent_dir = _load_state(msg_path)
+    state, agent_dir = await asyncio.to_thread(_load_state, msg_path)
     messages = state["messages"]
 
-    # Turn-limit warnings: at 25 remaining, and urgency in nudge within 10
     turn_num = turn_arg.get("turn_num", 1)
     max_turns = turn_arg.get("max_turns", 100)
-    if turn_num == max_turns - 25:
-        messages.append({
-            "role": "user",
-            "content": (
-                f"Turn {turn_num} of {max_turns}. "
-                f"25 turns remaining. Start concluding — call set_description() soon."
-            ),
-        })
-        _atomic_write(msg_path, state)
 
     # Deserialize [[filename]] refs → base64 data URIs for LLM call
     # Retention cap: strip images from all but the last 8 image-bearing
     # messages in the SENT copy, before base64 deserialize (also skips their S3
     # reads). Persisted state is never mutated.
     messages = _retain_recent_images(messages)
-    messages_with_images = _deserialize_messages(messages, agent_dir)
+    messages_with_images = await asyncio.to_thread(_deserialize_messages, messages, agent_dir)
 
     # Load provider config
     try:
@@ -243,11 +232,12 @@ async def run_genai_turn_activity(turn_arg: dict) -> dict:
         assistant_msg = msg.model_dump(exclude_none=True)
         result["assistant_message"] = assistant_msg
         result["text_only"] = True
+        msgs_to_persist = []
         content = assistant_msg.get("content") or ""
         # Skip persisting empty/thinking-only assistant messages so the history
         # doesn't accumulate blanks that are re-sent every turn.
         if isinstance(content, str) and content.strip():
-            state["messages"].append(assistant_msg)
+            msgs_to_persist.append(assistant_msg)
         remaining = max_turns - turn_num
         urgency = f"Only {remaining} turns remaining! " if remaining <= 10 else ""
         nudge_content = _build_nudge(urgency, turn_arg.get("tool_names", []))
@@ -255,28 +245,20 @@ async def run_genai_turn_activity(turn_arg: dict) -> dict:
         # Dedupe consecutive nudges (identical content) so a blank streak adds
         # exactly one nudge, not one per turn.
         if not (last and last.get("role") == "user" and last.get("content") == nudge_content):
-            state["messages"].append({"role": "user", "content": nudge_content})
-        _atomic_write(msg_path, state)
+            msgs_to_persist.append({"role": "user", "content": nudge_content})
+        result["messages_to_persist"] = msgs_to_persist
         return result
 
     assistant_msg = msg.model_dump(exclude_none=True)
     result["assistant_message"] = assistant_msg
 
-    # Persist assistant message so tool activities can find their tc_id
-    state["messages"].append(assistant_msg)
-    _atomic_write(msg_path, state)
-    log.debug("run_genai_turn: appended assistant message (tool_calls=%d)", len(msg.tool_calls))
     # Parse tool calls
     tool_calls = []
+    rejection_messages: list[dict] = []
 
     def _reject(tc_id: str, content: str) -> None:
-        """Append a tool-level error message and persist immediately."""
-        state["messages"].append({
-            "role": "tool",
-            "tool_call_id": tc_id,
-            "content": content,
-        })
-        _atomic_write(msg_path, state)
+        """Collect a tool-level error message for the workflow to persist."""
+        rejection_messages.append({"role": "tool", "tool_call_id": tc_id, "content": content})
 
     for tc in msg.tool_calls:
         tc_entry = {
@@ -344,15 +326,15 @@ async def run_genai_turn_activity(turn_arg: dict) -> dict:
     if len(tool_calls) > 1 and any(tc["name"] in exit_tools for tc in tool_calls):
         exit_ids = [tc["id"] for tc in tool_calls if tc["name"] in exit_tools]
         for eid in exit_ids:
-            state["messages"].append({
+            rejection_messages.append({
                 "role": "tool",
                 "tool_call_id": eid,
                 "content": "Cannot call set_description/close_subagent while other tools are pending. Review their results first, then conclude."
             })
-        _atomic_write(msg_path, state)
         tool_calls = [tc for tc in tool_calls if tc["name"] not in exit_tools]
         result.pop("description", None)
         result.pop("confidence", None)
 
     result["tool_calls"] = tool_calls
+    result["rejection_messages"] = rejection_messages
     return result

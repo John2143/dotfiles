@@ -468,13 +468,24 @@ class AgentSessionWorkflow:
             turn_arg["turn_num"] = turn + 1
             turn_arg["max_turns"] = max_turns
             turn_arg["tool_names"] = [t["function"]["name"] for t in _get_tools_for_depth(depth, max_depth)]
+            if turn + 1 == max_turns - 25:
+                await workflow.execute_activity(
+                    apply_tool_messages_activity,
+                    arg={"msg_path": msg_path, "outcomes": [{"messages": [{
+                        "role": "user",
+                        "content": f"Turn {turn + 1} of {max_turns}. 25 turns remaining. Start concluding — call set_description() soon.",
+                    }]}]},
+                    task_queue=genai_queue,
+                    start_to_close_timeout=timedelta(seconds=10),
+                    retry_policy=_ACTIVITY_RETRY,
+                )
             result = await workflow.execute_activity(
                 run_genai_turn_activity,
                 arg=turn_arg,
                 task_queue=genai_queue,
                 schedule_to_start_timeout=timedelta(hours=1),
                 start_to_close_timeout=timedelta(seconds=600),
-                heartbeat_timeout=timedelta(seconds=15),
+                heartbeat_timeout=timedelta(seconds=300),
                 retry_policy=_GENAI_RETRY,
             )
 
@@ -495,6 +506,27 @@ class AgentSessionWorkflow:
                 f"(cached: {total_cost['cached']}) | "
                 f"tools: {len(trace_entries)}"
             )
+            # Persist the turn's assistant/rejection messages before dispatching
+            # tools so tool activities can still find their tc_id via _find_tc_id,
+            # and so a retried run_genai_turn (which persists nothing) can never
+            # leave an orphaned assistant tool-call behind.
+            pre_outcomes: list[dict] = []
+            if result.get("text_only"):
+                for m in result.get("messages_to_persist", []):
+                    pre_outcomes.append({"messages": [m]})
+            else:
+                if result.get("assistant_message"):
+                    pre_outcomes.append({"messages": [result["assistant_message"]]})
+                for m in result.get("rejection_messages", []):
+                    pre_outcomes.append({"messages": [m]})
+            if pre_outcomes:
+                await workflow.execute_activity(
+                    apply_tool_messages_activity,
+                    arg={"msg_path": msg_path, "outcomes": pre_outcomes},
+                    task_queue=genai_queue,
+                    start_to_close_timeout=timedelta(seconds=10),
+                    retry_policy=_ACTIVITY_RETRY,
+                )
 
             if result.get("description"):
                 description = result["description"]
