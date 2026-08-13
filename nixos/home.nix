@@ -475,11 +475,9 @@ in {
           function()
             hl.exec_cmd("tmux setenv -g HYPRLAND_INSTANCE_SIGNATURE " .. os.getenv("HYPRLAND_INSTANCE_SIGNATURE"))
             hl.exec_cmd("lxqt-policykit-agent")
-        '' + (if compName == "secu" then ''
-            hl.exec_cmd("fish ~/dotfiles/.config/startup-secu.fish")
-        '' else ''
-            hl.exec_cmd("fish -c \"tmux new-session -d ; sleep 1; fish ~/dotfiles/.config/startup.fish\"")
-        '') + ''
+        '' + ''
+            hl.exec_cmd("fish -c \"if test -f ~/dotfiles/.config/startup.fish; tmux new-session -d; sleep 1; fish ~/dotfiles/.config/startup.fish; end\"")
+        '' + ''
             hl.exec_cmd("fish ~/.xprofile.fish")
             hl.exec_cmd("wl-paste --type text --watch cliphist store")
             hl.exec_cmd("wl-paste --type image --watch cliphist store")
