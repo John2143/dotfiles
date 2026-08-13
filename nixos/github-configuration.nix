@@ -72,7 +72,11 @@ in {
     ./modules/user-john.nix
   ];
 
-  boot.loader.grub.enable = true;
+  # The runner user needs to configure binary caches: cachix-action's
+  # `cachix use` writes the cache into nix.conf, and non-trusted users get
+  # "This user doesn't have permissions to configure binary caches".
+  # mkForce: avoid a dup "root" from nixpkgs' default definition.
+  nix.settings.trusted-users = lib.mkForce [ "root" "github-runner" ];
   # disko provides boot.loader.grub.devices from the EF02 partition — do NOT set
   # boot.loader.grub.device (big-configuration.nix gotcha: duplicate-device assertion).
 
