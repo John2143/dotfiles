@@ -315,12 +315,13 @@ in {
     replace = true; # re-registration succeeds if a stale "github" runner lingers
     extraLabels = ["nixos"];
     workDir = "/var/lib/github-runner-work";
+    # skopeo/containers-storage rootless needs XDG_RUNTIME_DIR writable by the
+    # service user; the module's RuntimeDirectory github-runner/<name> is owned
+    # by github-runner, /run/containers is not.
+    extraEnvironment = { XDG_RUNTIME_DIR = "/run/github-runner/2143-labs"; };
   } // runnerCommon;
 
   # Personal-account repos are served by REPO-level runners — GitHub has no
-  # user/account-level runner entity (registration endpoint is per-repo:
-  # /repos/{owner}/{repo}/actions/runners/registration-token). One instance per
-  # repo that needs self-hosted CI; both share the same repo-scope classic PAT.
   services.github-runners."john2143-com" = {
     enable = true;
     url = "https://github.com/John2143/john2143.com"; # repo URL — two segments = repos/ endpoint
@@ -329,6 +330,7 @@ in {
     replace = true;
     extraLabels = ["nixos"];
     workDir = "/var/lib/github-runner-work-john2143-com";
+    extraEnvironment = { XDG_RUNTIME_DIR = "/run/github-runner/john2143-com"; };
   } // runnerCommon;
 
   services.github-runners."dotfiles" = {
@@ -339,6 +341,7 @@ in {
     replace = true;
     extraLabels = ["nixos"];
     workDir = "/var/lib/github-runner-work-dotfiles";
+    extraEnvironment = { XDG_RUNTIME_DIR = "/run/github-runner/dotfiles"; };
   } // runnerCommon;
 
   system.stateVersion = "25.11";
