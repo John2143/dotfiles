@@ -15,7 +15,7 @@ in {
     # GL-KVM camera view — fullscreen on open (recreates the old always-on
     # fullscreen grid experience). Inert on other hosts (no GLKVM-titled window).
     window_rule = [
-      { match = { title = "^GLKVM$"; }; fullscreen = true; }
+      { match = { title = "^GLKVM"; }; fullscreen = true; }
     ];
   };
 }
