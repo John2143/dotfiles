@@ -337,6 +337,9 @@ Baseline (captured 2026-05-29; **post-MetalLB migration, live-confirmed 2026-08-
 192.168.1.0/24  — bridge (main LAN, router at .1) — cameras + reserved
 192.168.5.0/24  — bridge (switch LAN, router at .1) — general devices + IoT
 192.168.88.0/24 — bridge (legacy factory-default, router at .254, unused)
+192.168.6.0/24  — MetalLB v4 LB pool (`services` IPAddressPool), BGP /32s, NOT a bridge subnet
+fd00:1::/64     — node ULA (SLAAC on bridge, router .1) — all k3s nodes
+fd00:6::/64     — MetalLB v6 LB pool (`services` IPAddressPool), BGP /128s, NOT a bridge subnet
 ```
 
 Router bridges all subnets. Inter-subnet routing is automatic (no NAT between 1.0/24 and 5.0/24).
@@ -512,30 +515,30 @@ chain=srcnat action=masquerade out-interface=2GWAN dst-address=!192.168.0.0/24
 
 ## k3s Cluster
 
-**Control plane:** 3-node HA (closet, arch, nas) with embedded etcd. **MetalLB** (BGP + frr-k8s, since 2026-08-04) announces the API VIP `192.168.5.10` (Service `kubernetes-api` + custom EndpointSlice over closet/arch/nas, port 6443) and all LoadBalancer service IPs on the `192.168.6.0/24` service pool. **Dual-stack** (IPv4 + IPv6) with static ULA addresses (`fd00:1::/64`) for stable node-ip.
+**Control plane:** 3-node HA (closet, arch, nas) with embedded etcd. **MetalLB** (BGP + frr-k8s, since 2026-08-04) announces the API VIP `192.168.5.10` (Service `kubernetes-api` + custom EndpointSlice over closet/arch/nas, port 6443) and all LoadBalancer service IPs from the dual-stack `services` pool (`192.168.6.0/24` + `fd00:6::/64`). **Dual-stack** (IPv4 + IPv6) with static ULA addresses (`fd00:1::/64`) for stable node-ip.
 Agents: office (.209, wifi — never a BGP speaker), pite (.9), big (.68, NixOS VM on bigp, joined 2026-07-29) — 6 nodes total.
 
-Pod network: `10.42.0.0/16` (IPv4) + `fd42:42:42::/56` (IPv6) flannel VXLAN. Key services (LB IPs are MetalLB-announced, live 2026-08-04):
+Pod network: `10.42.0.0/16` (IPv4) + `fd42:42:42::/56` (IPv6) flannel VXLAN. Key services (LB IPs are MetalLB-announced; v6 twins live since 2026-08-13):
 
-| Service | Type | External IP | Notes |
-|---------|------|-------------|-------|
-| kubernetes-api | LoadBalancer | 192.168.5.10:6443 | k3s API (MetalLB, custom EndpointSlice) |
-| traefik | LoadBalancer | 192.168.6.11 | HTTP/HTTPS ingress (annotation-pinned) |
-| stalwart | LoadBalancer | 192.168.6.13 | SMTP/IMAP (25/587/993) |
-| unifi-inform | LoadBalancer | 192.168.6.10:8080 | UniFi device adoption |
-| unifi-discovery | LoadBalancer | 192.168.6.12:10001/UDP | UniFi L2 discovery |
-| unifi-web | LoadBalancer | 192.168.6.25:8443 | UniFi controller web UI |
-| ts-voice | LoadBalancer | 192.168.6.15:9987/UDP | Teamspeak voice |
-| ts-files | LoadBalancer | 192.168.6.16:30033 | Teamspeak file transfer |
-| openrct2-game | LoadBalancer | 192.168.6.17:11753 | OpenRCT2 |
-| headscale-stun | LoadBalancer | 192.168.6.18:3478/UDP | STUN for Headscale DERP |
-| mosquitto | LoadBalancer | 192.168.6.19:1883 | MQTT |
-| temporal-frontend | LoadBalancer | 192.168.6.20:7233 | Temporal gRPC |
-| coturn | LoadBalancer | 192.168.6.21:3478,5349 | TURN (scaled to 0 — dormant) |
-| livekit | LoadBalancer | 192.168.6.22:7881,50000-60000 | LiveKit (scaled to 0 — dormant) |
-| mimir-lb | LoadBalancer | 192.168.6.23:8080 | Mimir push/query (LAN-only) |
-| loki-push-lb | LoadBalancer | 192.168.6.24:3100 | Loki push (LAN-only) |
-| minecraft-game | NodePort | :32565/TCP | Minecraft (unchanged, nodePort path) |
+| Service | Type | External IP (v4) | External IP (v6) | Notes |
+|---------|------|------------------|------------------|-------|
+| kubernetes-api | LoadBalancer | 192.168.5.10:6443 | — (v4-only by design) | k3s API (MetalLB, custom EndpointSlice) |
+| traefik | LoadBalancer | 192.168.6.11 | fd00:6::10 (manual annotate) | HTTP/HTTPS ingress |
+| stalwart | LoadBalancer | 192.168.6.13 | fd00:6::13 | SMTP/IMAP (25/587/993) |
+| unifi-inform | LoadBalancer | 192.168.6.10:8080 | fd00:6::30 | UniFi device adoption |
+| unifi-discovery | LoadBalancer | 192.168.6.12:10001/UDP | fd00:6::12 | UniFi L2 discovery |
+| unifi-web | LoadBalancer | 192.168.6.25:8443 | fd00:6::25 | UniFi controller web UI |
+| ts-voice | LoadBalancer | 192.168.6.15:9987/UDP | fd00:6::15 | Teamspeak voice |
+| ts-files | LoadBalancer | 192.168.6.16:30033 | fd00:6::16 | Teamspeak file transfer |
+| openrct2-game | LoadBalancer | 192.168.6.17:11753 | fd00:6::17 | OpenRCT2 |
+| headscale-stun | LoadBalancer | 192.168.6.18:3478/UDP | fd00:6::18 | STUN for Headscale DERP |
+| mosquitto | LoadBalancer | 192.168.6.19:1883 | fd00:6::19 | MQTT |
+| temporal-frontend | LoadBalancer | 192.168.6.20:7233 | — (v4-only, chart limitation) | Temporal gRPC |
+| coturn | LoadBalancer | 192.168.6.21:3478,5349 | fd00:6::21 | TURN (scaled to 0 — dormant) |
+| livekit | LoadBalancer | 192.168.6.22:7881,50000-60000 | fd00:6::22 | LiveKit (scaled to 0 — dormant) |
+| mimir-lb | LoadBalancer | 192.168.6.23:8080 | fd00:6::23 | Mimir push/query (LAN-only) |
+| loki-push-lb | LoadBalancer | 192.168.6.24:3100 | fd00:6::24 | Loki push (LAN-only) |
+| minecraft-game | NodePort | :32565/TCP | — | Minecraft (unchanged, nodePort path) |
 
 Query live: `ssh closet 'kubectl get nodes,pods,svc -A'`
 
@@ -561,7 +564,7 @@ Query live: `ssh closet 'kubectl get nodes,pods,svc -A'`
 
 ## BGP (MetalLB + frr-k8s — since 2026-08-04)
 
-MetalLB (v0.16.1) announces the k3s API VIP `192.168.5.10` and every LoadBalancer service IP on `192.168.6.0/24` via BGP to the MikroTik (AS 65001). frr-k8s runs one FRR daemon per node; every **speaker node** advertises **all** service prefixes — no leader lease, no loopback VIP. The router installs each `/32` with 5 next-hops (one active path, the rest as failover backups — RouterOS 7.19 picks a single active path, not ECMP). Traffic lands on the node with the active route, and kube-proxy DNATs it to the service's endpoints.
+MetalLB (v0.16.1, frr-k8s) announces the k3s API VIP `192.168.5.10` and every LoadBalancer service IP via BGP to the MikroTik (AS 65001). **Dual-stack since 2026-08-13**: the `services` IPAddressPool carries both `192.168.6.0/24` (announced as /32s) and `fd00:6::/64` (announced as /128s). frr-k8s runs one FRR daemon per node; every **speaker node** advertises **all** service prefixes — no leader lease, no loopback VIP. The router installs each /32 or /128 with 5 next-hops (one active path, the rest as failover backups — RouterOS 7.19 picks a single active path, not ECMP). Traffic lands on the node with the active route, and kube-proxy DNATs it to the service's endpoints. The BGPPeer has `dualStackAddressFamily: true` (`argo/workloads/metallb/bgppeer.yaml`) — without it frr-k8s renders `ipv6 prefix-list … deny any` and never advertises v6 even after the router negotiates both AFIs. RouterOS side: both the default template AND each `metallb-*` connection carry `afi=ip,ipv6` — the template change alone is NOT enough on 7.19.6 (sessions keep `local.afi=ip` until each connection is set directly).
 
 ### Topology
 
@@ -574,9 +577,8 @@ MetalLB speakers (AS 65000, hostNetwork, port 179)
   pite    (192.168.5.9)    ──┘
 office (.209) is wifi — intentionally NOT a speaker.
 
-Each speaker advertises every allocated /32 (.5.10 API VIP + all .6.x LB IPs).
 ```
-
+Each speaker advertises every allocated /32 (v4: .5.10 API VIP + all .6.x LB IPs) and /128 (v6: fd00:6::X LB IPs).
 ### Live Status
 
 ```bash
@@ -586,14 +588,15 @@ ssh closet.local 'kubectl get bgpsessionstates -n metallb-system'
 # Router's view (5 lines with E flag, names ~"metallb*"):
 mikrotik-connect r '/routing bgp session print'
 
-# A service route (5 gateways, one active DAb):
+# A service route (5 gateways, one active DAb) — v4 and v6:
 mikrotik-connect r '/ip route print where dst-address=192.168.6.11/32'
+mikrotik-connect r '/ipv6 route print where dst-address=fd00:6::13/128'
 
 # FRR's own view (per node):
 kubectl --context closet-as-developer exec -n metallb-system ds/metallb-frr-k8s -c frr -- vtysh -c 'show bgp summary'
 
-# Current allocations:
-ssh closet.local 'kubectl get svc -A | grep 192.168.6'
+# Current allocations (both families):
+ssh closet.local 'kubectl get svc -A | grep -E "192.168.6|fd00:6"'
 ```
 
 ### Adding/Removing Nodes
