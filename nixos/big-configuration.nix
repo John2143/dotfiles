@@ -181,16 +181,19 @@
 
   # matter-server API (5580, hostNetwork pod) is LAN-invisible: allow only cluster
   # sources (pod CIDRs + node IPs as masquerade sources + closet ULA for v6).
-  # NOTE: this host uses the iptables firewall backend, so extraInputRules must be
-  # raw iptables-restore rule lines in the nixos-fw chain (not nft syntax).
-  networking.firewall.extraInputRules = ''
-    -A nixos-fw -p tcp -m tcp --dport 5580 -s 10.42.0.0/16 -j nixos-fw-accept
-    -A nixos-fw -p tcp -m tcp --dport 5580 -s 192.168.5.9 -j nixos-fw-accept
-    -A nixos-fw -p tcp -m tcp --dport 5580 -s 192.168.5.36 -j nixos-fw-accept
-    -A nixos-fw -p tcp -m tcp --dport 5580 -s 192.168.5.68 -j nixos-fw-accept
-    -A nixos-fw -p tcp -m tcp --dport 5580 -s 192.168.5.76 -j nixos-fw-accept
-    -A nixos-fw -p tcp -m tcp --dport 5580 -s 192.168.5.175 -j nixos-fw-accept
-    -A nixos-fw -p tcp -m tcp --dport 5580 -s 192.168.5.209 -j nixos-fw-accept
+  # This host uses the iptables firewall backend: extraCommands runs just before
+  # the final reject rule, so -A nixos-fw ... -j nixos-fw-accept lands before the
+  # drop (extraInputRules is nftables-backend-only and would be silently ignored).
+  networking.firewall.extraCommands = ''
+    iptables -A nixos-fw -p tcp -m tcp --dport 5580 -s 10.42.0.0/16 -j nixos-fw-accept
+    iptables -A nixos-fw -p tcp -m tcp --dport 5580 -s 192.168.5.9 -j nixos-fw-accept
+    iptables -A nixos-fw -p tcp -m tcp --dport 5580 -s 192.168.5.36 -j nixos-fw-accept
+    iptables -A nixos-fw -p tcp -m tcp --dport 5580 -s 192.168.5.68 -j nixos-fw-accept
+    iptables -A nixos-fw -p tcp -m tcp --dport 5580 -s 192.168.5.76 -j nixos-fw-accept
+    iptables -A nixos-fw -p tcp -m tcp --dport 5580 -s 192.168.5.175 -j nixos-fw-accept
+    iptables -A nixos-fw -p tcp -m tcp --dport 5580 -s 192.168.5.209 -j nixos-fw-accept
+    ip6tables -A nixos-fw -p tcp -m tcp --dport 5580 -s fd42:42:42::/48 -j nixos-fw-accept
+    ip6tables -A nixos-fw -p tcp -m tcp --dport 5580 -s fd00:1::36 -j nixos-fw-accept
   '';
 
   system.stateVersion = "26.05";
