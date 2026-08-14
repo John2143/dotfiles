@@ -181,9 +181,16 @@
 
   # matter-server API (5580, hostNetwork pod) is LAN-invisible: allow only cluster
   # sources (pod CIDRs + node IPs as masquerade sources + closet ULA for v6).
+  # NOTE: this host uses the iptables firewall backend, so extraInputRules must be
+  # raw iptables-restore rule lines in the nixos-fw chain (not nft syntax).
   networking.firewall.extraInputRules = ''
-    ip saddr { 10.42.0.0/16, 192.168.5.9, 192.168.5.36, 192.168.5.68, 192.168.5.76, 192.168.5.175, 192.168.5.209 } tcp dport 5580 accept
-    ip6 saddr { fd42:42:42::/48, fd00:1::36 } tcp dport 5580 accept
+    -A nixos-fw -p tcp -m tcp --dport 5580 -s 10.42.0.0/16 -j nixos-fw-accept
+    -A nixos-fw -p tcp -m tcp --dport 5580 -s 192.168.5.9 -j nixos-fw-accept
+    -A nixos-fw -p tcp -m tcp --dport 5580 -s 192.168.5.36 -j nixos-fw-accept
+    -A nixos-fw -p tcp -m tcp --dport 5580 -s 192.168.5.68 -j nixos-fw-accept
+    -A nixos-fw -p tcp -m tcp --dport 5580 -s 192.168.5.76 -j nixos-fw-accept
+    -A nixos-fw -p tcp -m tcp --dport 5580 -s 192.168.5.175 -j nixos-fw-accept
+    -A nixos-fw -p tcp -m tcp --dport 5580 -s 192.168.5.209 -j nixos-fw-accept
   '';
 
   system.stateVersion = "26.05";
