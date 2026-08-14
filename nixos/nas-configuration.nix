@@ -145,10 +145,10 @@ nixpkgs.overlays = [
   };
   systemd.watchdog.runtimeTime = "30s";
   boot.kernelParams = [
-    "zswap.enabled=1"
-    "zswap.compressor=zstd"
-    "zswap.zpool=zsmalloc"
-    "zswap.max_pool_percent=30"
+    # zswap disabled (was: enabled=1, zstd, zsmalloc, 30% pool). Compressed
+    # swap interacted with the memory-path crashes on this box (swap_cgroup /
+    # page-alloc NULL derefs in pstore captures); the 16 GiB dm-crypt swap
+    # partition remains as the only swap device.
     "panic=10"
     "zfs.zfs_arc_max=6442450944"
   ];
