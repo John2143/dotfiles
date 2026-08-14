@@ -170,7 +170,6 @@
   # Firewall — k3s ports
   networking.firewall.allowedTCPPorts = [
     10250 # kubelet
-    5580 # matter-server (hostNetwork pod)
   ];
   networking.firewall.allowedUDPPorts = [
     5540 # matter-server (hostNetwork pod)
@@ -179,6 +178,13 @@
   networking.firewall.allowedTCPPortRanges = [
     { from = 30000; to = 32767; } # NodePort range
   ];
+
+  # matter-server API (5580, hostNetwork pod) is LAN-invisible: allow only cluster
+  # sources (pod CIDRs + node IPs as masquerade sources + closet ULA for v6).
+  networking.firewall.extraInputRules = ''
+    ip saddr { 10.42.0.0/16, 192.168.5.9, 192.168.5.36, 192.168.5.68, 192.168.5.76, 192.168.5.175, 192.168.5.209 } tcp dport 5580 accept
+    ip6 saddr { fd42:42:42::/48, fd00:1::36 } tcp dport 5580 accept
+  '';
 
   system.stateVersion = "26.05";
 }
