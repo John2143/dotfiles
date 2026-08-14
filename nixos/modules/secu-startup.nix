@@ -16,6 +16,11 @@ in {
     # fullscreen grid experience). Inert on other hosts (no GLKVM-titled window).
     window_rule = [
       { match = { title = "^GLKVM"; }; fullscreen = true; }
+      # Self-signed/expired device cert → Firefox shows an interstitial at
+      # first load each boot (exception does not persist). Fullscreen it too,
+      # so the one-click accept lands on a fullscreen window and the GL-KVM
+      # view below it stays fullscreen.
+      { match = { title = "^(Warning: Security Risk|Potential Security Risk Ahead)"; }; fullscreen = true; }
     ];
   };
 }
