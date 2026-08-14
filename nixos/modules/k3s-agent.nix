@@ -59,6 +59,30 @@
       nameserver 100.100.100.100
     '';
 
+    # Containerd mirror — route every ghcr.io pull through the in-cluster
+    # registry (docker-registry, kube-system, ClusterIP 10.43.114.59) and its
+    # GHCR pull-through cache. Refs keep the meaningful ghcr.io host; the
+    # mirror key matches on the ref host and rewrites to the local endpoint.
+    # The second endpoint is the anonymous GHCR fallback if the cache is
+    # down/full (all cluster images are public, no imagePullSecrets). k3s
+    # reads this file at startup ONLY — a `systemctl restart k3s` is required
+    # after any change. Registry service IP must match the kube-system
+    # docker-registry Service; if it ever changes, update this block.
+    environment.etc."rancher/k3s/registries.yaml".text = ''
+      mirrors:
+        "10.43.114.59:5000":
+          endpoint:
+            - "http://10.43.114.59:5000"
+        "ghcr.io":
+          endpoint:
+            - "http://10.43.114.59:5000"
+            - "https://ghcr.io"
+      configs:
+        "10.43.114.59:5000":
+          tls:
+            insecure_skip_verify: true
+    '';
+
 
     # Prevent systemd-networkd from flushing custom ip rules created by
     # external tools (like our pod-CIDR routing fix below). Without this,
