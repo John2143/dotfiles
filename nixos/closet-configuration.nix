@@ -37,8 +37,10 @@
       size = 8192;
     }
   ];
-  zramSwap.enable = true;
-  zramSwap.memoryPercent = 75;
+  # zramSwap disabled (was: enable = true; memoryPercent = 75). The compressed
+  # swap interacted badly with the 8 GiB box under pressure (kernel panics in
+  # BPF LRU / memory paths — see pstore dmesg captures); the 8 GiB /swapfile
+  # above remains the only swap device.
   virtualisation.podman = {
     enable = true;
     dockerCompat = true;
