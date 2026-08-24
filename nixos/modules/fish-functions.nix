@@ -60,5 +60,5 @@ let
   commonFuncs = builtins.listToAttrs (map loadFile (attrNames commonFiles));
   linuxFuncs = builtins.listToAttrs (map loadFile (attrNames linuxFiles));
 in {
-  programs.fish.functions = commonFuncs // lib.optionalAttrs pkgs.stdenv.isLinux linuxFuncs;
+  programs.fish.functions = commonFuncs // lib.optionalAttrs pkgs.stdenv.hostPlatform.isLinux linuxFuncs;
 }

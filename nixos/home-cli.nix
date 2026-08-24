@@ -86,7 +86,7 @@ in {
       pandoc # markdown → HTML/Typst/PDF conversion
       typst # modern LaTeX replacement for beautiful PDF rendering
     ]
-    ++ lib.optionals pkgs.stdenv.isLinux [
+    ++ lib.optionals pkgs.stdenv.hostPlatform.isLinux [
       gocryptfs
       gptfdisk # disk partitioning tool
       timg # image viewer
@@ -98,7 +98,7 @@ in {
       # add python3 to basically everything with omp on it
       python3
     ]
-    ++ lib.optionals pkgs.stdenv.isDarwin [
+    ++ lib.optionals pkgs.stdenv.hostPlatform.isDarwin [
       ffmpeg
       mpv
       cmake
