@@ -31,11 +31,11 @@ in {
   };
 
   home.username =
-    if pkgs.stdenv.isDarwin
+    if pkgs.stdenv.hostPlatform.isDarwin
     then "jschmidt"
     else "john";
   home.homeDirectory =
-    if pkgs.stdenv.isDarwin
+    if pkgs.stdenv.hostPlatform.isDarwin
     then "/Users/jschmidt"
     else "/home/john";
 
