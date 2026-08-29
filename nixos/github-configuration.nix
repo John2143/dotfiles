@@ -288,6 +288,7 @@ in {
     "d /var/lib/github-runner-work 0755 github-runner github-runner -"
     "d /var/lib/github-runner-work-john2143-com 0755 github-runner github-runner -"
     "d /var/lib/github-runner-work-dotfiles 0755 github-runner github-runner -"
+    "d /var/lib/github-runner-work-timestone-dev 0755 github-runner github-runner -"
   ];
 
   # CI bulk storage — 100G ZFS disk (tank/vm-101-cache, ext4 "ci-cache")
@@ -312,6 +313,11 @@ in {
   };
   fileSystems."/var/lib/github-runner-work-dotfiles" = {
     device = "/var/lib/containers/work-dotfiles";
+    fsType = "none";
+    options = [ "bind" ];
+  };
+  fileSystems."/var/lib/github-runner-work-timestone-dev" = {
+    device = "/var/lib/containers/work-timestone-dev";
     fsType = "none";
     options = [ "bind" ];
   };
@@ -351,6 +357,18 @@ in {
     extraLabels = ["nixos"];
     workDir = "/var/lib/github-runner-work-dotfiles";
     extraEnvironment = { XDG_RUNTIME_DIR = "/run/github-runner/dotfiles"; };
+  } // runnerCommon;
+
+  # Timestone-dev runner — UMVC3 rollback builds
+  services.github-runners."timestone-dev" = {
+    enable = true;
+    url = "https://github.com/John2143/Timestone-dev"; # repo URL — two segments = repos/ endpoint
+    tokenFile = config.age.secrets.github-personal-token.path;
+    name = "github-timestone"; # unique within the repo; service unit: github-runner-timestone-dev
+    replace = true;
+    extraLabels = ["nixos"];
+    workDir = "/var/lib/github-runner-work-timestone-dev";
+    extraEnvironment = { XDG_RUNTIME_DIR = "/run/github-runner/timestone-dev"; };
   } // runnerCommon;
 
   system.stateVersion = "25.11";
