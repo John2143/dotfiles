@@ -349,6 +349,10 @@ nixpkgs.overlays = [
     enable = true;
     exports = ''
       /tank/longhorn-backups 100.64.0.0/10(rw,sync,no_subtree_check,no_root_squash,fsid=0) 192.168.5.0/24(rw,sync,no_subtree_check,no_root_squash,fsid=0) 10.42.0.0/16(rw,sync,no_subtree_check,no_root_squash,fsid=0)
+      # ── Proxmox Backup Server datastore ──────────────────────
+      # One-time: sudo zfs create -o mountpoint=/tank/backups/pbs -o recordsize=1M \
+      #             -o compression=lz4 -o atime=off tank/backups/pbs
+      /tank/backups/pbs       100.64.0.0/10(rw,sync,no_subtree_check,no_root_squash,fsid=2) 192.168.5.0/24(rw,sync,no_subtree_check,no_root_squash,fsid=2)
       # ── Observability archive ──────────────────────────────────
       # One-time: sudo zfs create -o mountpoint=/tank/logs -o recordsize=1M \
       #             -o compression=lz4 -o atime=off tank/logs
