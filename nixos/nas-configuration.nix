@@ -596,6 +596,7 @@ nixpkgs.overlays = [
       9100 # node_exporter (Prometheus metrics)
 
       20048 # rpc.mountd (NFS)
+      4002 # NFS lockd/NLM (v3 file locks — PBS datastore needs flock)
     ];
     allowedTCPPortRanges = [
       {
@@ -606,10 +607,16 @@ nixpkgs.overlays = [
     allowedUDPPorts = [
       111 # rpcbind (NFS)
       20048 # rpc.mountd (NFS)
+      4002 # NFS lockd/NLM (v3 file locks — PBS datastore needs flock)
       5540 # matter-server (hostNetwork pod)
       8472 # flannel VXLAN
     ];
   };
+
+  # Pin the kernel NFS lockd/NLM service to a fixed port so the firewall can
+  # allow NFSv3 file locks (needed by the PBS datastore's flock). Without a
+  # fixed port, lockd picks a random high port that the firewall drops.
+  boot.extraModprobeConfig = "options lockd nlm_tcpport=4002 nlm_udpport=4002";
 
   # Attic cache via loopback — no external cache dependency.
   nix.settings.substituters = lib.mkForce [
