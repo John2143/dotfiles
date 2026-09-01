@@ -122,8 +122,8 @@
     "--kube-apiserver-arg=default-unreachable-toleration-seconds=40"
     "--kube-controller-manager-arg=node-monitor-grace-period=20s"
     "--kube-controller-manager-arg=node-monitor-period=2s"
-    # Reserve 12 CPU + 23 GiB RAM for the system (Hyprland desktop). k8s gets 4 CPU, ~8 GiB.
-    "--kubelet-arg=system-reserved=cpu=12,memory=23Gi"
+    # Reserve 12 CPU + 16 GiB RAM for the system (Hyprland desktop, 32 GiB total per lshw). k8s gets 4 CPU, ~15.3 GiB.
+    "--kubelet-arg=system-reserved=cpu=12,memory=16Gi"
   ];
   custom.backup.enable = true;
 
