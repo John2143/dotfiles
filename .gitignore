@@ -25,3 +25,5 @@ __pycache__/
 *.pyo
 nixos/cluster/secrets/cloud-ssh-key.age
 nixos/cluster/secrets/do-pat.age
+
+.direnv/

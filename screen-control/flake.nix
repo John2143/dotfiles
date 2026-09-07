@@ -1,6 +1,5 @@
 {
   inputs = {
-    naersk.url = "github:nix-community/naersk/master";
     nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
     utils.url = "github:numtide/flake-utils";
   };
@@ -9,14 +8,26 @@
     self,
     nixpkgs,
     utils,
-    naersk,
   }:
     utils.lib.eachDefaultSystem (
       system: let
         pkgs = import nixpkgs {inherit system;};
-        naersk-lib = pkgs.callPackage naersk {};
+        rustPlatform = pkgs.rustPlatform;
+
+        pkg = rustPlatform.buildRustPackage {
+          pname = "screen-control";
+          version = "0.1.0";
+          src = ./.;
+          # Vendors every crate from Cargo.lock (fetched once, from
+          # static.crates.io, as a fixed-output derivation) and builds
+          # offline inside the sandbox.
+          cargoLock.lockFile = ./Cargo.lock;
+        };
       in {
-        defaultPackage = naersk-lib.buildPackage ./.;
+        packages.default = pkg;
+        # Legacy alias consumed by ../flake.nix (arch-configuration.nix)
+        defaultPackage = pkg;
+
         devShell = with pkgs;
           mkShell {
             buildInputs = [
