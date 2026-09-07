@@ -527,8 +527,13 @@ nixpkgs.overlays = [
     after = ["atticd.service"];
     requires = ["atticd.service"];
     wantedBy = ["multi-user.target"];
-    serviceConfig.Type = "oneshot";
-    serviceConfig.RemainAfterExit = true;
+    startLimitIntervalSec = 0;
+    serviceConfig = {
+      Type = "oneshot";
+      RemainAfterExit = true;
+      Restart = "on-failure";
+      RestartSec = "5";
+    };
     script = ''
       TOKEN=$(</run/agenix/attic-admin-token)
       ${pkgs.attic-client}/bin/attic login nas http://localhost:8280 "$TOKEN"
