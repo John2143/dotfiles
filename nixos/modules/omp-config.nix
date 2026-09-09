@@ -315,6 +315,24 @@ in
                 extraBody:
                   thinking:
                     type: enabled
+          # ChatGPT subscription (codex backend) — MUST use the Responses
+          # transport. The proxy's /v1/chat/completions is Cloudflare-blocked
+          # for chatgpt/* (upstream #27175), and OpenAI rejects
+          # tools+reasoning_effort there. These two slugs are verified against
+          # the proxy's /v1/responses (2026-09-09).
+          models:
+            - id: chatgpt/gpt-6-astra
+              name: ChatGPT GPT-6 Astra (Pro/Max subscription)
+              api: openai-responses
+              reasoning: true
+              supportsTools: true
+              input: [text]
+            - id: chatgpt/gpt-5.6-terra
+              name: ChatGPT GPT-5.6 Terra (Pro/Max subscription)
+              api: openai-responses
+              reasoning: true
+              supportsTools: true
+              input: [text]
 
     '';
     ".omp/agent/config.yml".text = ''
