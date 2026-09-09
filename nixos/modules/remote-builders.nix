@@ -10,35 +10,44 @@
   # aarch64 builders: pite (Pi 4, 1.8G), vpin (Pi 3/4, 3.7G).
   # Capabilities: kvm = can run VMs, nixos-test = can run NixOS tests,
   # cuda = has CUDA toolkit, big-parallel = can handle large builds.
+  # rank N: this host delegates ONLY to builders of rank < N. rank 0 = pure
+  # sink (never delegates). arch(2) → office/nas(1) → big(0); pite/vpin(0)
+  # are aarch64 sinks. Hosts not in builderDefs get rank 999 (delegate to all).
   builderDefs = {
     office = {
       maxJobs = 6;
+      rank = 1;
       system = "x86_64-linux";
       systems = ["x86_64-linux" "aarch64-linux"];
       supportedFeatures = ["kvm" "nixos-test" "big-parallel"];
     };
     arch = {
       maxJobs = 2;
+      rank = 2;
       system = "x86_64-linux";
       supportedFeatures = ["cuda" "big-parallel"];
     };
     big = {
       maxJobs = 8;
+      rank = 0;
       system = "x86_64-linux";
       supportedFeatures = ["big-parallel"];
     };
     nas = {
       maxJobs = 2;
+      rank = 1;
       system = "x86_64-linux";
       supportedFeatures = [];
     };
     pite = {
       maxJobs = 1;
+      rank = 0;
       system = "aarch64-linux";
       supportedFeatures = [];
     };
     vpin = {
       maxJobs = 2;
+      rank = 0;
       system = "aarch64-linux";
       supportedFeatures = [];
     };
@@ -56,11 +65,16 @@
     inherit (def) systems;
   };
 
-  # Every builder EXCEPT self — don't SSH into yourself.
-  isNotSelf = m: m.hostName != "${config.networking.hostName}.local";
-
-  buildMachines = builtins.filter isNotSelf
-    (lib.mapAttrsToList mkMachine builderDefs);
+  # A host may delegate ONLY to builders of strictly lower rank, so the
+  # delegation graph is acyclic: a drv can never be re-delegated back to a
+  # coordinator that holds its build lock (the mutual-wait deadlock that
+  # caused 12–24h stalls). Rank-0 hosts (big/pite/vpin) never delegate.
+  # Hosts not in builderDefs use rank 999 → they delegate to every builder.
+  buildMachines = let
+    selfRank = (builderDefs.${config.networking.hostName} or {rank = 999;}).rank;
+  in
+    lib.mapAttrsToList mkMachine
+    (lib.filterAttrs (name: def: def.rank < selfRank) builderDefs);
 in {
   # ── SSH: relax host key checking for builder connections ──────────
   # Builders are local-network machines that may be reinstalled,
