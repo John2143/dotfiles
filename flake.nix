@@ -49,6 +49,11 @@
       url = "github:John2143/node-rally-tools";
     };
 
+    timestone-lobby-watcher = {
+      url = "github:2143-Labs/timestone-lobby-watcher";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+
     autoclicker = {
       url = "path:./autoclicker";
       inputs.nixpkgs.follows = "nixpkgs";

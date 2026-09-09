@@ -35,20 +35,29 @@
   lib,
   pkgs,
   sshKeys,
+  inputs,
   modulesPath,
   ...
 }: let
-  # The lobby watcher lives outside this repo. Clone/place its executable at
-  # this path on the VM (e.g. /opt/lobby-watcher/lobby-watcher) and point this
-  # single line at it. The autostart wrapper (lobby-watcher-up) waits for the
-  # Steam client, then keeps the watcher running inside this graphical session.
-  lobbyWatcherExec = "/opt/lobby-watcher/lobby-watcher";
+  # The lobby watcher (timestone-lobby-watcher flake input) built into the
+  # system closure. The lobby-watcher-up autostart wrapper below waits for the
+  # Steam client, then keeps it running inside this graphical session.
+  lobbyWatcherExec = "${inputs.timestone-lobby-watcher.packages.${pkgs.system}.default}/bin/lobby-watcher";
 in {
   imports = [
     (modulesPath + "/profiles/qemu-guest.nix") # Proxmox VM virtio drivers
     ./steam-hardware-configuration.nix # fileSystems owned by disko (see modules/disko_steam.nix)
     ./modules/user-john.nix
   ];
+  # Watcher env vars (DISCORD_TOKEN and friends, one NAME=value line each) —
+  # agenix secret, decrypted at boot to a file the steam user can read; the
+  # lobby-watcher-up wrapper sources it. See secrets/secrets.nix.
+  age.secrets.timestone-watcher-env = {
+    file = ../secrets/timestone-watcher.env.age;
+    mode = "0400";
+    owner = "steam";
+    group = "users";
+  };
 
   # disko provides boot.loader.grub.devices from the EF02 partition — do NOT set
   # boot.loader.grub.device (big-configuration.nix gotcha: duplicate-device assertion).
@@ -79,9 +88,17 @@ in {
     htop
     xfce.xfce4-terminal # terminal for the one-time Steam login on the console
     # Waits for the Steam client (up to ~2 min), then keeps the lobby watcher
-    # alive; logs to the steam user's state dir. Respawns on exit after 10s.
-    # Absolute tool paths: XDG-autostarted sessions may not put sw/bin on PATH.
+    # alive; respawns on exit after 10s. Absolute tool paths: XDG-autostarted
+    # sessions may not put sw/bin on PATH.
     (pkgs.writeShellScriptBin "lobby-watcher-up" ''
+      # Source the watcher's env (DISCORD_TOKEN, ids, LOBBY_LOG_FILE…) from the
+      # agenix secret. Late source wins, so file values override these defaults.
+      export LOBBY_LOG_FILE="$HOME/lobby-watcher.log"
+      if [ -r "${config.age.secrets.timestone-watcher-env.path}" ]; then
+        set -a
+        . "${config.age.secrets.timestone-watcher-env.path}"
+        set +a
+      fi
       i=0
       until ${pkgs.procps}/bin/pgrep -x steam >/dev/null || [ "$i" -ge 60 ]; do
         ${pkgs.coreutils}/bin/sleep 2

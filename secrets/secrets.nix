@@ -19,6 +19,7 @@ let
   nas = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIPzgxUuaZUG9Dr5ZTZImKqt3SUSPVD/FLO2wKQfwz98A john@nas";
   big = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAILdR/pLJq0bYfttAU2BFr3kVzCIUW3+eBADCtJXIQWJ/ john@big";
   github = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIPrMRoGOmZeyTX1EvIBvURx6GzRfCOrrnrrejLTfIP4s john@github";
+  steam = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIKdcyW41sxBMhX4fgXKGJckajKD7g+6mE3NjlfujXiKn john@steam";
   # NOTE: mac is a work computer. Only grant it keys that are work-appropriate
   # (LLM API keys, admin tools). Do NOT grant: hass-credentials, ntfy-topic-url,
   # restic passwords, smb credentials, gocryptfs, NAS, or personal secrets.
@@ -131,7 +132,6 @@ in {
   #   rm /tmp/mikrotik-key /tmp/mikrotik-key.pub
   "mikrotik-credentials.age".publicKeys = [office arch];
 
-
   # Remote build cluster SSH key — shared across all builders (x86_64 + aarch64).
   # Each client uses this key to SSH into builders as nixbuild.
   # Builders have the public key in nixbuild's authorized_keys.
@@ -177,4 +177,8 @@ in {
   # k3s token for the CI cluster (github VM). Generated with:
   #   cd ~/dotfiles/secrets && echo -n "$(head -c 32 /dev/urandom | base64)" | agenix -e k3s-ci-token.age -i ~/.ssh/age
   "k3s-ci-token.age".publicKeys = [office arch github];
+  # Env vars for the timestone lobby watcher on the steam VM (one NAME=value
+  # line each; secret + non-secret alike — the whole file stays encrypted).
+  # Create interactively: cd ~/repos/dotfiles/secrets && EDITOR=vim agenix -e timestone-watcher.env.age -i ~/.ssh/age
+  "timestone-watcher.env.age".publicKeys = [steam office];
 }
