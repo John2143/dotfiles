@@ -21,6 +21,7 @@
     # inputs.home-manager.nixosModules.default
   ];
   home-manager.users."john" = import ./home.nix;
+  security.pam.services.hyprlock = {};
 
 
 

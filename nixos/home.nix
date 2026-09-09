@@ -417,7 +417,7 @@ in {
         { _args = [(mkLua ''mainMod .. " + CTRL + SHIFT + E"'') (mkLua ''hl.dsp.window.move({ workspace = "name:obsidian" })'')]; }
 
         # Sleep / wake / quit
-        { _args = ["CTRL + ALT + L" (mkLua ''function() hl.dsp.exec_cmd("hyprlock &") hl.timer(function() hl.dsp.dpms({ action = "disable" }) end, {timeout = 1000, type = "oneshot"}) end'')]; }
+        { _args = ["CTRL + ALT + L" (mkLua ''hl.dsp.exec_cmd([[loginctl lock-session]])'')]; }
         { _args = ["Print" (mkLua ''hl.dsp.dpms({ action = "enable" })'')]; }
         { _args = [(mkLua ''mainMod .. " + SHIFT + M"'') (mkLua "hl.dsp.exit()")]; }
 
@@ -525,6 +525,28 @@ in {
         rev = "c268b0269617c5109585044ef6eac8623090891f";
       }
       + "/hpfva.sh";
+  };
+
+  services.hypridle = {
+    enable = true;
+    settings = {
+      general = {
+        lock_cmd = "pidof hyprlock || hyprlock";
+        before_sleep_cmd = "loginctl lock-session";
+        after_sleep_cmd = "hyprctl dispatch 'hl.dsp.dpms({ action = \"enable\" })'";
+      };
+      listener = [
+        {
+          timeout = 300; # lock after 5 min idle (the default)
+          on-timeout = "loginctl lock-session";
+        }
+        {
+          timeout = 330; # screen off 30s after the lock listener (the default)
+          on-timeout = "hyprctl dispatch 'hl.dsp.dpms({ action = \"disable\" })'";
+          on-resume = "hyprctl dispatch 'hl.dsp.dpms({ action = \"enable\" })'"; # any input wakes
+        }
+      ];
+    };
   };
 
   services.dunst = {

@@ -180,6 +180,7 @@ in {
         # Requires `fkeys:basic_13-24` in hyprland kb_options.
         q   = "f20";      # monitors on
         w   = "C-f20";    # monitors off
+        x   = "M-f20";    # lock (loginctl lock-session)
         e   = "C-f18";    # light: dresser (light-dresser)
         r   = "A-f18";    # light: window AC (light-ac)
         y   = "f18";      # light: lamp (light-lamp)
@@ -225,6 +226,7 @@ in {
     # Macro pad F20 group — display
     { _args = ["F20" (mkLua ''hl.dsp.dpms({ action = "enable" })'')]; }
     { _args = ["CTRL + F20" (mkLua ''hl.dsp.dpms({ action = "disable" })'')]; }
+    { _args = ["SUPER + F20" (mkLua ''hl.dsp.exec_cmd([[loginctl lock-session]])'')]; }
 
     # Macro pad F21 group — Home Assistant toggles
     { _args = ["F21" (mkLua ''hl.dsp.exec_cmd("hass-macro dyson-fan")'')]; }
