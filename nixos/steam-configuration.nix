@@ -5,20 +5,15 @@
 # an external lobby-watcher that drives Steam inside that logged-in session.
 #
 # === INSTALL FROM LIVE CD ===
-#   On bigp: qm create 102 --name steam-nixos --machine q35 --cpu host \
+#   On bigp: qm create 104 --name steam-nixos --machine q35 --cpu host \
 #     --sockets 1 --cores 2 --memory 4096 --net0 virtio,firewall=1,bridge=vmbr0 \
-#     --scsihw virtio-scsi-single --scsi0 ZFS-POOL:40,iothread=1 \
-#     --ide2 local:iso/nixos-minimal-<current>-x86_64-linux.iso,media=cdrom \
-#     --serial0 socket --agent 1 --ostype l26 --boot order=ide2\;scsi0
-#   DISK STORAGE: the VM's 40G disk must live on bigp's ZFS-backed Proxmox
-#   storage, NEVER local-lvm (no space there). On bigp run `pvesm status` and
-#   substitute the ZFS storage's name for ZFS-POOL; if no ZFS storage exists,
-#   create one, e.g. `pvesm add <name> zfspool --pool <zpool>/data
-#   --content images,rootdir` (names come from bigp — never guess them). The
-#   ISO (--ide2) may stay on `local` — it is small and only used to boot the
-#   installer. Proxmox allocates the ZFS disk as a zvol, so the guest still
-#   sees one virtio-scsi disk at /dev/disk/by-id/scsi-0QEMU_QEMU_HARDDISK_*
-#   (disko layout below is unchanged).
+#     --scsihw virtio-scsi-single --scsi0 tank:40,discard=on,iothread=1 \
+#     --ide2 local:iso/nixos-minimal-26.05.5845.b3fe9581c906-x86_64-linux.iso,media=cdrom \
+#     --serial0 socket --agent 1 --ostype l26 --boot order=ide2\;scsi0 \
+#     --onboot 1
+#   Disk is on the tank zfspool (sparse zvol, discard=on) — the same storage the
+#   github VM uses; never local-lvm (~27G free there, tank has ~1.1T). VMID 104
+#   is free (100 big, 101 github, 102 unnamed, 103 proxmox-backup).
 #   On installer: clone https://github.com/John2143/dotfiles.git, then
 #     sudo nix --experimental-features "nix-command flakes" \
 #       run github:nix-community/disko -- --mode disko ./nixos/modules/disko_steam.nix
