@@ -134,6 +134,11 @@ in {
       "input"
       "networkmanager"
     ];
+    # Greeter fallback: autologin normally skips sddm, but if the session is
+    # ever logged out the greeter needs a password (initialPassword only seeds
+    # fresh installs — existing systems keep their /etc/shadow entry; the live
+    # steam VM was set with `chpasswd` to match).
+    initialPassword = "steam";
     description = "Steam lobby VM account";
   };
 
