@@ -379,6 +379,15 @@
           }
         ];
       })
+      // (mkHost {
+        name = "steam";
+        modules = [
+          inputs.disko.nixosModules.default
+          ./nixos/shared-cli-configuration.nix
+          ./nixos/steam-configuration.nix
+          ./nixos/modules/disko_steam.nix
+        ];
+      })
       // {
         installer = nixpkgs.lib.nixosSystem {
           inherit system;
