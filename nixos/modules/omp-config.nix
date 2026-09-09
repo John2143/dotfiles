@@ -327,48 +327,64 @@ in
               reasoning: true
               supportsTools: true
               input: [text]
+              contextWindow: 1000000
+              maxTokens: 128000
             - id: chatgpt/gpt-5.6-terra
               name: ChatGPT GPT-5.6 Terra (Pro/Max subscription)
               api: openai-responses
               reasoning: true
               supportsTools: true
               input: [text]
+              contextWindow: 400000
+              maxTokens: 128000
             - id: chatgpt/gpt-5.6-luna
               name: ChatGPT GPT-5.6 Luna (Pro/Max subscription)
               api: openai-responses
               reasoning: true
               supportsTools: true
               input: [text]
+              contextWindow: 400000
+              maxTokens: 128000
             - id: chatgpt/gpt-5.6-sol
               name: ChatGPT GPT-5.6 Sol (Pro/Max subscription)
               api: openai-responses
               reasoning: true
               supportsTools: true
               input: [text]
+              contextWindow: 400000
+              maxTokens: 128000
             - id: openai/gpt-6-astra
               name: OpenAI GPT-6 Astra (API key)
               api: openai-responses
               reasoning: true
               supportsTools: true
               input: [text]
+              contextWindow: 1000000
+              maxTokens: 128000
             - id: openai/gpt-5.6-terra
               name: OpenAI GPT-5.6 Terra (API key)
               api: openai-responses
               reasoning: true
               supportsTools: true
               input: [text]
+              contextWindow: 400000
+              maxTokens: 128000
             - id: openai/gpt-5.6-luna
               name: OpenAI GPT-5.6 Luna (API key)
               api: openai-responses
               reasoning: true
               supportsTools: true
               input: [text]
+              contextWindow: 400000
+              maxTokens: 128000
             - id: openai/gpt-5.6-sol
               name: OpenAI GPT-5.6 Sol (API key)
               api: openai-responses
               reasoning: true
               supportsTools: true
               input: [text]
+              contextWindow: 400000
+              maxTokens: 128000
 
     '';
     ".omp/agent/config.yml".text = ''
