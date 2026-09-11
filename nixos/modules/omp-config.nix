@@ -294,8 +294,12 @@ in
           baseUrl: https://llm.2143.me/v1
           api: openai-completions
           apiKey: LITELLM_EDITOR_KEY
+          # discovery: litellm reads /model/info (max_input_tokens -> context
+          # window) so discovered models show real windows (e.g. openrouter
+          # flash = 1M) instead of the 128K default. Requires the editor key
+          # to have "info_routes" in allowed_routes (set on the proxy).
           discovery:
-            type: openai-models-list
+            type: litellm
           modelOverrides:
             deepseek/deepseek-v4-flash:
               reasoning: true
@@ -400,10 +404,13 @@ in
       setupVersion: 1
       modelRoles:
         #default: vast-vllm/deepseek-v4-flash
-        default: litellm/chatgpt/gpt-6-astra
+        #default: litellm/chatgpt/gpt-6-astra
+        #default: litellm/openrouter/deepseek/deepseek-v4-pro-0813
+        default: litellm/openrouter/deepseek/deepseek-v4-flash-0731
         #smol: office-ollama-cpu/gemma4
         smol: litellm/chatgpt/gpt-5.6-luna
-        slow: litellm/deepseek/deepseek-v4-flash
+        #slow: litellm/openrouter/deepseek/deepseek-v4-pro-0813
+        slow: litellm/chatgpt/gpt-6-astra
         advisor: litellm/deepseek/deepseek-v4-flash
 
       modelProviderOrder:
@@ -427,10 +434,13 @@ in
         fallbackChains:
           default:
             - "deepseek/deepseek-v4-pro"
-            - "openrouter/anthropic/claude-sonnet-4.6"
+            - "litellm/openrouter/deepseek/deepseek-v4-flash-0731"
+            - "litellm/openrouter/deepseek/deepseek-v4-pro-0813"
+            - "litellm/chatgpt/gpt-6-astra"
             - "anthropic/claude-sonnet-4-6"
             #"office-ollama/qwen3.6:27b"  # disabled 2026-05-31
           smol:
+            - "litellm/openrouter/deepseek/deepseek-v4-flash-0731"
             - "gemini/gemini-2.5-flash-lite"
             - "anthropic/claude-haiku-4-5"
 
