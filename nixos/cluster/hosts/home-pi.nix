@@ -216,4 +216,53 @@
     };
   };
 
+  # ── deSEC DDNS: update dsstar.us apex every 30 minutes ──
+  systemd.services.desec-ddns-dsstar-us = {
+    description = "Update deSEC DNS A record for dsstar.us";
+    after = ["network-online.target"];
+    wants = ["network-online.target"];
+    path = [pkgs.curl pkgs.dnsutils];
+    serviceConfig = {
+      Type = "oneshot";
+    };
+    script = ''
+      set -euo pipefail
+      TOKEN=$(cat ${config.age.secrets."hetzner/desec-token".path})
+      API="https://desec.io/api/v1/domains/dsstar.us/rrsets"
+      IP=$(curl -4sf --connect-timeout 10 ifconfig.me 2>/dev/null || curl -4sf --connect-timeout 10 icanhazip.com 2>/dev/null || curl -4sf --connect-timeout 10 https://1.1.1.1/cdn-cgi/trace 2>/dev/null | grep ^ip= | cut -d= -f2)
+      if [ -z "$IP" ]; then
+        echo "ERROR: Could not determine public IP"
+        exit 1
+      fi
+      CURRENT_IP=$(dig +short dsstar.us @1.1.1.1 +noall +answer || dig +short dsstar.us @1.0.0.1 +noall +answer || dig +short dsstar.us @8.8.8.8)
+      if [ "$CURRENT_IP" = "$IP" ]; then
+        echo "OK: dsstar.us already points to $IP, no update needed"
+        exit 0
+      fi
+      HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" -X PATCH \
+        -H "Authorization: Token $TOKEN" \
+        -H "Content-Type: application/json" \
+        "$API/@/A/" \
+        -d "{\"records\":[\"$IP\"]}")
+      if [ "$HTTP_CODE" = "200" ] || [ "$HTTP_CODE" = "204" ]; then
+        echo "OK: dsstar.us -> $IP (PATCH $HTTP_CODE)"
+      else
+        curl -sf -X POST \
+          -H "Authorization: Token $TOKEN" \
+          -H "Content-Type: application/json" \
+          "$API/" \
+          -d "{\"subname\":\"\",\"type\":\"A\",\"ttl\":300,\"records\":[\"$IP\"]}"
+        echo "OK: dsstar.us -> $IP (POST created)"
+      fi
+    '';
+  };
+  systemd.timers.desec-ddns-dsstar-us = {
+    description = "Update deSEC DNS every 30 minutes";
+    wantedBy = ["timers.target"];
+    timerConfig = {
+      OnCalendar = "*:0/30";
+      Persistent = true;
+    };
+  };
+
 }

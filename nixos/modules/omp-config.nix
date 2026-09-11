@@ -320,6 +320,9 @@ in
           # is Cloudflare-blocked for chatgpt/* (upstream #27175), and OpenAI
           # rejects tools+reasoning_effort there. All eight slugs verified
           # against the proxy's /v1/responses (2026-09-09).
+          # Model capacities: https://developers.openai.com/api/docs/models/gpt-6-astra.md
+          # All four: 1,050,000 total / 922,000 input / 128,000 output tokens.
+          # Codex subscription-side caps are not verified by these API specs.
           models:
             - id: chatgpt/gpt-6-astra
               name: ChatGPT GPT-6 Astra (Pro/Max subscription)
@@ -327,7 +330,7 @@ in
               reasoning: true
               supportsTools: true
               input: [text]
-              contextWindow: 1000000
+              contextWindow: 1050000
               maxTokens: 128000
             - id: chatgpt/gpt-5.6-terra
               name: ChatGPT GPT-5.6 Terra (Pro/Max subscription)
@@ -335,7 +338,7 @@ in
               reasoning: true
               supportsTools: true
               input: [text]
-              contextWindow: 400000
+              contextWindow: 1050000
               maxTokens: 128000
             - id: chatgpt/gpt-5.6-luna
               name: ChatGPT GPT-5.6 Luna (Pro/Max subscription)
@@ -343,7 +346,7 @@ in
               reasoning: true
               supportsTools: true
               input: [text]
-              contextWindow: 400000
+              contextWindow: 1050000
               maxTokens: 128000
             - id: chatgpt/gpt-5.6-sol
               name: ChatGPT GPT-5.6 Sol (Pro/Max subscription)
@@ -351,7 +354,7 @@ in
               reasoning: true
               supportsTools: true
               input: [text]
-              contextWindow: 400000
+              contextWindow: 1050000
               maxTokens: 128000
             - id: openai/gpt-6-astra
               name: OpenAI GPT-6 Astra (API key)
@@ -359,7 +362,7 @@ in
               reasoning: true
               supportsTools: true
               input: [text]
-              contextWindow: 1000000
+              contextWindow: 1050000
               maxTokens: 128000
             - id: openai/gpt-5.6-terra
               name: OpenAI GPT-5.6 Terra (API key)
@@ -367,7 +370,7 @@ in
               reasoning: true
               supportsTools: true
               input: [text]
-              contextWindow: 400000
+              contextWindow: 1050000
               maxTokens: 128000
             - id: openai/gpt-5.6-luna
               name: OpenAI GPT-5.6 Luna (API key)
@@ -375,7 +378,7 @@ in
               reasoning: true
               supportsTools: true
               input: [text]
-              contextWindow: 400000
+              contextWindow: 1050000
               maxTokens: 128000
             - id: openai/gpt-5.6-sol
               name: OpenAI GPT-5.6 Sol (API key)
@@ -383,7 +386,7 @@ in
               reasoning: true
               supportsTools: true
               input: [text]
-              contextWindow: 400000
+              contextWindow: 1050000
               maxTokens: 128000
 
     '';
@@ -397,10 +400,10 @@ in
       setupVersion: 1
       modelRoles:
         #default: vast-vllm/deepseek-v4-flash
-        default: litellm/deepseek/deepseek-v4-flash
+        default: litellm/chatgpt/gpt-6-astra
         #smol: office-ollama-cpu/gemma4
-        smol: litellm/gemini/gemini-2.5-flash
-        slow: litellm/deepseek/deepseek-v4-pro
+        smol: litellm/chatgpt/gpt-5.6-luna
+        slow: litellm/deepseek/deepseek-v4-flash
         advisor: litellm/deepseek/deepseek-v4-flash
 
       modelProviderOrder:
