@@ -48,9 +48,12 @@
     # 1. Extract cities with coordinates from relays.json
     if [ -f "$RELAYS" ]; then
       jq -r '
-        .countries[] | .code as $cc | .cities[] |
-        select(.relays | map(select(.hostname | test("wg"))) | length > 0) |
-        "\($cc) \(.code) \(.latitude) \(.longitude)"
+        .wireguard.relays as $wg
+        | .locations
+        | to_entries[]
+        | .key as $loc
+        | select([$wg[] | select(.location == $loc and (.active // false))] | length > 0)
+        | "\($loc | split("-")[0]) \($loc | split("-")[1]) \(.value.latitude) \(.value.longitude)"
       ' "$RELAYS" > "$TMPDIR/all_cities.txt" 2>/dev/null || true
     fi
 
