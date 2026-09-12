@@ -240,12 +240,14 @@ in
         #default: vast-vllm/deepseek-v4-flash
         #default: litellm/chatgpt/gpt-6-astra
         #default: litellm/openrouter/deepseek/deepseek-v4-pro-0813
-        default: litellm/openrouter/deepseek/deepseek-v4-flash-0731
+        #default: litellm/openrouter/deepseek/deepseek-v4-flash-0731
+        default: litellm/openrouter/deepseek/deepseek-v4-flash
         #smol: office-ollama-cpu/gemma4
-        smol: litellm/openrouter/openai/gpt-5.6-luna
-        slow: litellm/openrouter/deepseek/deepseek-v4-pro-0813
+        #smol: litellm/openrouter/openai/gpt-5.6-luna
+        smol: litellm/openrouter/deepseek/deepseek-v4-flash
+        slow: litellm/openrouter/deepseek/deepseek-v4-pro
         #slow: litellm/chatgpt/gpt-6-astra
-        advisor: litellm/deepseek/deepseek-v4-flash
+        advisor: litellm/openrouter/deepseek/deepseek-v4-flash
 
       modelProviderOrder:
         - vast-vllm
@@ -263,13 +265,8 @@ in
         baseDelayMs: 2000
         fallbackChains:
           default:
-            - "deepseek/deepseek-v4-pro"
-            - "litellm/openrouter/deepseek/deepseek-v4-flash-0731"
-            - "litellm/openrouter/deepseek/deepseek-v4-pro-0813"
-            - "litellm/chatgpt/gpt-6-astra"
-            #"office-ollama/qwen3.6:27b"  # disabled 2026-05-31
-          smol:
-            - "litellm/openrouter/deepseek/deepseek-v4-flash-0731"
+            - "litellm/openrouter/deepseek/deepseek-v4-flash"
+            - "litellm/openrouter/auto"
 
       # Tools — enable setting-gated tools that ship disabled by default.
       inspect_image.enabled: true
@@ -322,7 +319,6 @@ in
       <core>
       - All text you output outside of tool use is displayed to the user.
       - You use the tools available to you (read, search, find, edit, bash, eval, lsp, etc.).
-      - Prefix web_search queries with [ENGINE: brave] to force Brave search. Default (no tag) uses Brave directly.
       - You work inside the repo at the current working directory (where the session started) unless told otherwise.
       - You parallelize independent work.
       - When working with code, prefer AST-aware tools (lsp references, lsp symbols, ast-grep) over text search. Missed callsites are bugs shipped.
