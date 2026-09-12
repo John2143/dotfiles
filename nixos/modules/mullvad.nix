@@ -624,5 +624,37 @@ in {
         tailscale set --advertise-exit-node
       '';
     };
+
+    # SOCKS5 proxy that egresses through this node's Mullvad tunnel, so a
+    # client can route its browser via a specific geo exit (DE = pite,
+    # US = vpin) by pointing its proxy at <hostname>.ts.2143.me:1080.
+    # Bound to the tailscale0 address only: LAN and k8s pods cannot reach it
+    # (enforced twice — by the firewall's trustedInterfaces and by binding to
+    # the 100.64.0.x tailnet IP it is closed off from every other interface).
+    systemd.services.mullvad-socks-proxy = {
+      description = "SOCKS5 proxy via this node's Mullvad egress (tailnet only)";
+      after = ["tailscaled.service"];
+      wants = ["tailscaled.service"];
+      wantedBy = ["multi-user.target"];
+      path = [pkgs.tailscale pkgs.coreutils];
+      serviceConfig = {
+        Restart = "always";
+        RestartSec = 3;
+        NoNewPrivileges = true;
+        PrivateTmp = true;
+        ProtectHome = true;
+        ProtectSystem = "strict";
+      };
+      script = ''
+        # Wait for a tailscale IPv4, then bind the proxy to it (never 0.0.0.0).
+        ip=""
+        for _ in $(seq 1 30); do
+          ip=$(tailscale ip -4 2>/dev/null) || true
+          [ -n "$ip" ] && break
+          sleep 1
+        done
+        exec ${pkgs.microsocks}/bin/microsocks -q -i "$ip" -p 1080
+      '';
+    };
   };
 }

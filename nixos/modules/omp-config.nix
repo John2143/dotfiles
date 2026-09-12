@@ -162,6 +162,17 @@ in
           # All four: 1,050,000 total / 922,000 input / 128,000 output tokens.
           # Codex subscription-side caps are not verified by these API specs.
           models:
+            # DeepSeek V4.1 Flash via OpenRouter — released 2026-09-10, the
+            # designated V4 Pro successor. Not yet in litellm's /model/info,
+            # so pinned explicitly rather than relying on discovery.
+            - id: openrouter/deepseek/deepseek-v4.1-flash
+              name: DeepSeek V4.1 Flash (OpenRouter)
+              api: openai-completions
+              reasoning: true
+              supportsTools: true
+              input: [text]
+              contextWindow: 1048576
+              maxTokens: 384000
             - id: chatgpt/gpt-6-astra
               name: ChatGPT GPT-6 Astra (Pro/Max subscription)
               api: openai-responses
@@ -245,7 +256,7 @@ in
         #smol: office-ollama-cpu/gemma4
         #smol: litellm/openrouter/openai/gpt-5.6-luna
         smol: litellm/openrouter/deepseek/deepseek-v4-flash-0731
-        slow: litellm/openrouter/deepseek/deepseek-v4-pro-0813
+        slow: litellm/openrouter/deepseek/deepseek-v4.1-flash
         #slow: litellm/chatgpt/gpt-6-astra
         advisor: litellm/openrouter/deepseek/deepseek-v4-flash-0731
 
@@ -274,7 +285,6 @@ in
       render_mermaid.enabled: true
       checkpoint.enabled: true
       providers.webSearch: brave
-      providers.brave.apiKey: BRAVE_API_KEY
     '';
 
     ".omp/agent/keybindings.json".text = ''
