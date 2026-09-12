@@ -252,12 +252,12 @@ in
         #default: litellm/chatgpt/gpt-6-astra
         #default: litellm/openrouter/deepseek/deepseek-v4-pro-0813
         #default: litellm/openrouter/deepseek/deepseek-v4-flash-0731
-        default: litellm/openrouter/deepseek/deepseek-v4-flash-0731
+        default: litellm/openrouter/deepseek/deepseek-v4.1-flash
         #smol: office-ollama-cpu/gemma4
         #smol: litellm/openrouter/openai/gpt-5.6-luna
-        smol: litellm/openrouter/deepseek/deepseek-v4-flash-0731
-        slow: litellm/openrouter/deepseek/deepseek-v4.1-flash
-        #slow: litellm/chatgpt/gpt-6-astra
+        smol: litellm/openrouter/deepseek/deepseek-v4.1-flash
+        slow: litellm/chatgpt/gpt-6-astra
+        #slow: litellm/openrouter/deepseek/deepseek-v4.1-flash
         advisor: litellm/openrouter/deepseek/deepseek-v4-flash-0731
 
       modelProviderOrder:
