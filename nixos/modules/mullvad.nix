@@ -34,6 +34,7 @@
     RELAYS="/var/cache/mullvad-vpn/relays.json"
     HOME_LAT=${toString cfg.homeLatitude}
     HOME_LON=${toString cfg.homeLongitude}
+    COUNTRY="${if cfg.country != null then cfg.country else ""}"
     MAX_DIST=1000
 
     exec 9>"$LOCK"
@@ -77,7 +78,7 @@
     pick_city() {
       local exclude_recent="$1"
       awk -v hlat="$HOME_LAT" -v hlon="$HOME_LON" -v maxd="$MAX_DIST" \
-          -v rfile="$RECENT_FILE" -v exclude="$exclude_recent" '
+          -v rfile="$RECENT_FILE" -v exclude="$exclude_recent" -v country="$COUNTRY" '
         BEGIN {
           PI=3.14159265358979; D=PI/180; R=3959
           n=0; total_w=0
@@ -91,10 +92,11 @@
         }
         {
           cc=$1; city=$2; lat=$3; lon=$4
+          if (country != "" && $1 != country) next
           dlat=(lat-hlat)*D; dlon=(lon-hlon)*D
           a=sin(dlat/2)^2 + cos(hlat*D)*cos(lat*D)*sin(dlon/2)^2
           dist=R*2*atan2(sqrt(a),sqrt(1-a))
-          if (dist > maxd) next
+          if (dist > maxd && country == "") next
           key = cc " " city
           if (exclude && (key in recent)) next
           n++
@@ -425,16 +427,29 @@
   '';
 
   nuclearCooldownFile = "/run/mullvad-nuclear-cooldown";
+
+  # Per-host VPN zone, keyed by hostname. A host with no entry keeps the
+  # proximity selector (no country pin) and the DC home anchor.
+  zoneByHost = {
+    pite = { country = "de"; homeLatitude = 50.1109; homeLongitude = 8.6821; };
+    vpin = { country = "us"; };
+  };
+  zone = zoneByHost.${config.networking.hostName} or {};
 in {
   options.services.mullvad-relay = {
+    country = lib.mkOption {
+      type = lib.types.nullOr lib.types.str;
+      default = zone.country or null;
+      description = "Restrict relay selection to a single country code (e.g. \"de\", \"us\"). When set, the 1000-mile radius is ignored and selection picks weighted-random among that country's cities (nearest preferred). Defaults from zoneByHost; null = proximity selection.";
+    };
     homeLatitude = lib.mkOption {
       type = lib.types.float;
-      default = 38.8977;
+      default = zone.homeLatitude or 38.8977;
       description = "Latitude for nearby-city relay selection (default: White House, DC).";
     };
     homeLongitude = lib.mkOption {
       type = lib.types.float;
-      default = -77.0365;
+      default = zone.homeLongitude or (-77.0365);
       description = "Longitude for nearby-city relay selection (default: White House, DC).";
     };
   };
