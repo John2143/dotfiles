@@ -241,13 +241,13 @@ in
         #default: litellm/chatgpt/gpt-6-astra
         #default: litellm/openrouter/deepseek/deepseek-v4-pro-0813
         #default: litellm/openrouter/deepseek/deepseek-v4-flash-0731
-        default: litellm/openrouter/deepseek/deepseek-v4-flash
+        default: litellm/openrouter/deepseek/deepseek-v4-flash-0731
         #smol: office-ollama-cpu/gemma4
         #smol: litellm/openrouter/openai/gpt-5.6-luna
-        smol: litellm/openrouter/deepseek/deepseek-v4-flash
-        slow: litellm/openrouter/deepseek/deepseek-v4-pro
+        smol: litellm/openrouter/deepseek/deepseek-v4-flash-0731
+        slow: litellm/openrouter/deepseek/deepseek-v4-pro-0813
         #slow: litellm/chatgpt/gpt-6-astra
-        advisor: litellm/openrouter/deepseek/deepseek-v4-flash
+        advisor: litellm/openrouter/deepseek/deepseek-v4-flash-0731
 
       modelProviderOrder:
         - vast-vllm
@@ -265,7 +265,7 @@ in
         baseDelayMs: 2000
         fallbackChains:
           default:
-            - "litellm/openrouter/deepseek/deepseek-v4-flash"
+            - "litellm/openrouter/deepseek/deepseek-v4-flash-0731"
             - "litellm/openrouter/auto"
 
       # Tools — enable setting-gated tools that ship disabled by default.
