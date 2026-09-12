@@ -119,172 +119,6 @@ in
                   thinking:
                     type: enabled
 
-        # OpenAI fallback for the smol safety classifier. Used only when
-        # DeepSeek is unreachable — OpenAI's global routing is the most
-        # reliable fallback available. gpt-4.1-nano is their cheapest model
-        # that supports json_schema structured output (~$0.10/1M tokens).
-        # Requires OPENAI_API_KEY in /run/agenix/llm-runtime-keys.
-        # Get one: https://platform.openai.com/api-keys
-        openai:
-          baseUrl: https://api.openai.com/v1
-          api: openai-completions
-          apiKey: OPENAI_API_KEY
-          models:
-            - id: gpt-4.1-nano
-              name: GPT-4.1 Nano (OpenAI)
-              reasoning: false
-              input: [text]
-              cost: { input: 0.01, output: 0.04, cacheRead: 0.0025, cacheWrite: 0 }
-              contextWindow: 1000000
-              maxTokens: 8192
-
-  #office-ollama:        # disabled 2026-05-31
-  #  baseUrl: http://office:11434/v1
-  #  api: openai-completions
-  #  auth: none
-  #  models:
-  #    - id: gemma4
-  #      name: Gemma 4 (Office ROCm)
-  #      reasoning: false
-  #      input: [text]
-  #      cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }
-  #      contextWindow: 128000
-  #      maxTokens: 8192
-  #    - id: qwen3.6:27b
-  #      name: Qwen 3 (Office ROCm)
-  #      reasoning: true
-  #      input: [text]
-  #      cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }
-  #      contextWindow: 128000
-  #      maxTokens: 8192
-
-  #office-ollama-cpu:    # disabled 2026-05-31
-  #  baseUrl: http://office:11435/v1
-  #  api: openai-completions
-  #  auth: none
-  #  models:
-  #    - id: gemma4
-  #      name: Gemma 4 (Office CPU)
-  #      reasoning: false
-  #      input: [text]
-  #      cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }
-  #      contextWindow: 128000
-  #      maxTokens: 8192
-  #    - id: qwen3.6:27b
-  #      name: Qwen 3 (Office CPU)
-  #      reasoning: true
-  #      input: [text]
-  #      cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }
-  #      contextWindow: 128000
-  #      maxTokens: 8192
-
-        # OpenRouter — unified API gateway for 300+ models. Used for:
-        #   - Gemini Flash/Pro (cheap, fast, 1M context — excellent smol)
-        #   - Web search via :online suffix ($0.005/req Exa search)
-        #   - Anthropic fallback (routes around direct-API outages)
-        #   - Provider diversity for resilience
-        # Requires OPENROUTER_API_KEY in /run/agenix/llm-runtime-keys.
-        # Get one: https://openrouter.ai/settings/keys
-        openrouter:
-          baseUrl: https://openrouter.ai/api/v1
-          api: openai-completions
-          apiKey: OPENROUTER_API_KEY
-          models:
-            # Gemini Flash Lite — cheapest smol option on OR. $0.10/$0.40 per 1M,
-            # 1M context. Lightweight reasoning model, faster than full Flash.
-            - id: google/gemini-2.5-flash-lite
-              name: Gemini 2.5 Flash Lite (OpenRouter)
-              reasoning: true
-              input: [text]
-              cost: { input: 0.10, output: 0.40, cacheRead: 0, cacheWrite: 0 }
-              contextWindow: 1048576
-              maxTokens: 65536
-
-            # Gemini Flash — Google's workhorse. $0.30/$2.50 per 1M, 1M context.
-            # Supports text and image input (video/audio not yet in OMP schema).
-            # Built-in thinking with configurable reasoning effort.
-            - id: google/gemini-2.5-flash
-              name: Gemini 2.5 Flash Multimodal (OpenRouter)
-              reasoning: true
-              input: [text, image]
-              cost: { input: 0.30, output: 2.50, cacheRead: 0.03, cacheWrite: 0.08333 }
-              contextWindow: 1048576
-              maxTokens: 65536
-
-            # Gemini Flash with OpenRouter web search. Adds $0.005/req for Exa
-            # search results. Supports text and image input.
-            - id: google/gemini-2.5-flash:online
-              name: Gemini 2.5 Flash Multimodal Online (OpenRouter)
-              reasoning: true
-              input: [text, image]
-              cost: { input: 0.30, output: 2.50, cacheRead: 0.03, cacheWrite: 0.08333 }
-              contextWindow: 1048576
-              maxTokens: 65536
-
-            # Gemini Pro — heavier reasoning for hard tasks. $1.25/$10 per 1M.
-            - id: google/gemini-2.5-pro
-              name: Gemini 2.5 Pro (OpenRouter)
-              reasoning: true
-              input: [text]
-              cost: { input: 1.25, output: 10.00, cacheRead: 0.03125, cacheWrite: 0 }
-              contextWindow: 1048576
-              maxTokens: 65536
-
-            # Claude Sonnet via OpenRouter — fallback when direct Anthropic is
-            # down. Same $3/$15 pricing as direct, but OR can route through
-            # multiple providers (including Anthropic itself).
-            - id: anthropic/claude-sonnet-4-6
-              name: Claude Sonnet 4.6 (OpenRouter)
-              reasoning: true
-              input: [text]
-              cost: { input: 3.00, output: 15.00, cacheRead: 0.30, cacheWrite: 3.75 }
-              contextWindow: 1000000
-              maxTokens: 65536
-
-            # Claude Haiku via OpenRouter. $1/$5 per 1M.
-            - id: anthropic/claude-haiku-4-5
-              name: Claude Haiku 4.5 (OpenRouter)
-              reasoning: true
-              input: [text]
-              cost: { input: 1.00, output: 5.00, cacheRead: 0.08, cacheWrite: 1.00 }
-              contextWindow: 200000
-              maxTokens: 65536
-
-        # Google Gemini direct API. Cheaper than OpenRouter (no $0.005/req
-        # surcharge) and one less hop. Same models, same pricing.
-        # Requires GEMINI_API_KEY in /run/agenix/llm-runtime-keys.
-        # Get one: https://aistudio.google.com/apikey
-        google:
-          api: google-generative-ai
-          baseUrl: https://generativelanguage.googleapis.com/v1beta
-          apiKey: GEMINI_API_KEY
-          models:
-            # Flash Lite — Google's cheapest. $0.10/$0.40 per 1M, 1M context.
-            - id: gemini-2.5-flash-lite
-              name: Gemini 2.5 Flash Lite (Google)
-              reasoning: true
-              input: [text]
-              cost: { input: 0.10, output: 0.40, cacheRead: 0, cacheWrite: 0 }
-              contextWindow: 1048576
-              maxTokens: 65536
-
-            # Flash — workhorse multimodal. $0.30/$2.50 per 1M, 1M context.
-            - id: gemini-2.5-flash
-              name: Gemini 2.5 Flash (Google)
-              reasoning: true
-              input: [text, image]
-              cost: { input: 0.30, output: 2.50, cacheRead: 0.03, cacheWrite: 0.08333 }
-              contextWindow: 1048576
-              maxTokens: 65536
-
-            # Pro — heavy reasoning. $1.25/$10 per 1M, 1M context.
-            - id: gemini-2.5-pro
-              name: Gemini 2.5 Pro (Google)
-              reasoning: true
-              input: [text]
-              cost: { input: 1.25, output: 10.00, cacheRead: 0.03125, cacheWrite: 0 }
-              contextWindow: 1048576
-              maxTokens: 65536
 
         # LiteLLM proxy — unified router for all providers. Every query logged
         # in the dashboard at https://llm.2143.me/ui.
@@ -408,22 +242,18 @@ in
         #default: litellm/openrouter/deepseek/deepseek-v4-pro-0813
         default: litellm/openrouter/deepseek/deepseek-v4-flash-0731
         #smol: office-ollama-cpu/gemma4
-        smol: litellm/chatgpt/gpt-5.6-luna
-        #slow: litellm/openrouter/deepseek/deepseek-v4-pro-0813
-        slow: litellm/chatgpt/gpt-6-astra
+        smol: litellm/openrouter/openai/gpt-5.6-luna
+        slow: litellm/openrouter/deepseek/deepseek-v4-pro-0813
+        #slow: litellm/chatgpt/gpt-6-astra
         advisor: litellm/deepseek/deepseek-v4-flash
 
       modelProviderOrder:
-        - litellm
         - vast-vllm
+        - litellm
         - deepseek
-        - openrouter
         - office-vllm
         #- office-ollama       # disabled 2026-05-31
         #- office-ollama-cpu   # disabled 2026-05-31
-        - anthropic
-        - openai
-        - google
 
 
       enabledModels: []
@@ -437,12 +267,9 @@ in
             - "litellm/openrouter/deepseek/deepseek-v4-flash-0731"
             - "litellm/openrouter/deepseek/deepseek-v4-pro-0813"
             - "litellm/chatgpt/gpt-6-astra"
-            - "anthropic/claude-sonnet-4-6"
             #"office-ollama/qwen3.6:27b"  # disabled 2026-05-31
           smol:
             - "litellm/openrouter/deepseek/deepseek-v4-flash-0731"
-            - "gemini/gemini-2.5-flash-lite"
-            - "anthropic/claude-haiku-4-5"
 
       # Tools — enable setting-gated tools that ship disabled by default.
       inspect_image.enabled: true
