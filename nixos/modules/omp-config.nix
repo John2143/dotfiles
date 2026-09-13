@@ -249,16 +249,16 @@ in
       setupVersion: 1
       modelRoles:
         #default: vast-vllm/deepseek-v4-flash
-        #default: litellm/chatgpt/gpt-6-astra
+        #default: litellm/chatgpt/gpt-5.6-sol
         #default: litellm/openrouter/deepseek/deepseek-v4-pro-0813
         #default: litellm/openrouter/deepseek/deepseek-v4-flash-0731
         default: litellm/openrouter/deepseek/deepseek-v4.1-flash
         #smol: office-ollama-cpu/gemma4
         #smol: litellm/openrouter/openai/gpt-5.6-luna
         smol: litellm/openrouter/deepseek/deepseek-v4.1-flash
-        slow: litellm/chatgpt/gpt-6-astra
+        slow: litellm/chatgpt/gpt-5.6-sol
         #slow: litellm/openrouter/deepseek/deepseek-v4.1-flash
-        advisor: litellm/openrouter/deepseek/deepseek-v4-flash-0731
+        advisor: litellm/openrouter/deepseek/deepseek-v4.1-flash
 
       modelProviderOrder:
         - vast-vllm
@@ -276,6 +276,10 @@ in
         baseDelayMs: 2000
         fallbackChains:
           default:
+            - "litellm/openrouter/deepseek/deepseek-v4-flash-0731"
+            - "litellm/openrouter/auto"
+          slow:
+            - "litellm/openrouter/openai/gpt-5.6-sol"
             - "litellm/openrouter/deepseek/deepseek-v4-flash-0731"
             - "litellm/openrouter/auto"
 

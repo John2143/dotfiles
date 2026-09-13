@@ -394,6 +394,19 @@
           ./nixos/modules/disko_steam.nix
         ];
       })
+      // (mkHost {
+        name = "mirror";
+        modules = [
+          ./nixos/shared-cli-configuration.nix
+          ./nixos/mirror-configuration.nix
+          ./nixos/tailscale.nix
+          ./nixos/modules/observability-agent.nix
+
+          {
+            services.observability-agent.enable = true;
+          }
+        ];
+      })
       // {
         installer = nixpkgs.lib.nixosSystem {
           inherit system;
