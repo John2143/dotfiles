@@ -277,11 +277,11 @@ in
         fallbackChains:
           default:
             - "litellm/openrouter/deepseek/deepseek-v4-flash-0731"
-            - "litellm/openrouter/auto"
+            - "litellm/openrouter/openrouter/auto"
           slow:
             - "litellm/openrouter/openai/gpt-5.6-sol"
             - "litellm/openrouter/deepseek/deepseek-v4-flash-0731"
-            - "litellm/openrouter/auto"
+            - "litellm/openrouter/openrouter/auto"
 
       # Tools — enable setting-gated tools that ship disabled by default.
       inspect_image.enabled: true
