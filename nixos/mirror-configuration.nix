@@ -57,10 +57,20 @@
   #
   # The consoles matter because the finished mirror has no keyboard; without
   # them a wedged kiosk is only reachable over SSH.
+  #
+  # The panel is physically mounted in portrait, so the output needs a 90°
+  # counter-clockwise turn — otherwise "up" points to the right. cage cannot
+  # rotate at all (its entire option set is -d/-D/-h/-m/-s/-v), so the turn is
+  # done at the DRM/KMS layer, which is the mechanism the Raspberry Pi docs
+  # recommend under vc4-kms-v3d (`display_rotate` in config.txt is deprecated
+  # and ignored once KMS is in use). 1024x768 is this panel's only real EDID
+  # mode, so the portrait geometry comes out 768x1024. If the turn lands the
+  # wrong way round, 270 is the other candidate.
   boot.kernelParams = [
     "console=ttyS0,115200n8"
     "console=ttyAMA0,115200n8"
     "console=tty0"
+    "video=HDMI-A-1:1024x768@60,rotate=90"
   ];
   zramSwap.enable = true;
   swapDevices = [{device = "/swapfile"; size = 4096;}];
@@ -79,6 +89,11 @@
     git
     curl
     htop
+    # Diagnostics for a headless-ish display: grim captures the running
+    # compositor (if cage exposes wlr-screencopy), wlr-randr reports/edits
+    # output state (if cage exposes wlr-output-management).
+    grim
+    wlr-randr
   ];
 
   programs.fish.enable = true;
