@@ -516,8 +516,9 @@ nixpkgs.overlays = [
 
   # ZFS datasets (one-time):
   #   Data:    sudo zfs create -o mountpoint=/tank/atticd -o recordsize=1M -o compression=lz4 -o atime=off tank/atticd
+  #   Cache:   sudo zfs create -o mountpoint=/tank/atticd/storage -o recordsize=1M -o compression=lz4 -o atime=off tank/atticd/storage
   #   DB:      sudo zfs create -o mountpoint=/tank/atticd/db -o recordsize=64K -o compression=lz4 -o atime=off tank/atticd/db
-  #   Owner:   sudo chown atticd:atticd /tank/atticd /tank/atticd/db
+  #   Owner:   sudo chown atticd:atticd /tank/atticd /tank/atticd/storage /tank/atticd/db
   #   Migrate: systemctl stop atticd && mv /tank/atticd/server.db /tank/atticd/db/ && systemctl start atticd
 
   # Declarative cache bootstrap — creates + configures the cache on first boot.
