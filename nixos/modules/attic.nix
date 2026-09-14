@@ -77,6 +77,10 @@ in {
       Restart = "on-failure";
       RestartSec = 30;
       TimeoutStopSec = 10;
+      # watch-store also ballooned (2.8G RSS / 2.9G swap on nas, Sep 2026).
+      # Cap it so a runaway uploader can't swap the host out.
+      MemoryHigh = "1G";
+      MemoryMax = "2G";
     };
     wantedBy = [ "default.target" ];
   };

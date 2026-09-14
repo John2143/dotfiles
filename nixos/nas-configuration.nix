@@ -540,7 +540,7 @@ nixpkgs.overlays = [
       if ! ${pkgs.attic-client}/bin/attic cache info 2143nix >/dev/null 2>&1; then
         ${pkgs.attic-client}/bin/attic cache create 2143nix
       fi
-      ${pkgs.attic-client}/bin/attic cache configure 2143nix --priority 25
+      ${pkgs.attic-client}/bin/attic cache configure 2143nix --priority 25 --retention-period "90 days"
     '';
   };
   services.atticd = {
@@ -551,6 +551,11 @@ nixpkgs.overlays = [
       allowed-hosts = ["nas.ts.2143.me" "nas.ts.2143.me:8280" "nas" "nas:8280" "nas.local" "nas.local:8280" "localhost" "localhost:8280" "100.64.0.14" "100.64.0.14:8280"];
       api-endpoint = "http://nas:8280/";
       database.url = "sqlite:///tank/atticd/db/server.db?mode=rwc";
+
+      # Periodic GC — atticd prunes NARs/chunks unreferenced by any cache.
+      # Without this the DB and storage drift apart (DB rows pointing at
+      # chunk files that no longer exist -> "Storage error: No such file").
+      garbage-collection.interval = "12 hours";
 
       storage = {
         type = "local";
@@ -582,6 +587,11 @@ nixpkgs.overlays = [
     DynamicUser = lib.mkForce false;
     PrivateUsers = lib.mkForce false;
     ReadWritePaths = ["/tank/atticd"];
+    # Guardrail: atticd once swapped the whole box out (7.2G swap) during
+    # the Sep 2026 storage/DB divergence. Cap it so it OOMs itself rather
+    # than taking the host down.
+    MemoryHigh = "3G";
+    MemoryMax = "6G";
     TimeoutStopSec = "30s";
   };
 
