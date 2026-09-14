@@ -18,8 +18,6 @@
   ...
 }: {
   imports = [
-    # TODO: replace with this machine's real `nixos-generate-config` output —
-    # see the warning at the top of mirror-hardware-configuration.nix.
     ./mirror-hardware-configuration.nix
     ./modules/user-john.nix
     ./modules/smart-mirror.nix
@@ -36,13 +34,27 @@
     url = "https://home.ts.2143.me/mirror/0?kiosk";
   };
 
-  # Use the systemd-boot EFI boot loader.
-  # TODO: change to boot.loader.grub if this host actually boots via GRUB —
-  # a rebuild with the wrong loader re-installs boot entries.
+  # Raspberry Pi 4: the firmware loads u-boot, which distro-boots
+  # /boot/extlinux/extlinux.conf. There is no EFI firmware on this box, so
+  # systemd-boot (and grub) are both wrong here. Same pattern the other Pis in
+  # this repo use — see remote-cli-config.nix.
   boot.loader = {
-    efi.canTouchEfiVariables = true;
-    systemd-boot.enable = true;
+    grub.enable = false;
+    generic-extlinux-compatible.enable = true;
   };
+
+  # Both of these are carried over from the configuration this machine is
+  # already running, so the switch does not silently drop them:
+  #  - the serial + HDMI consoles matter because the finished mirror has no
+  #    keyboard; without them a wedged kiosk is only reachable over SSH.
+  #  - zram is the machine's only swap. A Pi 4 running a chromium kiosk with
+  #    no swap at all is a needless OOM risk.
+  boot.kernelParams = [
+    "console=ttyS0,115200n8"
+    "console=ttyAMA0,115200n8"
+    "console=tty0"
+  ];
+  zramSwap.enable = true;
 
   networking.hostName = compName; # Define your hostname.
   networking.networkmanager.enable = true;
