@@ -431,7 +431,6 @@
   # Per-host VPN zone, keyed by hostname. A host with no entry keeps the
   # proximity selector (no country pin) and the DC home anchor.
   zoneByHost = {
-    pite = { country = "de"; homeLatitude = 50.1109; homeLongitude = 8.6821; };
     vpin = { country = "us"; };
   };
   zone = zoneByHost.${config.networking.hostName} or {};
@@ -626,8 +625,8 @@ in {
     };
 
     # SOCKS5 proxy that egresses through this node's Mullvad tunnel, so a
-    # client can route its browser via a specific geo exit (DE = pite,
-    # US = vpin) by pointing its proxy at <hostname>.ts.2143.me:1080.
+    # client can route its browser via a specific geo exit by pointing its
+    # proxy at <hostname>.ts.2143.me:1080 (vpin.ts.2143.me:1080 = US exit).
     # Bound to the tailscale0 address only: LAN and k8s pods cannot reach it
     # (enforced twice — by the firewall's trustedInterfaces and by binding to
     # the 100.64.0.x tailnet IP it is closed off from every other interface).

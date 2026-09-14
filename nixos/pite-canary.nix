@@ -11,6 +11,19 @@
   ...
 }: {
 
+  # k3s/flannel forwards pod traffic; this was previously enabled indirectly
+  # by the Mullvad module's Tailscale routing mode.
+  boot.kernel.sysctl = {
+    "net.ipv4.conf.all.forwarding" = true;
+    "net.ipv6.conf.all.forwarding" = true;
+  };
+
+  # Keep plain tailnet access and its UDP port, but retire pite as an exit node.
+  services.tailscale = {
+    openFirewall = true;
+    extraSetFlags = ["--advertise-exit-node=false"];
+  };
+
   # Reserve 1 core and 1Gi for system daemons — leaves 3 cores / 2.7Gi allocatable for workloads
   services.k3s.extraFlags = [
     "--kubelet-arg=system-reserved=cpu=1,memory=1Gi"
