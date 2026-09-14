@@ -1,0 +1,9 @@
+# asciinema CLI (3.0+). Config precedence:
+#   /etc/asciinema/config.toml  <  ~/.config/asciinema/defaults.toml  <  this file
+# `defaults.toml` is written by the CLI's first-run wizard; this file overrides it.
+#
+# Server is deployed by ArgoCD from the `argo` repo (apps/asciinema.yaml,
+# workloads/asciinema/). Admin panel: log in, then /admin.
+
+[server]
+url = "https://terminals.john2143.com"
