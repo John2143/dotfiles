@@ -43,18 +43,27 @@
     generic-extlinux-compatible.enable = true;
   };
 
-  # Both of these are carried over from the configuration this machine is
-  # already running, so the switch does not silently drop them:
-  #  - the serial + HDMI consoles matter because the finished mirror has no
-  #    keyboard; without them a wedged kiosk is only reachable over SSH.
-  #  - zram is the machine's only swap. A Pi 4 running a chromium kiosk with
-  #    no swap at all is a needless OOM risk.
+  # Consoles and memory headroom. The consoles are carried over from the
+  # configuration this machine already runs; the memory settings are the fix
+  # for this Pi locking up (sshd stops answering while ICMP keeps replying —
+  # sshd cannot fork, the kernel still does).
+  #
+  #   zram     ~900 MB of fast compressed swap (the 50%-of-RAM default on a
+  #            2 GB Pi 4). On its own this is NOT enough: a chromium kiosk
+  #            plus a nix rebuild exhausts it and the box wedges.
+  #   swapfile 4 GB backstop on the SD card. Slow, but it is the difference
+  #            between "crawling" and "dead". Same pairing the other Pis in
+  #            this repo use — see remote-cli-config.nix.
+  #
+  # The consoles matter because the finished mirror has no keyboard; without
+  # them a wedged kiosk is only reachable over SSH.
   boot.kernelParams = [
     "console=ttyS0,115200n8"
     "console=ttyAMA0,115200n8"
     "console=tty0"
   ];
   zramSwap.enable = true;
+  swapDevices = [{device = "/swapfile"; size = 4096;}];
 
   networking.hostName = compName; # Define your hostname.
   networking.networkmanager.enable = true;
