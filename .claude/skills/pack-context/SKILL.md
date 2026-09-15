@@ -11,7 +11,7 @@ tool-hints: |
 
 **Invocation:** `/skill:pack-context [--plan <path>] [--slug <name>] [--file]`
 
-The plan you are about to hand off is executed in a fresh context window: the next agent sees the file and nothing else. Everything you learned that the file does not say dies with this session. Pack it now, before you `resolve`.
+The plan you are about to hand off is executed in a fresh context window: the next agent sees the file and nothing else. Everything you learned that the file does not say dies with this session. Pack it now — in plan mode, before you `resolve`.
 
 - `--plan <path>` — explicit plan file to pack into. Overrides auto-detect.
 - `--slug <name>` — name for the standalone context file (only used with `--file`).
@@ -33,7 +33,7 @@ Parse `$ARGUMENTS`:
 
 ## Mode: Pack Context
 
-**Target.** Default to the plan file you have been writing this session — under plan mode that is `local://<slug>-plan.md` (the same slug you pass to `resolve` as `extra.title`). If you cannot name it and `--plan` was not given, report "no plan file to pack into" and STOP. Never invent a plan, never dump to the repo root.
+**Target.** Default to the plan file you have been writing this session — under plan mode that is `local://<slug>-plan.md` (the same slug you pass to `resolve` as `extra.title`). If you cannot name it and `--plan` was not given, report "no plan file to pack into" and STOP. If `--plan` names a file that does not exist, report that and STOP — never create a plan-shaped file around a lone `## Handoff Context`. Never invent a plan, never dump to the repo root.
 
 **Pack only the surprises** — what a competent agent would burn time rediscovering:
 - dead ends already ruled out, and why (so it does not re-walk them)
@@ -45,7 +45,7 @@ Parse `$ARGUMENTS`:
 
 **Drop** anything a `grep` or `read` answers, the goal, the plan's own steps, and anything the plan already says. Per line ask: *would a competent agent burn time rediscovering this?* No → drop it.
 
-**Write** a `## Handoff Context` section immediately after the plan's `## Context` section (before `## Approach`), so the executor reads it before it starts. If a `## Handoff Context` section already exists, merge into it — never append a second one.
+**Write** a `## Handoff Context` section immediately after the plan's `## Context` section (before `## Approach`), so the executor reads it before it starts. If the plan has no `## Context` section, put it at the top, before the first section. If a `## Handoff Context` section already exists, merge into it — never append a second one.
 
 With `--file`, write `local://<slug>-context.md` instead and leave exactly one pointer line in that same position:
 
