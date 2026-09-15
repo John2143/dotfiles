@@ -60,17 +60,29 @@
   #
   # The panel is physically mounted in portrait, so the output needs a 90°
   # counter-clockwise turn — otherwise "up" points to the right. cage cannot
-  # rotate at all (its entire option set is -d/-D/-h/-m/-s/-v), so the turn is
-  # done at the DRM/KMS layer, which is the mechanism the Raspberry Pi docs
-  # recommend under vc4-kms-v3d (`display_rotate` in config.txt is deprecated
-  # and ignored once KMS is in use). 1024x768 is this panel's only real EDID
-  # mode, so the portrait geometry comes out 768x1024. If the turn lands the
-  # wrong way round, 270 is the other candidate.
+  # rotate at all (its entire option set is -d/-D/-h/-m/-s/-v), so this is
+  # pushed down to the DRM/KMS layer.
+  #
+  # `rotate=90` would be the obvious spelling, but the kernel rejects it unless
+  # a mode is given too (drm_modes.c refuses a freestanding rotate), and any
+  # mode string here PINS the resolution — which is wrong: this monitor is
+  # 1920x1080 (its EDID reads 44 modes, preferred 1920x1080@60, pixel clock
+  # 148.5 MHz). Pinning would also break the case where the monitor is off at
+  # boot and the kernel falls back to the no-EDID VESA list (1024x768 etc).
+  #
+  # `panel_orientation=` has no such restriction, so it applies the rotation
+  # while leaving mode selection to the EDID. It sets the connector's "panel
+  # orientation" property, which wlroots reads to pick the output transform —
+  # and cage is wlroots-based, so it honours it.
+  #
+  # left_side_up = the panel's left edge is at the top (monitor turned 90°
+  # clockwise). If the turn comes out the other way, right_side_up is the
+  # alternative.
   boot.kernelParams = [
     "console=ttyS0,115200n8"
     "console=ttyAMA0,115200n8"
     "console=tty0"
-    "video=HDMI-A-1:1024x768@60,rotate=90"
+    "video=HDMI-A-1:panel_orientation=left_side_up"
   ];
   zramSwap.enable = true;
   swapDevices = [{device = "/swapfile"; size = 4096;}];
