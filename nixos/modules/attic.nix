@@ -81,6 +81,7 @@ in {
       # Cap it so a runaway uploader can't swap the host out.
       MemoryHigh = "1G";
       MemoryMax = "2G";
+      MemorySwapMax = "512M";
     };
     wantedBy = [ "default.target" ];
   };

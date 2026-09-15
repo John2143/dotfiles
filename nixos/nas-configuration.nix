@@ -593,6 +593,7 @@ nixpkgs.overlays = [
     # than taking the host down.
     MemoryHigh = "3G";
     MemoryMax = "6G";
+    MemorySwapMax = "1G";
     TimeoutStopSec = "30s";
   };
 
