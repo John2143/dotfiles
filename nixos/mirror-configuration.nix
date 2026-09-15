@@ -63,17 +63,27 @@
   # rotate at all (its entire option set is -d/-D/-h/-m/-s/-v), so this is
   # pushed down to the DRM/KMS layer.
   #
-  # `rotate=90` would be the obvious spelling, but the kernel rejects it unless
-  # a mode is given too (drm_modes.c refuses a freestanding rotate), and any
-  # mode string here PINS the resolution — which is wrong: this monitor is
-  # 1920x1080 (its EDID reads 44 modes, preferred 1920x1080@60, pixel clock
-  # 148.5 MHz). Pinning would also break the case where the monitor is off at
-  # boot and the kernel falls back to the no-EDID VESA list (1024x768 etc).
+  # The mode is FORCED to 1920x1080@60 on purpose. Without a mode the panel
+  # only gets what the EDID advertises, and this monitor's EDID is frequently
+  # unreadable (it reports 0 bytes while the screen is off, and the kernel then
+  # falls back to its generic no-EDID VESA list — 1024x768, 800x600, 848x480,
+  # 640x480 — so the mirror comes up at 1024x768 on a 1080p panel, and stays
+  # there). Forcing the mode makes the signal correct whether or not the
+  # display answers EDID probing. 1920x1080 is this panel's native mode; when
+  # the EDID does read it reports exactly that, preferred, at a 148.5 MHz
+  # pixel clock.
   #
-  # `panel_orientation=` has no such restriction, so it applies the rotation
-  # while leaving mode selection to the EDID. It sets the connector's "panel
-  # orientation" property, which wlroots reads to pick the output transform —
-  # and cage is wlroots-based, so it honours it.
+  # Note the forced mode is built by the kernel's GTF maths
+  # (drm_mode_create_from_cmdline_mode), not copied from the EDID, so the
+  # blanking is a hair different from the native CEA timing — same resolution,
+  # same ~60 Hz, hsync within ~0.5% of native. That is the price of "always
+  # correct", and it is why `rotate=90` (which also requires a mode) is not
+  # used: it would additionally pin the plane rotation, which the compositor
+  # then fights over.
+  #
+  # `panel_orientation=` carries the rotation instead. It sets the connector's
+  # "panel orientation" property, which wlroots reads to choose the output
+  # transform — and cage is wlroots-based, so it honours it.
   #
   # left_side_up = the panel's left edge is at the top (monitor turned 90°
   # clockwise). If the turn comes out the other way, right_side_up is the
@@ -82,7 +92,7 @@
     "console=ttyS0,115200n8"
     "console=ttyAMA0,115200n8"
     "console=tty0"
-    "video=HDMI-A-1:panel_orientation=left_side_up"
+    "video=HDMI-A-1:1920x1080@60,panel_orientation=left_side_up"
   ];
   zramSwap.enable = true;
   swapDevices = [{device = "/swapfile"; size = 4096;}];
