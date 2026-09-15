@@ -85,6 +85,7 @@ in {
       zip
       pandoc # markdown → HTML/Typst/PDF conversion
       typst # modern LaTeX replacement for beautiful PDF rendering
+      asciinema # terminal session recorder → terminals.john2143.com
     ]
     ++ lib.optionals pkgs.stdenv.hostPlatform.isLinux [
       gocryptfs
@@ -128,6 +129,13 @@ in {
     #   org.gradle.console=verbose
     #   org.gradle.daemon.idletimeout=3600000
     # '';
+  };
+
+  # Live symlink (not a store copy) so editing the repo file takes effect
+  # without a rebuild. asciinema server lives in the `argo` repo
+  # (apps/asciinema.yaml, workloads/asciinema/); admin panel at /admin.
+  xdg.configFile = {
+    "asciinema/config.toml".source = config.lib.file.mkOutOfStoreSymlink ../.config/asciinema/config.toml;
   };
 
   # Home Manager can also manage your environment variables through
