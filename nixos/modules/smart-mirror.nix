@@ -21,10 +21,28 @@
 }: let
   cfg = config.services.smart-mirror;
 
-  kiosk = pkgs.writeShellApplication {
-    name = "smart-mirror-session";
-    runtimeInputs = [cfg.browser];
+  # kanshi applies the panel rotation, and re-applies it every time the output
+  # is (re-)initialised. That re-application is the whole point: cage resets an
+  # output to the unrotated default whenever the connector is re-probed (which
+  # on this mirror happens whenever the HDMI link blips or the screen is
+  # power-cycled), so a one-shot rotation does not survive. kanshi watches the
+  # output configuration and re-applies its matching profile when it changes.
+  kanshiConfig = pkgs.writeText "smart-mirror-kanshi.conf" ''
+    profile {
+      output ${cfg.output} enable transform ${cfg.transform}
+    }
+  '';
+
+  # Runs *inside* the cage session — a Wayland client needs a compositor to
+  # talk to — and before the browser, so the browser maps onto the rotated
+  # output from the start rather than being resized out from under itself.
+  # kanshi creates no window, so cage's single-window mode is unaffected.
+  client = pkgs.writeShellApplication {
+    name = "smart-mirror-client";
+    runtimeInputs = [cfg.browser pkgs.kanshi];
     text = ''
+      kanshi -c ${kanshiConfig} &
+
       # cage paints a solid black backdrop; the chromium window fills it.
       # A persistent --user-data-dir keeps the Home Assistant login across
       # reboots (log in once, by hand, with a keyboard attached).
@@ -43,9 +61,16 @@
         --check-for-update-interval=31536000
         ${lib.escapeShellArgs cfg.extraFlags}
       )
-      exec ${pkgs.cage}/bin/cage -s -- ${lib.getExe cfg.browser} \
+      exec ${lib.getExe cfg.browser} \
         --disable-features=TranslateUI,Translate,MediaRouter \
         "''${args[@]}" "${cfg.url}"
+    '';
+  };
+
+  kiosk = pkgs.writeShellApplication {
+    name = "smart-mirror-session";
+    text = ''
+      exec ${pkgs.cage}/bin/cage -s -- ${lib.getExe client}
     '';
   };
 in {
@@ -69,6 +94,35 @@ in {
       default = pkgs.chromium;
       defaultText = lib.literalExpression "pkgs.chromium";
       description = "Browser used for the kiosk.";
+    };
+
+    output = lib.mkOption {
+      type = lib.types.str;
+      default = "HDMI-A-1";
+      description = ''
+        DRM connector the kiosk renders to, as named by wlr-randr and
+        /sys/class/drm (for example HDMI-A-1). Used only to apply the rotation.
+      '';
+    };
+
+    transform = lib.mkOption {
+      type = lib.types.enum [
+        "normal"
+        "90"
+        "180"
+        "270"
+        "flipped"
+        "flipped-90"
+        "flipped-180"
+        "flipped-270"
+      ];
+      default = "normal";
+      description = ''
+        Output transform for a panel that is mounted rotated. "90" is a 90°
+        counter-clockwise rotation. Applied by kanshi, which re-applies it
+        whenever the output configuration changes — cage on its own drops it
+        as soon as the HDMI connector is re-probed.
+      '';
     };
 
     userDataDir = lib.mkOption {

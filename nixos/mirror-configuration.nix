@@ -32,6 +32,10 @@
     # by the HACS kiosk-mode integration to hide the sidebar and header; it
     # is a client-side nicety, not a security boundary.
     url = "https://home.ts.2143.me/mirror/0?kiosk";
+    # The panel is mounted in portrait: "90" is the 90° counter-clockwise turn
+    # that puts "up" back at the top. Applied by kanshi, not by the kernel —
+    # see the boot.kernelParams comment below for why.
+    transform = "90";
   };
 
   # Raspberry Pi 4: the firmware loads u-boot, which distro-boots
@@ -59,9 +63,11 @@
   # them a wedged kiosk is only reachable over SSH.
   #
   # The panel is physically mounted in portrait, so the output needs a 90°
-  # counter-clockwise turn — otherwise "up" points to the right. cage cannot
-  # rotate at all (its entire option set is -d/-D/-h/-m/-s/-v), so this is
-  # pushed down to the DRM/KMS layer.
+  # counter-clockwise turn — otherwise "up" points to the right.
+  #
+  # That turn is not done here. cage has no orientation handling whatsoever
+  # (its whole option set is -d/-D/-h/-m/-s/-v), so it is applied by kanshi —
+  # see services.smart-mirror.transform above.
   #
   # The mode is FORCED to 1920x1080@60 on purpose. Without a mode the panel
   # only gets what the EDID advertises, and this monitor's EDID is frequently
@@ -77,22 +83,26 @@
   # (drm_mode_create_from_cmdline_mode), not copied from the EDID, so the
   # blanking is a hair different from the native CEA timing — same resolution,
   # same ~60 Hz, hsync within ~0.5% of native. That is the price of "always
-  # correct", and it is why `rotate=90` (which also requires a mode) is not
-  # used: it would additionally pin the plane rotation, which the compositor
-  # then fights over.
+  # correct".
   #
-  # `panel_orientation=` carries the rotation instead. It sets the connector's
-  # "panel orientation" property, which wlroots reads to choose the output
-  # transform — and cage is wlroots-based, so it honours it.
-  #
-  # left_side_up = the panel's left edge is at the top (monitor turned 90°
-  # clockwise). If the turn comes out the other way, right_side_up is the
-  # alternative.
+  # Neither rotate= nor panel_orientation= is used here:
+  #   rotate=             rejected unless a mode string is given too, and it
+  #                       sets plane rotation that the compositor owns anyway.
+  #   panel_orientation=  accepted without a mode, and the kernel does set the
+  #                       connector's "panel orientation" property, and wlroots
+  #                       does know how to translate "Left Side Up" into output
+  #                       transform 90 (backend/drm/drm.c). But that translation
+  #                       is an exported helper for compositors to call, and
+  #                       cage never calls it — so the property did nothing
+  #                       observable. It was dropped rather than left in place
+  #                       pretending to work: a future cage that does read it
+  #                       would rotate on top of kanshi's transform, and
+  #                       90 + 90 = 180°.
   boot.kernelParams = [
     "console=ttyS0,115200n8"
     "console=ttyAMA0,115200n8"
     "console=tty0"
-    "video=HDMI-A-1:1920x1080@60,panel_orientation=left_side_up"
+    "video=HDMI-A-1:1920x1080@60"
   ];
   zramSwap.enable = true;
   swapDevices = [{device = "/swapfile"; size = 4096;}];
