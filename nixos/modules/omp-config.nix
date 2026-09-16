@@ -248,10 +248,10 @@ in
       startup.quiet: true
       setupVersion: 1
       modelRoles:
-        default: litellm/openrouter/deepseek/deepseek-v4.1-flash
-        smol: litellm/openrouter/deepseek/deepseek-v4.1-flash
+        default: litellm/deepseek/deepseek-v4-flash
+        smol: litellm/deepseek/deepseek-v4-flash
         slow: litellm/chatgpt/gpt-5.6-sol
-        advisor: litellm/openrouter/deepseek/deepseek-v4.1-flash
+        advisor: litellm/deepseek/deepseek-v4-flash
 
       modelProviderOrder:
         - vast-vllm
@@ -269,12 +269,12 @@ in
         baseDelayMs: 2000
         fallbackChains:
           default:
-            - "litellm/openrouter/deepseek/deepseek-v4-flash-0731"
+            - "litellm/openrouter/deepseek/deepseek-v4.1-flash"
             - "litellm/openrouter/openrouter/auto"
           slow:
             - "litellm/openai/gpt-5.6-sol"
             - "litellm/openrouter/openai/gpt-5.6-sol"
-            - "litellm/openrouter/deepseek/deepseek-v4-flash-0731"
+            - "litellm/openrouter/deepseek/deepseek-v4.1-flash"
             - "litellm/openrouter/openrouter/auto"
 
       # Tools — enable setting-gated tools that ship disabled by default.
