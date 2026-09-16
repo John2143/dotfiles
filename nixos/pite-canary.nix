@@ -27,6 +27,8 @@
   # Reserve 1 core and 1Gi for system daemons — leaves 3 cores / 2.7Gi allocatable for workloads
   services.k3s.extraFlags = [
     "--kubelet-arg=system-reserved=cpu=1,memory=1Gi"
+    # Let pods request forwarded-packet sysctls (VPN exit nodes need them).
+    "--kubelet-arg=allowed-unsafe-sysctls=net.ipv4.ip_forward,net.ipv6.conf.all.forwarding"
   ];
   # ── Agenix Secrets ─────────────────────────────────────────────
   # ntfy topic URL for Alertmanager notifications.

@@ -165,6 +165,8 @@
   services.k3s.extraFlags = [
     "--node-label=workload-type=general"
     "--node-label=node.longhorn.io/create-default-disk=true"
+    # Let pods request forwarded-packet sysctls (VPN exit nodes need them).
+    "--kubelet-arg=allowed-unsafe-sysctls=net.ipv4.ip_forward,net.ipv6.conf.all.forwarding"
   ];
 
   # Firewall — k3s ports

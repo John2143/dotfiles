@@ -125,6 +125,8 @@
     "--kube-controller-manager-arg=node-monitor-period=2s"
     # Reserve 12 CPU + 16 GiB RAM for the system (Hyprland desktop, 32 GiB total per lshw). k8s gets 4 CPU, ~15.3 GiB.
     "--kubelet-arg=system-reserved=cpu=12,memory=16Gi"
+    # Let pods request forwarded-packet sysctls (VPN exit nodes need them).
+    "--kubelet-arg=allowed-unsafe-sysctls=net.ipv4.ip_forward,net.ipv6.conf.all.forwarding"
   ];
   custom.backup.enable = true;
 

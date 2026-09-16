@@ -144,6 +144,11 @@
     { from = 30000; to = 32767; } # Kubernetes NodePort range
   ];
 
+  # Let pods request forwarded-packet sysctls (VPN exit nodes need them).
+  services.k3s.extraFlags = [
+    "--kubelet-arg=allowed-unsafe-sysctls=net.ipv4.ip_forward,net.ipv6.conf.all.forwarding"
+  ];
+
   # Allow windows to see the samba share
   #services.samba-wsdd = {
   #enable = true;

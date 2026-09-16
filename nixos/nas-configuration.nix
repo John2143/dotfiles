@@ -324,6 +324,8 @@ nixpkgs.overlays = [
     # Reserve 2 CPU + 3 GiB RAM for OS functions (ZFS, Samba, Immich run
     # natively on NAS; k3s must not starve them — 2026-07-31 OOM panic).
     "--kubelet-arg=system-reserved=cpu=2,memory=3Gi"
+    # Let pods request forwarded-packet sysctls (VPN exit nodes need them).
+    "--kubelet-arg=allowed-unsafe-sysctls=net.ipv4.ip_forward,net.ipv6.conf.all.forwarding"
   ];
 
   # ================

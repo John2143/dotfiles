@@ -153,6 +153,8 @@
       # the OOM hang returned; 5120Mi would leave only ~2.4 GiB for pods on
       # a control-plane hosting argocd/cert-manager/keda).
       "--kubelet-arg=system-reserved=cpu=1,memory=4096Mi"
+      # Let pods request forwarded-packet sysctls (VPN exit nodes need them).
+      "--kubelet-arg=allowed-unsafe-sysctls=net.ipv4.ip_forward,net.ipv6.conf.all.forwarding"
     ];
     # Raw manifest via `source` (not `content`): pkgs.formats.yaml in current
     # nixpkgs emits a `%YAML 1.1` directive that the k3s helm-controller's
