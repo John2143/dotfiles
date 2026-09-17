@@ -344,7 +344,6 @@ in {
   hardware.i2c.enable = true;
   services.hardware.openrgb.enable = true;
   boot.kernelParams = [
-    "video=DP-1:2560x1440@120"
     "video=HDMI-A-2:2560x1440@120"
   ];
   boot.extraModulePackages = [];

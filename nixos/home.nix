@@ -215,8 +215,8 @@ in {
 
       # ---- Monitors ----
       monitor = [
-        { output = mkLua "MONITOR_LEFT"; mode = "highrr"; position = "0x0"; scale = 1; bitdepth = 8; }
-        { output = mkLua "MONITOR_RIGHT"; mode = "highrr"; position = "2560x0"; scale = 1; }
+        { output = mkLua "MONITOR_LEFT"; mode = (if compName == "arch" then "2560x1440@239.97" else "highrr"); position = "0x0"; scale = 1; bitdepth = 8; }
+        { output = mkLua "MONITOR_RIGHT"; mode = (if compName == "arch" then "2560x1440@144" else "highrr"); position = "2560x0"; scale = 1; }
       ];
 
       # ---- Environment ----
@@ -545,12 +545,12 @@ in {
   #        timeout = 300; # lock after 5 min idle (the default)
   #        on-timeout = "loginctl lock-session";
   #      }
-  #      {
-  #        timeout = 330; # screen off 30s after the lock listener (the default)
-  #        on-timeout = "hyprctl dispatch 'hl.dsp.dpms({ action = \"disable\" })'";
-  #        on-resume = "hyprctl dispatch 'hl.dsp.dpms({ action = \"enable\" })'"; # any input wakes
-  #      }
-  #    ];
+  ##      {
+  ##        timeout = 330; # screen off 30s after the lock listener (the default)
+  ##        on-timeout = "hyprctl dispatch 'hl.dsp.dpms({ action = \"disable\" })'";
+  ##        on-resume = "hyprctl dispatch 'hl.dsp.dpms({ action = \"enable\" })'"; # any input wakes
+  ##      }
+  ##    ];
   #  };
   #};
 
