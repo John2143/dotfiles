@@ -8,6 +8,13 @@ MikroTik firmware and device configurations for the home network.
 - `core.rsc` — Config export from the core switch (CRS305-1G-4S+IN, 192.168.5.4)
 - `upstairs.rsc` — Config export from the upstairs switch (CRS310-8G+2S+IN, 192.168.5.3)
 - `office.rsc` — Config export from the office switch (CRS310-8G+2S+IN, 192.168.5.2)
+- `upstairs-core.rsc` — Config export from the upstairs-core switch (CRS305-1G-4S+ r2, 192.168.5.5)
+
+Each device also has a `.verbose.rsc` twin (`/export verbose` — includes protocol-mode,
+bridge and default settings) for full-fidelity restore.
+
+**`/export` omits sensitive values** — WireGuard private keys, passwords, etc. only appear
+under `/export show-sensitive`. These files are safe to commit; never add `show-sensitive`.
 
 Git tracks history — no need for dates in filenames.
 
@@ -18,6 +25,9 @@ ssh -i /run/user/$(id -u)/mikrotik-key admin@192.168.1.1 '/export' > router.rsc
 ssh -i /run/user/$(id -u)/mikrotik-key admin@192.168.5.4 '/export' > core.rsc
 ssh -i /run/user/$(id -u)/mikrotik-key admin@192.168.5.3 '/export' > upstairs.rsc
 ssh -i /run/user/$(id -u)/mikrotik-key admin@192.168.5.2 '/export' > office.rsc
+ssh -i /run/user/$(id -u)/mikrotik-key admin@192.168.5.5 '/export' > upstairs-core.rsc
+
+# ...and the .verbose.rsc twin of each (add '/export verbose' - see SKILL.md for the full list)
 ```
 
 ## Restoring

@@ -1,4 +1,4 @@
-# 2026-06-14 05:25:07 by RouterOS 7.19.6
+# 2026-09-17 14:12:58 by RouterOS 7.19.6
 # software id = 7RHC-3MMG
 #
 # model = RB5009UPr+S+
@@ -94,6 +94,11 @@ set [ find default-name=ether8 ] advertise="10M-baseT-half,10M-baseT-full,100M\
     tx-flow-control=off
 /queue interface
 set bridge queue=no-queue
+/interface wireguard
+add comment="WireGuard remote access" disabled=no listen-port=51820 mtu=1420 \
+    name=wg-remote
+/queue interface
+set wg-remote queue=no-queue
 /interface ethernet switch
 set 0 cpu-flow-control=yes mirror-egress-target=none name=switch1
 /interface ethernet switch port
@@ -234,7 +239,7 @@ set ether7 queue=only-hardware-queue
 set pi queue=only-hardware-queue
 set to-wifi queue=only-hardware-queue
 /routing bgp template
-set default as=65530 name=default
+set default afi=ip,ipv6 as=65530 name=default
 /snmp community
 set [ find default=yes ] addresses=::/0 authentication-protocol=MD5 disabled=\
     no encryption-protocol=DES name=public read-access=yes security=none \
@@ -371,6 +376,7 @@ set accept-proto-version=all accept-pseudowire-type=all allow-fast-path=no \
 /interface list member
 add comment=defconf disabled=no interface=bridge list=LAN
 add disabled=no interface=2GWAN list=WAN
+add comment="wg-remote tunnel" disabled=no interface=wg-remote list=LAN
 /interface lte settings
 set esim-channel=auto firmware-path=firmware link-recovery-timer=120 mode=\
     auto
@@ -394,11 +400,12 @@ add address=192.168.0.2/24 disabled=no interface=2GWAN network=192.168.0.0
 add address=192.168.1.1/24 disabled=no interface=bridge network=192.168.1.0
 add address=192.168.88.254/24 disabled=no interface=bridge network=\
     192.168.88.0
+add address=192.168.6.1/24 disabled=no interface=bridge network=192.168.6.0
+add address=10.99.0.1/24 comment="wg-remote tunnel subnet" disabled=no \
+    interface=wg-remote network=10.99.0.0
 /ip arp
 add address=192.168.5.36 disabled=no interface=bridge mac-address=\
     0C:C4:7A:BD:63:3D published=no
-add address=192.168.5.35 disabled=no interface=bridge mac-address=\
-    40:B0:76:D9:69:92 published=no
 /ip cloud
 set back-to-home-vpn=revoked-and-disabled ddns-enabled=auto \
     ddns-update-interval=none update-time=yes
@@ -425,12 +432,6 @@ add address=192.168.1.65 address-lists="" !allow-dual-stack-queue client-id=\
 add address=192.168.5.165 address-lists="" !allow-dual-stack-queue client-id=\
     1:80:f1:b2:52:f0:c8 dhcp-option="" disabled=no !insert-queue-before \
     mac-address=80:F1:B2:52:F0:C8 !parent-queue !queue-type server=dchp1
-add address=192.168.5.35 address-lists="" !allow-dual-stack-queue client-id=\
-    1:40:b0:76:d9:69:92 dhcp-option="" disabled=no !insert-queue-before \
-    mac-address=40:B0:76:D9:69:92 !parent-queue !queue-type server=dchp1
-add address=192.168.5.226 address-lists="" !allow-dual-stack-queue client-id=\
-    1:70:85:c2:a5:7:cc dhcp-option="" disabled=no !insert-queue-before \
-    mac-address=70:85:C2:A5:07:CC !parent-queue !queue-type server=dchp1
 add address=192.168.5.175 address-lists="" !allow-dual-stack-queue client-id=\
     1:e8:4d:d0:c1:54:20 dhcp-option="" disabled=no !insert-queue-before \
     mac-address=E8:4D:D0:C1:54:20 !parent-queue !queue-type server=dchp1
@@ -458,6 +459,17 @@ add address=192.168.5.36 address-lists="" !allow-dual-stack-queue comment=\
 add address=192.168.5.76 address-lists="" !allow-dual-stack-queue comment=\
     arch dhcp-option="" disabled=no !insert-queue-before mac-address=\
     98:B7:85:23:48:90 !parent-queue !queue-type
+add address=192.168.5.9 address-lists="" !allow-dual-stack-queue client-id=\
+    1:dc:a6:32:25:51:6e dhcp-option="" disabled=no !insert-queue-before \
+    mac-address=DC:A6:32:25:51:6E !parent-queue !queue-type server=dchp1
+add address=192.168.5.209 address-lists="" !allow-dual-stack-queue client-id=\
+    1:c4:3d:1a:f3:e:76 comment="office k3s node (static)" dhcp-option="" \
+    disabled=no !insert-queue-before mac-address=C4:3D:1A:F3:0E:76 \
+    !parent-queue !queue-type server=dchp1
+add address=192.168.5.68 address-lists="" !allow-dual-stack-queue client-id=\
+    1:bc:24:11:19:22:f9 comment="big k3s node (static)" dhcp-option="" \
+    disabled=no !insert-queue-before mac-address=BC:24:11:19:22:F9 \
+    !parent-queue !queue-type server=dchp1
 /ip dhcp-server network
 add address=192.168.1.0/24 caps-manager="" dhcp-option="" dns-server=\
     192.168.5.1 gateway=192.168.1.1 !next-server ntp-server="" wins-server=""
@@ -475,6 +487,47 @@ set address-list-extra-time=0s allow-remote-requests=yes cache-max-ttl=1w \
 /ip dns static
 add address=192.168.5.1 comment=defconf disabled=no name=router.lan ttl=1d \
     type=A
+add address=192.168.6.11 disabled=no name=argo-webhook.john2143.com ttl=1d \
+    type=A
+add address=192.168.6.11 disabled=no name=argocd.ts.2143.me ttl=1d type=A
+add address=192.168.6.11 disabled=no name=au.2143.me ttl=1d type=A
+add address=192.168.6.11 disabled=no name=auth.john2143.com ttl=1d type=A
+add address=192.168.6.11 disabled=no name=cameras.john2143.com ttl=1d type=A
+add address=192.168.6.11 disabled=no name=cameras.ts.2143.me ttl=1d type=A
+add address=192.168.6.11 disabled=no name=cams.ts.2143.me ttl=1d type=A
+add address=192.168.6.11 disabled=no name=chat.2143.me ttl=1d type=A
+add address=192.168.6.11 disabled=no name=containerstore.john2143.com ttl=1d \
+    type=A
+add address=192.168.6.11 disabled=no name=element.john2143.com ttl=1d type=A
+add address=192.168.6.11 disabled=no name=files-ui.ts.2143.me ttl=1d type=A
+add address=192.168.6.11 disabled=no name=files.john2143.com ttl=1d type=A
+add address=192.168.6.11 disabled=no name=grafana.john2143.com ttl=1d type=A
+add address=192.168.6.11 disabled=no name=home.ts.2143.me ttl=1d type=A
+add address=192.168.6.11 disabled=no name=images.2143.me ttl=1d type=A
+add address=192.168.6.11 disabled=no name=immich.ts.2143.me ttl=1d type=A
+add address=192.168.6.11 disabled=no name=john2143.com ttl=1d type=A
+add address=192.168.6.11 disabled=no name=livekit.john2143.com ttl=1d type=A
+add address=192.168.6.11 disabled=no name=llm.2143.me ttl=1d type=A
+add address=192.168.6.11 disabled=no name=longhorn.ts.2143.me ttl=1d type=A
+add address=192.168.6.11 disabled=no name=m.2143.me ttl=1d type=A
+add address=192.168.6.11 disabled=no name=matrix.2143.me ttl=1d type=A
+add address=192.168.6.11 disabled=no name=mattermost.john2143.com ttl=1d \
+    type=A
+add address=192.168.6.11 disabled=no name=net.2143.me ttl=1d type=A
+add address=192.168.6.11 disabled=no name=net.john2143.com ttl=1d type=A
+add address=192.168.6.11 disabled=no name=pihole.ts.2143.me ttl=1d type=A
+add address=192.168.6.11 disabled=no name=prod.rots.2143.me ttl=1d type=A
+add address=192.168.6.11 disabled=no name=pvp.john2143.com ttl=1d type=A
+add address=192.168.6.11 disabled=no name=rots.2143.me ttl=1d type=A
+add address=192.168.6.11 disabled=no name=seafile.john2143.com ttl=1d type=A
+add address=192.168.6.11 disabled=no name=status.2143.me ttl=1d type=A
+add address=192.168.6.11 disabled=no name=temporal.john2143.com ttl=1d type=A
+add address=192.168.6.11 disabled=no name=temporal.ts.2143.me ttl=1d type=A
+add address=192.168.6.11 disabled=no name=unifi.ts.2143.me ttl=1d type=A
+add address=192.168.6.13 disabled=no name=imap.m.2143.me ttl=1d type=A
+add address=192.168.6.13 disabled=no name=smtp.m.2143.me ttl=1d type=A
+add address=192.168.6.20 disabled=no name=temporal-grpc.john2143.com ttl=1d \
+    type=A
 /ip firewall filter
 add action=accept chain=forward comment="allow inter-subnet routing" \
     dst-address=192.168.0.0/16 src-address=192.168.0.0/16
@@ -486,6 +539,8 @@ add action=drop chain=input comment="defconf: drop invalid" connection-state=\
 add action=accept chain=input comment="defconf: accept ICMP" protocol=icmp
 add action=accept chain=input comment=\
     "defconf: accept to local loopback (for CAPsMAN)" dst-address=127.0.0.1
+add action=accept chain=input comment="wireguard remote access" dst-port=\
+    51820 in-interface-list=WAN protocol=udp
 add action=drop chain=input comment="defconf: drop all not coming from LAN" \
     in-interface-list=!LAN
 add action=accept chain=forward comment="defconf: accept in ipsec policy" \
@@ -518,8 +573,8 @@ add action=dst-nat chain=dstnat !connection-bytes !connection-limit \
     !out-interface !out-interface-list !packet-mark !packet-size \
     !per-connection-classifier !port !priority protocol=udp !psd !random \
     !routing-mark !src-address !src-address-list !src-address-type \
-    !src-mac-address !src-port !tcp-mss !time to-addresses=192.168.5.10 \
-    to-ports=30087 !ttl
+    !src-mac-address !src-port !tcp-mss !time to-addresses=192.168.6.15 \
+    to-ports=9987 !ttl
 add action=dst-nat chain=dstnat !connection-bytes !connection-limit \
     !connection-mark !connection-rate !connection-type !content disabled=no \
     !dscp !dst-address !dst-address-list !dst-address-type !dst-limit \
@@ -530,8 +585,8 @@ add action=dst-nat chain=dstnat !connection-bytes !connection-limit \
     !out-interface !out-interface-list !packet-mark !packet-size \
     !per-connection-classifier !port !priority protocol=tcp !psd !random \
     !routing-mark !src-address !src-address-list !src-address-type \
-    !src-mac-address !src-port !tcp-mss !time to-addresses=192.168.5.10 \
-    to-ports=30034 !ttl
+    !src-mac-address !src-port !tcp-mss !time to-addresses=192.168.6.16 \
+    to-ports=30033 !ttl
 add action=dst-nat chain=dstnat !connection-bytes !connection-limit \
     !connection-mark !connection-rate !connection-type !content disabled=no \
     !dscp !dst-address !dst-address-list !dst-address-type !dst-limit \
@@ -542,7 +597,7 @@ add action=dst-nat chain=dstnat !connection-bytes !connection-limit \
     !packet-mark !packet-size !per-connection-classifier !port !priority \
     protocol=tcp !psd !random !routing-mark !src-address !src-address-list \
     !src-address-type !src-mac-address !src-port !tcp-mss !time to-addresses=\
-    192.168.5.10 to-ports=80 !ttl
+    192.168.6.11 to-ports=80 !ttl
 add action=dst-nat chain=dstnat !connection-bytes !connection-limit \
     !connection-mark !connection-rate !connection-type !content disabled=no \
     !dscp !dst-address !dst-address-list !dst-address-type !dst-limit \
@@ -553,7 +608,7 @@ add action=dst-nat chain=dstnat !connection-bytes !connection-limit \
     !packet-mark !packet-size !per-connection-classifier !port !priority \
     protocol=tcp !psd !random !routing-mark !src-address !src-address-list \
     !src-address-type !src-mac-address !src-port !tcp-mss !time to-addresses=\
-    192.168.5.10 to-ports=443 !ttl
+    192.168.6.11 to-ports=443 !ttl
 add action=dst-nat chain=dstnat !connection-bytes !connection-limit \
     !connection-mark !connection-rate !connection-type !content disabled=no \
     !dscp !dst-address !dst-address-list !dst-address-type !dst-limit \
@@ -564,7 +619,7 @@ add action=dst-nat chain=dstnat !connection-bytes !connection-limit \
     !out-interface !out-interface-list !packet-mark !packet-size \
     !per-connection-classifier !port !priority protocol=tcp !psd !random \
     !routing-mark !src-address !src-address-list !src-address-type \
-    !src-mac-address !src-port !tcp-mss !time to-addresses=192.168.5.35 \
+    !src-mac-address !src-port !tcp-mss !time to-addresses=192.168.5.36 \
     to-ports=5432 !ttl
 add action=dst-nat chain=dstnat !connection-bytes !connection-limit \
     !connection-mark !connection-rate !connection-type !content disabled=no \
@@ -576,8 +631,8 @@ add action=dst-nat chain=dstnat !connection-bytes !connection-limit \
     !out-interface !out-interface-list !packet-mark !packet-size \
     !per-connection-classifier !port !priority protocol=udp !psd !random \
     !routing-mark !src-address !src-address-list !src-address-type \
-    !src-mac-address !src-port !tcp-mss !time to-addresses=192.168.5.10 \
-    to-ports=30478 !ttl
+    !src-mac-address !src-port !tcp-mss !time to-addresses=192.168.6.18 \
+    to-ports=3478 !ttl
 add action=dst-nat chain=dstnat !connection-bytes !connection-limit \
     !connection-mark !connection-rate !connection-type !content disabled=no \
     !dscp !dst-address !dst-address-list !dst-address-type !dst-limit \
@@ -623,15 +678,39 @@ add action=dst-nat chain=dstnat !connection-bytes !connection-limit \
     !out-interface !out-interface-list !packet-mark !packet-size \
     !per-connection-classifier !port !priority protocol=tcp !psd !random \
     !routing-mark !src-address !src-address-list !src-address-type \
-    !src-mac-address !src-port !tcp-mss !time to-addresses=192.168.5.10 \
-    to-ports=31753 !ttl
+    !src-mac-address !src-port !tcp-mss !time to-addresses=192.168.6.17 \
+    to-ports=11753 !ttl
 add action=dst-nat chain=dstnat comment="mail-smtp stalwart" dst-port=25 \
-    in-interface-list=all protocol=tcp to-addresses=192.168.5.10 to-ports=25
+    in-interface-list=all protocol=tcp to-addresses=192.168.6.13 to-ports=25
 add action=dst-nat chain=dstnat comment="mail-submission stalwart" dst-port=\
-    587 in-interface-list=all protocol=tcp to-addresses=192.168.5.10 \
+    587 in-interface-list=all protocol=tcp to-addresses=192.168.6.13 \
     to-ports=587
 add action=dst-nat chain=dstnat comment="mail-imaps stalwart" dst-port=993 \
-    in-interface-list=all protocol=tcp to-addresses=192.168.5.10 to-ports=993
+    in-interface-list=all protocol=tcp to-addresses=192.168.6.13 to-ports=993
+add action=dst-nat chain=dstnat comment="LiveKit WebRTC TCP" dst-port=7881 \
+    in-interface-list=WAN protocol=tcp to-addresses=192.168.6.22 to-ports=\
+    7881
+add action=dst-nat chain=dstnat comment="Coturn TURN TCP" dst-port=3478 \
+    in-interface-list=WAN protocol=tcp to-addresses=192.168.6.14 to-ports=\
+    3478
+add action=dst-nat chain=dstnat comment="Coturn TURN UDP" dst-port=3478 \
+    in-interface-list=WAN protocol=udp to-addresses=192.168.6.14 to-ports=\
+    3478
+add action=dst-nat chain=dstnat comment="Coturn TURN TLS" dst-port=5349 \
+    in-interface-list=WAN protocol=tcp to-addresses=192.168.6.21 to-ports=\
+    5349
+add action=dst-nat chain=dstnat comment=Temporal-gRPC-mTLS dst-port=7233 \
+    in-interface-list=WAN protocol=tcp to-addresses=192.168.6.20 to-ports=\
+    7233
+add action=dst-nat chain=dstnat comment="Linkerd multicluster gateway (home)" \
+    dst-port=4143 in-interface-list=WAN protocol=tcp to-addresses=\
+    192.168.5.36 to-ports=4143
+add action=dst-nat chain=dstnat comment="steam-lobby coturn relay" dst-port=\
+    45000-45063 in-interface-list=WAN protocol=udp to-addresses=192.168.6.14 \
+    to-ports=45000-45063
+add action=dst-nat chain=dstnat comment=factorio dst-port=34197 \
+    in-interface-list=WAN protocol=udp to-addresses=192.168.6.28 to-ports=\
+    34197
 /ip firewall service-port
 set ftp disabled=no ports=21
 set tftp disabled=no ports=69
@@ -807,6 +886,17 @@ set accounting=yes enable-ipv6-accounting=no interim-update=0s \
     use-circuit-id-in-nas-port-id=no use-radius=no
 /radius incoming
 set accept=no port=3799 vrf=main
+/routing bgp connection
+add afi=ip,ipv6 as=65001 hold-time=3m local.address=192.168.5.1 .role=ebgp \
+    name=metallb-arch remote.address=192.168.5.76 .as=65000
+add afi=ip,ipv6 as=65001 local.address=192.168.5.1 .role=ebgp name=\
+    metallb-closet remote.address=192.168.5.36 .as=65000
+add afi=ip,ipv6 as=65001 local.address=192.168.5.1 .role=ebgp name=\
+    metallb-nas remote.address=192.168.5.175 .as=65000
+add afi=ip,ipv6 as=65001 local.address=192.168.5.1 .role=ebgp name=\
+    metallb-big remote.address=192.168.5.68 .as=65000
+add afi=ip,ipv6 as=65001 local.address=192.168.5.1 .role=ebgp name=\
+    metallb-pite remote.address=192.168.5.9 .as=65000
 /routing igmp-proxy
 set query-interval=2m5s query-response-interval=10s quick-leave=no
 /routing settings
@@ -892,6 +982,25 @@ set allocate-udp-ports-from=2000 allowed-addresses4="" allowed-addresses6="" \
 set from=<> port=25 server=0.0.0.0 tls=no user="" vrf=main
 /tool graphing
 set page-refresh=300 store-every=5min
+/tool graphing interface
+add allow-address=192.168.5.0/24 disabled=no interface=2GWAN store-on-disk=no
+add allow-address=192.168.5.0/24 disabled=no interface=10GsfpLAN \
+    store-on-disk=no
+add allow-address=192.168.5.0/24 disabled=no interface=ether3 store-on-disk=\
+    no
+add allow-address=192.168.5.0/24 disabled=no interface=ether4 store-on-disk=\
+    no
+add allow-address=192.168.5.0/24 disabled=no interface=ether6 store-on-disk=\
+    no
+add allow-address=192.168.5.0/24 disabled=no interface=ether7 store-on-disk=\
+    no
+add allow-address=192.168.5.0/24 disabled=no interface=pi store-on-disk=no
+add allow-address=192.168.5.0/24 disabled=no interface=to-wifi store-on-disk=\
+    no
+add allow-address=192.168.5.0/24 disabled=no interface=ether5 store-on-disk=\
+    no
+/tool graphing resource
+add allow-address=192.168.5.0/24 disabled=no store-on-disk=no
 /tool mac-server
 set allowed-interface-list=LAN
 /tool mac-server mac-winbox

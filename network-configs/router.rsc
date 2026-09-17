@@ -1,4 +1,4 @@
-# 2026-06-14 05:25:06 by RouterOS 7.19.6
+# 2026-09-17 14:12:57 by RouterOS 7.19.6
 # software id = 7RHC-3MMG
 #
 # model = RB5009UPr+S+
@@ -10,6 +10,9 @@ set [ find default-name=ether1 ] name=2GWAN
 set [ find default-name=sfp-sfpplus1 ] name=10GsfpLAN
 set [ find default-name=ether2 ] name=pi
 set [ find default-name=ether8 ] name=to-wifi
+/interface wireguard
+add comment="WireGuard remote access" listen-port=51820 mtu=1420 name=\
+    wg-remote
 /interface list
 add comment=defconf name=WAN
 add comment=defconf name=LAN
@@ -21,6 +24,8 @@ add address-pool=dhcp interface=bridge name=dchp1
 add address-pool=ula-addr-pool interface=bridge name=ula-dhcp
 /ipv6 pool
 add name=ula-addr-pool prefix=fd00:1::/64 prefix-length=128
+/routing bgp template
+set default afi=ip,ipv6
 /disk settings
 set auto-media-interface=bridge auto-media-sharing=yes auto-smb-sharing=yes
 /interface bridge port
@@ -39,15 +44,18 @@ set accept-router-advertisements=yes
 /interface list member
 add comment=defconf interface=bridge list=LAN
 add interface=2GWAN list=WAN
+add comment="wg-remote tunnel" interface=wg-remote list=LAN
 /ip address
 add address=192.168.5.1/24 comment=defconf interface=bridge network=\
     192.168.5.0
 add address=192.168.0.2/24 interface=2GWAN network=192.168.0.0
 add address=192.168.1.1/24 interface=bridge network=192.168.1.0
 add address=192.168.88.254/24 interface=bridge network=192.168.88.0
+add address=192.168.6.1/24 interface=bridge network=192.168.6.0
+add address=10.99.0.1/24 comment="wg-remote tunnel subnet" interface=\
+    wg-remote network=10.99.0.0
 /ip arp
 add address=192.168.5.36 interface=bridge mac-address=0C:C4:7A:BD:63:3D
-add address=192.168.5.35 interface=bridge mac-address=40:B0:76:D9:69:92
 /ip dhcp-client
 add comment=defconf interface=2GWAN
 /ip dhcp-server lease
@@ -59,10 +67,6 @@ add address=192.168.1.65 client-id=1:94:b3:f7:18:52:cc mac-address=\
     94:B3:F7:18:52:CC server=dchp1
 add address=192.168.5.165 client-id=1:80:f1:b2:52:f0:c8 mac-address=\
     80:F1:B2:52:F0:C8 server=dchp1
-add address=192.168.5.35 client-id=1:40:b0:76:d9:69:92 mac-address=\
-    40:B0:76:D9:69:92 server=dchp1
-add address=192.168.5.226 client-id=1:70:85:c2:a5:7:cc mac-address=\
-    70:85:C2:A5:07:CC server=dchp1
 add address=192.168.5.175 client-id=1:e8:4d:d0:c1:54:20 mac-address=\
     E8:4D:D0:C1:54:20 server=dchp1
 add address=192.168.1.67 comment="Reolink NVR" mac-address=EC:71:DB:8B:92:93 \
@@ -79,6 +83,12 @@ add address=192.168.5.127 mac-address=C8:FF:77:57:E0:3D server=dchp1
 add address=192.168.5.36 comment="closet 10GbE NIC" mac-address=\
     0C:C4:7A:BD:63:3D server=dchp1
 add address=192.168.5.76 comment=arch mac-address=98:B7:85:23:48:90
+add address=192.168.5.9 client-id=1:dc:a6:32:25:51:6e mac-address=\
+    DC:A6:32:25:51:6E server=dchp1
+add address=192.168.5.209 client-id=1:c4:3d:1a:f3:e:76 comment=\
+    "office k3s node (static)" mac-address=C4:3D:1A:F3:0E:76 server=dchp1
+add address=192.168.5.68 client-id=1:bc:24:11:19:22:f9 comment=\
+    "big k3s node (static)" mac-address=BC:24:11:19:22:F9 server=dchp1
 /ip dhcp-server network
 add address=192.168.1.0/24 dns-server=192.168.5.1 gateway=192.168.1.1
 add address=192.168.5.0/24 dns-server=192.168.5.1 gateway=192.168.5.1 \
@@ -88,6 +98,43 @@ set allow-remote-requests=yes mdns-repeat-ifaces=bridge,2GWAN servers=\
     1.1.1.1,1.0.0.1
 /ip dns static
 add address=192.168.5.1 comment=defconf name=router.lan type=A
+add address=192.168.6.11 name=argo-webhook.john2143.com type=A
+add address=192.168.6.11 name=argocd.ts.2143.me type=A
+add address=192.168.6.11 name=au.2143.me type=A
+add address=192.168.6.11 name=auth.john2143.com type=A
+add address=192.168.6.11 name=cameras.john2143.com type=A
+add address=192.168.6.11 name=cameras.ts.2143.me type=A
+add address=192.168.6.11 name=cams.ts.2143.me type=A
+add address=192.168.6.11 name=chat.2143.me type=A
+add address=192.168.6.11 name=containerstore.john2143.com type=A
+add address=192.168.6.11 name=element.john2143.com type=A
+add address=192.168.6.11 name=files-ui.ts.2143.me type=A
+add address=192.168.6.11 name=files.john2143.com type=A
+add address=192.168.6.11 name=grafana.john2143.com type=A
+add address=192.168.6.11 name=home.ts.2143.me type=A
+add address=192.168.6.11 name=images.2143.me type=A
+add address=192.168.6.11 name=immich.ts.2143.me type=A
+add address=192.168.6.11 name=john2143.com type=A
+add address=192.168.6.11 name=livekit.john2143.com type=A
+add address=192.168.6.11 name=llm.2143.me type=A
+add address=192.168.6.11 name=longhorn.ts.2143.me type=A
+add address=192.168.6.11 name=m.2143.me type=A
+add address=192.168.6.11 name=matrix.2143.me type=A
+add address=192.168.6.11 name=mattermost.john2143.com type=A
+add address=192.168.6.11 name=net.2143.me type=A
+add address=192.168.6.11 name=net.john2143.com type=A
+add address=192.168.6.11 name=pihole.ts.2143.me type=A
+add address=192.168.6.11 name=prod.rots.2143.me type=A
+add address=192.168.6.11 name=pvp.john2143.com type=A
+add address=192.168.6.11 name=rots.2143.me type=A
+add address=192.168.6.11 name=seafile.john2143.com type=A
+add address=192.168.6.11 name=status.2143.me type=A
+add address=192.168.6.11 name=temporal.john2143.com type=A
+add address=192.168.6.11 name=temporal.ts.2143.me type=A
+add address=192.168.6.11 name=unifi.ts.2143.me type=A
+add address=192.168.6.13 name=imap.m.2143.me type=A
+add address=192.168.6.13 name=smtp.m.2143.me type=A
+add address=192.168.6.20 name=temporal-grpc.john2143.com type=A
 /ip firewall filter
 add action=accept chain=forward comment="allow inter-subnet routing" \
     dst-address=192.168.0.0/16 src-address=192.168.0.0/16
@@ -99,6 +146,8 @@ add action=drop chain=input comment="defconf: drop invalid" connection-state=\
 add action=accept chain=input comment="defconf: accept ICMP" protocol=icmp
 add action=accept chain=input comment=\
     "defconf: accept to local loopback (for CAPsMAN)" dst-address=127.0.0.1
+add action=accept chain=input comment="wireguard remote access" dst-port=\
+    51820 in-interface-list=WAN protocol=udp
 add action=drop chain=input comment="defconf: drop all not coming from LAN" \
     in-interface-list=!LAN
 add action=accept chain=forward comment="defconf: accept in ipsec policy" \
@@ -122,17 +171,17 @@ add action=dst-nat chain=dstnat comment="Monero P2P node (arch)" dst-port=\
     18080 in-interface-list=all protocol=tcp to-addresses=192.168.5.76 \
     to-ports=18080
 add action=dst-nat chain=dstnat dst-port=9987 in-interface-list=WAN protocol=\
-    udp to-addresses=192.168.5.10 to-ports=30087
+    udp to-addresses=192.168.6.15 to-ports=9987
 add action=dst-nat chain=dstnat dst-port=30033 in-interface-list=WAN \
-    protocol=tcp to-addresses=192.168.5.10 to-ports=30034
+    protocol=tcp to-addresses=192.168.6.16 to-ports=30033
 add action=dst-nat chain=dstnat dst-port=80 in-interface-list=WAN protocol=\
-    tcp to-addresses=192.168.5.10 to-ports=80
+    tcp to-addresses=192.168.6.11 to-ports=80
 add action=dst-nat chain=dstnat dst-port=443 in-interface-list=WAN protocol=\
-    tcp to-addresses=192.168.5.10 to-ports=443
+    tcp to-addresses=192.168.6.11 to-ports=443
 add action=dst-nat chain=dstnat dst-port=5432 in-interface-list=all protocol=\
-    tcp to-addresses=192.168.5.35 to-ports=5432
+    tcp to-addresses=192.168.5.36 to-ports=5432
 add action=dst-nat chain=dstnat dst-port=30478 in-interface-list=all \
-    protocol=udp to-addresses=192.168.5.10 to-ports=30478
+    protocol=udp to-addresses=192.168.6.18 to-ports=3478
 add action=dst-nat chain=dstnat dst-port=25565 in-interface-list=all \
     protocol=tcp to-addresses=192.168.5.175 to-ports=32565
 add action=dst-nat chain=dstnat dst-port=32565 in-interface-list=all \
@@ -140,14 +189,38 @@ add action=dst-nat chain=dstnat dst-port=32565 in-interface-list=all \
 add action=masquerade chain=srcnat dst-address=!192.168.0.0/24 out-interface=\
     2GWAN
 add action=dst-nat chain=dstnat dst-port=11753 in-interface-list=all \
-    protocol=tcp to-addresses=192.168.5.10 to-ports=31753
+    protocol=tcp to-addresses=192.168.6.17 to-ports=11753
 add action=dst-nat chain=dstnat comment="mail-smtp stalwart" dst-port=25 \
-    in-interface-list=all protocol=tcp to-addresses=192.168.5.10 to-ports=25
+    in-interface-list=all protocol=tcp to-addresses=192.168.6.13 to-ports=25
 add action=dst-nat chain=dstnat comment="mail-submission stalwart" dst-port=\
-    587 in-interface-list=all protocol=tcp to-addresses=192.168.5.10 \
+    587 in-interface-list=all protocol=tcp to-addresses=192.168.6.13 \
     to-ports=587
 add action=dst-nat chain=dstnat comment="mail-imaps stalwart" dst-port=993 \
-    in-interface-list=all protocol=tcp to-addresses=192.168.5.10 to-ports=993
+    in-interface-list=all protocol=tcp to-addresses=192.168.6.13 to-ports=993
+add action=dst-nat chain=dstnat comment="LiveKit WebRTC TCP" dst-port=7881 \
+    in-interface-list=WAN protocol=tcp to-addresses=192.168.6.22 to-ports=\
+    7881
+add action=dst-nat chain=dstnat comment="Coturn TURN TCP" dst-port=3478 \
+    in-interface-list=WAN protocol=tcp to-addresses=192.168.6.14 to-ports=\
+    3478
+add action=dst-nat chain=dstnat comment="Coturn TURN UDP" dst-port=3478 \
+    in-interface-list=WAN protocol=udp to-addresses=192.168.6.14 to-ports=\
+    3478
+add action=dst-nat chain=dstnat comment="Coturn TURN TLS" dst-port=5349 \
+    in-interface-list=WAN protocol=tcp to-addresses=192.168.6.21 to-ports=\
+    5349
+add action=dst-nat chain=dstnat comment=Temporal-gRPC-mTLS dst-port=7233 \
+    in-interface-list=WAN protocol=tcp to-addresses=192.168.6.20 to-ports=\
+    7233
+add action=dst-nat chain=dstnat comment="Linkerd multicluster gateway (home)" \
+    dst-port=4143 in-interface-list=WAN protocol=tcp to-addresses=\
+    192.168.5.36 to-ports=4143
+add action=dst-nat chain=dstnat comment="steam-lobby coturn relay" dst-port=\
+    45000-45063 in-interface-list=WAN protocol=udp to-addresses=192.168.6.14 \
+    to-ports=45000-45063
+add action=dst-nat chain=dstnat comment=factorio dst-port=34197 \
+    in-interface-list=WAN protocol=udp to-addresses=192.168.6.28 to-ports=\
+    34197
 /ip route
 add disabled=no dst-address=192.168.1.0/24 gateway=bridge routing-table=main \
     suppress-hw-offload=no
@@ -227,10 +300,33 @@ add action=accept chain=forward connection-state=established,related
 add action=masquerade chain=srcnat out-interface=2GWAN
 /ipv6 nd
 set [ find default=yes ] managed-address-configuration=yes
+/routing bgp connection
+add afi=ip,ipv6 as=65001 hold-time=3m local.address=192.168.5.1 .role=ebgp \
+    name=metallb-arch remote.address=192.168.5.76 .as=65000
+add afi=ip,ipv6 as=65001 local.address=192.168.5.1 .role=ebgp name=\
+    metallb-closet remote.address=192.168.5.36 .as=65000
+add afi=ip,ipv6 as=65001 local.address=192.168.5.1 .role=ebgp name=\
+    metallb-nas remote.address=192.168.5.175 .as=65000
+add afi=ip,ipv6 as=65001 local.address=192.168.5.1 .role=ebgp name=\
+    metallb-big remote.address=192.168.5.68 .as=65000
+add afi=ip,ipv6 as=65001 local.address=192.168.5.1 .role=ebgp name=\
+    metallb-pite remote.address=192.168.5.9 .as=65000
 /system clock
 set time-zone-name=America/New_York
 /system identity
 set name=router
+/tool graphing interface
+add allow-address=192.168.5.0/24 interface=2GWAN store-on-disk=no
+add allow-address=192.168.5.0/24 interface=10GsfpLAN store-on-disk=no
+add allow-address=192.168.5.0/24 interface=ether3 store-on-disk=no
+add allow-address=192.168.5.0/24 interface=ether4 store-on-disk=no
+add allow-address=192.168.5.0/24 interface=ether6 store-on-disk=no
+add allow-address=192.168.5.0/24 interface=ether7 store-on-disk=no
+add allow-address=192.168.5.0/24 interface=pi store-on-disk=no
+add allow-address=192.168.5.0/24 interface=to-wifi store-on-disk=no
+add allow-address=192.168.5.0/24 interface=ether5 store-on-disk=no
+/tool graphing resource
+add allow-address=192.168.5.0/24 store-on-disk=no
 /tool mac-server
 set allowed-interface-list=LAN
 /tool mac-server mac-winbox

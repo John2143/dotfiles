@@ -1,13 +1,16 @@
 ---
 description: Inject network context into any session — device inventory, live ARP/routes/DHCP, server-to-flake mapping, subnet layout
 argument-hint: (none — invoked as skill://network-engineer)
-allowed-tools: Bash(mikrotik-connect *), Bash(kubectl *), Bash(ssh closet *), Read, Search, Edit
+allowed-tools: Bash(mikrotik-connect *), Bash(kubectl *), Bash(ssh *), Bash(curl *), Read, Search, Edit
 tool-hints: |
   This skill injects context. It does NOT modify anything.
   All RouterOS commands are read-only (print, export, monitor, get).
   NEVER run add/remove/set/enable/disable/reboot/shutdown without explicit user approval.
   Prefer live queries over stale static data when confirming current state.
-  kubectl is available via `ssh closet 'kubectl ...'` for local cluster queries.
+  kubectl is available via `ssh closet 'kubectl ...'` for local cluster queries —
+  and ALWAYS query all namespaces (`-A`), never just `-n default`.
+  BEFORE proposing any new WAN port, confirm no dstnat rule's dst-port range covers it:
+  DNAT runs before the input filter and will silently steal the packet.
   This skill is allowed to update its own SKILL.md file when the user asks for documentation changes.
 ---
 
@@ -258,8 +261,7 @@ Upstairs Switch (CRS310):
   ether1        → Reolink NVR                      (192.168.1.67, PoE)
   ether6        → Brother printer                  (192.168.5.6)
   sfp-sfpplus2  → bigp Proxmox 10G NIC       (192.168.5.19; VM big .68 shares this link)
-
-
+```
 
 ## Verizon Router (Upstream CR1000B)
 
@@ -289,11 +291,12 @@ The Verizon router does SLAAC on its LAN (192.168.0.0/24), handing out addresses
 from `2600:4040:25fa:e400::/64`. Devices directly on the Verizon LAN (like
 home-pi at 192.168.0.154) get working IPv6 this way.
 
-The MikroTik sits at 192.168.0.2 on this subnet and SHOULD accept a SLAAC address
-and request a prefix delegation (PD) via DHCPv6 for its own LAN. **Currently the
-MikroTik has stale static IPv6 addresses** (`2600:4040:2602::/48`) that don't match
-the Verizon's delegated prefix — this is why IPv6 doesn't work on the LAN side.
-See the `## IPv6` section for the fix.
+The MikroTik sits at 192.168.0.2 on this subnet and accepts a SLAAC address plus a
+DHCPv6 prefix delegation for its own LAN. **Verified working 2026-09-17** — 2GWAN holds
+current Verizon-prefix addresses (`2600:4040:25fa:e400:6f4:1cff:fee3:7127/64` plus a second
+`2600:4040:25fc:8d00::/64`), and the bridge advertises ULA `fd00:1::1/64` to the LAN.
+(The older "stale static `2600:4040:2602::/48`" note is obsolete — re-check live with
+`/ipv6 address print terse` before trusting either.) See the `## IPv6` section.
 
 ## Port Forwarding (dst-nat)
 
@@ -302,34 +305,151 @@ See the `## IPv6` section for the fix.
 mikrotik-connect r '/ip firewall nat print terse where chain=dstnat'
 ```
 
-Baseline (captured 2026-05-29; **post-MetalLB migration, live-confirmed 2026-08-04**):
+Baseline — **live-verified 2026-09-17** (targets re-measured; several had drifted from the
+2026-08-04 snapshot):
 
-| WAN Port(s) | Proto | MikroTik → | Final Target | K8s NodePort | Service |
-|------------|-------|-----------|-------------|-------------|---------|
-| 80, 443 | TCP | **MetalLB .6.11:80,443** | traefik (k8s LB) | 31316, 30908 | HTTP/HTTPS ingress |
-| 9987 | UDP | **MetalLB .6.15:9987** | ts-voice | 30087 | Teamspeak voice |
-| 30033 | TCP | **MetalLB .6.16:30033** | ts-files | 30034 | Teamspeak file transfer |
-| 5432 | TCP | **closet (.36):5432** | Postgres (NixOS bare-metal) | — | PostgreSQL |
-| 25565 | TCP | nas (.175):32565 | minecraft-game:32565 | 32565 | Minecraft (k8s) |
-| 32565 | TCP | nas (.175):32565 | minecraft-game:32565 | 32565 | Minecraft alternate |
-| 11753 | TCP | **MetalLB .6.17:11753** | openrct2-game | 31753 | OpenRCT2 |
-| 6767 | Both | Verizon→home-pi:6767 | home-pi Headscale | (direct) | Headscale control |
-| 30478 | UDP | **MetalLB .6.18:3478** | headscale-stun | — | Headscale STUN/DERP |
-| 18080 | TCP | arch (.76):18080 | Monero P2P (bare-metal) | — | Monero |
-| 25 | TCP | **MetalLB .6.13:25** | stalwart-mail | — | SMTP (Stalwart) |
-| 587 | TCP | **MetalLB .6.13:587** | stalwart-mail | — | Submission (Stalwart) |
-| 993 | TCP | **MetalLB .6.13:993** | stalwart-mail | — | IMAPS (Stalwart) |
-| 7881 | TCP | **MetalLB .6.22:7881** | LiveKit WebRTC signal | — | LiveKit |
-| 50000-60000 | UDP | **MetalLB .6.22:50000-60000** | LiveKit WebRTC media | — | LiveKit media |
-| 3478 | TCP/UDP | **MetalLB .6.21:3478** | Coturn TURN | — | TURN |
-| 5349 | TCP | **MetalLB .6.21:5349** | Coturn TURN TLS | — | TURN TLS |
-| 7233 | TCP | **MetalLB .6.20:7233** | Temporal gRPC mTLS | — | Temporal |
-| 4143 | TCP | closet (.36):4143 | Linkerd multicluster gateway | — | Linkerd MCS |
+| WAN Port(s) | Proto | MikroTik → (live target) | Service | Notes |
+|------------|-------|--------------------------|---------|-------|
+| 80, 443 | TCP | `.6.11:80,443` | kube-system/traefik | HTTP/HTTPS ingress |
+| 25, 587, 993 | TCP | `.6.13:25,587,993` | stalwart/stalwart-stalwart | SMTP / submission / IMAPS |
+| 9987 | UDP | `.6.15:9987` | default/ts-voice | Teamspeak voice |
+| 30033 | TCP | `.6.16:30033` | default/ts-files | Teamspeak file transfer |
+| 11753 | TCP | `.6.17:11753` | default/openrct2-game | OpenRCT2 |
+| 30478 | UDP | `.6.18:3478` | default/headscale-stun | Headscale STUN/DERP |
+| 7233 | TCP | `.6.20:7233` | default/temporal-frontend | Temporal gRPC mTLS |
+| 7881 | TCP | `.6.22:7881` | matrix/livekit-server-rtc | LiveKit WebRTC signal |
+| 3478 | TCP+UDP | `.6.14:3478` | steam-lobby/coturn | TURN (live) |
+| 45000-45063 | UDP | `.6.14:45000-45063` | steam-lobby/coturn | TURN relay range (live) |
+| 5349 | TCP | `.6.21:5349` | matrix/coturn — ⚠️ but `.6.21` publishes `3478 + 49152-49215`, **not** 5349 | likely dead |
+| **51820** | **UDP** | **the router itself (`wg-remote`)** | WireGuard remote access | **added 2026-09-17** |
+| 5432 | TCP | `.5.36:5432` | Postgres (NixOS bare-metal) | PostgreSQL |
+| 18080 | TCP | `.5.76:18080` | Monero P2P (NixOS bare-metal) | Monero |
+| 25565, 32565 | TCP | `.5.175:32565` | default/minecraft-game | Minecraft (k8s) |
+| 34197 | UDP | `.6.28:34197` | default/factorio-game | Factorio |
+| 6767 | Both | Verizon → home-pi:6767 | home-pi Headscale | **lives on the Verizon router, not the MikroTik** |
 
-**No dst-nat (LAN-only):** mimir-lb `.6.23:8080`, loki-push-lb `.6.24:3100`, unifi-web `.6.25:8443`.
+**Removed 2026-09-17:** `50000-60000 UDP → .6.14` (comment `LiveKit WebRTC media`). It was
+vestigial — its target (steam-lobby/coturn) relays on `45000-45063`, and livekit's LB
+publishes only `50000/UDP` — and it silently shadowed UDP 51820. To restore:
+
+```
+mikrotik-connect r '/ip firewall nat add chain=dstnat action=dst-nat to-addresses=192.168.6.14 to-ports=50000-60000 protocol=udp in-interface-list=WAN dst-port=50000-60000 comment="LiveKit WebRTC media"'
+```
+
+**⚠️ Known inbound gaps (observed 2026-09-17, not yet fixed):** `matrix/coturn` relays on
+`49152-49215/UDP` and `matrix/livekit-server-rtc` publishes `50000/UDP`, but **neither range
+has a dst-nat rule** — inbound TURN relay / media for those two services cannot work. The
+`5349` rule targets `.6.21:5349`, a port `matrix/coturn` does not publish.
+
+**CRITICAL — before choosing any new WAN port:** confirm no dstnat rule's `dst-port` range
+covers it. DNAT runs in PREROUTING, *before* the `input` filter chain, so a covering range
+steals the packet and a listener on the router itself never sees it. This is exactly what hid
+UDP 51820 behind the (since-removed) LiveKit range — external probes were DNATed to `.6.14`
+instead of reaching the router.
+
+**No dst-nat (LAN-only):** mimir-lb `.6.23:8080`, loki-push-lb `.6.24:3100`,
+unifi-web `.6.25:8443`, frigate `.6.26`, pihole-dns `.6.27:53`.
 
 **Note:** The Headscale port 6767 forward lives on the Verizon router (192.168.0.1), not the MikroTik. home-pi (192.168.0.154) sits on the WAN subnet (192.168.0.0/24) directly behind the Verizon router. The MikroTik has a secondary DHCP WAN IP at 192.168.0.152 (not to be confused with home-pi).
-**Migration (2026-08-04):** all k8s dst-nat targets moved from the kube-vip VIP `.10` to MetalLB `.6.x` LB IPs. **Fix (2026-08-03):** the 5432 dst-nat rule was re-pointed from a dead target (`.35`) to closet `.36` — postgres answers on `.36`. Note: RouterOS 7.19 `find`/`where` on port/protocol properties (`dst-port`, `to-ports`, `protocol`) matches nothing — select rules by **rule number from a fresh `print`** (`set <number> ...`) or via `find to-addresses=...` instead.
+**Migration (2026-08-04):** all k8s dst-nat targets moved from the kube-vip VIP `.10` to MetalLB `.6.x` LB IPs. **Fix (2026-08-03):** the 5432 dst-nat rule was re-pointed from a dead target (`.35`) to closet `.36` — postgres answers on `.36`. Note: RouterOS 7.19 `find`/`where` on port/protocol properties (`dst-port`, `to-ports`, `protocol`) matches nothing — select rules by **rule number from a fresh `print`** (`set <number> ...`), or match on `comment` (`remove [find comment="..."]`), which works fine.
+
+## WireGuard (remote access — built 2026-09-17)
+
+Native RouterOS WireGuard. **Built into the base `routeros` package since 7.1 — nothing to
+install** (the RB5009 runs exactly one package: `routeros`). Verified working on 7.19.6 /
+arm64: interface listening, inbound path proven end-to-end from external nodes.
+
+> The server side is complete, but it ships with **zero peers** — nothing can connect until a
+> peer is added. Unauthenticated packets are silently discarded, so "no response" is normal.
+
+| Property | Value |
+|----------|-------|
+| Interface | `wg-remote` (`type=wg`, MTU 1420, running) |
+| Listen port | **UDP 51820** |
+| Tunnel subnet | `10.99.0.0/24` — the router is `10.99.0.1` |
+| Server public key | `2HeIlsYngjfFpCctWpzJyfFCC0+npvliQMzaglf8bGw=` |
+| Client endpoint | `john2143.com:51820` (public DNS tracks the DHCP WAN IP) |
+| Firewall | `input accept udp dst-port=51820 in-interface-list=WAN`, placed **before** `drop all not coming from LAN` |
+| `LAN` list | `wg-remote` is a member — required so tunnel traffic *to the router itself* (DNS, SSH, Winbox) isn't dropped by that same rule |
+| Verizon | **nothing to forward** — the CR1000B DMZ already delivers all inbound to 192.168.0.2 |
+
+### How it works
+
+- **No client/server distinction.** Every participant is a peer with a keypair; the router is
+  merely the peer with a stable public endpoint. One peer entry per device.
+- **`allowed-address` is the entire routing table**, doing double duty: which destinations get
+  encrypted to that peer, *and* which source IPs are accepted *from* it. A mismatch fails
+  silently — no error, no log.
+- Handshake is Noise IK (Curve25519 + ChaCha20-Poly1305 + BLAKE2s). Sessions rekey ~2 min and
+  are rejected after 3 min. Per-packet authentication means peers roam between networks with
+  no reconnection.
+- **UDP only, no TCP fallback.** If UDP 51820 is blocked anywhere, nothing comes up and there
+  is no diagnostic signal — which is why the DMZ was verified for UDP, not inferred from TCP.
+- **Throughput is CPU-bound** (software crypto, no offload). `cpu-frequency: auto` in
+  `/system/routerboard/settings` costs throughput; pinning to 1400 MHz helps. RB5009 measures
+  ~300-900 Mbps real-world, ~1.1-1.4 Gbps in lab conditions.
+
+### Add a peer
+
+```
+mikrotik-connect r '/interface wireguard peers add interface=wg-remote public-key="<CLIENT_PUBKEY>" allowed-address=10.99.0.2/32 comment="<device>"'
+```
+
+Client config:
+
+```ini
+[Interface]
+PrivateKey = <client private key>
+Address    = 10.99.0.2/24
+DNS        = 192.168.5.1
+
+[Peer]
+PublicKey  = 2HeIlsYngjfFpCctWpzJyfFCC0+npvliQMzaglf8bGw=
+Endpoint   = john2143.com:51820
+AllowedIPs = 10.99.0.0/24, 192.168.1.0/24, 192.168.5.0/24, 192.168.6.0/24
+PersistentKeepalive = 25
+```
+
+Use `AllowedIPs = 0.0.0.0/0` for a full-tunnel config — the existing
+`srcnat masquerade out-interface=2GWAN` rule handles internet egress automatically. No NAT is
+needed for LAN access: `10.99.0.0/24` is a connected route via `wg-remote`.
+
+### Verify
+
+```
+# Listening? How many peers? (0 peers = nothing can connect)
+mikrotik-connect r '/interface wireguard print'
+mikrotik-connect r '/interface wireguard peers print'
+
+# After adding a peer — the ONLY proof a tunnel is live:
+# last-handshake under 2 min, with non-zero rx/tx
+mikrotik-connect r '/interface wireguard peers print detail'
+```
+
+### Rollback
+
+```
+mikrotik-connect r '/ip firewall filter remove [find comment="wireguard remote access"]'
+mikrotik-connect r '/interface wireguard remove wg-remote'
+mikrotik-connect r '/interface list member remove [find comment="wg-remote tunnel"]'
+```
+
+### Gotchas
+
+- **The peer list IS the access control.** The firewall accepts UDP 51820 unconditionally (the
+  DMZ hands everything inbound to the router), so only configured public keys are accepted.
+  Adding peers requires no firewall change.
+- **No IPv6 over the tunnel** until a v6 address is added to `wg-remote`.
+- MTU 1420 default; if large transfers stall while small ones work, lower it (~1392).
+- `/export` **omits** the private key (only `/export show-sensitive` includes it), so the file
+  in `network-configs/` is safe to commit. **`/interface wireguard print detail` DOES print
+  it** — avoid that command in shared transcripts.
+- The private key was displayed once during the 2026-09-17 build. Rotate with
+  `/interface wireguard set wg-remote private-key="<new>"` if that matters.
+- RouterOS has a built-in turnkey alternative, **Back To Home VPN** (`/ip cloud`,
+  `back-to-home-vpn` — currently `revoked-and-disabled`) — WireGuard-based, configured from
+  the MikroTik mobile app, no manual peers.
+
 ## Subnet Layout
 
 ```
@@ -340,6 +460,7 @@ Baseline (captured 2026-05-29; **post-MetalLB migration, live-confirmed 2026-08-
 192.168.6.0/24  — MetalLB v4 LB pool (`services` IPAddressPool), BGP /32s, NOT a bridge subnet
 fd00:1::/64     — node ULA (SLAAC on bridge, router .1) — all k3s nodes
 fd00:6::/64     — MetalLB v6 LB pool (`services` IPAddressPool), BGP /128s, NOT a bridge subnet
+10.99.0.0/24    — wg-remote WireGuard tunnel subnet (router at .1, peers from .2)
 ```
 
 Router bridges all subnets. Inter-subnet routing is automatic (no NAT between 1.0/24 and 5.0/24).
@@ -534,8 +655,12 @@ Pod network: `10.42.0.0/16` (IPv4) + `fd42:42:42::/56` (IPv6) flannel VXLAN. Key
 | headscale-stun | LoadBalancer | 192.168.6.18:3478/UDP | fd00:6::18 | STUN for Headscale DERP |
 | mosquitto | LoadBalancer | 192.168.6.19:1883 | fd00:6::19 | MQTT |
 | temporal-frontend | LoadBalancer | 192.168.6.20:7233 | — (v4-only, chart limitation) | Temporal gRPC |
-| coturn | LoadBalancer | 192.168.6.21:3478,5349 | fd00:6::21 | TURN (scaled to 0 — dormant) |
-| livekit | LoadBalancer | 192.168.6.22:7881,50000-60000 | fd00:6::22 | LiveKit (scaled to 0 — dormant) |
+| coturn (steam-lobby) | LoadBalancer | 192.168.6.14:3478 + 45000-45063/UDP | fd00:6::14 | TURN for steam-lobby — **live**, 41d, 1/1, `coturn-wan-ip-watcher` cronjob every 5m |
+| coturn (matrix) | LoadBalancer | 192.168.6.21:3478 + 49152-49215/UDP | fd00:6::21 | TURN for matrix — **live**. Relay range has no dst-nat rule (see above) |
+| livekit | LoadBalancer | 192.168.6.22:7881 + 50000/UDP | fd00:6::22 | LiveKit RTC, ns `matrix` — **live**, 74d, 1/1. Only `50000/UDP`, not a range |
+| frigate | LoadBalancer | 192.168.6.26:5000,1984,8554,8555/UDP | fd00:6::26 | cameras |
+| pihole-dns | LoadBalancer | 192.168.6.27:53 UDP+TCP | — | LAN DNS |
+| factorio-game | LoadBalancer | 192.168.6.28:34197/UDP | fd00:6::28 | Factorio |
 | mimir-lb | LoadBalancer | 192.168.6.23:8080 | fd00:6::23 | Mimir push/query (LAN-only) |
 | loki-push-lb | LoadBalancer | 192.168.6.24:3100 | fd00:6::24 | Loki push (LAN-only) |
 | minecraft-game | NodePort | :32565/TCP | — | Minecraft (unchanged, nodePort path) |
@@ -646,11 +771,21 @@ ssh <node>.local 'iptables -t nat -L KUBE-SERVICES -n | grep 192.168.6.X'
 | MikroTik BGP connections | on router (`mikrotik-connect r /routing bgp connection print`) |
 | Firewall port 179 | `dotfiles/nixos/<host>-configuration.nix` → `networking.firewall.allowedTCPPorts` |
 | MikroTik dst-nat (.6.x targets) | on router (`mikrotik-connect r /ip firewall nat print where chain=dstnat`) |
+
 ## Config Backup & Restore
 Full config exports are saved in the dotfiles repo (`~/dotfiles/network-configs/`) for
-disaster recovery. These are RouterOS script files (`.rsc`) — plain text, one command
-per line. When asked about "the last known-good config" or "what changed", check
-`~/dotfiles/network-configs/mikrotik-export-*.rsc` for the most recent backup.
+disaster recovery. Files are named per device — `router.rsc`, `router.verbose.rsc`,
+`core.rsc`, `upstairs.rsc`, `office.rsc`, `upstairs-core.rsc` (each with a `.verbose.rsc`
+twin). **Git tracks history, so there are no dates in the filenames — and there is no
+`mikrotik-export-*.rsc`.** Last refreshed: **2026-09-17** (router only; the switches date
+from 2026-06-14).
+
+**`/export` omits sensitive values** — WireGuard private keys, passwords, etc. appear only
+under `/export show-sensitive`. The committed files are therefore safe; never add
+`show-sensitive` to the backup commands.
+
+Writing these files touches the dotfiles repo outside the current working directory — only do
+it when the user asks.
 
 ### Creating a Backup
 
@@ -699,6 +834,14 @@ When answering a question or diagnosing a problem:
 8. **Validate LB/BGP paths from OUTSIDE the system under test.** Cluster nodes DNAT `.6.x` traffic locally (kube-proxy PREROUTING precedes routing), so `curl` from office/big/pite proves nothing about the router path. Use a non-cluster device: an AP, the WAN, or a LAN host whose route actually crosses the router. (Home-pi on 192.168.0.x is NOT such a host — the Verizon router has no route to `.6.0/24`; its timeouts say nothing.)
 9. **Check BOTH ends before declaring a path broken.** A `syn-sent` in the router's connection table means the router saw the packet — it does NOT mean forwarding failed. Verify the receiving side (e.g. `cat /proc/net/nf_conntrack` on the speaker node for the VIP:port) before concluding breakage. In 2026-08-04's migration this exact trap caused a false "router forwarding broken" alarm.
 10. **ICMP on a MetalLB BGP VIP always times out** — no interface owns the VIP and kube-proxy only DNATs TCP/UDP. A failed `ping` to `.6.x` is expected, not a symptom.
+11. **Query ALL namespaces, never just `-n default`.** On 2026-09-17 `.6.14` looked like a dead target from `kubectl get deploy -n default`, but it is `steam-lobby/coturn` — live, 41 days, `1/1`, with a 5-minute cronjob. Workloads live in `matrix`, `steam-lobby`, `observability`, `stalwart`, `argo`, etc. Run `kubectl get svc,pods,deploy -A` before declaring any NAT target dead or service dormant.
+12. **`<host>.local` may not resolve** (mDNS). The examples use `closet.local`; if that fails, use `ssh 192.168.5.36` (or bare `ssh closet`). Same for `arch.local`, `nas.local`.
+13. **Prove inbound WAN reachability without an external host.** From any LAN machine, drive external probes at the public IP (`/ip cloud print` → `public-address`) and catch the arrival in the router's own conntrack:
+    - TCP: `curl -s -H 'Accept: application/json' 'https://check-host.net/check-tcp?host=<pubip>:<port>&max_nodes=5'`, then poll `https://check-host.net/check-result/<request_id>`.
+    - UDP: `check-udp` — **its verdicts are useless** (it reports `timeout` even for ports known to be live), but the packets it sends are real. Fire a burst, then poll `mikrotik-connect r '/ip firewall connection print terse where dst-address~":<port>"'` and correlate source IPs against the check-host nodes via `socket.gethostbyname`.
+    - Lone UDP conntrack entries expire in ~30 s: fire the burst and poll **concurrently**.
+    - This is how the DMZ was proven to forward UDP (263 external packets landed on `192.168.0.2:51820`) — and how the DNAT hijack was caught (all of them arriving at `.6.14` beforehand).
+14. **A failed external `ping` to the public IP means NOTHING.** ICMP to `108.56.153.222` is filtered upstream — TIMEOUT / DEST_UNREACH from every external node — while TCP 80/443/993 and UDP both pass. Never conclude "the WAN path is broken" from a failed ping.
 
 ## Safety
 

@@ -21,7 +21,7 @@
     # inputs.home-manager.nixosModules.default
   ];
   home-manager.users."john" = import ./home.nix;
-  security.pam.services.hyprlock = {};
+  #security.pam.services.hyprlock = {}; # DISABLED 2026-09-17: hyprlock removed from home.nix
 
 
 

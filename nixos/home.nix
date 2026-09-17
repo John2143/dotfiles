@@ -42,7 +42,7 @@
     gammastep # redshift / f.lux / night light
     #spotifyd # play to spotify device if needed
 
-    hyprlock # screen locker
+    #hyprlock # DISABLED 2026-09-17: crashes / misbehaves with the DP monitors + 7900 XT; see services.hypridle note below
 
     # desktop programs (programs you can open)
     firefox # browser
@@ -417,7 +417,6 @@ in {
         { _args = [(mkLua ''mainMod .. " + CTRL + SHIFT + E"'') (mkLua ''hl.dsp.window.move({ workspace = "name:obsidian" })'')]; }
 
         # Sleep / wake / quit
-        { _args = ["CTRL + ALT + L" (mkLua ''hl.dsp.exec_cmd([[loginctl lock-session]])'')]; }
         { _args = ["Print" (mkLua ''hl.dsp.dpms({ action = "enable" })'')]; }
         { _args = [(mkLua ''mainMod .. " + SHIFT + M"'') (mkLua "hl.dsp.exit()")]; }
 
@@ -508,7 +507,7 @@ in {
   xdg.configFile = {
     "alacritty/alacritty.toml".source = config.lib.file.mkOutOfStoreSymlink ../.config/alacritty/alacritty.toml;
     "dunst/dunstrc".source = config.lib.file.mkOutOfStoreSymlink ../.config/dunst/dunstrc;
-    "hypr/hyprlock.conf".source = config.lib.file.mkOutOfStoreSymlink ../.config/hypr/hyprlock.conf;
+    #"hypr/hyprlock.conf".source = config.lib.file.mkOutOfStoreSymlink ../.config/hypr/hyprlock.conf; # DISABLED: hyprlock off (see primaryPackages)
     "hypr/hyprpaper.conf".text = "
       preload = /home/john/backgrounds/luna_1.png
       wallpaper = , /home/john/backgrounds/luna_1.png
@@ -527,27 +526,33 @@ in {
       + "/hpfva.sh";
   };
 
-  services.hypridle = {
-    enable = true;
-    settings = {
-      general = {
-        lock_cmd = "pidof hyprlock || hyprlock";
-        before_sleep_cmd = "loginctl lock-session";
-        after_sleep_cmd = "hyprctl dispatch 'hl.dsp.dpms({ action = \"enable\" })'";
-      };
-      listener = [
-        {
-          timeout = 300; # lock after 5 min idle (the default)
-          on-timeout = "loginctl lock-session";
-        }
-        {
-          timeout = 330; # screen off 30s after the lock listener (the default)
-          on-timeout = "hyprctl dispatch 'hl.dsp.dpms({ action = \"disable\" })'";
-          on-resume = "hyprctl dispatch 'hl.dsp.dpms({ action = \"enable\" })'"; # any input wakes
-        }
-      ];
-    };
-  };
+  # DISABLED 2026-09-17: hyprlock crashes / misbehaves with the DP monitors + 7900 XT, and
+  # hypridle is the thing that launched it (5 min idle → `loginctl lock-session`). Do not flip
+  # this back on without a working locker: `loginctl lock-session` alone does nothing.
+  # Side effect: the 330s DPMS blank is gone too — `CTRL+F20` / `Print` still toggle DPMS by hand.
+  # (Also: office never had `security.pam.services.hyprlock` — only arch-configuration.nix does,
+  #  which is a likely reason lock attempts on this host behaved badly.)
+  #services.hypridle = {
+  #  enable = true;
+  #  settings = {
+  #    general = {
+  #      lock_cmd = "pidof hyprlock || hyprlock";
+  #      before_sleep_cmd = "loginctl lock-session";
+  #      after_sleep_cmd = "hyprctl dispatch 'hl.dsp.dpms({ action = \"enable\" })'";
+  #    };
+  #    listener = [
+  #      {
+  #        timeout = 300; # lock after 5 min idle (the default)
+  #        on-timeout = "loginctl lock-session";
+  #      }
+  #      {
+  #        timeout = 330; # screen off 30s after the lock listener (the default)
+  #        on-timeout = "hyprctl dispatch 'hl.dsp.dpms({ action = \"disable\" })'";
+  #        on-resume = "hyprctl dispatch 'hl.dsp.dpms({ action = \"enable\" })'"; # any input wakes
+  #      }
+  #    ];
+  #  };
+  #};
 
   services.dunst = {
     enable = true;
