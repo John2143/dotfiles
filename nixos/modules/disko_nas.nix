@@ -6,10 +6,11 @@
 #   part1: ESP         (4GB,    vfat,  mount=/boot)
 #   part2: root        (1024GB, ext4,  mount=/)
 #   part3: swap        (16GB,   plain dm-crypt random-key)
-#   part4: zfs_special (100GB,  raw — tank special mirror leg, attached post-boot)
-#   part5: l2arc       (200GB,  raw — tank L2ARC cache, added post-boot)
-#   part6: longhorn    (remainder ~519GB, ext4, mount=/var/lib/longhorn)
-#   Part 6 also hosts longhorn-disk.cfg for /var/lib/longhorn.
+#   part4: zfs_special (238GB,  raw — tank special mirror leg, sized to match the NVMe leg)
+#   part5: longhorn    (519GB,  ext4,  mount=/var/lib/longhorn)
+#   Part 5 also hosts longhorn-disk.cfg for /var/lib/longhorn.
+#   ~61.5GB at the tail of the disk is deliberately left unallocated — the
+#   leftover from the removed L2ARC partition beyond what part4 needed.
 #   A SECOND Longhorn disk lives at /var/lib/longhorn-2 on the root
 #   partition (sda2, ~1TiB) — created by systemd-tmpfiles and added
 #   to the Longhorn node CRD post-boot.
@@ -18,9 +19,7 @@
 #   1. Import:  sudo zpool import tank
 #   2. Re-attach special mirror leg:
 #      sudo zpool replace tank /dev/disk/by-partlabel/disk-main-zfs_special
-#   3. Re-add L2ARC:
-#      sudo zpool add tank cache /dev/disk/by-partlabel/disk-main-l2arc
-#   4. Rebuild: sudo nixos-rebuild switch --flake /home/john/dotfiles#nas
+#   3. Rebuild: sudo nixos-rebuild switch --flake /home/john/dotfiles#nas
 #
 # === INSTALL STEPS (fresh install or boot SSD replacement) ===
 #
@@ -61,10 +60,9 @@
 # 7. Restart instance-manager to pick up the new disk:
 #      kubectl delete pod -n longhorn-system -l longhorn.io/instance-manager -l longhorn.io/node=nas
 #      reboot
-# 6. RE-ATTACH ZFS TANK MEMBERS:
+# 8. RE-ATTACH ZFS TANK MEMBERS:
 #      zpool import tank
 #      zpool replace tank /dev/disk/by-partlabel/disk-main-zfs_special
-#      zpool add tank cache /dev/disk/by-partlabel/disk-main-l2arc
 #      nixos-rebuild switch --flake ~/dotfiles#nas
 #
 # The dotfiles repo must be reachable at install time. If the NAS itself
@@ -116,13 +114,10 @@
             };
             zfs_special = {
               type = "8300";
-              size = "100G";
-              # Raw — ZFS special mirror leg, attached post-boot
-            };
-            l2arc = {
-              type = "8300";
-              size = "200G";
-              # Raw — ZFS L2ARC cache, added post-boot
+              size = "238G";
+              # Raw — tank special mirror leg, sized to match nvme0n1p1. If this
+              # partition is ever recreated in place, preserve its start offset —
+              # the ZFS label lives in the first 1 MiB.
             };
             longhorn = {
               type = "8300";
