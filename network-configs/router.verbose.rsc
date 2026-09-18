@@ -1,4 +1,4 @@
-# 2026-09-17 20:40:52 by RouterOS 7.19.6
+# 2026-09-17 23:22:52 by RouterOS 7.19.6
 # software id = 7RHC-3MMG
 #
 # model = RB5009UPr+S+
@@ -399,8 +399,6 @@ add allowed-address=10.99.0.2/32,10.244.0.0/16 client-endpoint="" comment=\
     preshared-key="" private-key="" public-key=\
     "jUMIaOQP8hPqzw3t//WZrpt/WTFkRzkD18LBM27RlEE="
 /ip address
-add address=192.168.5.1/24 comment=defconf disabled=no interface=bridge \
-    network=192.168.5.0
 add address=192.168.0.2/24 disabled=no interface=2GWAN network=192.168.0.0
 add address=192.168.1.1/24 disabled=no interface=bridge network=192.168.1.0
 add address=192.168.88.254/24 disabled=no interface=bridge network=\
@@ -410,6 +408,8 @@ add address=10.99.0.1/24 comment="wg-remote tunnel subnet" disabled=no \
     interface=*C network=10.99.0.0
 add address=10.99.0.1/24 comment="wg-remote tunnel subnet" disabled=no \
     interface=wg-remote network=10.99.0.0
+add address=192.168.5.1/24 comment=defconf disabled=no interface=bridge \
+    network=192.168.5.0
 /ip arp
 add address=192.168.5.36 disabled=no interface=bridge mac-address=\
     0C:C4:7A:BD:63:3D published=no
@@ -905,11 +905,16 @@ set 3 action=echo disabled=no prefix="" regex="" topics=critical
 /system note
 set note="" show-at-cli-login=no show-at-login=yes
 /system ntp client
-set enabled=no mode=unicast servers="" vrf=main
+set enabled=yes mode=unicast servers=216.239.35.12,162.159.200.1 vrf=main
 /system ntp server
-set auth-key=none broadcast=no broadcast-addresses="" enabled=no \
+set auth-key=none broadcast=no broadcast-addresses="" enabled=yes \
     local-clock-stratum=5 manycast=no multicast=no use-local-clock=no vrf=\
     main
+/system ntp client servers
+add address=216.239.35.12 auth-key=none disabled=no iburst=yes max-poll=10 \
+    min-poll=6
+add address=162.159.200.1 auth-key=none disabled=no iburst=yes max-poll=10 \
+    min-poll=6
 /system package local-update mirror
 set check-interval=1d enabled=no primary-server=0.0.0.0 secondary-server=\
     0.0.0.0 user=""

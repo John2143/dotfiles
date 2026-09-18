@@ -1,4 +1,4 @@
-# 2026-05-05 10:45:48 by RouterOS 7.20.8
+# 2026-09-17 23:23:07 by RouterOS 7.20.8
 # software id = TAKC-K349
 #
 # model = CRS305-1G-4S+
@@ -403,6 +403,9 @@ set always-from-cache=no anonymous=no cache-administrator=webmaster \
     max-client-connections=600 max-fresh-time=3d max-server-connections=600 \
     parent-proxy=:: parent-proxy-port=0 port=8080 serialize-connections=no \
     src-address=::
+/ip route
+add comment="NTP Google" dst-address=216.239.35.12/32 gateway=192.168.5.1
+add comment="NTP Cloudflare" dst-address=162.159.200.1/32 gateway=192.168.5.1
 /ip service
 set ftp address="" disabled=no max-sessions=20 port=21 vrf=main
 set ssh address="" disabled=no max-sessions=20 port=22 vrf=main
@@ -466,7 +469,7 @@ set contact="" enabled=no engine-id-suffix="" location="" src-address=:: \
     trap-community=public trap-generators=temp-exception trap-target="" \
     trap-version=1 vrf=main
 /system clock
-set time-zone-autodetect=yes time-zone-name=manual
+set time-zone-autodetect=no time-zone-name=America/New_York
 /system clock manual
 set dst-delta=+00:00 dst-end="1970-01-01 00:00:00" dst-start=\
     "1970-01-01 00:00:00" time-zone=+00:00
@@ -494,11 +497,16 @@ set 3 action=echo disabled=no prefix="" regex="" topics=critical
 /system note
 set note="" show-at-cli-login=no show-at-login=yes
 /system ntp client
-set enabled=no mode=unicast servers="" vrf=main
+set enabled=yes mode=unicast servers=216.239.35.12,162.159.200.1 vrf=main
 /system ntp server
 set auth-key=none broadcast=no broadcast-addresses="" enabled=no \
     local-clock-stratum=5 manycast=no multicast=no use-local-clock=no vrf=\
     main
+/system ntp client servers
+add address=216.239.35.12 auth-key=none disabled=no iburst=yes max-poll=10 \
+    min-poll=6
+add address=162.159.200.1 auth-key=none disabled=no iburst=yes max-poll=10 \
+    min-poll=6
 /system package local-update mirror
 set check-interval=1d enabled=no primary-server=0.0.0.0 secondary-server=\
     0.0.0.0 user=""

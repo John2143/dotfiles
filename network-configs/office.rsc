@@ -1,4 +1,4 @@
-# 2026-02-11 11:42:13 by RouterOS 7.19.6
+# 2026-09-17 23:23:03 by RouterOS 7.19.6
 # software id = UL5S-M34T
 #
 # model = CRS310-8G+2S+
@@ -23,8 +23,18 @@ add address=192.168.5.2/24 comment=defconf interface=bridge network=\
 set allow-remote-requests=yes servers=1.1.1.1
 /ip hotspot profile
 set [ find default=yes ] html-directory=hotspot
+/ip route
+add comment="NTP Google" dst-address=216.239.35.12/32 gateway=192.168.5.1
+add comment="NTP Cloudflare" dst-address=162.159.200.1/32 gateway=192.168.5.1
+/system clock
+set time-zone-autodetect=no time-zone-name=America/New_York
 /system identity
 set name=office-switch
+/system ntp client
+set enabled=yes
+/system ntp client servers
+add address=216.239.35.12
+add address=162.159.200.1
 /tool graphing interface
 add allow-address=192.168.5.0/24 interface=sfp-sfpplus1 store-on-disk=no
 add allow-address=192.168.5.0/24 interface=sfp-sfpplus2 store-on-disk=no

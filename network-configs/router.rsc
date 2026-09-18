@@ -1,4 +1,4 @@
-# 2026-09-17 20:40:51 by RouterOS 7.19.6
+# 2026-09-17 23:22:51 by RouterOS 7.19.6
 # software id = 7RHC-3MMG
 #
 # model = RB5009UPr+S+
@@ -49,8 +49,6 @@ add allowed-address=10.99.0.2/32,10.244.0.0/16 comment=\
     "2143-k8s cluster: postgres client + tunnel" interface=wg-remote name=\
     peer1 public-key="jUMIaOQP8hPqzw3t//WZrpt/WTFkRzkD18LBM27RlEE="
 /ip address
-add address=192.168.5.1/24 comment=defconf interface=bridge network=\
-    192.168.5.0
 add address=192.168.0.2/24 interface=2GWAN network=192.168.0.0
 add address=192.168.1.1/24 interface=bridge network=192.168.1.0
 add address=192.168.88.254/24 interface=bridge network=192.168.88.0
@@ -59,6 +57,8 @@ add address=10.99.0.1/24 comment="wg-remote tunnel subnet" interface=*C \
     network=10.99.0.0
 add address=10.99.0.1/24 comment="wg-remote tunnel subnet" interface=\
     wg-remote network=10.99.0.0
+add address=192.168.5.1/24 comment=defconf interface=bridge network=\
+    192.168.5.0
 /ip arp
 add address=192.168.5.36 interface=bridge mac-address=0C:C4:7A:BD:63:3D
 /ip dhcp-client
@@ -333,6 +333,13 @@ add afi=ip,ipv6 as=65001 local.address=192.168.5.1 .role=ebgp name=\
 set time-zone-name=America/New_York
 /system identity
 set name=router
+/system ntp client
+set enabled=yes
+/system ntp server
+set enabled=yes
+/system ntp client servers
+add address=216.239.35.12
+add address=162.159.200.1
 /tool graphing interface
 add allow-address=192.168.5.0/24 interface=2GWAN store-on-disk=no
 add allow-address=192.168.5.0/24 interface=10GsfpLAN store-on-disk=no

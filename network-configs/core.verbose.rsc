@@ -1,4 +1,4 @@
-# 2026-05-07 19:03:34 by RouterOS 7.20.8
+# 2026-09-17 23:22:59 by RouterOS 7.20.8
 # software id = BFGZ-NVN3
 #
 # model = CRS305-1G-4S+
@@ -354,6 +354,8 @@ set enabled=no
 /ip address
 add address=192.168.5.4/24 comment=defconf disabled=no interface=bridge \
     network=192.168.5.0
+add address=192.168.1.250/24 comment=temp-recovery disabled=no interface=\
+    bridge network=192.168.1.0
 /ip cloud
 set back-to-home-vpn=revoked-and-disabled ddns-enabled=auto \
     ddns-update-interval=none update-time=yes
@@ -467,7 +469,7 @@ set contact="" enabled=no engine-id-suffix="" location="" src-address=:: \
     trap-community=public trap-generators=temp-exception trap-target="" \
     trap-version=1 vrf=main
 /system clock
-set time-zone-autodetect=yes time-zone-name=manual
+set time-zone-autodetect=no time-zone-name=America/New_York
 /system clock manual
 set dst-delta=+00:00 dst-end="1970-01-01 00:00:00" dst-start=\
     "1970-01-01 00:00:00" time-zone=+00:00
@@ -495,11 +497,16 @@ set 3 action=echo disabled=no prefix="" regex="" topics=critical
 /system note
 set note="" show-at-cli-login=no show-at-login=yes
 /system ntp client
-set enabled=no mode=unicast servers="" vrf=main
+set enabled=yes mode=unicast servers=162.159.200.1,216.239.35.12 vrf=main
 /system ntp server
 set auth-key=none broadcast=no broadcast-addresses="" enabled=no \
     local-clock-stratum=5 manycast=no multicast=no use-local-clock=no vrf=\
     main
+/system ntp client servers
+add address=162.159.200.1 auth-key=none disabled=no iburst=yes max-poll=10 \
+    min-poll=6
+add address=216.239.35.12 auth-key=none disabled=no iburst=yes max-poll=10 \
+    min-poll=6
 /system package local-update mirror
 set check-interval=1d enabled=no primary-server=0.0.0.0 secondary-server=\
     0.0.0.0 user=""
