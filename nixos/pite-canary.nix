@@ -220,9 +220,13 @@
     ];
   };
 
-  # Ensure runtime directories exist
+  # Ensure runtime directories exist.
+  # NOTE: /run/alertmanager is deliberately NOT listed here — the alertmanager
+  # unit runs as a DynamicUser, so that directory must be created and owned by
+  # systemd via RuntimeDirectory (see the unit below). A root-owned tmpfiles
+  # entry made preStart unable to write config.yml, which stopped the service
+  # from ever starting (start-limit-hit) and silenced every ntfy alert.
   systemd.tmpfiles.rules = [
-    "d /run/alertmanager 0755 root root -"
     "d /var/www/status 0755 root root -"
     "d /var/lib/status-page 0755 root root -"
   ];
@@ -251,8 +255,13 @@
           ${pkgs.gnused}/bin/sed -i "s|NTFY_PLACEHOLDER|$NTFY_URL|g" /run/alertmanager/config.yml
     '';
     serviceConfig = {
+      # Owned by the DynamicUser; systemd creates it before preStart runs.
+      RuntimeDirectory = "alertmanager";
+      # storage.path must match this unit's StateDirectory (/var/lib/alertmanager).
+      # /var/lib/prometheus/alertmanager does not exist — that was the second
+      # failure waiting behind the config-write problem.
       ExecStart = lib.mkForce
-        "${pkgs.prometheus-alertmanager}/bin/alertmanager --config.file=/run/alertmanager/config.yml --storage.path=/var/lib/prometheus/alertmanager --web.listen-address=127.0.0.1:9093";
+        "${pkgs.prometheus-alertmanager}/bin/alertmanager --config.file=/run/alertmanager/config.yml --storage.path=/var/lib/alertmanager --web.listen-address=127.0.0.1:9093";
     };
   };
 
