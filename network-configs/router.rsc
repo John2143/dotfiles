@@ -1,4 +1,4 @@
-# 2026-09-17 20:23:05 by RouterOS 7.19.6
+# 2026-09-17 20:40:51 by RouterOS 7.19.6
 # software id = 7RHC-3MMG
 #
 # model = RB5009UPr+S+
@@ -44,7 +44,10 @@ set accept-router-advertisements=yes
 /interface list member
 add comment=defconf interface=bridge list=LAN
 add interface=2GWAN list=WAN
-add comment="wg-remote tunnel" interface=wg-remote list=LAN
+/interface wireguard peers
+add allowed-address=10.99.0.2/32,10.244.0.0/16 comment=\
+    "2143-k8s cluster: postgres client + tunnel" interface=wg-remote name=\
+    peer1 public-key="jUMIaOQP8hPqzw3t//WZrpt/WTFkRzkD18LBM27RlEE="
 /ip address
 add address=192.168.5.1/24 comment=defconf interface=bridge network=\
     192.168.5.0
@@ -52,6 +55,8 @@ add address=192.168.0.2/24 interface=2GWAN network=192.168.0.0
 add address=192.168.1.1/24 interface=bridge network=192.168.1.0
 add address=192.168.88.254/24 interface=bridge network=192.168.88.0
 add address=192.168.6.1/24 interface=bridge network=192.168.6.0
+add address=10.99.0.1/24 comment="wg-remote tunnel subnet" interface=*C \
+    network=10.99.0.0
 add address=10.99.0.1/24 comment="wg-remote tunnel subnet" interface=\
     wg-remote network=10.99.0.0
 /ip arp
@@ -148,6 +153,13 @@ add action=accept chain=input comment=\
     "defconf: accept to local loopback (for CAPsMAN)" dst-address=127.0.0.1
 add action=accept chain=input comment="wireguard remote access" dst-port=\
     51820 in-interface-list=WAN protocol=udp
+add action=accept chain=input comment="wg: doks -> router DNS udp" dst-port=\
+    53 in-interface=wg-remote protocol=udp
+add action=accept chain=input comment="wg: doks -> router DNS tcp" dst-port=\
+    53 in-interface=wg-remote protocol=tcp
+add action=drop chain=input comment="no public postgres; log attempts" \
+    dst-port=5432 in-interface-list=WAN log=yes log-prefix=pg-public-attempt \
+    protocol=tcp
 add action=drop chain=input comment="defconf: drop all not coming from LAN" \
     in-interface-list=!LAN
 add action=accept chain=forward comment="defconf: accept in ipsec policy" \
@@ -166,61 +178,67 @@ add action=drop chain=forward comment=\
     connection-state=new in-interface-list=WAN
 add action=drop chain=forward comment="block camera subnet WAN egress" \
     dst-address=!192.168.0.0/16 src-address=192.168.1.0/24
+add action=accept chain=forward comment="wg: doks -> postgres" dst-address=\
+    192.168.5.36 dst-port=5432 in-interface=wg-remote protocol=tcp
+add action=drop chain=forward comment=\
+    "wg: deny tunnel traffic not allowed above" in-interface=wg-remote log=\
+    yes log-prefix=wg-drop
 /ip firewall nat
-add action=dst-nat chain=dstnat comment="Monero P2P node (arch)" dst-port=\
-    18080 in-interface-list=all protocol=tcp to-addresses=192.168.5.76 \
-    to-ports=18080
-add action=dst-nat chain=dstnat dst-port=9987 in-interface-list=WAN protocol=\
-    udp to-addresses=192.168.6.15 to-ports=9987
-add action=dst-nat chain=dstnat dst-port=30033 in-interface-list=WAN \
-    protocol=tcp to-addresses=192.168.6.16 to-ports=30033
-add action=dst-nat chain=dstnat dst-port=80 in-interface-list=WAN protocol=\
-    tcp to-addresses=192.168.6.11 to-ports=80
-add action=dst-nat chain=dstnat dst-port=443 in-interface-list=WAN protocol=\
-    tcp to-addresses=192.168.6.11 to-ports=443
-add action=dst-nat chain=dstnat dst-port=5432 in-interface-list=all protocol=\
-    tcp to-addresses=192.168.5.36 to-ports=5432
-add action=dst-nat chain=dstnat dst-port=30478 in-interface-list=all \
-    protocol=udp to-addresses=192.168.6.18 to-ports=3478
-add action=dst-nat chain=dstnat dst-port=25565 in-interface-list=all \
-    protocol=tcp to-addresses=192.168.5.175 to-ports=32565
-add action=dst-nat chain=dstnat dst-port=32565 in-interface-list=all \
-    protocol=tcp to-addresses=192.168.5.175 to-ports=32565
+add action=dst-nat chain=dstnat comment="monero p2p (tcp/18080) -> .5.76" \
+    dst-port=18080 in-interface-list=WAN protocol=tcp to-addresses=\
+    192.168.5.76 to-ports=18080
+add action=dst-nat chain=dstnat comment="teamspeak voice (udp/9987) -> .6.15" \
+    dst-port=9987 in-interface-list=WAN protocol=udp to-addresses=\
+    192.168.6.15 to-ports=9987
+add action=dst-nat chain=dstnat comment=\
+    "teamspeak file transfer (tcp/30033) -> .6.16" dst-port=30033 \
+    in-interface-list=WAN protocol=tcp to-addresses=192.168.6.16 to-ports=\
+    30033
+add action=dst-nat chain=dstnat comment="traefik http (tcp/80) -> .6.11" \
+    dst-port=80 in-interface-list=WAN protocol=tcp to-addresses=192.168.6.11 \
+    to-ports=80
+add action=dst-nat chain=dstnat comment="traefik https (tcp/443) -> .6.11" \
+    dst-port=443 in-interface-list=WAN protocol=tcp to-addresses=192.168.6.11 \
+    to-ports=443
 add action=masquerade chain=srcnat dst-address=!192.168.0.0/24 out-interface=\
     2GWAN
-add action=dst-nat chain=dstnat dst-port=11753 in-interface-list=all \
-    protocol=tcp to-addresses=192.168.6.17 to-ports=11753
-add action=dst-nat chain=dstnat comment="mail-smtp stalwart" dst-port=25 \
-    in-interface-list=all protocol=tcp to-addresses=192.168.6.13 to-ports=25
-add action=dst-nat chain=dstnat comment="mail-submission stalwart" dst-port=\
-    587 in-interface-list=all protocol=tcp to-addresses=192.168.6.13 \
+add action=dst-nat chain=dstnat comment="openrct2 (tcp/11753) -> .6.17" \
+    dst-port=11753 in-interface-list=WAN protocol=tcp to-addresses=\
+    192.168.6.17 to-ports=11753
+add action=dst-nat chain=dstnat comment="mail-smtp (tcp/25) -> .6.13" \
+    dst-port=25 in-interface-list=WAN protocol=tcp to-addresses=192.168.6.13 \
+    to-ports=25
+add action=dst-nat chain=dstnat comment="mail-submission (tcp/587) -> .6.13" \
+    dst-port=587 in-interface-list=WAN protocol=tcp to-addresses=192.168.6.13 \
     to-ports=587
-add action=dst-nat chain=dstnat comment="mail-imaps stalwart" dst-port=993 \
-    in-interface-list=all protocol=tcp to-addresses=192.168.6.13 to-ports=993
-add action=dst-nat chain=dstnat comment="LiveKit WebRTC TCP" dst-port=7881 \
-    in-interface-list=WAN protocol=tcp to-addresses=192.168.6.22 to-ports=\
-    7881
-add action=dst-nat chain=dstnat comment="Coturn TURN TCP" dst-port=3478 \
+add action=dst-nat chain=dstnat comment="mail-imaps (tcp/993) -> .6.13" \
+    dst-port=993 in-interface-list=WAN protocol=tcp to-addresses=192.168.6.13 \
+    to-ports=993
+add action=dst-nat chain=dstnat comment=\
+    "livekit webrtc tcp (tcp/7881) -> .6.22" dst-port=7881 in-interface-list=\
+    WAN protocol=tcp to-addresses=192.168.6.22 to-ports=7881
+add action=dst-nat chain=dstnat comment=\
+    "steam-lobby coturn TURN (tcp/3478) -> .6.14" dst-port=3478 \
     in-interface-list=WAN protocol=tcp to-addresses=192.168.6.14 to-ports=\
     3478
-add action=dst-nat chain=dstnat comment="Coturn TURN UDP" dst-port=3478 \
+add action=dst-nat chain=dstnat comment=\
+    "steam-lobby coturn TURN (udp/3478) -> .6.14" dst-port=3478 \
     in-interface-list=WAN protocol=udp to-addresses=192.168.6.14 to-ports=\
     3478
-add action=dst-nat chain=dstnat comment="Coturn TURN TLS" dst-port=5349 \
-    in-interface-list=WAN protocol=tcp to-addresses=192.168.6.21 to-ports=\
-    5349
-add action=dst-nat chain=dstnat comment=Temporal-gRPC-mTLS dst-port=7233 \
-    in-interface-list=WAN protocol=tcp to-addresses=192.168.6.20 to-ports=\
-    7233
-add action=dst-nat chain=dstnat comment="Linkerd multicluster gateway (home)" \
-    dst-port=4143 in-interface-list=WAN protocol=tcp to-addresses=\
-    192.168.5.36 to-ports=4143
-add action=dst-nat chain=dstnat comment="steam-lobby coturn relay" dst-port=\
+add action=dst-nat chain=dstnat comment=\
+    "temporal-grpc mtls (tcp/7233) -> .6.20" dst-port=7233 in-interface-list=\
+    WAN protocol=tcp to-addresses=192.168.6.20 to-ports=7233
+add action=dst-nat chain=dstnat comment=\
+    "linkerd multicluster (tcp/4143) -> .5.36" dst-port=4143 \
+    in-interface-list=WAN protocol=tcp to-addresses=192.168.5.36 to-ports=\
+    4143
+add action=dst-nat chain=dstnat comment=\
+    "steam-lobby coturn relay (udp/45000-45063) -> .6.14" dst-port=\
     45000-45063 in-interface-list=WAN protocol=udp to-addresses=192.168.6.14 \
     to-ports=45000-45063
-add action=dst-nat chain=dstnat comment=factorio dst-port=34197 \
-    in-interface-list=WAN protocol=udp to-addresses=192.168.6.28 to-ports=\
-    34197
+add action=dst-nat chain=dstnat comment="factorio (udp/34197) -> .6.28" \
+    dst-port=34197 in-interface-list=WAN protocol=udp to-addresses=\
+    192.168.6.28 to-ports=34197
 /ip route
 add disabled=no dst-address=192.168.1.0/24 gateway=bridge routing-table=main \
     suppress-hw-offload=no
