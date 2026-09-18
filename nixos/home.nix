@@ -7,6 +7,24 @@
   compName,
   ...
 }: let
+  # Blank the monitors on demand, but never while the session is locked: DPMS off with a
+  # locker up is the documented crash path (hyprwm/hyprlock#953 issues 1+2, #434, #480).
+  # LockedHint catches the stale-lock case where no locker process is left to grep for.
+  hypr-blank = pkgs.writeShellApplication {
+    name = "hypr-blank";
+    runtimeInputs = [ pkgs.coreutils pkgs.procps pkgs.systemd pkgs.hyprland pkgs.libnotify ];
+    text = ''
+      sid="''${XDG_SESSION_ID:-}"
+      [ -n "$sid" ] || sid="$(loginctl show-user "''${USER:-$(id -un)}" -p Display --value 2>/dev/null || true)"
+      hint="$(loginctl show-session "''${sid:-0}" -p LockedHint --value 2>/dev/null || true)"
+      if pgrep -x hyprlock > /dev/null || [ "$hint" = "yes" ]; then
+        notify-send -u low "Screen blank skipped" "session is locked (LockedHint=$hint) — DPMS off while locked is a known crash path"
+        exit 0
+      fi
+      hyprctl dispatch 'hl.dsp.dpms({ action = "disable" })'
+    '';
+  };
+
   primaryPackages = with pkgs; [
     # fonts
     # https://github.com/NixOS/nixpkgs/blob/master/pkgs/data/fonts/nerdfonts/shas.nix
@@ -42,7 +60,8 @@
     gammastep # redshift / f.lux / night light
     #spotifyd # play to spotify device if needed
 
-    #hyprlock # DISABLED 2026-09-17: crashes / misbehaves with the DP monitors + 7900 XT; see services.hypridle note below
+    hyprlock # screen locker (manual only — see the hypridle note at the end of this file)
+    hypr-blank # blank the monitors; refuses while the session is locked
 
     # desktop programs (programs you can open)
     firefox # browser
@@ -277,6 +296,9 @@ in {
         misc = {
           disable_splash_rendering = true;
           force_default_wallpaper = 0;
+          # lets a fresh hyprlock take over a lock whose owner died — without it Hyprland
+          # refuses every re-lock and the session is stuck locked with no prompt (2026-09-17)
+          allow_session_lock_restore = true;
         };
 
         input = {
@@ -417,6 +439,11 @@ in {
         { _args = [(mkLua ''mainMod .. " + CTRL + SHIFT + E"'') (mkLua ''hl.dsp.window.move({ workspace = "name:obsidian" })'')]; }
 
         # Sleep / wake / quit
+        # locked = true: this key must fire while the session IS locked, otherwise a stale lock
+        # leaves only the TTY escape. Bare hyprlock (no pidof guard) so it can take over a lock
+        # whose owner died — that refusal is what bricked the session on 2026-09-17.
+        { _args = ["CTRL + ALT + L" (mkLua ''hl.dsp.exec_cmd([[hyprlock]])'') { locked = true; }]; }
+        { _args = ["CTRL + ALT + M" (mkLua ''hl.dsp.exec_cmd([[hypr-blank]])'')]; }
         { _args = ["Print" (mkLua ''hl.dsp.dpms({ action = "enable" })'')]; }
         { _args = [(mkLua ''mainMod .. " + SHIFT + M"'') (mkLua "hl.dsp.exit()")]; }
 
@@ -507,7 +534,7 @@ in {
   xdg.configFile = {
     "alacritty/alacritty.toml".source = config.lib.file.mkOutOfStoreSymlink ../.config/alacritty/alacritty.toml;
     "dunst/dunstrc".source = config.lib.file.mkOutOfStoreSymlink ../.config/dunst/dunstrc;
-    #"hypr/hyprlock.conf".source = config.lib.file.mkOutOfStoreSymlink ../.config/hypr/hyprlock.conf; # DISABLED: hyprlock off (see primaryPackages)
+    "hypr/hyprlock.conf".source = config.lib.file.mkOutOfStoreSymlink ../.config/hypr/hyprlock.conf;
     "hypr/hyprpaper.conf".text = "
       preload = /home/john/backgrounds/luna_1.png
       wallpaper = , /home/john/backgrounds/luna_1.png
@@ -526,33 +553,10 @@ in {
       + "/hpfva.sh";
   };
 
-  # DISABLED 2026-09-17: hyprlock crashes / misbehaves with the DP monitors + 7900 XT, and
-  # hypridle is the thing that launched it (5 min idle → `loginctl lock-session`). Do not flip
-  # this back on without a working locker: `loginctl lock-session` alone does nothing.
-  # Side effect: the 330s DPMS blank is gone too — `CTRL+F20` / `Print` still toggle DPMS by hand.
-  # (Also: office never had `security.pam.services.hyprlock` — only arch-configuration.nix does,
-  #  which is a likely reason lock attempts on this host behaved badly.)
-  #services.hypridle = {
-  #  enable = true;
-  #  settings = {
-  #    general = {
-  #      lock_cmd = "pidof hyprlock || hyprlock";
-  #      before_sleep_cmd = "loginctl lock-session";
-  #      after_sleep_cmd = "hyprctl dispatch 'hl.dsp.dpms({ action = \"enable\" })'";
-  #    };
-  #    listener = [
-  #      {
-  #        timeout = 300; # lock after 5 min idle (the default)
-  #        on-timeout = "loginctl lock-session";
-  #      }
-  ##      {
-  ##        timeout = 330; # screen off 30s after the lock listener (the default)
-  ##        on-timeout = "hyprctl dispatch 'hl.dsp.dpms({ action = \"disable\" })'";
-  ##        on-resume = "hyprctl dispatch 'hl.dsp.dpms({ action = \"enable\" })'"; # any input wakes
-  ##      }
-  ##    ];
-  #  };
-  #};
+  # hypridle intentionally NOT enabled (2026-09-18): locking is manual-only, so there is no
+  # idle timer, no 5-min auto-lock and no DPMS-off listener (the documented AMD crash path,
+  # hyprwm/hyprlock#953). Lock = CTRL+ALT+L / macropad x; blank = CTRL+ALT+M. Note that
+  # `loginctl lock-session` now has no handler at all — never bind it, always run hyprlock.
 
   services.dunst = {
     enable = true;

@@ -305,6 +305,12 @@ in {
     xwayland.enable = true;
     withUWSM = true;
   };
+
+  # hyprlock authenticates against the PAM service named "hyprlock" (its own default). If
+  # /etc/pam.d/hyprlock is missing it silently falls back to /etc/pam.d/su. The empty attrset
+  # makes nixpkgs generate the complete default stack (auth/account/password/session, pam_unix,
+  # no pam_faillock) — the same shape as the generated /etc/pam.d/swaylock.
+  security.pam.services.hyprlock = { };
   security.polkit.enable = true;
 
   # games

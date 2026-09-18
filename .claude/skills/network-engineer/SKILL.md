@@ -450,6 +450,94 @@ mikrotik-connect r '/interface list member remove [find comment="wg-remote tunne
   `back-to-home-vpn` — currently `revoked-and-disabled`) — WireGuard-based, configured from
   the MikroTik mobile app, no manual peers.
 
+## NTP / time sync (built 2026-09-18)
+
+All MikroTiks run Eastern time and sync from **public anycast NTP by literal IP** (no DNS
+dependency). The iDRAC syncs from the router *and* those same public servers. **No firewall
+rule was needed** — the input chain's `drop all not coming from LAN` already covers the LAN,
+and the Verizon DMZ forwards all inbound, so NTP is never WAN-exposed.
+
+| Device | Time source | Path |
+|---|---|---|
+| `r` (router) | `216.239.35.12`, `162.159.200.1` | direct (has WAN) |
+| `c` (core, .5.4) | same two IPs | via its **existing default route** |
+| `u` (.5.3), `o` (.5.2), `uc` (.5.5) | same two IPs | via two **/32 host routes** (below) |
+| iDRAC (.5.254) | `192.168.5.1`, then the two public IPs | Redfish-managed |
+
+Applied to all four switches:
+
+```
+/system clock set time-zone-name=America/New_York time-zone-autodetect=no
+/system ntp client set enabled=yes servers=216.239.35.12,162.159.200.1
+```
+
+`u`, `o` and `uc` have **no default route** (they're L2 switches; adding one would be a bigger
+change than the problem warrants), and they have no DNS servers. They therefore carry two
+`/32` host routes so they can reach *only* the time servers — nothing else gains a path:
+
+```
+/ip route add dst-address=216.239.35.12/32 gateway=192.168.5.1 comment="NTP Google"
+/ip route add dst-address=162.159.200.1/32 gateway=192.168.5.1 comment="NTP Cloudflare"
+```
+
+Server choice is measured, not guessed: `216.239.35.12` (Google) answers 12/12 and is what every
+device actually locked to; `162.159.200.1` (Cloudflare) is flaky on this WAN (2/11 in one
+sample, 6/8 in another). **Never use `132.163.96.3` (time.nist.gov)** — 3/8.
+
+### ⚠ The RouterOS NTP server cannot serve RouterOS clients (LI=3)
+
+`/system ntp server` is enabled on the router, but **do not point RouterOS devices at it.** It
+advertises **LI=3 ("clock unsynchronized") in every reply, unconditionally** — even with
+`use-local-clock=yes` and a demonstrably synchronized upstream. Byte-level decode of its replies
+shows everything else correct (Mode 4, right stratum, valid refid, correct timestamps, correctly
+echoed originate timestamp); **LI is the only difference from a working server.** RouterOS's own
+NTP client discards LI=3 and sits at `status: waiting` **forever**, while the identical client
+syncs from Google in ~30 s.
+
+Isolated proof: with `o`'s clock set to within 2 s of true UTC it *still* never synced from the
+router — killing the "the clock is too far off to step" theory — and then synced from Google in
+under 30 s with no other change. The lesson generalizes: **RouterOS NTP server → RouterOS NTP
+client does not work.** Use public NTP (or a real NTP daemon elsewhere) for RouterOS clients.
+
+Non-RouterOS clients are unaffected: the iDRAC polls the router happily (12/12 replies) and was
+corrected by whichever source it accepted, so the router's NTP server stays enabled for that.
+
+### iDRAC (Dell PowerEdge R740, iDRAC9 `7.00.00.181`)
+
+Time/NTP lives in Redfish attributes, not a CLI. `PATCH`
+`/redfish/v1/Managers/iDRAC.Embedded.1/Attributes` with:
+
+```
+Time.1.Timezone            = EST5EDT          (was CST6CDT)
+NTPConfigGroup.1.NTPEnable = Enabled          (was Disabled)
+NTPConfigGroup.1.NTP1      = 192.168.5.1
+NTPConfigGroup.1.NTP2      = 216.239.35.12
+NTPConfigGroup.1.NTP3      = 162.159.200.1
+```
+
+One PATCH is enough; it takes effect in well under a minute with **no host reboot and no iDRAC
+reset**. Value quirks: the attribute registry enumerates `NTPEnable` as `0`/`1` while the
+resource renders `Disabled`/`Enabled` — `"Enabled"` is accepted. `Time.1.Timezone` has **no enum
+in the registry at all**; the POSIX form works (`EST5EDT`). Verify with
+`GET /redfish/v1/Managers/iDRAC.Embedded.1` → `DateTime` should track UTC and
+`DateTimeLocalOffset` should be `-04:00`.
+
+The iDRAC root password is **deliberately not stored in this repo** — prompt for it at run time,
+and never pass it as a command-line argument (it lands in shell history and `ps`).
+
+### Verify
+
+```
+for a in r c u o uc; do mikrotik-connect $a '/system clock print' | grep -E "date:|time:"; done
+for a in c u o uc; do mikrotik-connect $a '/system ntp client print' | grep -E "status|synced-server"; done
+date -u +"%Y-%m-%d %H:%M UTC"     # every device must agree with this within ~2s
+```
+
+Expect `status: synchronized` on all four switches, `gmt-offset: -04:00`, `dst-active: yes`.
+**A switch reboot leaves the clock wrong until NTP re-syncs** (no reliable free-running clock) —
+re-check `status` after any power loss rather than treating it as a new fault. The `/32` routes
+are in each device's export, so restoring from `network-configs/` restores time sync too.
+
 ## Subnet Layout
 
 ```
@@ -492,7 +580,7 @@ mikrotik-connect r '/ip dhcp-server lease make-static [find host-name=Side]'
 | big | 192.168.5.68 (DHCP) | BC:24:11:19:22:F9 (Dell) | NixOS VM on bigp | k3s worker, tailscale node `big`. Shares bigp's physical port. |
 
 - **bigp and big share one physical link** (big = VM bridged onto bigp's NIC → upstairs switch sfp-sfpplus2). Different SSH host keys is expected (VM ≠ hypervisor); don't read it as two machines.
-- Likely iDRAC: 192.168.5.254 (`idrac-6V3QK93`, 2C:EA:7F:7B:12:75) — Dell OUI matches bigp; confirm association.
+- **iDRAC (confirmed 2026-09-18):** Dell **PowerEdge R740** BMC at `192.168.5.254` — iDRAC9 fw `7.00.00.181`, Redfish 1.17.0, MAC `2C:EA:7F:7B:12:75` (Dell OUI, same block as bigp), static `/24` with gateway `192.168.5.1`. This is the R740's own BMC, not another host's iDRAC. Time/NTP is managed over Redfish — see **NTP / time sync**.
 - PVE API (`/api2/json/*`) needs a ticket; 8006 cert is self-signed (`curl -k`).
 
 ## UniFi (APs + Controller)

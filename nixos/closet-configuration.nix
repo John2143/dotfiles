@@ -273,8 +273,18 @@ data:
       #host all all 127.0.0.1/32 trust
       #host all all 192.168.1.1/24 trust
 
-      # password login
-      host all all 0.0.0.0/0 scram-sha-256
+      # password login: the WireGuard tunnel (10.99.0.0/24), the LAN, and loopback
+      # only. The public WAN forward for 5432 is gone from the router, so nothing
+      # routes here from the internet any more.
+      # Deliberately absent: the cluster pod CIDR 10.42.0.0/16. Nothing in the
+      # cluster connects to this database (the DO side comes in over the tunnel and
+      # is masqueraded to 10.99.0.2; home pods are masqueraded to their node IPs,
+      # which the LAN line already covers). Add it back if a pod ever connects
+      # directly.
+      host all all 10.99.0.0/24 scram-sha-256
+      host all all 192.168.5.0/24 scram-sha-256
+      host all all 127.0.0.1/32 scram-sha-256
+      host all all ::1/128 scram-sha-256
     '';
   };
 
