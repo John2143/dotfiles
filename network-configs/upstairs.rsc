@@ -1,4 +1,4 @@
-# 2025-10-06 00:21:09 by RouterOS 7.19.6
+# 2026-01-09 15:18:18 by RouterOS 7.19.6
 # software id = KNIM-QKB7
 #
 # model = CRS310-8G+2S+
@@ -23,3 +23,11 @@ add address=192.168.5.3/24 comment=defconf interface=bridge network=\
 set [ find default=yes ] html-directory=hotspot
 /system identity
 set name=upstairs-switch
+/tool graphing interface
+add allow-address=192.168.5.0/24 interface=ether1 store-on-disk=no
+add allow-address=192.168.5.0/24 interface=ether4 store-on-disk=no
+add allow-address=192.168.5.0/24 interface=ether6 store-on-disk=no
+add allow-address=192.168.5.0/24 interface=ether8 store-on-disk=no
+add allow-address=192.168.5.0/24 interface=sfp-sfpplus1 store-on-disk=no
+/tool graphing resource
+add allow-address=192.168.5.0/24 store-on-disk=no

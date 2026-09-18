@@ -1,4 +1,4 @@
-# 2025-11-08 02:09:45 by RouterOS 7.19.6
+# 2026-02-11 11:42:15 by RouterOS 7.19.6
 # software id = UL5S-M34T
 #
 # model = CRS310-8G+2S+
@@ -656,6 +656,13 @@ set allocate-udp-ports-from=2000 allowed-addresses4="" allowed-addresses6="" \
 set from=<> port=25 server=0.0.0.0 tls=no user="" vrf=main
 /tool graphing
 set page-refresh=300 store-every=5min
+/tool graphing interface
+add allow-address=192.168.5.0/24 disabled=no interface=sfp-sfpplus1 \
+    store-on-disk=no
+add allow-address=192.168.5.0/24 disabled=no interface=sfp-sfpplus2 \
+    store-on-disk=no
+/tool graphing resource
+add allow-address=192.168.5.0/24 disabled=no store-on-disk=no
 /tool mac-server
 set allowed-interface-list=all
 /tool mac-server mac-winbox

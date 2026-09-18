@@ -1,4 +1,4 @@
-# 2026-02-02 01:53:42 by RouterOS 7.20.8
+# 2026-05-07 19:03:34 by RouterOS 7.20.8
 # software id = BFGZ-NVN3
 #
 # model = CRS305-1G-4S+
@@ -535,6 +535,19 @@ set allocate-udp-ports-from=2000 allowed-addresses4="" allowed-addresses6="" \
 set from=<> port=25 server=0.0.0.0 tls=no user="" vrf=main
 /tool graphing
 set page-refresh=300 store-every=5min
+/tool graphing interface
+add allow-address=192.168.5.0/24 disabled=no interface=ether1 store-on-disk=\
+    no
+add allow-address=192.168.5.0/24 disabled=no interface=sfp-sfpplus1 \
+    store-on-disk=no
+add allow-address=192.168.5.0/24 disabled=no interface=sfp-sfpplus2 \
+    store-on-disk=no
+add allow-address=192.168.5.0/24 disabled=no interface=sfp-sfpplus3 \
+    store-on-disk=no
+add allow-address=192.168.5.0/24 disabled=no interface=sfp-sfpplus4 \
+    store-on-disk=no
+/tool graphing resource
+add allow-address=192.168.5.0/24 disabled=no store-on-disk=no
 /tool mac-server
 set allowed-interface-list=all
 /tool mac-server mac-winbox

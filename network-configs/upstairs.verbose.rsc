@@ -1,4 +1,4 @@
-# 2025-10-06 00:21:10 by RouterOS 7.19.6
+# 2026-01-09 15:18:20 by RouterOS 7.19.6
 # software id = KNIM-QKB7
 #
 # model = CRS310-8G+2S+
@@ -656,6 +656,19 @@ set allocate-udp-ports-from=2000 allowed-addresses4="" allowed-addresses6="" \
 set from=<> port=25 server=0.0.0.0 tls=no user="" vrf=main
 /tool graphing
 set page-refresh=300 store-every=5min
+/tool graphing interface
+add allow-address=192.168.5.0/24 disabled=no interface=ether1 store-on-disk=\
+    no
+add allow-address=192.168.5.0/24 disabled=no interface=ether4 store-on-disk=\
+    no
+add allow-address=192.168.5.0/24 disabled=no interface=ether6 store-on-disk=\
+    no
+add allow-address=192.168.5.0/24 disabled=no interface=ether8 store-on-disk=\
+    no
+add allow-address=192.168.5.0/24 disabled=no interface=sfp-sfpplus1 \
+    store-on-disk=no
+/tool graphing resource
+add allow-address=192.168.5.0/24 disabled=no store-on-disk=no
 /tool mac-server
 set allowed-interface-list=all
 /tool mac-server mac-winbox

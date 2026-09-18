@@ -1,4 +1,4 @@
-# 2025-11-08 02:09:44 by RouterOS 7.19.6
+# 2026-02-11 11:42:13 by RouterOS 7.19.6
 # software id = UL5S-M34T
 #
 # model = CRS310-8G+2S+
@@ -25,3 +25,8 @@ set allow-remote-requests=yes servers=1.1.1.1
 set [ find default=yes ] html-directory=hotspot
 /system identity
 set name=office-switch
+/tool graphing interface
+add allow-address=192.168.5.0/24 interface=sfp-sfpplus1 store-on-disk=no
+add allow-address=192.168.5.0/24 interface=sfp-sfpplus2 store-on-disk=no
+/tool graphing resource
+add allow-address=192.168.5.0/24 store-on-disk=no
