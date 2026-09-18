@@ -169,7 +169,7 @@
 
   # ── deSEC DDNS: update john2143.com every 30 minutes ──
   systemd.services.desec-ddns-john2143-com = {
-    description = "Update deSEC DNS A record for john2143.com";
+    description = "Update deSEC DNS A records for john2143.com and its wildcard";
     after = ["network-online.target"];
     wants = ["network-online.target"];
     path = [pkgs.curl pkgs.dnsutils];
@@ -185,6 +185,26 @@
         echo "ERROR: Could not determine public IP"
         exit 1
       fi
+      # Wildcard A: the wildcard is no longer a CNAME that follows the apex, so
+      # nothing else keeps the subdomains pointing at the home IP. Read it through
+      # the API rather than dig, because a CNAME chain to the apex resolves to the
+      # same address and would look indistinguishable from a correct A record.
+      # This runs before the apex block, whose early exit for an unchanged IP
+      # would otherwise skip it.
+      WILD_A=$(curl -sf -H "Authorization: Token $TOKEN" -H "Content-Type: application/json" \
+        "$API/*/A/" 2>/dev/null || echo "")
+      case "$WILD_A" in
+        *"$IP"*)
+          echo "OK: *.john2143.com already points to $IP" ;;
+        *)
+          curl -sf -X PUT \
+            -H "Authorization: Token $TOKEN" \
+            -H "Content-Type: application/json" \
+            "$API/*/A/" \
+            -d "{\"records\":[\"$IP\"],\"ttl\":3600}"
+          echo "OK: *.john2143.com -> $IP" ;;
+      esac
+
       CURRENT_IP=$(dig +short john2143.com @1.1.1.1 +noall +answer || dig +short john2143.com @1.0.0.1 +noall +answer || dig +short john2143.com @8.8.8.8)
       if [ "$CURRENT_IP" = "$IP" ]; then
         echo "OK: john2143.com already points to $IP, no update needed"
