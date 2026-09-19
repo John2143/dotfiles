@@ -288,6 +288,9 @@
           {
             services.observability-agent.enable = true;
           }
+          {
+            services.tailscale.extraUpFlags = ["--hostname=mullvad-us-vpin-deccam"];
+          }
         ];
       })
       // (mkHost {
