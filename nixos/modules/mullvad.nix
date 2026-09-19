@@ -626,7 +626,7 @@ in {
 
     # SOCKS5 proxy that egresses through this node's Mullvad tunnel, so a
     # client can route its browser via a specific geo exit by pointing its
-    # proxy at <hostname>.ts.2143.me:1080 (vpin.ts.2143.me:1080 = US exit).
+    # proxy at <hostname>.ts.2143.me:1080 (mullvad-us-vpin-deccam.ts.2143.me:1080 = US exit).
     # Bound to the tailscale0 address only: LAN and k8s pods cannot reach it
     # (enforced twice — by the firewall's trustedInterfaces and by binding to
     # the 100.64.0.x tailnet IP it is closed off from every other interface).

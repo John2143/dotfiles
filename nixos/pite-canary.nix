@@ -75,7 +75,7 @@
               "localhost:9100"
               "192.168.5.108:9100" # github runner VM (github-nixos)
               "100.64.0.25:9100" # secu (tailscale; reimaged 2026-08-12)
-              "100.64.0.7:9100" # vpin (tailscale, us-mullvad-vpin)
+              "100.64.0.7:9100" # vpin (tailscale, mullvad-us-vpin-deccam)
             ];
           }
         ];
