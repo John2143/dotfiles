@@ -6,6 +6,7 @@
 #   4. Rebuild: sudo nixos-rebuild switch --flake .#big
 {
   config,
+  pkgs,
   ...
 }: {
   imports = [
@@ -32,6 +33,12 @@
   };
   hardware.nvidia-container-toolkit.enable = true;
   environment.etc."cdi/nvidia-container-toolkit.json".source = "/run/cdi/nvidia-container-toolkit.json";
+  # Stable, GC-rooted path to the container toolkit's CDI hook. The k8s device
+  # plugin bakes an absolute hook path into its own CDI spec; a raw
+  # /nix/store/<hash> path goes stale as soon as the toolkit is updated and the
+  # old path is collected (that is what broke frigate). Interpolating the
+  # derivation here also makes it a GC root.
+  environment.etc."nvidia-toolkit".source = "${pkgs.nvidia-container-toolkit.tools}";
   # ── kube GPU device plugin driver root ────────────────────────────
   # The NVIDIA device plugin (k8s) mounts /driver-root into its pod and
   # generates CDI specs referencing /usr/lib64 paths (nvcdi resolves to
