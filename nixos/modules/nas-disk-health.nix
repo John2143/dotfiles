@@ -28,12 +28,25 @@ let
       problems=1
     fi
 
-    for dev in /dev/disk/by-id/ata-*; do
+    # Enumerate across all local transports, not just ata-* — NVMe devices are
+    # nvme-*, and disks behind an HBA expose only wwn-*/scsi-*. Order matters:
+    # ata-*/nvme-* win over the duplicate wwn-*/scsi-* links for the same device,
+    # and the resolved-device check drops the duplicates. Existing ata-* state
+    # files keep their names, so reallocated-sector history is preserved.
+    declare -A seen
+    for dev in /dev/disk/by-id/ata-* /dev/disk/by-id/nvme-* \
+               /dev/disk/by-id/scsi-* /dev/disk/by-id/wwn-*; do
       case "$dev" in
         *-part*) continue ;; # partition symlinks would double-scan the same disk
       esac
-      name=$(basename "$dev")
+      real=$(readlink -f "$dev")
+      [ -n "''${seen[$real]:-}" ] && continue
       smart=$(smartctl -a "$dev" 2>/dev/null)
+      # Skip devices with no SMART (Longhorn iSCSI LUNs, virtual disks) so an
+      # absent attribute can never be read as a healthy disk.
+      echo "$smart" | grep -qi "SMART support is:.*\(Available\|Enabled\)" || continue
+      seen[$real]=1
+      name=$(basename "$dev")
 
       if ! echo "$smart" | grep -qi "PASSED"; then
         echo "DISK-HEALTH-ALERT: $name SMART health not PASSED" >&2

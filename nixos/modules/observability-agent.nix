@@ -40,11 +40,28 @@ in
         ExecStart = pkgs.writeShellScript "smartctl-exporter-start" ''
           set -o errexit
           shopt -s nullglob
+          # Enumerate whole-disk by-id links across ALL local transports, not just
+          # ata-*. Hosts whose disks sit behind an HBA expose only wwn-*/scsi-*
+          # (big has zero ata-* links, which left the exporter auto-detecting and
+          # answering HTTP 500), and NVMe is always nvme-* — nas's special vdev
+          # lives there and was never health-checked at all.
+          # Patterns are tried in this order so ata-*/nvme-* win over the
+          # duplicate wwn-*/scsi-* links for the same device; the resolved-device
+          # check drops the duplicates.
+          # Devices without SMART (Longhorn iSCSI LUNs, virtual disks) are skipped
+          # rather than handed to the exporter, which would fail the whole scrape.
+          declare -A seen
           devices=()
-          for dev in /dev/disk/by-id/ata-*; do
+          for dev in /dev/disk/by-id/ata-* /dev/disk/by-id/nvme-* \
+                     /dev/disk/by-id/scsi-* /dev/disk/by-id/wwn-*; do
             case "$dev" in
               *-part*) continue ;;
             esac
+            real=$(readlink -f "$dev")
+            [ -n "''${seen[$real]:-}" ] && continue
+            smartctl -i "$dev" 2>/dev/null \
+              | grep -q 'SMART support is:.*\(Available\|Enabled\)' || continue
+            seen[$real]=1
             devices+=(--smartctl.device "$dev")
           done
           exec ${pkgs.prometheus-smartctl-exporter}/bin/smartctl_exporter \
