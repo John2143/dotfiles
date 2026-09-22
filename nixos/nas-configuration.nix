@@ -452,10 +452,35 @@ nixpkgs.overlays = [
     database.enable = true;
     redis.enable = true;
 
-    # Public serving of /share/* is handled by the k8s `immich-public-proxy`
-    # workload fronting images.2143.me. This setting only controls the URL
-    # Immich embeds in generated share links (and a few other UI-copied URLs).
-    settings.server.externalDomain = "https://images.2143.me";
+    # Setting `settings` makes NixOS write /run/immich/config.json and export
+    # IMMICH_CONFIG_FILE. Immich then REFUSES every admin-UI config write
+    # ("Cannot update configuration while IMMICH_CONFIG_FILE is in use"), so
+    # everything here is authoritative and the UI is read-only for config.
+    settings = {
+      # Public serving of /share/* is handled by the k8s `immich-public-proxy`
+      # workload fronting images.2143.me. This setting only controls the URL
+      # Immich embeds in generated share links (and a few other UI-copied URLs).
+      server.externalDomain = "https://images.2143.me";
+
+      # Pocket ID. clientId is a public OIDC identifier (headscale's is likewise
+      # committed). The client secret is read from the agenix file below and
+      # never enters the Nix store or this repo.
+      oauth = {
+        enabled = true;
+        issuerUrl = "https://au.2143.me";
+        clientId = "fc5eb5a2-013a-4c88-978f-fe2402839411";
+        clientSecret._secret = config.age.secrets.immich-oidc-client-secret.path;
+        scope = "openid email profile";
+        signingAlgorithm = "RS256";
+        tokenEndpointAuthMethod = "client_secret_post";
+        autoRegister = false;
+        autoLaunch = false;
+        buttonText = "Sign in with Pocket ID";
+      };
+
+      # Stays true until every account carries an oauthId. Phase 5 flips it.
+      passwordLogin.enabled = true;
+    };
   };
 
   # ================
@@ -572,6 +597,13 @@ nixpkgs.overlays = [
     mode = "0400";
     owner = "atticd";
     group = "atticd";
+  };
+
+  age.secrets.immich-oidc-client-secret = {
+    file = ../secrets/immich-oidc-client-secret.age;
+    mode = "0400";
+    owner = "root";
+    group = "root";
   };
 
   # Persistent user for ZFS dataset ownership.

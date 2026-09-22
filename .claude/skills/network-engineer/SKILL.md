@@ -755,6 +755,83 @@ Pod network: `10.42.0.0/16` (IPv4) + `fd42:42:42::/56` (IPv6) flannel VXLAN. Key
 
 Query live: `ssh closet 'kubectl get nodes,pods,svc -A'`
 
+## Traffic Flow & Access Logs
+
+For "who is talking to what" questions the source of truth is **Traefik's access log**, shipped to
+Loki by Alloy. **`kubectl logs` is useless for this** — the access log rotates within seconds
+(`--tail=20000` returned only 18 s of history when measured 2026-09-21), so it cannot answer "what
+hit this service 20 minutes ago".
+
+**Query Loki directly over the LAN. No port-forward needed.** The Service is named `loki-push-lb`,
+but its selector is actually the Loki **gateway**, so it answers the full query API:
+
+```
+curl -sS -G 'http://192.168.6.24:3100/loki/api/v1/query_range' \
+  --data-urlencode 'query={namespace="kube-system"} |= "seafile.john2143.com"' \
+  --data-urlencode "start=$(date -u -d '30 minutes ago' +%Y-%m-%dT%H:%M:%SZ)" \
+  --data-urlencode "end=$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+  --data-urlencode 'limit=200'
+```
+
+`loki-push-lb` → `192.168.6.24:3100` (v6 `fd00:6::24`), LAN-only, no dst-nat. That snippet is
+**bash** — the interactive shell is fish, so wrap it in `bash -lc '…'`. The interactive equivalent
+is Grafana Explore at `https://grafana.john2143.com` — pick the **Loki** datasource (uid `loki`). A
+log line's `TraceId` correlates with Tempo, which is wired in as a linked datasource.
+
+### Traffic-flow queries
+
+Start from the base query above and narrow it. The whole log line is one JSON object, so you can
+either match a substring or parse it with the `| json` stage — the parser is cleaner and lets you
+compare numerically:
+
+```logql
+{namespace="kube-system"} |= "seafile.john2143.com"                              # one host
+{namespace="kube-system"} |= "/thumbnail/"                                       # one path prefix
+{namespace="kube-system"} |= "seafile.john2143.com" | json | DownstreamStatus = 429
+{namespace="kube-system"} | json | DownstreamStatus >= 500                       # backend errors
+{namespace="kube-system"} | json | ClientHost = `108.28.68.83`                   # one client
+```
+
+`DownstreamStatus` is a JSON **number** — compare it unquoted (`= 429`). `ClientHost` is a string —
+use backticks or double quotes. Keep queries in a fenced block like the above: a `|` inside a
+markdown table cell must be escaped as `\|`, and the escaped-quote substring form
+(`|= "\"DownstreamStatus\":429"`) is easy to mangle into something that silently matches nothing.
+
+Then aggregate client-side. Counting by `ClientHost` and `DownstreamStatus` over the returned rows is
+what turned a vague "photo browsing is broken" into a precise diagnosis on 2026-09-21 (3 client IPs,
+2927 rejections, every one on `GET /thumbnail/…`).
+
+### Useful access-log fields
+
+| field | meaning |
+|---|---|
+| `ClientHost` | client IP — see the NAT caveat below |
+| `DownstreamStatus` | status returned to the client — count this one |
+| `OriginStatus` | status from the backend; differs when a middleware rewrote the answer |
+| `RequestPath`, `RequestMethod`, `RequestHost` | what was asked for |
+| `Duration` | nanoseconds (seconds ×1e9) |
+| `RouterName`, `ServiceName` | Traefik router that matched; embeds `httproute-<ns>-<name>-gw-<gateway>…`, mapping the line back to the exact HTTPRoute |
+| `StartUTC` | request start (UTC) |
+| `RequestCount` | **cumulative process counter, not a per-request count** — never sum it |
+
+### Why a client IP may look wrong
+
+`ClientHost` is the **real client IP for remote clients** — a phone on a VPN appears under its own
+address, and each such client gets its own rate-limit bucket. **LAN clients are the exception:**
+hairpin NAT presents every device at home to Traefik as the WAN IP `108.56.153.222`, so they share
+one bucket. That is exactly why `108.56.153.222` is listed explicitly in the bouncer's
+`clientTrustedIps` — do not read "all my devices share one public IP" as a fault.
+
+### Rate-limit rejections are `429`, not `403`
+
+Traefik's `rateLimit` and `inFlightReq` middlewares **both answer `429`**, and the log cannot tell you
+which one rejected a request — check the route's middleware chain
+(`ssh closet 'kubectl get httproute <name> -n <ns> -o yaml'`; name the namespace explicitly, per
+triage rule 11). CrowdSec bans appear as `403`; a `429` is never CrowdSec.
+
+Loki's `max_entries_limit_per_query` is **5000** — narrow the window or paginate instead of raising
+`limit`.
+
 ## DNS
 
 | Role | Server | Zone |

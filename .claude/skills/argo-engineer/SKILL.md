@@ -386,6 +386,58 @@ Alloy (`observability` ns, DaemonSet, clustered) is the single cluster telemetry
 - **Traefik tracing** is configured via the `traefik` HelmChartConfig in `dotfiles/nixos/closet-configuration.nix` (`tracing.otlp.grpc.endpoint: alloy.observability.svc:4317`); it only takes effect on a closet `nixos-rebuild switch` (user-owned).
 - Quick health check: `curl -s 'http://192.168.6.23:8080/prometheus/api/v1/query?query=count%20by%20(job)(up)'` → jobs `kubelet` (6), `cadvisor` (6), `kube-state-metrics`, `traefik`, `temporal` (4), `keda`, `observability` (7).
 
+### Querying logs when you need traffic flow (Loki)
+
+Alloy ships every container's stdout to Loki, and **Traefik's access log is the source of truth for
+"who called what"**. Do not reach for `kubectl logs`: Traefik's access log rotates within seconds
+(`--tail=20000` returned only 18 s of history when measured 2026-09-21), so it cannot answer "what
+hit this route 20 minutes ago". Query Loki instead.
+
+**Query the Loki API directly over the LAN — no port-forward needed.** The Service is named
+`loki-push-lb`, but its selector is actually the Loki **gateway**, so it serves the full query API:
+
+```
+curl -sS -G 'http://192.168.6.24:3100/loki/api/v1/query_range' \
+  --data-urlencode 'query={namespace="kube-system"} |= "seafile.john2143.com"' \
+  --data-urlencode "start=$(date -u -d '30 minutes ago' +%Y-%m-%dT%H:%M:%SZ)" \
+  --data-urlencode "end=$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+  --data-urlencode 'limit=200'
+```
+
+`loki-push-lb` → `192.168.6.24:3100` (and `fd00:6::24`). That snippet is **bash** — the interactive
+shell is fish, so wrap it in `bash -lc '…'`. The interactive equivalent is Grafana Explore at
+`https://grafana.john2143.com` — pick the **Loki** datasource (uid `loki`). A log line's `TraceId`
+correlates with Tempo, which is wired in as a linked datasource.
+
+To narrow to one status or one client, parse the line — `DownstreamStatus` is a JSON number,
+`ClientHost` a string:
+
+```logql
+{namespace="kube-system"} |= "seafile.john2143.com" | json | DownstreamStatus = 429
+{namespace="kube-system"} | json | ClientHost = `108.28.68.83`
+```
+
+Access-log lines are JSON. The fields worth knowing:
+
+| field | meaning |
+|---|---|
+| `ClientHost` | client IP. **Real for remote clients**; LAN clients hairpin through NAT and all appear as the WAN IP `108.56.153.222` |
+| `DownstreamStatus` | status returned to the client — count this one |
+| `OriginStatus` | status from the backend; differs from `DownstreamStatus` when a middleware rewrote the answer |
+| `RequestPath`, `RequestMethod`, `RequestHost` | what was asked for |
+| `Duration` | nanoseconds (seconds ×1e9) |
+| `RouterName`, `ServiceName` | the Traefik router that matched; embeds `httproute-<ns>-<name>-gw-<gateway>…`, so it maps a line back to the exact HTTPRoute |
+| `StartUTC` | request start (UTC) — use this, not the local `time` field |
+| `TraceId` | correlates the request with Tempo |
+| `RequestCount` | **cumulative process counter, not a per-request count** — never sum it |
+
+**Traefik's `rateLimit` and `inFlightReq` middlewares both answer `429`**, so a `429` in the log does
+not say which one rejected the request. Check `kubectl -n default get httproute <name>` for the
+attached middleware chain.
+
+Loki's `max_entries_limit_per_query` is **5000** — narrow the time range or paginate rather than
+raising `limit`.
+
 ## Safety Quick Reference
 
 | Action | Allowed? | Notes |

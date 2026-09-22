@@ -181,4 +181,6 @@ in {
   # line each; secret + non-secret alike — the whole file stays encrypted).
   # Create interactively: cd ~/repos/dotfiles/secrets && EDITOR=vim agenix -e timestone-watcher.env.age -i ~/.ssh/age
   "timestone-watcher.env.age".publicKeys = [steam office];
+
+  "immich-oidc-client-secret.age".publicKeys = [office arch nas];
 }
