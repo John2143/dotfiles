@@ -120,6 +120,18 @@
             . /run/agenix/llm-runtime-keys
             set +a
           fi
+          # Claude Code runs against the Claude Max subscription through the
+          # LiteLLM proxy: the subscription OAuth token occupies Authorization,
+          # so the proxy key travels in x-litellm-api-key (which litellm prefers
+          # over Authorization) and the token is forwarded to Anthropic.
+          if [ -z "$LITELLM_EDITOR_KEY" ]; then
+            echo "claude: LITELLM_EDITOR_KEY missing from /run/agenix/llm-runtime-keys" >&2
+            exit 1
+          fi
+          export ANTHROPIC_BASE_URL="https://llm.2143.me"
+          export ANTHROPIC_CUSTOM_HEADERS="x-litellm-api-key: Bearer $LITELLM_EDITOR_KEY"
+          # An inherited platform key would win over the subscription login.
+          unset ANTHROPIC_API_KEY
           # Ensure claude's state dir exists so --bind succeeds.
           mkdir -p "$HOME/.claude"
           ${claude-unwrapped}/bin/claude "$@"
