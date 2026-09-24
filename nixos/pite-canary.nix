@@ -240,7 +240,18 @@
     # and no ntfy notification is ever delivered for any alert.
     # The unquoted heredoc below lets the shell expand $NTFY_URL instead.
     preStart = ''
-          NTFY_URL=$(cat /run/agenix/ntfy-topic-url 2>/dev/null || echo "https://ntfy.sh/2143-site-outages")
+          # Accept a sourced "KEY=value" secret, or any file containing a URL token.
+          NTFY_URL=$(. "$CREDENTIALS_DIRECTORY/ntfy-topic-url" 2>/dev/null && printf '%s' "''${NTFY_TOPIC_URL:-}")
+          if [ -z "$NTFY_URL" ]; then
+            NTFY_URL=$(${pkgs.gnugrep}/bin/grep -oE 'https://[A-Za-z0-9._~/-]+' "$CREDENTIALS_DIRECTORY/ntfy-topic-url" 2>/dev/null | head -1 || true)
+          fi
+          case "$NTFY_URL" in
+            https://*) : ;;
+            *)
+              echo "alertmanager: could not resolve a ntfy topic URL from the ntfy-topic-url secret" >&2
+              exit 1
+              ;;
+          esac
 
           cat > /run/alertmanager/config.yml <<CONFIGEOF
       global:
@@ -261,6 +272,9 @@
     serviceConfig = {
       # Owned by the DynamicUser; systemd creates it before preStart runs.
       RuntimeDirectory = "alertmanager";
+      # The secret is mode 0400 root:root and this unit is a DynamicUser, so it
+      # cannot read the file itself — systemd copies it in as a credential.
+      LoadCredential = [ "ntfy-topic-url:${config.age.secrets.ntfy-topic-url.path}" ];
       # storage.path must match this unit's StateDirectory (/var/lib/alertmanager).
       # /var/lib/prometheus/alertmanager does not exist — that was the second
       # failure waiting behind the config-write problem.

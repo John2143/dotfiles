@@ -33,7 +33,12 @@ notify() {
     local body="$1"
     [[ $quiet -eq 1 ]] && return 0
     local url
-    url="$(cat /run/agenix/ntfy-topic-url 2>/dev/null || echo 'https://ntfy.sh/2143-site-outages')"
+    url="$(. /run/agenix/ntfy-topic-url 2>/dev/null && printf '%s' "${NTFY_TOPIC_URL:-}")"
+    [[ -n "$url" ]] || url="$(grep -oE 'https://[A-Za-z0-9._~/-]+' /run/agenix/ntfy-topic-url 2>/dev/null | head -1)"
+    if [[ -z "$url" ]]; then
+        echo "WARN: no ntfy topic URL available; skipping drift notification" >&2
+        return 0
+    fi
     curl -sS -m 15 -H "Priority: default" -H "Tags: mikrotik,warning" \
         -H "Title: RouterOS config drift" -d "$body" "$url" >/dev/null 2>&1 \
         || echo "WARN: notification delivery failed" >&2
