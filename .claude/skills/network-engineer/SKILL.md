@@ -293,10 +293,10 @@ The Verizon router does SLAAC on its LAN (192.168.0.0/24), handing out addresses
 from `2600:4040:25fa:e400::/64`. Devices directly on the Verizon LAN (like
 home-pi at 192.168.0.154) get working IPv6 this way.
 
-The MikroTik sits at 192.168.0.2 on this subnet and accepts a SLAAC address plus a
-DHCPv6 prefix delegation for its own LAN. **Verified working 2026-09-17** — 2GWAN holds
-current Verizon-prefix addresses (`2600:4040:25fa:e400:6f4:1cff:fee3:7127/64` plus a second
-`2600:4040:25fc:8d00::/64`), and the bridge advertises ULA `fd00:1::1/64` to the LAN.
+The MikroTik sits at 192.168.0.2 on this subnet. It requests **no** DHCPv6 prefix delegation
+(there is no `/ipv6 dhcp-client`). **Current 2026-09-24** — 2GWAN holds a static
+`2600:4040:25fa:e400:6f4:1cff:fee3:7127/64` plus a dynamic/SLAAC `2600:4040:25fc:8d00::/64`,
+and the bridge advertises only ULA `fd00:1::1/64` to the LAN.
 (The older "stale static `2600:4040:2602::/48`" note is obsolete — re-check live with
 `/ipv6 address print terse` before trusting either.) See the `## IPv6` section.
 
@@ -307,8 +307,8 @@ current Verizon-prefix addresses (`2600:4040:25fa:e400:6f4:1cff:fee3:7127/64` pl
 mikrotik-connect r '/ip firewall nat print terse where chain=dstnat'
 ```
 
-Baseline — **live-verified 2026-09-17** (targets re-measured; several had drifted from the
-2026-08-04 snapshot):
+Baseline — **live-verified 2026-09-24: 15 dst-nat rules** (some rows below cover more than one
+rule; the 51820 and 6767 rows are not MikroTik dst-nat rules):
 
 | WAN Port(s) | Proto | MikroTik → (live target) | Service | Notes |
 |------------|-------|--------------------------|---------|-------|
@@ -317,18 +317,26 @@ Baseline — **live-verified 2026-09-17** (targets re-measured; several had drif
 | 9987 | UDP | `.6.15:9987` | default/ts-voice | Teamspeak voice |
 | 30033 | TCP | `.6.16:30033` | default/ts-files | Teamspeak file transfer |
 | 11753 | TCP | `.6.17:11753` | default/openrct2-game | OpenRCT2 |
-| 30478 | UDP | `.6.18:3478` | default/headscale-stun | Headscale STUN/DERP |
-| 7233 | TCP | `.6.20:7233` | default/temporal-frontend | Temporal gRPC mTLS |
 | 7881 | TCP | `.6.22:7881` | matrix/livekit-server-rtc | LiveKit WebRTC signal |
 | 3478 | TCP+UDP | `.6.14:3478` | steam-lobby/coturn | TURN (live) |
 | 45000-45063 | UDP | `.6.14:45000-45063` | steam-lobby/coturn | TURN relay range (live) |
-| 5349 | TCP | `.6.21:5349` | matrix/coturn — ⚠️ but `.6.21` publishes `3478 + 49152-49215`, **not** 5349 | likely dead |
-| **51820** | **UDP** | **the router itself (`wg-remote`)** | WireGuard remote access | **added 2026-09-17** |
-| 5432 | TCP | `.5.36:5432` | Postgres (NixOS bare-metal) | PostgreSQL |
+| 4143 | TCP | `.5.36` | linkerd multicluster gateway | target is closet, not a `.6.x` LB IP |
+| **51820** | **UDP** | **the router itself (`wg-remote`)** | WireGuard tunnel (DO cluster peer) | **not a dst-nat** — terminated on the router by an input rule; added 2026-09-17 |
 | 18080 | TCP | `.5.76:18080` | Monero P2P (NixOS bare-metal) | Monero |
-| 25565, 32565 | TCP | `.5.175:32565` | default/minecraft-game | Minecraft (k8s) |
 | 34197 | UDP | `.6.28:34197` | default/factorio-game | Factorio |
 | 6767 | Both | Verizon → home-pi:6767 | home-pi Headscale | **lives on the Verizon router, not the MikroTik** |
+
+**Removed 2026-09-24:** `7233/tcp → .6.20` (comment `temporal-grpc mtls (tcp/7233) -> .6.20`). It
+exposed the Temporal frontend to the internet as plaintext, unauthenticated gRPC — the "mtls" label
+was false (the frontend has no TLS). Verified closed from the internet (timeout). LAN clients use
+split-horizon `temporal-grpc.john2143.com → 192.168.6.20` (CoreDNS hosts blob in
+`closet-configuration.nix`); the DO cluster reaches it over the WireGuard tunnel. The traefik
+TLSRoute `temporal-grpc` (passthrough on 443 → frontend:7233) cannot work — the backend is plaintext.
+
+**Also absent from the live list** (present in the 2026-09-17 table): `5432 → .5.36` (Postgres —
+WAN 5432 is now dropped by the input rule `no public postgres; log attempts`; see
+**PostgreSQL (closet)**), `25565, 32565 → .5.175` (Minecraft), `5349 → .6.21`, and
+`30478/udp → .6.18` (headscale-stun).
 
 **Removed 2026-09-17:** `50000-60000 UDP → .6.14` (comment `LiveKit WebRTC media`). It was
 vestigial — its target (steam-lobby/coturn) relays on `45000-45063`, and livekit's LB
@@ -338,10 +346,10 @@ publishes only `50000/UDP` — and it silently shadowed UDP 51820. To restore:
 mikrotik-connect r '/ip firewall nat add chain=dstnat action=dst-nat to-addresses=192.168.6.14 to-ports=50000-60000 protocol=udp in-interface-list=WAN dst-port=50000-60000 comment="LiveKit WebRTC media"'
 ```
 
-**⚠️ Known inbound gaps (observed 2026-09-17, not yet fixed):** `matrix/coturn` relays on
-`49152-49215/UDP` and `matrix/livekit-server-rtc` publishes `50000/UDP`, but **neither range
-has a dst-nat rule** — inbound TURN relay / media for those two services cannot work. The
-`5349` rule targets `.6.21:5349`, a port `matrix/coturn` does not publish.
+**⚠️ Known inbound gaps (observed 2026-09-17, still absent from the 2026-09-24 list):**
+`matrix/coturn` relays on `49152-49215/UDP` and `matrix/livekit-server-rtc` publishes `50000/UDP`,
+but **neither range has a dst-nat rule** — inbound TURN relay / media for those two services cannot
+work.
 
 **CRITICAL — before choosing any new WAN port:** confirm no dstnat rule's `dst-port` range
 covers it. DNAT runs in PREROUTING, *before* the `input` filter chain, so a covering range
@@ -350,28 +358,32 @@ UDP 51820 behind the (since-removed) LiveKit range — external probes were DNAT
 instead of reaching the router.
 
 **No dst-nat (LAN-only):** mimir-lb `.6.23:8080`, loki-push-lb `.6.24:3100`,
-unifi-web `.6.25:8443`, frigate `.6.26`, pihole-dns `.6.27:53`.
+frigate `.6.26`, pihole-dns `.6.27:53`, temporal-frontend `.6.20:7233` (LAN + WireGuard tunnel).
 
 **Note:** The Headscale port 6767 forward lives on the Verizon router (192.168.0.1), not the MikroTik. home-pi (192.168.0.154) sits on the WAN subnet (192.168.0.0/24) directly behind the Verizon router. The MikroTik has a secondary DHCP WAN IP at 192.168.0.152 (not to be confused with home-pi).
-**Migration (2026-08-04):** all k8s dst-nat targets moved from the kube-vip VIP `.10` to MetalLB `.6.x` LB IPs. **Fix (2026-08-03):** the 5432 dst-nat rule was re-pointed from a dead target (`.35`) to closet `.36` — postgres answers on `.36`. Note: RouterOS 7.19 `find`/`where` on port/protocol properties (`dst-port`, `to-ports`, `protocol`) matches nothing — select rules by **rule number from a fresh `print`** (`set <number> ...`), or match on `comment` (`remove [find comment="..."]`), which works fine.
+**Migration (2026-08-04):** all k8s dst-nat targets moved from the kube-vip VIP `.10` to MetalLB `.6.x` LB IPs. **Fix (2026-08-03):** the 5432 dst-nat rule was re-pointed from a dead target (`.35`) to closet `.36` (that rule is gone from the 2026-09-24 list). **Selecting rules — owner policy: no numeric selectors, ever.** Never `set <number>` / `remove <number>` from a `print`. Select by a unique exact comment (`[find comment="..."]`, after `:put [:len [/ip firewall nat find comment="..."]]` prints 1) or by an exact multi-property identity printed immediately before and returning one row. RouterOS 7.19 `find`/`where` on port/protocol properties (`dst-port`, `to-ports`, `protocol`) matches nothing, so those cannot be part of that identity.
 
-## WireGuard (remote access — built 2026-09-17)
+## WireGuard (`wg-remote` — built 2026-09-17, key rotated 2026-09-24)
 
 Native RouterOS WireGuard. **Built into the base `routeros` package since 7.1 — nothing to
 install** (the RB5009 runs exactly one package: `routeros`). Verified working on 7.19.6 /
 arm64: interface listening, inbound path proven end-to-end from external nodes.
 
-> The server side is complete, but it ships with **zero peers** — nothing can connect until a
-> peer is added. Unauthenticated packets are silently discarded, so "no response" is normal.
+> One peer today: `peer1`, the **2143-k8s DigitalOcean cluster**. It carries DO → home Postgres and
+> Temporal, and home → DO MongoDB. Unauthenticated packets are silently discarded, so "no response"
+> is normal.
 
 | Property | Value |
 |----------|-------|
 | Interface | `wg-remote` (`type=wg`, MTU 1420, running) |
 | Listen port | **UDP 51820** |
-| Tunnel subnet | `10.99.0.0/24` — the router is `10.99.0.1` |
-| Server public key | `2HeIlsYngjfFpCctWpzJyfFCC0+npvliQMzaglf8bGw=` |
+| Tunnel subnet | `10.99.0.0/24` — the router is `10.99.0.1` (address plan: **Subnet Layout → 10.99.0.0/24**) |
+| Router public key | `26mSa5AF67ZCYagY8TBwlMLSo1YkQLUKAUjJajBwEgQ=` (rotated 2026-09-24 — see **Key rotation**) |
+| Peer `peer1` | comment `2143-k8s cluster: postgres client + tunnel`, public key `jUMIaOQP8hPqzw3t//WZrpt/WTFkRzkD18LBM27RlEE=`, `allowed-address=10.99.0.2/32,10.244.0.0/16` (10.244.0.0/16 = DO pod CIDR) |
+| Peer endpoint | `endpoint-address="" endpoint-port=0` — **the router never dials**; the DO side initiates (persistent-keepalive 25) |
 | Client endpoint | `john2143.com:51820` (public DNS tracks the DHCP WAN IP) |
-| Firewall | `input accept udp dst-port=51820 in-interface-list=WAN`, placed **before** `drop all not coming from LAN` |
+| Firewall (input) | `input accept udp dst-port=51820 in-interface-list=WAN`, placed **before** `drop all not coming from LAN` |
+| Firewall (forward) | **Tunnel ACL** — default-deny for everything arriving on `wg-remote` except the listed allows |
 | `LAN` list | `wg-remote` is a member — required so tunnel traffic *to the router itself* (DNS, SSH, Winbox) isn't dropped by that same rule |
 | Verizon | **nothing to forward** — the CR1000B DMZ already delivers all inbound to 192.168.0.2 |
 
@@ -391,66 +403,174 @@ arm64: interface listening, inbound path proven end-to-end from external nodes.
   `/system/routerboard/settings` costs throughput; pinning to 1400 MHz helps. RB5009 measures
   ~300-900 Mbps real-world, ~1.1-1.4 Gbps in lab conditions.
 
-### Add a peer
+### The DO peer (2143-k8s)
+
+Defined in the `2143-k8s` repo, `base/wireguard-doks.yaml` (FluxCD; **public repo**):
+
+- Privileged `hostNetwork` pod, Deployment strategy `Recreate`; `wg0` = `10.99.0.2/24`, endpoint
+  `john2143.com:51820`, persistent-keepalive 25.
+- allowed-ips `10.99.0.0/24,192.168.5.0/24,192.168.6.0/24`; routes those three via `wg0`.
+- `iptables -t nat POSTROUTING -o wg0 -j MASQUERADE` → **home sees every DO pod as src
+  `10.99.0.2`**.
+- The private key lives only in the hand-applied Secret `wireguard-doks-key`. The router's public
+  key is pinned on the file's `peer` line — a router key rotation needs a commit there too.
+- DO pod CIDR `10.244.0.0/16`; DO service CIDR `10.245.0.0/16` (not routed over the tunnel).
+
+### Tunnel ACL (router `chain=forward`)
+
+Order matters. **Select these rules by exact comment, NEVER by number.**
+
+| Order | Comment | Rule |
+|---|---|---|
+| 1 | `wg: doks -> postgres` | accept tcp `in-interface=wg-remote` dst `192.168.5.36:5432` |
+| 2 | `wg: doks -> temporal` | accept tcp `in-interface=wg-remote` dst `192.168.6.20:7233` (added 2026-09-24) |
+| 3 | `wg: deny tunnel traffic not allowed above` | drop `in-interface=wg-remote`, `log=yes log-prefix=wg-drop` |
+
+Anything else from the tunnel hits rule 3 and is logged with prefix `wg-drop`. The home → DO
+direction (LAN → `10.99.0.2`) needs no rule — `10.99.0.0/24` is a connected route via `wg-remote`.
+
+Adding an allow (mutating — needs user approval): confirm the anchor matches exactly one rule, then
+insert above it:
 
 ```
-mikrotik-connect r '/interface wireguard peers add interface=wg-remote public-key="<CLIENT_PUBKEY>" allowed-address=10.99.0.2/32 comment="<device>"'
+mikrotik-connect r ':put [:len [/ip firewall filter find comment="wg: deny tunnel traffic not allowed above"]]'   # must print 1
+mikrotik-connect r '/ip firewall filter add chain=forward action=accept protocol=tcp in-interface=wg-remote dst-address=<ip> dst-port=<port> comment="wg: doks -> <service>" place-before=[find comment="wg: deny tunnel traffic not allowed above"]'
 ```
+
+### What rides the tunnel
+
+| Direction | Endpoint | Service | Consumer |
+|---|---|---|---|
+| DO → home | `192.168.5.36:5432` | closet PostgreSQL (NixOS bare metal) | none right now (DO `openfront-pro*` deployments are scaled to 0) |
+| DO → home | `192.168.6.20:7233` | Temporal frontend (plaintext gRPC, no TLS/auth) | DO `john2143-com` (`TEMPORAL_ADDRESS=192.168.6.20:7233`, set 2026-09-24; log shows `Temporal: connected to 192.168.6.20:7233`, workflows start) |
+| home → DO | `10.99.0.2:32040` | DO MongoDB via Service `mongo-tunnel` (ClusterIP, `externalIPs: [10.99.0.2]`, port 32040 → 27017) | home `john2143-com-worker-209` (worker-uri `mongodb://…@10.99.0.2:32040/`, composed by ESO in argo) |
+
+Verified after the 2026-09-24 rotation: Postgres reachable from DO; DO → `192.168.6.11:443` blocked
+(the `wg-drop` counter rose); Temporal connected and an `UploadWorkflow` started; Mongo `hello` over
+the tunnel returns `isWritablePrimary`.
+
+**DO MongoDB is tunnel-only (2026-09-24).** It used to be public at `161.35.58.72:32040`: DOKS opens
+every `type: NodePort` Service's nodePort to `0.0.0.0/0` in its managed cloud firewall.
+`mongo-nodeport` (NodePort) was replaced by `mongo-tunnel` (ClusterIP + externalIP `10.99.0.2`, same
+port 32040). Public 32040 is closed — the firewall rule was removed by DOKS automatically once no
+NodePort requested it. **Never add a NodePort for Mongo again.**
+
+### Add a peer
+
+`10.99.0.2` is taken (DO cluster); the next peer gets **`10.99.0.3`**, then `.4`, … — check the
+address plan in **Subnet Layout → 10.99.0.0/24** first.
+
+```
+mikrotik-connect r '/interface wireguard peers add interface=wg-remote public-key="<CLIENT_PUBKEY>" allowed-address=10.99.0.3/32 comment="<device>"'
+```
+
+The handshake needs no firewall change, but **every forwarded packet from the new peer (LAN or
+internet) hits the tunnel ACL's final drop** — add a matching allow above it first (see
+**Tunnel ACL**). Traffic to the router itself (e.g. DNS on 192.168.5.1) is input-chain and already
+allowed via the `LAN` list.
 
 Client config:
 
 ```ini
 [Interface]
 PrivateKey = <client private key>
-Address    = 10.99.0.2/24
+Address    = 10.99.0.3/24
 DNS        = 192.168.5.1
 
 [Peer]
-PublicKey  = 2HeIlsYngjfFpCctWpzJyfFCC0+npvliQMzaglf8bGw=
+PublicKey  = 26mSa5AF67ZCYagY8TBwlMLSo1YkQLUKAUjJajBwEgQ=
 Endpoint   = john2143.com:51820
 AllowedIPs = 10.99.0.0/24, 192.168.1.0/24, 192.168.5.0/24, 192.168.6.0/24
 PersistentKeepalive = 25
 ```
 
 Use `AllowedIPs = 0.0.0.0/0` for a full-tunnel config — the existing
-`srcnat masquerade out-interface=2GWAN` rule handles internet egress automatically. No NAT is
-needed for LAN access: `10.99.0.0/24` is a connected route via `wg-remote`.
+`srcnat masquerade out-interface=2GWAN` rule handles internet egress once the tunnel ACL allows it.
+No NAT is needed for LAN access: `10.99.0.0/24` is a connected route via `wg-remote`.
 
 ### Verify
 
-```
-# Listening? How many peers? (0 peers = nothing can connect)
-mikrotik-connect r '/interface wireguard print'
-mikrotik-connect r '/interface wireguard peers print'
+**Never run a plain `/interface wireguard print`** — it prints `private-key=`. Use these forms:
 
-# After adding a peer — the ONLY proof a tunnel is live:
-# last-handshake under 2 min, with non-zero rx/tx
-mikrotik-connect r '/interface wireguard peers print detail'
 ```
+# Interface up, and which public key is live? (must be 26mSa5AF…)
+mikrotik-connect r '/interface wireguard print proplist=name,listen-port,public-key,running'
+mikrotik-connect r ':put [/interface wireguard get [find name="wg-remote"] public-key]'
+
+# The ONLY proof a tunnel is live: last-handshake under 2 min, with non-zero rx/tx
+mikrotik-connect r '/interface wireguard peers print proplist=comment,current-endpoint-address,current-endpoint-port,last-handshake,rx,tx'
+
+# DO side
+kubectl --context 2143prod -n default exec deploy/wireguard-doks -- wg show wg0
+```
+
+Because the router never dials `peer1`, **a fresh handshake also proves inbound UDP 51820 reaches
+the router through the Verizon DMZ** — the DO side has to get in on its own.
+
+### Key rotation (as executed 2026-09-24; ~30 s tunnel outage)
+
+The router key was rotated on 2026-09-24 because the previous private key leaked into a session
+transcript. Dead router public keys — distrust any config that still pins one: `lNbjEa…`
+(2026-09-18 → 09-24, the leaked one) and `2HeIlsYng…` (original 2026-09-17 build).
+
+1. Off-router: `wg genkey` → private (never echo it), `wg pubkey` → public
+   (`nix shell nixpkgs#wireguard-tools`).
+2. Put the new public key on the `peer` line of `2143-k8s/base/wireguard-doks.yaml`; commit (don't
+   push yet).
+3. From a script that never prints the value:
+   `/interface wireguard set [find name="wg-remote"] private-key="<new>"`; confirm with the
+   `:put … public-key` form above.
+4. Push 2143-k8s, then `flux --context 2143prod reconcile kustomization prod --with-source`. The
+   `Recreate` rollout brings `wg0` up with the new peer key; handshake within ~10 s.
+5. Verify with the `wg show wg0` and `peers print proplist=…` commands above.
 
 ### Rollback
 
+⚠ `wg-remote` is load-bearing: removing it cuts the DO cluster off from closet Postgres and
+Temporal, and home off from DO MongoDB.
+
 ```
 mikrotik-connect r '/ip firewall filter remove [find comment="wireguard remote access"]'
+mikrotik-connect r '/ip firewall filter remove [find comment="wg: doks -> postgres"]'
+mikrotik-connect r '/ip firewall filter remove [find comment="wg: doks -> temporal"]'
+mikrotik-connect r '/ip firewall filter remove [find comment="wg: deny tunnel traffic not allowed above"]'
 mikrotik-connect r '/interface wireguard remove wg-remote'
 mikrotik-connect r '/interface list member remove [find comment="wg-remote tunnel"]'
 ```
 
 ### Gotchas
 
-- **The peer list IS the access control.** The firewall accepts UDP 51820 unconditionally (the
-  DMZ hands everything inbound to the router), so only configured public keys are accepted.
-  Adding peers requires no firewall change.
+- **Two layers of access control.** The peer list gates the handshake: the firewall accepts UDP
+  51820 unconditionally (the DMZ hands everything inbound to the router), so only configured public
+  keys get in. The **tunnel ACL** gates what an admitted peer may reach — forwarded traffic from
+  `wg-remote` is default-deny.
 - **No IPv6 over the tunnel** until a v6 address is added to `wg-remote`.
 - MTU 1420 default; if large transfers stall while small ones work, lower it (~1392).
-- `/export` **omits** the private key (only `/export show-sensitive` includes it), so the file
-  in `network-configs/` is safe to commit. **`/interface wireguard print detail` DOES print
-  it** — avoid that command in shared transcripts.
-- The private key was displayed once during the 2026-09-17 build. Rotate with
-  `/interface wireguard set wg-remote private-key="<new>"` if that matters.
+- **Private-key exposure.** `/export` **omits** it (peer rows show `private-key=""`; only
+  `/export show-sensitive` includes it), so the file in `network-configs/` is safe to commit. But a
+  **plain `/interface wireguard print` — not only `print detail` — prints `private-key=`**. Use the
+  `proplist=` / `:put … public-key` forms from **Verify**.
+- The RouterOS log records every mutation with its full command text, **but omits `private-key`**
+  — verified with a throwaway interface: the key is absent from `/log` and `/system history`.
+- **Key rotated 2026-09-24** after the previous private key leaked into a session transcript — see
+  **Key rotation**. Rotating again means updating the DO `peer` line in the same change.
 - RouterOS has a built-in turnkey alternative, **Back To Home VPN** (`/ip cloud`,
   `back-to-home-vpn` — currently `revoked-and-disabled`) — WireGuard-based, configured from
   the MikroTik mobile app, no manual peers.
+
+## PostgreSQL (closet 192.168.5.36)
+
+- **The WireGuard tunnel is the only remote path.** Public 5432 is closed: the dst-nat is gone and
+  the router input rule `no public postgres; log attempts` drops WAN 5432 (822+ drops observed —
+  internet scanners).
+- pg_hba narrowing is **committed but not deployed**: dotfiles `nixos/closet-configuration.nix`
+  (commit `6a27db1`) → `local all all trust`; `host all all` for `10.99.0.0/24`, `192.168.5.0/24`,
+  `127.0.0.1/32`, `::1/128` with `scram-sha-256`. closet's current system generation is from
+  2026-09-16 01:08, so the live pg_hba still contains `host all all 0.0.0.0/0 scram-sha-256`. The
+  owner runs the closet rebuild.
+- After it lands: join `pg_stat_ssl` to `pg_stat_activity`; if every tunnel connection shows
+  `ssl=t`, flip `10.99.0.0/24` to `hostssl` (plan recorded in
+  `argo/docs/2026-09-17-network-hardening.md`).
 
 ## NTP / time sync (built 2026-09-18)
 
@@ -548,12 +668,29 @@ are in each device's export, so restoring from `network-configs/` restores time 
 192.168.5.0/24  — bridge (switch LAN, router at .1) — general devices + IoT
 192.168.88.0/24 — bridge (legacy factory-default, router at .254, unused)
 192.168.6.0/24  — MetalLB v4 LB pool (`services` IPAddressPool), BGP /32s, NOT a bridge subnet
-fd00:1::/64     — node ULA (SLAAC on bridge, router .1) — all k3s nodes
+fd00:1::/64     — node ULA (advertised on bridge + stateful DHCPv6 `ula-dhcp`, router ::1) — all k3s nodes
 fd00:6::/64     — MetalLB v6 LB pool (`services` IPAddressPool), BGP /128s, NOT a bridge subnet
-10.99.0.0/24    — wg-remote WireGuard tunnel subnet (router at .1, peers from .2)
+10.99.0.0/24    — wg-remote WireGuard tunnel subnet (router at .1, DO node at .2, next peer .3 — see below)
 ```
 
 Router bridges all subnets. Inter-subnet routing is automatic (no NAT between 1.0/24 and 5.0/24).
+
+### 10.99.0.0/24 — WireGuard tunnel
+
+Lives on router `wg-remote` (details: **WireGuard**). Not a bridge subnet — a connected route via
+`wg-remote`, so LAN → tunnel needs no NAT or extra route.
+
+| Address | Holder |
+|---|---|
+| 10.99.0.1 | router `wg-remote` |
+| 10.99.0.2 | DO cluster node (`wireguard-doks` pod, `wg0`); also the externalIP of DO Service `mongo-tunnel` |
+| 10.99.0.3–.254 | free — next peer gets `.3` |
+
+- DO pod CIDR `10.244.0.0/16` is in `peer1`'s allowed-address, but the DO pod masquerades out
+  `wg0`, so home sees every DO pod as src `10.99.0.2`.
+- DO service CIDR `10.245.0.0/16` is **not** routed over the tunnel.
+- The router also carries an inert, invalid `10.99.0.1/24 interface=*C` address row left from the
+  interface recreation. Leave it alone — there is no safe selector for it.
 
 ### DHCP Allocation (192.168.5.0/24)
 
@@ -589,65 +726,60 @@ mikrotik-connect r '/ip dhcp-server lease make-static [find host-name=Side]'
 
 ### Access Points
 
+All three on firmware 8.7.11.
+
 | Device | IP | Model | MAC | Location | Uplink |
 |--------|-----|-------|-----|----------|--------|
 | U7 Pro XGS | 192.168.5.171 (DHCP) | U7 Pro XGS | 90:41:B2:D6:74:DB | Office | 10GbE (office switch sfp-sfpplus1) |
-| U7 Lite | 192.168.5.173 (DHCP) | U7 Lite | 1C:0B:8B:50:FF:7E | Blue Room | 1GbE (router ether6) |
-| U7-Mesh | 192.168.5.198 (DHCP) | U7-Mesh | 8C:ED:E1:EC:89:CA | — | Wireless mesh |
+| U7 Lite | 192.168.5.173 (DHCP) | U7 Lite | 1C:0B:8B:50:FF:7E | Blue Room | 1GbE (**router ether5**, PoE) |
+| U7-Mesh | 192.168.5.198 (DHCP) | U7-Mesh | 8C:ED:E1:EC:89:CA | — | Wireless mesh to the U7 Lite (~−67 dBm) |
 
-APs normally discover the controller via L2 broadcast (UDP 10001) — but **broadcast discovery does NOT reach this containerized controller** (kube-proxy can only DNAT unicast to the LB IPs; broadcasts are dropped at the nodes). Always use manual `set-inform` to (re)point an AP.
-Device communication uses the `unifi-inform` LoadBalancer service (TCP 8080) on
-the MetalLB IP **192.168.6.10** (BGP-announced).
-**Post-migration (2026-08-04): inform = `192.168.6.10`** — use it for `set-inform`; `.10` is now the MetalLB-announced k3s API VIP (6443 only, no inform LB bound there).
+- U7 Lite port confirmed 2026-09-24 by `/ip neighbor` and the router's bridge host table.
+- **ether5 PoE fault fixed 2026-09-24:** it was `short-circuit` with `LLDP 12.9W request denied :
+  low-voltage` every 30 s; now `powered-on`, ~5 W. ether3 and ether7 still report `short-circuit`
+  with nothing drawing.
 
-To re-point an AP after controller rebuild:
+To (re)point an AP at the controller:
 ```bash
 ssh ubnt@<ap-ip>
-set-inform http://192.168.6.10:8080/inform
+set-inform http://192.168.5.30:8080/inform
 ```
-
 
 ### Controller
 
-UniFi controller runs in k3s (namespace: default), managed via ArgoCD. Currently schedules on node **arch** (preferred nodeAffinity on workload-type; moved 2026-08-04 during the MetalLB INFORM_HOST rollout); historically on big/closet.
-Single deployment with MongoDB as a sidecar container — no separate MongoDB pod.
+**UniFi OS Server 1.0.1** VM on Proxmox (bigp), hostname "2707 McComas", **192.168.5.30**, MAC
+`BC:24:11:23:B8:A5`. Network application 10.4.57. Single local admin, no Ubiquiti SSO.
 
-| Resource | Details |
-|----------|---------|
-| **Pod** | `unifi-*` (1 replica, 2 containers: unifi + mongodb) |
-| **Image** | `lscr.io/linuxserver/unifi-network-application:10.4.57-ls136` |
-| **MongoDB** | Sidecar (`mongo:7.0`), dedicated PVC `unifi-mongodb-data` (5Gi, Longhorn 3 replicas) |
-| **Web UI (LB)** | `unifi-web` → 8443/TCP, **MetalLB `192.168.6.25`** (NodePort 30443 kept) |
-| **Device inform (LB)** | `unifi-inform` → 8080/TCP, **MetalLB `192.168.6.10`** (NodePort kept) |
-| **L2 discovery (LB)** | `unifi-discovery` → 10001/UDP, **MetalLB `192.168.6.12`** (NodePort kept) |
-| **Config PVC** | `unifi-data` (10Gi, Longhorn 3 replicas) |
-| **Version** | 10.4.57 (2026-07-18) |
-| **VM pitfall** | mongodb sidecar crash-looping with exitCode **132 (SIGILL)** = VM CPU type lacks AVX (mongo 7.0 requires it). Fix: set the Proxmox VM CPU type to `host` or `x86-64-v2/v3`. Hit 2026-08-03 on big. |
+**Removed 2026-09-24 — the old in-cluster controller:** argo app `unifi` + `workloads/unifi`
+(Deployment at replicas 0, LB Services unifi-inform `.6.10` / unifi-discovery `.6.12` / unifi-web
+`.6.25`, BackendTLSPolicy `unifi-web-tls`, ConfigMap `unifi-web-ca`) and, by owner decision, PVCs
+`unifi-data` + `unifi-mongodb-data` with their Retain PVs and Longhorn volumes. Longhorn backups of
+both volumes (last 2026-09-15T07:02Z) still exist in the backup target. Freed LB IPs: `.6.10`,
+`.6.12`, `.6.25` and `fd00:6::30`, `::12`, `::25`. Monitoring probes for `.6.10`/`.6.25` were removed
+from `nixos/pite-canary.nix` and `nixos/status-page/generate.py`.
 
 ### Accessing the UniFi Controller
 
-**Web UI (primary method):**
-```
-https://192.168.6.25:8443
-```
-Any k3s node IP on port 30443 (NodePort) also works. Certificate is self-signed. Admin account is local (no Ubiquiti SSO).
+**Web UI:** `https://192.168.5.30:11443/network/default` (self-signed cert), or
+`https://unifi.ts.2143.me` — argo app `unifi-os`: selectorless Service `unifi-os` + EndpointSlice →
+`192.168.5.30:11443`, BackendTLSPolicy `unifi-os-tls` pins the console's self-signed cert via
+ConfigMap `unifi-os-ca`, HTTPRoute `unifi-os-ts-2143` with the `lan-only` middleware. Router static
+DNS `unifi.ts.2143.me → 192.168.6.11` and the headscale extra_record are correct (traefik) — keep
+them.
 
-Health check (no auth required):
-```
-curl -sk https://192.168.6.25:8443/status
-# {"meta":{"rc":"ok","up":true,"server_version":"10.4.57","uuid":"...","data":[]}
-```
-
-**API (programmatic access):**
-Login endpoint is **`/api/login`** (NOT `/api/auth/login` — that's for UniFi OS consoles). Credentials: `/run/agenix/unifi-credentials` (updated post-reset).
-If `/api/login` returns **HTTP 400**, the controller pod may be crash-looping (see VM pitfall) — check `ssh closet 'kubectl get pods -n default | grep unifi'` before debugging the script.
-
-**Via kubectl:**
-```
-ssh closet.local 'kubectl get pods,svc -n default | grep unifi'
-ssh closet.local 'kubectl logs deploy/unifi -n default -c unifi --tail=100'
-ssh closet.local 'kubectl exec deploy/unifi -n default -c unifi -- <command>'
-```
+**API (programmatic access)** — this is a UniFi OS console:
+- Login: `POST /api/auth/login` with `{"username","password","remember":true}` → cookie `TOKEN`.
+  Writes also need the `X-CSRF-Token` response header. The old standalone-controller login path
+  (no `/auth`) is wrong for this console.
+- Network API under `/proxy/network/api/s/default/`: `stat/device`, `stat/sta`, `stat/health`,
+  `stat/rogueap`, `rest/wlanconf`, `rest/networkconf`, `stat/report/hourly.ap`.
+- **No event history via API:** legacy `stat/event` returns 404 on 10.4.57, and
+  `/proxy/network/v2/api/site/default/events` 404s too.
+- **`get/setting` returns cleartext device credentials** (`x_ssh_password`, `x_api_token`,
+  `x_mesh_psk`) — never dump it in a transcript.
+- Credentials: `/run/agenix/unifi-credentials` (`UNIFI_USERNAME` / `UNIFI_PASSWORD`). The secret may
+  predate the migration — the comment in `nixos/shared-cli-configuration.nix` still documents the old
+  k8s controller URL. If login fails, ask the owner; do not guess.
 
 
 
@@ -697,21 +829,32 @@ mikrotik-connect uc '/interface print terse where running'
 mikrotik-connect r /export
 ```
 
-## IPv6 (NAT66 + ULA — Working 2026-05-29)
-NAT66 with ULA (`fd00:1::/64`) masquerades LAN IPv6 through 2GWAN. Fix applied 2026-05-27.
+## IPv6 (ULA + stateful DHCPv6 + NAT66 — current 2026-09-24)
+
+- **No `/ipv6 dhcp-client`** — the router requests no prefix delegation.
+- **2GWAN:** static `2600:4040:25fa:e400:6f4:1cff:fee3:7127/64` plus a dynamic/SLAAC
+  `2600:4040:25fc:8d00::/64`.
+- **LAN:** only ULA `fd00:1::1/64` is advertised on the bridge, with a stateful DHCPv6 server
+  `ula-dhcp` (pool `fd00:1::/64`, /128 leases). Egress is one NAT66 masquerade out 2GWAN.
+- **Brittle:** works today, but breaks silently when Verizon rotates the static prefix.
+- Native IPv6 is **deliberately deferred** (`argo/docs/2026-09-17-network-hardening.md`,
+  "Deferred deliberately").
 
 **Quick check:**
 ```bash
 # MikroTik side: what addresses are configured?
 mikrotik-connect r '/ipv6 address print terse'
 
-# MikroTik side: is a DHCPv6 client running?
+# MikroTik side: is a DHCPv6 client running? (expected: none)
 mikrotik-connect r '/ipv6 dhcp-client print'
+
+# MikroTik side: stateful DHCPv6 server (expect ula-dhcp)
+mikrotik-connect r '/ipv6 dhcp-server print'
 
 # Traceroute from a LAN host (e.g. arch) to see where IPv6 dies
 ping -6 -c 2 google.com
 ```
-2GWAN should have an address in 2600:4040:25fa:e400::/64
+2GWAN should have the static 2600:4040:25fa:e400:6f4:1cff:fee3:7127/64 (plus the SLAAC 2600:4040:25fc:8d00::/64)
 bridge should have fd00:1::1/64
 
 ## Source NAT Rules
@@ -736,9 +879,6 @@ Pod network: `10.42.0.0/16` (IPv4) + `fd42:42:42::/56` (IPv6) flannel VXLAN. Key
 | kubernetes-api | LoadBalancer | 192.168.5.10:6443 | — (v4-only by design) | k3s API (MetalLB, custom EndpointSlice) |
 | traefik | LoadBalancer | 192.168.6.11 | fd00:6::10 (manual annotate) | HTTP/HTTPS ingress |
 | stalwart | LoadBalancer | 192.168.6.13 | fd00:6::13 | SMTP/IMAP (25/587/993) |
-| unifi-inform | LoadBalancer | 192.168.6.10:8080 | fd00:6::30 | UniFi device adoption |
-| unifi-discovery | LoadBalancer | 192.168.6.12:10001/UDP | fd00:6::12 | UniFi L2 discovery |
-| unifi-web | LoadBalancer | 192.168.6.25:8443 | fd00:6::25 | UniFi controller web UI |
 | ts-voice | LoadBalancer | 192.168.6.15:9987/UDP | fd00:6::15 | Teamspeak voice |
 | ts-files | LoadBalancer | 192.168.6.16:30033 | fd00:6::16 | Teamspeak file transfer |
 | openrct2-game | LoadBalancer | 192.168.6.17:11753 | fd00:6::17 | OpenRCT2 |
@@ -925,7 +1065,7 @@ ssh <node>.local 'iptables -t nat -L KUBE-SERVICES -n | grep 192.168.6.X'
 ```
 
 **RouterOS 7.19 quirks:**
-- `find`/`where` on port/protocol properties (`dst-port`, `to-ports`, `protocol`) matches nothing — select nat rules by **rule number from a fresh `print`** (`set <number> ...`).
+- `find`/`where` on port/protocol properties (`dst-port`, `to-ports`, `protocol`) matches nothing. **Do not fall back to rule numbers** — owner policy is no numeric selectors, ever: select by a unique exact comment (`[find comment="..."]`) or an exact multi-property identity printed immediately before and returning one row.
 - BGP session objects persist under their original connection name after the connection is removed (RouterOS reuses session objects by remote IP) — verify by remote address / uptime, not name.
 
 ### Configs Location
@@ -944,8 +1084,11 @@ Full config exports are saved in the dotfiles repo (`~/dotfiles/network-configs/
 disaster recovery. Files are named per device — `router.rsc`, `router.verbose.rsc`,
 `core.rsc`, `upstairs.rsc`, `office.rsc`, `upstairs-core.rsc` (each with a `.verbose.rsc`
 twin). **Git tracks history, so there are no dates in the filenames — and there is no
-`mikrotik-export-*.rsc`.** Last refreshed: **2026-09-17** (router only; the switches date
-from 2026-06-14).
+`mikrotik-export-*.rsc`.** Last refreshed: **2026-09-24** (router only, after the tunnel ACL and
+7233 changes; the switches date from 2026-06-14). RouterOS 7.19 returns **CRLF** even over plain
+non-pty `ssh`, while the committed baselines are LF — strip it (`sed -i 's/\r$//' <file>`) after
+exporting, or every line shows as changed in git. `network-configs/check-drift.sh` normalises line
+endings itself.
 
 **`/export` omits sensitive values** — WireGuard private keys, passwords, etc. appear only
 under `/export show-sensitive`. The committed files are therefore safe; never add
@@ -1014,7 +1157,9 @@ When answering a question or diagnosing a problem:
 
 - All RouterOS commands through this skill are **read-only** (`print`, `export` without `file=`, `monitor`, `get`).
 - **NEVER** run add/remove/set/enable/disable/move/reset/reboot/shutdown without explicit user approval.
+- **No numeric selectors, ever** (owner policy): never `set <n> …` / `remove <n>` from a `print`. Select by a unique exact comment, or an exact multi-property identity printed immediately before and returning one row (check `:put [:len [find …]]` = 1 first).
+- A plain `/interface wireguard print` (not only `print detail`) exposes the WireGuard private key — use `print proplist=name,listen-port,public-key,running` or `:put [/interface wireguard get [find name="wg-remote"] public-key]`.
 - **NEVER** run `nixos-rebuild switch` or `home-manager switch` without explicit user approval.
 - When in doubt whether a command is read-only, show it to the user and ask.
 - `export file=...` writes to device flash — it IS mutating.
-- UniFi API writes (POST/PUT/DELETE beyond `/api/login`) mutate controller state. Only use read-only GET endpoints unless the user explicitly asks for configuration changes.
+- UniFi API writes (POST/PUT/DELETE beyond `POST /api/auth/login`) mutate controller state. Only use read-only GET endpoints unless the user explicitly asks for configuration changes.
