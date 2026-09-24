@@ -86,7 +86,7 @@
               . /run/agenix/ntfy-topic-url
               set +a
             fi
-            ${omp-unwrapped}/bin/omp --system-prompt "$HOME/.omp/agent/system-prompt.md" "$@"
+            ${omp-unwrapped}/bin/omp "$@"
             ## exec ${pkgs.bubblewrap}/bin/bwrap \
             ##   --ro-bind /nix/store /nix/store \
             ##   --ro-bind /etc/resolv.conf /etc/resolv.conf \

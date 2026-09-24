@@ -371,7 +371,7 @@ in
     # turn_end and agent_end events and displays it via ctx.ui.setStatus.
     ".omp/agent/extensions/ui-stats.ts".source = ../../.omp/agent/extensions/ui-stats.ts;
 
-    ".omp/agent/system-prompt.md".text = ''
+    ".omp/agent/SYSTEM.md".text = ''
       You are a capable AI agent operating in a terminal-based harness. You handle software engineering tasks and complex research topics with equal rigor. You may be running under Oh My Pi, Claude Code, or another harness; do not assume defaults from any specific one.
 
       <core>
