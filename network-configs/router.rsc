@@ -1,4 +1,4 @@
-# 2026-09-17 23:22:51 by RouterOS 7.19.6
+# 2026-09-24 04:11:24 by RouterOS 7.19.6
 # software id = 7RHC-3MMG
 #
 # model = RB5009UPr+S+
@@ -180,6 +180,8 @@ add action=drop chain=forward comment="block camera subnet WAN egress" \
     dst-address=!192.168.0.0/16 src-address=192.168.1.0/24
 add action=accept chain=forward comment="wg: doks -> postgres" dst-address=\
     192.168.5.36 dst-port=5432 in-interface=wg-remote protocol=tcp
+add action=accept chain=forward comment="wg: doks -> temporal" dst-address=\
+    192.168.6.20 dst-port=7233 in-interface=wg-remote protocol=tcp
 add action=drop chain=forward comment=\
     "wg: deny tunnel traffic not allowed above" in-interface=wg-remote log=\
     yes log-prefix=wg-drop
@@ -225,9 +227,6 @@ add action=dst-nat chain=dstnat comment=\
     "steam-lobby coturn TURN (udp/3478) -> .6.14" dst-port=3478 \
     in-interface-list=WAN protocol=udp to-addresses=192.168.6.14 to-ports=\
     3478
-add action=dst-nat chain=dstnat comment=\
-    "temporal-grpc mtls (tcp/7233) -> .6.20" dst-port=7233 in-interface-list=\
-    WAN protocol=tcp to-addresses=192.168.6.20 to-ports=7233
 add action=dst-nat chain=dstnat comment=\
     "linkerd multicluster (tcp/4143) -> .5.36" dst-port=4143 \
     in-interface-list=WAN protocol=tcp to-addresses=192.168.5.36 to-ports=\
