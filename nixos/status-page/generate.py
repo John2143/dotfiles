@@ -29,11 +29,11 @@ RANGE_TIMEOUT = 30  # seconds per range query (30d avg_over_time is heavy)
 
 # Friendly names for node instances
 NODE_NAMES = {
-    "192.168.5.36:9100": "closet",
-    "192.168.5.76:9100": "arch",
-    "192.168.5.175:9100": "nas",
-    "192.168.5.209:9100": "office",
-    "192.168.5.68:9100": "big",
+    "closet.local:9100": "closet",
+    "arch.local:9100": "arch",
+    "nas.local:9100": "nas",
+    "office.local:9100": "office",
+    "big.local:9100": "big",
     "localhost:9100": "pite",
 }
 

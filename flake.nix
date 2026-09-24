@@ -121,6 +121,9 @@
           [
             inputs.home-manager.nixosModules.default
             agenix.nixosModules.default
+            {
+              system.configurationRevision = inputs.self.rev or inputs.self.dirtyRev or null;
+            }
           ]
           ++ modules;
       };
@@ -179,9 +182,11 @@
 
           ./nixos/modules/waybar-popup.nix
           ./nixos/modules/observability-agent.nix
+          ./nixos/modules/nixos-metrics.nix
 
           {
             services.observability-agent.enable = true;
+            services.nixos-metrics.enable = true;
           }
         ];
       })
@@ -204,9 +209,11 @@
           ./nixos/modules/waybar-popup.nix
           ./nixos/modules/keybind.nix
           ./nixos/modules/observability-agent.nix
+          ./nixos/modules/nixos-metrics.nix
 
           {
             services.observability-agent.enable = true;
+            services.nixos-metrics.enable = true;
             services.observability-agent.enableNvidiaGpu = true;
           }
         ];
@@ -226,9 +233,11 @@
 
           ./nixos/modules/remote-builders.nix
           ./nixos/modules/observability-agent.nix
+          ./nixos/modules/nixos-metrics.nix
 
           {
             services.observability-agent.enable = true;
+            services.nixos-metrics.enable = true;
           }
         ];
       })
@@ -244,9 +253,11 @@
           ./nixos/modules/remote-builders.nix
           ./nixos/pite-canary.nix
           ./nixos/modules/observability-agent.nix
+          ./nixos/modules/nixos-metrics.nix
 
           {
             services.observability-agent.enable = true;
+            services.nixos-metrics.enable = true;
           }
         ];
       })
@@ -267,9 +278,11 @@
             };
           })
           ./nixos/modules/observability-agent.nix
+          ./nixos/modules/nixos-metrics.nix
 
           {
             services.observability-agent.enable = true;
+            services.nixos-metrics.enable = true;
           }
         ];
       })
@@ -284,9 +297,11 @@
           ./nixos/modules/attic.nix
           ./nixos/modules/remote-builders.nix
           ./nixos/modules/observability-agent.nix
+          ./nixos/modules/nixos-metrics.nix
 
           {
             services.observability-agent.enable = true;
+            services.nixos-metrics.enable = true;
           }
           {
             services.tailscale.extraUpFlags = ["--hostname=mullvad-us-vpin-deccam"];
@@ -303,9 +318,11 @@
 
           ./nixos/modules/attic.nix
           ./nixos/modules/observability-agent.nix
+          ./nixos/modules/nixos-metrics.nix
 
           {
             services.observability-agent.enable = true;
+            services.nixos-metrics.enable = true;
           }
         ];
       })
@@ -327,9 +344,11 @@
 
           ./nixos/modules/remote-builders.nix
           ./nixos/modules/observability-agent.nix
+          ./nixos/modules/nixos-metrics.nix
 
           {
             services.observability-agent.enable = true;
+            services.nixos-metrics.enable = true;
           }
         ];
       })
@@ -347,9 +366,11 @@
 
           ./nixos/modules/remote-builders.nix
           ./nixos/modules/observability-agent.nix
+          ./nixos/modules/nixos-metrics.nix
 
           {
             services.observability-agent.enable = true;
+            services.nixos-metrics.enable = true;
           }
         ];
       })
@@ -364,9 +385,11 @@
 
           ./nixos/modules/big-post-install.nix
           ./nixos/modules/observability-agent.nix
+          ./nixos/modules/nixos-metrics.nix
 
           {
             services.observability-agent.enable = true;
+            services.nixos-metrics.enable = true;
           }
         ];
       })
@@ -381,9 +404,11 @@
 
           ./nixos/modules/attic.nix
           ./nixos/modules/observability-agent.nix
+          ./nixos/modules/nixos-metrics.nix
 
           {
             services.observability-agent.enable = true;
+            services.nixos-metrics.enable = true;
           }
         ];
       })
@@ -394,6 +419,10 @@
           ./nixos/shared-cli-configuration.nix
           ./nixos/steam-configuration.nix
           ./nixos/modules/disko_steam.nix
+          ./nixos/modules/nixos-metrics.nix
+          ({...}: {
+            services.nixos-metrics.enable = true;
+          })
         ];
       })
       // (mkHost {
@@ -403,9 +432,11 @@
           ./nixos/mirror-configuration.nix
           ./nixos/tailscale.nix
           ./nixos/modules/observability-agent.nix
+          ./nixos/modules/nixos-metrics.nix
 
           {
             services.observability-agent.enable = true;
+            services.nixos-metrics.enable = true;
           }
         ];
       })

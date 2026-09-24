@@ -67,15 +67,16 @@
         static_configs = [
           {
             targets = [
-              "192.168.5.36:9100" # closet
-              "192.168.5.76:9100" # arch
-              "192.168.5.175:9100" # nas
-              "192.168.5.209:9100" # office
-              "192.168.5.68:9100" # big
-              "localhost:9100"
-              "192.168.5.108:9100" # github runner VM (github-nixos)
-              "100.64.0.25:9100" # secu (tailscale; reimaged 2026-08-12)
-              "100.64.0.7:9100" # vpin (tailscale, mullvad-us-vpin-deccam)
+              "closet.local:9100" # closet
+              "arch.local:9100" # arch
+              "nas.local:9100" # nas
+              "office.local:9100" # office
+              "big.local:9100" # big
+              "localhost:9100" # pite itself — pite.local does not resolve, keep localhost
+              "github.local:9100" # github runner VM (github-nixos)
+              "secu.local:9100" # secu (Camera NVR) — depends on 5b
+              "vpin.local:9100" # vpin (Mullvad exit)
+              "mirror.local:9100" # mirror
             ];
           }
         ];
@@ -87,12 +88,12 @@
         static_configs = [
           {
             targets = [
-              "192.168.5.36:9633" # closet
-              "192.168.5.76:9633" # arch
-              "192.168.5.175:9633" # nas
-              "192.168.5.209:9633" # office
-              "192.168.5.68:9633" # big
-              "100.64.0.25:9633" # secu
+              "closet.local:9633" # closet
+              "arch.local:9633" # arch
+              "nas.local:9633" # nas
+              "office.local:9633" # office
+              "big.local:9633" # big
+              "secu.local:9633" # secu — depends on 5b
             ];
           }
         ];
@@ -295,35 +296,6 @@
     '';
   };
 
-  # ── NixOS Version Metrics (textfile collector) ─────────────────
-  systemd.services.nixos-metrics = {
-    description = "Write NixOS version to node_exporter textfile";
-    serviceConfig = {
-      Type = "oneshot";
-      User = "root";
-    };
-    path = [pkgs.jq pkgs.coreutils];
-    script = ''
-      VERSION=$(nixos-version 2>/dev/null | awk '{print $1}')
-      REVISION=$(nixos-version --json 2>/dev/null | ${pkgs.jq}/bin/jq -r '.nixpkgsRevision // "unknown"')
-      mkdir -p /var/lib/node_exporter/textfile
-      cat > /var/lib/node_exporter/textfile/nixos.prom <<PROMEOF
-      nixos_info{version="$VERSION", revision="$REVISION", hostname="$(hostname)"} 1
-      PROMEOF
-    '';
-  };
-  systemd.timers.nixos-metrics = {
-    wantedBy = ["timers.target"];
-    timerConfig = {
-      OnCalendar = "hourly";
-      Persistent = true;
-    };
-  };
-
-  # Ensure the textfile directory exists for node_exporter
-  services.prometheus.exporters.node.extraFlags = [
-    "--collector.textfile.directory=/var/lib/node_exporter/textfile"
-  ];
   # ── Blackbox Exporter ──────────────────────────────────────────
   services.prometheus.exporters.blackbox = {
     enable = true;
