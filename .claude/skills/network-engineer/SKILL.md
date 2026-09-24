@@ -67,7 +67,8 @@ mikrotik-connect o '/system routerboard print'
 mikrotik-connect uc '/system routerboard print'
 ```
 
-**UniFi wireless snapshot (credentials from agenix):**
+**UniFi wireless snapshot (credentials from agenix; UniFi OS Server console at `192.168.5.30:11443`):**
+`/run/agenix/unifi-credentials` may predate the 2026-09 controller migration — if login fails, ask the owner rather than guessing.
 ```
 python3 << 'PYEOF'
 import urllib.request, ssl, json, http.cookiejar
@@ -78,17 +79,18 @@ with open('/run/agenix/unifi-credentials') as f:
             k, v = line.strip().split('=', 1)
             creds[k] = v.strip('"')
 ctx = ssl.create_default_context(); ctx.check_hostname = False; ctx.verify_mode = ssl.CERT_NONE
-base = 'https://192.168.6.25:8443'
+base = 'https://192.168.5.30:11443'
 cj = http.cookiejar.CookieJar()
 opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(cj), urllib.request.HTTPSHandler(context=ctx))
 data = json.dumps({'username': creds['UNIFI_USERNAME'], 'password': creds['UNIFI_PASSWORD'], 'remember': True}).encode()
-opener.open(urllib.request.Request(f'{base}/api/login', data=data, headers={'Content-Type': 'application/json'}))
-resp = opener.open(urllib.request.Request(f'{base}/api/s/default/stat/device'))
+opener.open(urllib.request.Request(f'{base}/api/auth/login', data=data, headers={'Content-Type': 'application/json'}))
+api = f'{base}/proxy/network/api/s/default'
+resp = opener.open(urllib.request.Request(f'{api}/stat/device'))
 aps = [d for d in json.loads(resp.read())['data'] if d.get('type') == 'uap']
 print(f"APs: {len(aps)}")
 for ap in aps:
     print(f"  {ap.get('name','?'):25s} {ap.get('model','?'):10s} state={ap.get('state')} clients={ap.get('num_sta',0)} uptime={ap.get('uptime',0)}s ip={ap.get('ip','?')}")
-resp = opener.open(urllib.request.Request(f'{base}/api/s/default/stat/sta'))
+resp = opener.open(urllib.request.Request(f'{api}/stat/sta'))
 clients = json.loads(resp.read())['data']
 print(f"Wireless clients: {len(clients)}")
 for c in sorted(clients, key=lambda c: c.get('signal', -100)):
@@ -201,9 +203,9 @@ The `INTERFACE` column shows the port the packet egressed through, not necessari
 the port the device is directly connected to. The only definitive method is physical
 inspection.
 
-Example: U7Lite is physically on **router ether6** (directly connected), not on the office switch.
-shows it on **router ether6** because the router's bridge forwarded the discovery
-packet out that port.
+Example: U7Lite is physically on **router ether5** (directly connected), not on the office switch;
+`/ip neighbor` and the router's bridge host table both show it on **router ether5**
+(confirmed 2026-09-24).
 
 Use these to narrow down the candidate port, then confirm physically:
 ```
