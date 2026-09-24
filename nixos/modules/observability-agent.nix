@@ -40,6 +40,13 @@ in
         ExecStart = pkgs.writeShellScript "smartctl-exporter-start" ''
           set -o errexit
           shopt -s nullglob
+          # udev may still be probing a large HBA when this unit starts. If the
+          # by-id enumeration below runs first it finds nothing, the exporter
+          # falls back to discovery, and the Prometheus registry freezes its
+          # descriptor set from whatever it saw at registration — every later
+          # scrape then fails with "unregistered descriptor" (big, 2026-09-17:
+          # 2 devices at start, 34 an hour later, HTTP 500 ever since).
+          ${pkgs.udev}/bin/udevadm settle --timeout=60 || true
           # Enumerate whole-disk by-id links across ALL local transports, not just
           # ata-*. Hosts whose disks sit behind an HBA expose only wwn-*/scsi-*
           # (big has zero ata-* links, which left the exporter auto-detecting and
