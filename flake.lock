@@ -496,11 +496,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1783574569,
-        "narHash": "sha256-tD5dYw6VoEUbTUMPJjQH0EL0EcfS7qfCRZSYMgsTkKA=",
+        "lastModified": 1790244866,
+        "narHash": "sha256-BVSBfk3f3smo/Y7lp1f6yoqMinxKygjkfoaK2zFDrzs=",
         "owner": "John2143",
         "repo": "oh-my-pi",
-        "rev": "5d1ce42fbdd79c350013f1843c5048c3db23df9f",
+        "rev": "5d5814edcd87cdde1c0d7f9aa1d92b02951370fa",
         "type": "github"
       },
       "original": {

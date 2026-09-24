@@ -119,6 +119,39 @@ in
                   thinking:
                     type: enabled
 
+        # Claude Max subscription via LiteLLM. OMP owns and refreshes the
+        # Anthropic OAuth token; the proxy key is a separate header so LiteLLM
+        # forwards the OAuth Authorization header upstream.
+        anthropic:
+          baseUrl: https://llm.2143.me
+          api: anthropic-messages
+          auth: oauth
+          headers:
+            x-litellm-api-key: LITELLM_EDITOR_KEY
+          compat:
+            # LiteLLM is not a signing endpoint; apply this to bundled Claude
+            # models too so unsigned thinking blocks are never replayed.
+            replayUnsignedThinking: false
+          models:
+            - id: claude-opus-5-5
+              name: Claude Opus 5.5 (Max subscription)
+              reasoning: true
+              supportsTools: true
+              input: [text, image]
+              cost: { input: 4, output: 20, cacheRead: 0.2, cacheWrite: 5 }
+              contextWindow: 1000000
+              maxTokens: 64000
+              thinking:
+                mode: anthropic-adaptive
+                efforts: [minimal, low, medium, high, xhigh]
+                effortMap:
+                  minimal: low
+                  low: medium
+                  medium: high
+                  high: xhigh
+                  xhigh: max
+                supportsDisplay: true
+
 
         # LiteLLM proxy — unified router for all providers. Every query logged
         # in the dashboard at https://llm.2143.me/ui.
@@ -271,6 +304,7 @@ in
 
       modelProviderOrder:
         - vast-vllm
+        - anthropic
         - litellm
         - deepseek
         - office-vllm

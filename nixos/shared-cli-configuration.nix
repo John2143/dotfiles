@@ -74,6 +74,13 @@
               . /run/agenix/llm-runtime-keys
               set +a
             fi
+            if [ -z "$LITELLM_EDITOR_KEY" ]; then
+              echo "omp: LITELLM_EDITOR_KEY missing from /run/agenix/llm-runtime-keys" >&2
+              exit 1
+            fi
+            # Force Anthropic through the locally stored OAuth subscription;
+            # an inherited platform key would otherwise enable billed fallback.
+            unset ANTHROPIC_API_KEY
             if [ -f /run/agenix/ntfy-topic-url ]; then
               set -a
               . /run/agenix/ntfy-topic-url
