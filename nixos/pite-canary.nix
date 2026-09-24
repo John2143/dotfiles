@@ -231,10 +231,18 @@
 
   # ── Alertmanager — ntfy-only, config generated at runtime ──────
   systemd.services.alertmanager = {
+    # ⚠ Do NOT use `sed -i` in this preStart. The nixpkgs prometheus-alertmanager
+    # module sandboxes the unit with `SystemCallFilter=@system-service ~@privileged`,
+    # and GNU sed's in-place mode needs chown(2)/xattr on its temp file to preserve
+    # the original's attributes — those live in @privileged, so seccomp kills sed
+    # with SIGSYS ("Bad system call (core dumped)"), preStart fails, and systemd
+    # gives up with start-limit-hit. The result is silent: alertmanager never runs
+    # and no ntfy notification is ever delivered for any alert.
+    # The unquoted heredoc below lets the shell expand $NTFY_URL instead.
     preStart = ''
           NTFY_URL=$(cat /run/agenix/ntfy-topic-url 2>/dev/null || echo "https://ntfy.sh/2143-site-outages")
 
-          cat > /run/alertmanager/config.yml <<'CONFIGEOF'
+          cat > /run/alertmanager/config.yml <<CONFIGEOF
       global:
         resolve_timeout: 5m
       route:
@@ -246,11 +254,9 @@
       receivers:
         - name: ntfy
           webhook_configs:
-            - url: "NTFY_PLACEHOLDER"
+            - url: "$NTFY_URL"
               send_resolved: true
       CONFIGEOF
-
-          ${pkgs.gnused}/bin/sed -i "s|NTFY_PLACEHOLDER|$NTFY_URL|g" /run/alertmanager/config.yml
     '';
     serviceConfig = {
       # Owned by the DynamicUser; systemd creates it before preStart runs.
