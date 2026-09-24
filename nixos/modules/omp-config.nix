@@ -205,6 +205,22 @@ in
               input: [text]
               contextWindow: 1050000
               maxTokens: 128000
+            - id: chatgpt/gpt-6-sol
+              name: ChatGPT GPT-6 Sol (Pro/Max subscription)
+              api: openai-responses
+              reasoning: true
+              supportsTools: true
+              input: [text]
+              contextWindow: 1050000
+              maxTokens: 128000
+            - id: chatgpt/gpt-6-luna
+              name: ChatGPT GPT-6 Luna (Pro/Max subscription)
+              api: openai-responses
+              reasoning: true
+              supportsTools: true
+              input: [text]
+              contextWindow: 1050000
+              maxTokens: 128000
             - id: openai/gpt-6-astra
               name: OpenAI GPT-6 Astra (API key)
               api: openai-responses
@@ -250,7 +266,7 @@ in
       modelRoles:
         default: litellm/deepseek/deepseek-v4-flash
         smol: litellm/deepseek/deepseek-v4-flash
-        slow: litellm/chatgpt/gpt-5.6-sol
+        slow: litellm/chatgpt/gpt-6-sol
         advisor: litellm/deepseek/deepseek-v4-flash
 
       modelProviderOrder:
