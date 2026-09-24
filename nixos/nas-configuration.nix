@@ -478,8 +478,11 @@ nixpkgs.overlays = [
         buttonText = "Sign in with Pocket ID";
       };
 
-      # Stays true until every account carries an oauthId. Phase 5 flips it.
-      passwordLogin.enabled = true;
+      # SSO-only. john and leighanne are linked; amanda links on her first
+      # Pocket ID sign-in. `login()` throws before it compares the password,
+      # so there is no admin bypass -- reverting this line and rebuilding is
+      # the only way back in if Pocket ID becomes unreachable.
+      passwordLogin.enabled = false;
     };
   };
 
