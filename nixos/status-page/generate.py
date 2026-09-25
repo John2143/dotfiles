@@ -176,6 +176,12 @@ def get_nodes():
                      'node_filesystem_size_bytes{mountpoint="/"}) * 100'
                  )}
 
+    # Build identity — which NixOS image and flake revision each host runs
+    build_data = {r["metric"]["instance"]: r["metric"]
+                  for r in prom_instant('nixos_info')}
+    ts_data = {r["metric"]["instance"]: r["value"][1]
+               for r in prom_instant('nixos_flake_timestamp')}
+
     # Long-term uptime from Mimir
     uptime_30d = mimir_avg_uptime("home-nodes", 30)
     uptime_7d = mimir_avg_uptime("home-nodes", 7)
@@ -200,6 +206,15 @@ def get_nodes():
         u30 = uptime_30d.get(inst)
         u7 = uptime_7d.get(inst)
 
+        build = build_data.get(inst, {})
+        # "26.11.20260923.4975466" -> image date "26.11.20260923"
+        image = build.get("version", "").rsplit(".", 1)[0]
+        ts = ts_data.get(inst)
+        try:
+            age = (time.time() - float(ts)) if ts is not None else None
+        except (TypeError, ValueError):
+            age = None
+
         nodes.append({
             "name": name,
             "ip": ip,
@@ -210,6 +225,8 @@ def get_nodes():
             "disk": 100 - disk,  # disk = avail %, so used % = 100 - avail
             "uptime_30d": u30,
             "uptime_7d": u7,
+            "image": image,
+            "age": age,
         })
     return nodes
 
@@ -456,6 +473,17 @@ def fmt_uptime(pct):
     return f"{pct:.5f}%"
 
 
+def fmt_age(seconds):
+    """Format an age in seconds as '13h' or '3d 4h', or '--' if unknown."""
+    if seconds is None:
+        return "--"
+    if seconds < 3600:
+        return f"{int(seconds // 60)}m"
+    if seconds < 86400:
+        return f"{int(seconds // 3600)}h"
+    return f"{int(seconds // 86400)}d {int(seconds % 86400 // 3600)}h"
+
+
 def fmt_latency(seconds):
     """Format latency in human-readable form."""
     if seconds < 1:
@@ -505,6 +533,11 @@ def render_node_rows(nodes):
     rows = []
     for n in nodes:
         up_badge = '<span class="up">UP</span>' if n["up"] else '<span class="down">DOWN</span>'
+        build_cell = "--"
+        if n["image"]:
+            build_cell = html.escape(n["image"])
+            if n["age"] is not None:
+                build_cell += f' <span class="muted">· {fmt_age(n["age"])}</span>'
         rows.append(
             f'<tr>'
             f'<td>{html.escape(n["name"])} ({html.escape(n["ip"])})</td>'
@@ -513,6 +546,7 @@ def render_node_rows(nodes):
             f'<td>{n["ram"]:.1f}%</td>'
             f'<td>{n["disk"]:.1f}%</td>'
             f'<td>{fmt_uptime(n["uptime_30d"])}</td>'
+            f'<td>{build_cell}</td>'
             f'</tr>'
         )
     return "\n".join(rows)
@@ -770,6 +804,7 @@ def render_html(nodes, services, certs, rw, pods, alerts, errors, k8s_rows, lgtm
       <th>RAM%</th>
       <th>Disk%</th>
       <th>30d Uptime</th>
+      <th>Build</th>
     </tr>
 {render_node_rows(nodes)}
   </table>

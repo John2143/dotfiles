@@ -32,6 +32,12 @@ Settings → Alert Configuration) if it is refused. A minimal email setup is
 `RemoteHosts.1.SMTPAuthentication=Enabled` + `.SMTPUserName`/`.SMTPPassword` only if the relay
 requires it.
 
+**Status 2026-09-24:** still accurate for *hardware* alerting, but backup alerting provably works —
+the `pbs-daily` job's notifications are delivered, because postfix on bigp sends them direct-to-MX
+(`mail.protonmail.ch:25`) for `root@pam`'s address (`john@2143.me`) and the queue clears cleanly each
+night at ~02:03. iDRAC's own destinations remain disabled exactly as described above.
+
+
 ## ZED can already push to ntfy but is unconfigured
 
 `/etc/zfs/zed.d/zed.rc` ships `ZED_NTFY_TOPIC` (line ~163), `ZED_NTFY_ACCESS_TOKEN` (~171) and
@@ -40,15 +46,26 @@ set. Setting a non-empty `ZED_NTFY_TOPIC` plus `systemctl restart zfs-zed` enabl
 **The topic URL is a capability secret: read it from the operator's secret store and never commit it
 to this repo.**
 
-## Root's mail is a black hole
+## Root's mail — fixed 2026-09-24 (previously a black hole)
 
-`/etc/aliases` defines no `root:` entry; postfix is `inet_interfaces = loopback-only`, `relayhost =`
-(empty), `mydestination = $myhostname, localhost.$mydomain, localhost`; `/var/mail/` and
-`/var/spool/mail/` contain no `root` file and `/var/spool/postfix/maildrop` is empty. Everything
-`smartd-runner`, ZED and cron mail to root is therefore lost. Fixing it means adding
-`root: <address>` to `/etc/aliases` plus `newaliases`, and setting `relayhost = <smtp-host>:587` with
-SASL credentials in `/etc/postfix/main.cf` then `systemctl reload postfix`. Recipient and relay
-details were never supplied, so this item stays open.
+Was: `/etc/aliases` defined no `root:` entry while postfix ran `inet_interfaces = loopback-only` with
+an empty `relayhost`, so everything `smartd-runner`, cron and ZED mailed to root went to an unread
+local mbox (`/var/mail/` holds no `root` file). Fixed on 2026-09-24:
+
+- `/etc/aliases` → `root: technology@m.2143.me`, then `newaliases`.
+- `/etc/postfix/transport` → `m.2143.me smtp:[192.168.6.13]:25`, plus
+  `transport_maps = hash:/etc/postfix/transport` in `main.cf`, then `systemctl reload postfix`.
+  **The transport map is required, not optional:** split-horizon DNS resolves `m.2143.me` to
+  `192.168.6.11` (the Traefik webmail ingress), which has **no SMTP listener** on 25 or 587, so mail
+  to the mail domain otherwise fails with `connect to m.2143.me[192.168.6.11]:25: No route to host`.
+  The MetalLB mail load balancer is `192.168.6.13`.
+- Verified in the log: `to=<technology@m.2143.me>, orig_to=<root@bigp.local>,
+  relay=192.168.6.13[192.168.6.13]:25, status=sent (250 2.0.0 Message queued with id …)`.
+- Pre-change originals are at `/root/aliases.orig-20260924` and `/root/main.cf.orig-20260924`.
+
+Net effect: SMART disk alerts (`-m root` in `/etc/smartd.conf`), cron reports (including the ZFS
+scrub/trim jobs) and ZED output now reach a monitored mailbox instead of vanishing. Mail to other
+domains is untouched — `john@2143.me` still resolves to Proton's MX and is delivered directly.
 
 ## Disk health is now iDRAC-only
 
