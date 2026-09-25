@@ -94,6 +94,12 @@ in {
 
       exclude =
         [
+          # gocryptfs FUSE mount: the backup service runs as root, which cannot
+          # stat the mount point (mounted without allow_other), failing the
+          # whole run with restic exit 3 and skipping prune. The plaintext data
+          # lives in the NAS `private` share, which sanoid already snapshots
+          # (daily 30 / monthly 12 / yearly 1) — see nas-configuration.nix.
+          "/home/john/private"
           "/home/john/.cache"
           "/home/john/.local/share"
           "/home/john/.mozilla/firefox"
