@@ -343,9 +343,11 @@ in {
   ];
   hardware.i2c.enable = true;
   services.hardware.openrgb.enable = true;
-  boot.kernelParams = [
-    "video=HDMI-A-2:2560x1440@120"
-  ];
+  # No `video=` kernel params here on purpose. nvidia-drm refuses any mode that is not
+  # in the monitor's EDID ("User-defined mode not supported"), so `video=HDMI-A-2:...`
+  # never actually took effect — it only made every connector re-probe log a failure at
+  # exactly the moments that preceded the DPMS-wake monitor corruption. Hyprland sets the
+  # real modes via the monitor rules in home.nix. Removed 2026-09-20.
   boot.extraModulePackages = [];
   boot.extraModprobeConfig = '''';
   # Keyfile for pool1 LUKS auto-unlock at boot. Password keyslot (slot 0)
