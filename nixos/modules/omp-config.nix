@@ -151,6 +151,42 @@ in
                   high: xhigh
                   xhigh: max
                 supportsDisplay: true
+            - id: claude-haiku-5-5
+              name: Claude Haiku 5.5 (Max subscription)
+              reasoning: true
+              supportsTools: true
+              input: [text, image]
+              cost: { input: 4, output: 20, cacheRead: 0.2, cacheWrite: 5 }
+              contextWindow: 1000000
+              maxTokens: 64000
+              thinking:
+                mode: anthropic-adaptive
+                efforts: [minimal, low, medium, high, xhigh]
+                effortMap:
+                  minimal: low
+                  low: medium
+                  medium: high
+                  high: xhigh
+                  xhigh: max
+                supportsDisplay: true
+            - id: claude-fable-5-1
+              name: Claude Fable 5.1 (Max subscription)
+              reasoning: true
+              supportsTools: true
+              input: [text, image]
+              cost: { input: 4, output: 20, cacheRead: 0.2, cacheWrite: 5 }
+              contextWindow: 1000000
+              maxTokens: 64000
+              thinking:
+                mode: anthropic-adaptive
+                efforts: [minimal, low, medium, high, xhigh]
+                effortMap:
+                  minimal: low
+                  low: medium
+                  medium: high
+                  high: xhigh
+                  xhigh: max
+                supportsDisplay: true
 
 
         # LiteLLM proxy — unified router for all providers. Every query logged
@@ -297,15 +333,15 @@ in
       startup.quiet: true
       setupVersion: 1
       modelRoles:
-        default: litellm/deepseek/deepseek-v4-flash
+        default: anthropic/claude-opus-5-5
         smol: litellm/deepseek/deepseek-v4-flash
         slow: litellm/chatgpt/gpt-6-sol
         advisor: litellm/deepseek/deepseek-v4-flash
 
       modelProviderOrder:
         - vast-vllm
-        - anthropic
         - litellm
+        - anthropic
         - deepseek
         - office-vllm
         #- office-ollama       # disabled 2026-05-31
@@ -318,11 +354,18 @@ in
         maxRetries: 3
         baseDelayMs: 2000
         fallbackChains:
+          smol:
+            - "litellm/deepseek/deepseek-v4-flash"
+            - "anthropic/claude-haiku-5-5"
           default:
+            - "litellm/deepseek/deepseek-v4-flash"
+            - "anthropic/claude-opus-5-5"
             - "litellm/openrouter/deepseek/deepseek-v4.1-flash"
             - "litellm/openrouter/openrouter/auto"
           slow:
-            - "litellm/openai/gpt-5.6-sol"
+            - "anthropic/claude-opus-5-5"
+            - "litellm/openai/gpt-6-sol"
+            - "litellm/deepseek/deepseek-v4-flash"
             - "litellm/openrouter/openai/gpt-5.6-sol"
             - "litellm/openrouter/deepseek/deepseek-v4.1-flash"
             - "litellm/openrouter/openrouter/auto"
