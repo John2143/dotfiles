@@ -6,9 +6,9 @@
 #
 # - smartctl_exporter: exposes SMART attributes (Reallocated_Sector_Ct,
 #   Current_Pending_Sector, Offline_Uncorrectable, ...) on :9633. Iterates
-#   /dev/disk/by-id/ata-* whole disks at runtime — sdX letters shift across
-#   reboots, so by-id names are required. Hosts with no ata-* disks (Pi, VM)
-#   get an empty device list and serve zero SMART metrics; that is fine.
+#   whole-disk ata-*, nvme-*, scsi-*, and wwn-* by-id links at runtime — sdX
+#   letters shift across reboots. Hosts without SMART disks (Pi, VM) get an
+#   empty device list and serve zero SMART metrics; that is fine.
 # - nvidia_gpu_exporter (enableNvidiaGpu): arch's GTX 1080 Ti on :9835.
 { config, lib, pkgs, ... }:
 
@@ -29,7 +29,7 @@ in
     networking.firewall.allowedTCPPorts = [ 9633 ];
     # smartctl_exporter — Prometheus metrics for SMART health (bad sectors,
     # reallocated/pending/uncorrectable counts) scraped on port 9633.
-    # Uses stable ata-* by-id names; Longhorn iSCSI volumes (no ata-* by-id)
+    # Uses stable whole-disk by-id names; known Longhorn iSCSI virtual LUNs
     # and partition symlinks are skipped.
     systemd.services.smartctl-exporter = {
       description = "smartctl_exporter for Prometheus (SMART metrics)";
@@ -47,16 +47,12 @@ in
           # scrape then fails with "unregistered descriptor" (big, 2026-09-17:
           # 2 devices at start, 34 an hour later, HTTP 500 ever since).
           ${pkgs.udev}/bin/udevadm settle --timeout=60 || true
-          # Enumerate whole-disk by-id links across ALL local transports, not just
-          # ata-*. Hosts whose disks sit behind an HBA expose only wwn-*/scsi-*
-          # (big has zero ata-* links, which left the exporter auto-detecting and
-          # answering HTTP 500), and NVMe is always nvme-* — nas's special vdev
-          # lives there and was never health-checked at all.
-          # Patterns are tried in this order so ata-*/nvme-* win over the
-          # duplicate wwn-*/scsi-* links for the same device; the resolved-device
-          # check drops the duplicates.
-          # Devices without SMART (Longhorn iSCSI LUNs, virtual disks) are skipped
-          # rather than handed to the exporter, which would fail the whole scrape.
+          # Enumerate whole-disk by-id links across local transports. HBA disks
+          # may expose only wwn-*/scsi-* (big has no ata-* links), while NVMe
+          # disks expose nvme-* links. Try ata-*/nvme-* first so they win over
+          # aliases for the same resolved device.
+          # Skip verified IET virtual LUNs and other SMART-disabled devices;
+          # exporting either would make the scrape fail.
           declare -A seen
           devices=()
           for dev in /dev/disk/by-id/ata-* /dev/disk/by-id/nvme-* \
@@ -66,8 +62,20 @@ in
             esac
             real=$(readlink -f "$dev")
             [ -n "''${seen[$real]:-}" ] && continue
-            smartctl -i "$dev" 2>/dev/null \
-              | grep -q 'SMART support is:.*\(Available\|Enabled\)' || continue
+            info=$(smartctl -i "$dev" 2>/dev/null) || true
+            if grep -Eq '^Vendor:[[:space:]]+IET[[:space:]]*$' <<<"$info" &&
+               grep -Eq '^Product:[[:space:]]+VIRTUAL-DISK[[:space:]]*$' <<<"$info"; then
+              seen[$real]=1
+              continue
+            fi
+            if grep -Eq '^SMART support is:[[:space:]]+Disabled' <<<"$info"; then
+              seen[$real]=1
+              continue
+            fi
+            case "$(basename "$dev")" in
+              nvme-*) grep -Eq '^NVMe Version:' <<<"$info" || continue ;;
+              *) grep -Eq '^SMART support is:[[:space:]]+(Available|Enabled)([[:space:]]|$)' <<<"$info" || continue ;;
+            esac
             seen[$real]=1
             devices+=(--smartctl.device "$dev")
           done
