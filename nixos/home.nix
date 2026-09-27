@@ -129,13 +129,13 @@
     #plex-desktop # plex
     #rustdesk
     #spotify # music
-    #(prismlauncher.override {
-      #jdks = [
+    (prismlauncher.override {
+      jdks = [
         #temurin-bin-21
         #temurin-bin-8
-        #temurin-bin-17
-      #];
-    #})
+        temurin-bin-17
+      ];
+    })
     #r2modman # game modding
     #rusty-path-of-building # Path of Exile build planner
     #bitwarden-desktop # password manager
