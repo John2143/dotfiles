@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# desec-dns.sh — Manage deSEC DNS records for 9s.pics (and balabusta.homes)
+# desec-dns.sh — Manage deSEC DNS records for 9s.pics
 #
 # Usage:
 #   desec-dns.sh set-a <name> <ip>                     # Set A record
@@ -7,7 +7,6 @@
 #   desec-dns.sh list                                  # List all records
 #   desec-dns.sh update-headscale                      # Update headscale.9s.pics to current public IP
 #   desec-dns.sh update-all-nodes                      # Update headscale.9s.pics to current public IP
-#   desec-dns.sh update-balabusta [ip]                 # balabusta.homes + *.balabusta.homes A → ip (default: current public IP)
 #
 # Requires: DESEC_TOKEN env var or agenix secret at ../secrets/hetzner/desec-token.age
 
@@ -76,26 +75,6 @@ cmd_update_headscale() {
 
 cmd_update_all_nodes() {
   cmd_update_headscale
-}
-
-# ── balabusta.homes: apex + wildcard A → home public IP ──
-# One bulk PUT creates or replaces both RRsets atomically. Bulk requests name the
-# apex with an empty subname; "@" is only accepted in single-RRset URLs.
-BALABUSTA_API="https://desec.io/api/v1/domains/balabusta.homes/rrsets"
-
-cmd_update_balabusta() {
-  local ip="${1:-}"
-  if [ -z "$ip" ]; then
-    ip=$(curl -4sf --connect-timeout 10 ifconfig.me 2>/dev/null || curl -4sf --connect-timeout 10 icanhazip.com 2>/dev/null || true)
-  fi
-  if [ -z "$ip" ]; then
-    echo "ERROR: Could not determine public IP"
-    exit 1
-  fi
-  echo "Setting A records: balabusta.homes, *.balabusta.homes → ${ip}"
-  curl -s --fail-with-body -X PUT -H "$AUTH" -H "$CT" "$BALABUSTA_API/" \
-    -d "[{\"subname\":\"\",\"type\":\"A\",\"ttl\":3600,\"records\":[\"${ip}\"]},{\"subname\":\"*\",\"type\":\"A\",\"ttl\":3600,\"records\":[\"${ip}\"]}]" \
-    | python3 -m json.tool
 }
 
 # ── NS Delegation Setup (k8gb GSLB) ──
@@ -251,11 +230,8 @@ case "${1:-}" in
   update-all-nodes)
     cmd_update_all_nodes
     ;;
-  update-balabusta)
-    cmd_update_balabusta "${2:-}"
-    ;;
   *)
-    echo "Usage: $0 {list|set-a|set-ns|setup-ns-delegation|deploy-wildcard-cname|verify-ns-delegation|update-headscale|update-all-nodes|update-balabusta}"
+    echo "Usage: $0 {list|set-a|set-ns|setup-ns-delegation|deploy-wildcard-cname|verify-ns-delegation|update-headscale|update-all-nodes}"
     echo ""
     echo "  list                  List all DNS records for ${DOMAIN}"
     echo "  set-a NAME IP         Set A record (e.g. headscale → 108.56.153.222)"
@@ -265,7 +241,6 @@ case "${1:-}" in
     echo "  verify-ns-delegation  Check NS delegation and coredns health"
     echo "  update-headscale      Auto-detect public IP and update headscale.${DOMAIN}"
     echo "  update-all-nodes      Update headscale.${DOMAIN} to current public IP"
-    echo "  update-balabusta [IP] Set balabusta.homes + *.balabusta.homes A (default: current public IP)"
 
     exit 1
     ;;

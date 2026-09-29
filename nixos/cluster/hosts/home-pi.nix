@@ -285,4 +285,49 @@
     };
   };
 
+  # ── deSEC DDNS: update balabusta.homes + *.balabusta.homes every 30 minutes ──
+  # Both are plain A records, so read them through the API (a GET does not count
+  # against deSEC's write limits) and write only when one differs. The single bulk
+  # PUT creates or replaces both RRsets atomically; bulk requests name the apex
+  # with an empty subname ("@" only works in single-RRset URLs).
+  systemd.services.desec-ddns-balabusta-homes = {
+    description = "Update deSEC DNS A records for balabusta.homes and its wildcard";
+    after = ["network-online.target"];
+    wants = ["network-online.target"];
+    path = [pkgs.curl];
+    serviceConfig = {
+      Type = "oneshot";
+    };
+    script = ''
+      set -euo pipefail
+      TOKEN=$(cat ${config.age.secrets."hetzner/desec-token".path})
+      API="https://desec.io/api/v1/domains/balabusta.homes/rrsets"
+      IP=$(curl -4sf --connect-timeout 10 ifconfig.me 2>/dev/null || curl -4sf --connect-timeout 10 icanhazip.com 2>/dev/null || curl -4sf --connect-timeout 10 https://1.1.1.1/cdn-cgi/trace 2>/dev/null | grep ^ip= | cut -d= -f2)
+      if [ -z "$IP" ]; then
+        echo "ERROR: Could not determine public IP"
+        exit 1
+      fi
+      APEX_A=$(curl -sf -H "Authorization: Token $TOKEN" "$API/@/A/" 2>/dev/null || echo "")
+      WILD_A=$(curl -sf -H "Authorization: Token $TOKEN" "$API/*/A/" 2>/dev/null || echo "")
+      if [[ "$APEX_A" == *"\"$IP\""* && "$WILD_A" == *"\"$IP\""* ]]; then
+        echo "OK: balabusta.homes and *.balabusta.homes already point to $IP, no update needed"
+        exit 0
+      fi
+      curl -sf -X PUT \
+        -H "Authorization: Token $TOKEN" \
+        -H "Content-Type: application/json" \
+        "$API/" \
+        -d "[{\"subname\":\"\",\"type\":\"A\",\"ttl\":3600,\"records\":[\"$IP\"]},{\"subname\":\"*\",\"type\":\"A\",\"ttl\":3600,\"records\":[\"$IP\"]}]"
+      echo "OK: balabusta.homes, *.balabusta.homes -> $IP"
+    '';
+  };
+  systemd.timers.desec-ddns-balabusta-homes = {
+    description = "Update balabusta.homes DNS every 30 minutes";
+    wantedBy = ["timers.target"];
+    timerConfig = {
+      OnCalendar = "*:0/30";
+      Persistent = true;
+    };
+  };
+
 }
