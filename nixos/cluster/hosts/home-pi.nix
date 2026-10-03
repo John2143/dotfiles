@@ -66,7 +66,7 @@
     description = "Update deSEC DNS A record for headscale.9s.pics";
     after = ["network-online.target"];
     wants = ["network-online.target"];
-    path = [pkgs.curl];
+    path = [pkgs.curl pkgs.dnsutils];
     serviceConfig = {
       Type = "oneshot";
     };
@@ -287,9 +287,11 @@
 
   # ── deSEC DDNS: update balabusta.homes + *.balabusta.homes every 30 minutes ──
   # Both are plain A records, so read them through the API (a GET does not count
-  # against deSEC's write limits) and write only when one differs. The single bulk
-  # PUT creates or replaces both RRsets atomically; bulk requests name the apex
-  # with an empty subname ("@" only works in single-RRset URLs).
+  # against deSEC's write limits) and write only when one differs or is missing.
+  # A read that is throttled or errors (429/5xx/no response) skips the run instead
+  # of writing blind; the next tick retries. The single bulk PUT creates or
+  # replaces both RRsets atomically; bulk requests name the apex with an empty
+  # subname ("@" only works in single-RRset URLs).
   systemd.services.desec-ddns-balabusta-homes = {
     description = "Update deSEC DNS A records for balabusta.homes and its wildcard";
     after = ["network-online.target"];
@@ -307,9 +309,23 @@
         echo "ERROR: Could not determine public IP"
         exit 1
       fi
-      APEX_A=$(curl -sf -H "Authorization: Token $TOKEN" "$API/@/A/" 2>/dev/null || echo "")
-      WILD_A=$(curl -sf -H "Authorization: Token $TOKEN" "$API/*/A/" 2>/dev/null || echo "")
-      if [[ "$APEX_A" == *"\"$IP\""* && "$WILD_A" == *"\"$IP\""* ]]; then
+      TMP=$(mktemp -d)
+      trap 'rm -rf "$TMP"' EXIT
+      APEX_CODE=$(curl -s -o "$TMP/apex" -w '%{http_code}' -H "Authorization: Token $TOKEN" "$API/@/A/" || true)
+      WILD_CODE=$(curl -s -o "$TMP/wild" -w '%{http_code}' -H "Authorization: Token $TOKEN" "$API/*/A/" || true)
+      for CODE in "$APEX_CODE" "$WILD_CODE"; do
+        case "$CODE" in
+          200|404) ;;
+          000|429|5??)
+            echo "SKIP: deSEC read returned HTTP $CODE, leaving records as-is until the next run"
+            exit 0 ;;
+          *)
+            echo "ERROR: deSEC read returned HTTP $CODE"
+            exit 1 ;;
+        esac
+      done
+      if [ "$APEX_CODE" = 200 ] && [ "$WILD_CODE" = 200 ] \
+        && grep -qF "\"$IP\"" "$TMP/apex" && grep -qF "\"$IP\"" "$TMP/wild"; then
         echo "OK: balabusta.homes and *.balabusta.homes already point to $IP, no update needed"
         exit 0
       fi
@@ -327,6 +343,8 @@
     timerConfig = {
       OnCalendar = "*:0/30";
       Persistent = true;
+      # Keep off the exact :00/:30 second the other deSEC timers share.
+      RandomizedDelaySec = "5min";
     };
   };
 
