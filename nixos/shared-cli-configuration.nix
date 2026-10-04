@@ -234,7 +234,10 @@
 
   # Enable the OpenSSH daemon.
   services.openssh = {
-    package = pkgs-stable.openssh;
+    # Do not pin this to pkgs-stable. sshd's libpam dlopens the modules in
+    # /etc/pam.d, which come from security.pam.package (unstable). A stable
+    # sshd carries an older glibc and cannot load them once unstable's glibc
+    # moves ahead, so every login is denied (big lost ssh this way 2026-10-04).
     enable = true;
     settings = {
       PasswordAuthentication = false;
