@@ -384,6 +384,7 @@
           ./nixos/tailscale.nix
 
           ./nixos/modules/big-post-install.nix
+          ./nixos/modules/big-gpu-clocks.nix # optional: max P4 app clocks; comment out to disable
           ./nixos/modules/observability-agent.nix
           ./nixos/modules/nixos-metrics.nix
 
