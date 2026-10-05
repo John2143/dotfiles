@@ -315,6 +315,8 @@ nixpkgs.overlays = [
     "--service-cidr=10.43.0.0/16,fd42:42:43::/112"
     "--flannel-ipv6-masq"
     "--node-ip=192.168.5.175,fd00:1::175"
+    # Also serve etcd /metrics on the node IPv4 :2381 (default is 127.0.0.1 only); scraped by pite Prometheus job=etcd.
+    "--etcd-expose-metrics"
     # Fast crash recovery — detect downed nodes in 20s, evict pods in 40s
     "--kube-apiserver-arg=default-not-ready-toleration-seconds=40"
     "--kube-apiserver-arg=default-unreachable-toleration-seconds=40"

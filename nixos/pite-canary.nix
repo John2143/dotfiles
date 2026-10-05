@@ -98,6 +98,26 @@
           }
         ];
       }
+      # etcd members (k3s --etcd-expose-metrics, see modules/k3s-server.nix).
+      # etcd binds metrics to each server's IPv4 node IP only, so use literal
+      # IPs (*.local may resolve to IPv6). `node` = Kubernetes node name.
+      {
+        job_name = "etcd";
+        static_configs = [
+          {
+            targets = ["192.168.5.36:2381"];
+            labels.node = "closet";
+          }
+          {
+            targets = ["192.168.5.76:2381"];
+            labels.node = "arch";
+          }
+          {
+            targets = ["192.168.5.175:2381"];
+            labels.node = "nas";
+          }
+        ];
+      }
       # Blackbox probes — public endpoints
       {
         job_name = "blackbox-http";

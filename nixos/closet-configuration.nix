@@ -135,6 +135,8 @@
       "--service-cidr=10.43.0.0/16,fd42:42:43::/112"
       # Dual-stack nodes must use explicit IPv4+IPv6 addresses
       "--node-ip=192.168.5.36,fd00:1::36"
+      # Also serve etcd /metrics on the node IPv4 :2381 (default is 127.0.0.1 only); scraped by pite Prometheus job=etcd.
+      "--etcd-expose-metrics"
       # Required for IPv6 pod egress when using flannel
       "--flannel-ipv6-masq"
       # Fast crash recovery — detect downed nodes in 20s, evict pods in 40s
