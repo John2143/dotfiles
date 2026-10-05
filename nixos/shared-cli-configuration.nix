@@ -312,6 +312,23 @@
       group = "users";
     };
 
+  # Full OMP user-level MCP config (server definitions + bearer tokens) as one
+  # JSON file. Decrypted to /run/agenix/omp-mcp and linked to
+  # ~/.omp/agent/.mcp.json by nixos/modules/omp-config.nix.
+  # Rotate a token or change servers:
+  #   cd secrets && agenix -e omp-mcp.json.age -i ~/.ssh/age
+  #   agenix -d omp-mcp.json.age -i ~/.ssh/age | jq -e '.mcpServers | keys'
+  #   commit, nixos-rebuild switch; in running omp sessions: /mcp reload
+  age.secrets.omp-mcp =
+    lib.mkIf
+    (builtins.elem config.networking.hostName ["office" "arch"])
+    {
+      file = ../secrets/omp-mcp.json.age;
+      mode = "0400";
+      owner = "john";
+      group = "users";
+    };
+
   # Home Assistant long-lived access token. Used by omp system prompt for
   # critical iOS notifications (bypasses Do Not Disturb / mute).
   age.secrets.hass-credentials =

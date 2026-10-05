@@ -1,4 +1,4 @@
-{ lib, ... }:
+{ lib, config, osConfig, ... }:
 let
   # Skills — source of truth at ~/dotfiles/.claude/skills/. Enumerate all skill
   # directories and create symlinks for both Claude Code (~/.claude/skills/)
@@ -413,6 +413,18 @@ in
     # with every `omp` invocation (no --hook needed). Reads token usage from
     # turn_end and agent_end events and displays it via ctx.ui.setStatus.
     ".omp/agent/extensions/ui-stats.ts".source = ../../.omp/agent/extensions/ui-stats.ts;
+
+    # MCP servers: the whole config lives in agenix (secrets/omp-mcp.json.age,
+    # declared in nixos/shared-cli-configuration.nix). Uses .mcp.json, not
+    # mcp.json: OMP rewrites mcp.json via tmp+rename, which would replace a
+    # link. To disable a server, add it to "disabledServers" in
+    # ~/.omp/agent/mcp.json by hand -- `/mcp disable <name>` may write the
+    # decrypted config back out as a plain file; force replaces such a copy.
+    # Only present on hosts that declare the secret (office, arch).
+    ".omp/agent/.mcp.json" = lib.mkIf ((osConfig.age.secrets or { }) ? omp-mcp) {
+      source = config.lib.file.mkOutOfStoreSymlink osConfig.age.secrets.omp-mcp.path;
+      force = true;
+    };
 
     ".omp/agent/SYSTEM.md".text = ''
       You are a capable AI agent operating in a terminal-based harness. You handle software engineering tasks and complex research topics with equal rigor. You may be running under Oh My Pi, Claude Code, or another harness; do not assume defaults from any specific one.
