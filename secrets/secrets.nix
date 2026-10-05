@@ -118,6 +118,7 @@ in {
   # cryptographic secret (public server, anyone with the name can publish),
   # but keeping it out of the Nix store avoids accidental exposure.
   "ntfy-topic-url.age".publicKeys = [office arch pite];
+  "omp-mcp.json.age".publicKeys = [office arch];
   # MikroTik SSH key — router (192.168.1.1) + two switches.
   # Upstairs: 192.168.5.3, Downstairs: 192.168.5.2. All use admin@.
   # Decrypted by the mikrotik-connect fish helper (key-based, no sshpass).
