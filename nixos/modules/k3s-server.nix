@@ -23,13 +23,6 @@
     description = "Systemd units that must remain active during k3s shutdown (e.g. storage mounts backing Longhorn).";
   };
 
-  options.custom.k3sNodeTaints = lib.mkOption {
-    type = lib.types.listOf lib.types.str;
-    default = [];
-    description = "Node taints for the k3s server node.";
-    example = ["seated=true:NoSchedule"];
-  };
-
   config = {
     age.secrets.k3s-local-token = {
       file = ../../secrets/k3s-local-token.age;

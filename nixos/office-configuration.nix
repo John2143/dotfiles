@@ -107,7 +107,17 @@
     };
   };
 
-  custom.k3sNodeTaints = ["seated=true:NoSchedule"];
+  # office's only uplink is wifi. These taints keep every network-storage pod and
+  # every Longhorn component off it (Longhorn tolerates wifi=true, not this value);
+  # storage-free pods get the toleration automatically from the argo app
+  # wifi-node-policy. wifi-overflow makes the scheduler prefer wired nodes.
+  # Applied only when the node first registers. If office gets a wired uplink:
+  # delete both entries here AND run
+  #   kubectl taint node office wifi- wifi-overflow-
+  custom.k3sNodeTaints = [
+    "wifi=no-network-storage:NoSchedule"
+    "wifi-overflow=true:PreferNoSchedule"
+  ];
   custom.backup.enable = true;
 
   environment.systemPackages = with pkgs; [

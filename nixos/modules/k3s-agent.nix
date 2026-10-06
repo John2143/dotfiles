@@ -26,6 +26,11 @@
       role = "agent";
       serverAddr = "https://192.168.5.10:6443";
       tokenFile = config.age.secrets.k3s-local-token.path;
+      # Registration-time taints: k3s applies --node-taint only when the node
+      # first joins. Retaint a running node with `kubectl taint`.
+      extraFlags =
+        lib.mkIf (config.custom.k3sNodeTaints != [])
+        (map (t: "--node-taint=${t}") config.custom.k3sNodeTaints);
     };
     # Agent needs avahi to resolve .local server hostnames
     systemd.services.k3s = {
