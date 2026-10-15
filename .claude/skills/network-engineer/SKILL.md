@@ -149,8 +149,8 @@ When connecting to any MikroTik device, run `/system routerboard print` on first
 ```
 Internet
   └─ Verizon router (192.168.0.1)
-       ├─ DMZ → 192.168.0.2 (MikroTik, static WAN)
-       ├─ Port 6767 → 192.168.0.154 (home-pi Headscale)
+       ├─ Per-port forwards → 192.168.0.2 (MikroTik). NOT a full DMZ (tested 2026-10-13, see below)
+       ├─ Port 6767 → 192.168.0.154 (home-pi Headscale) — home-pi headscale retired 2026-10-13; remove if still present
        └─ DHCP: 192.168.0.152 (MikroTik secondary WAN), .154 (home-pi)
             │
             ├─ home-pi (192.168.0.154) — on WAN subnet, not behind MikroTik
@@ -268,8 +268,12 @@ Upstairs Switch (CRS310):
 ## Verizon Router (Upstream CR1000B)
 
 The upstream gateway is a **Verizon CR1000B** (firmware 3.6.0.2_BD). It handles the ISP
-connection and DMZs all inbound traffic to the MikroTik. It also hosts the Headscale
-port forward (6767 → home-pi).
+connection and forwards **specific ports** to the MikroTik. It is **not** a full DMZ: on
+2026-10-13 external check-host probes to WAN UDP 3479 and TCP/UDP 40404 never reached the
+router (no conntrack, no NAT hits), while UDP 3478 and 51820 did. **Every new WAN port needs a
+Verizon forward to 192.168.0.2 in addition to the MikroTik dst-nat** (UDP 3479 was added by the
+owner on 2026-10-13). The old home-pi Headscale forward (6767) is obsolete: the control server is
+in-cluster at `https://net.john2143.com`.
 
 | Property | Value |
 |----------|-------|
@@ -277,7 +281,7 @@ port forward (6767 → home-pi).
 | Firmware | 3.6.0.2_BD |
 | LAN | 192.168.0.1/24 |
 | DHCP pool | 192.168.0.100-169 |
-| DMZ target | 192.168.0.2 (MikroTik) |
+| Inbound | per-port forwards to 192.168.0.2 (MikroTik); not a full DMZ |
 | WAN IPv4 | DHCP from ISP (108.56.153.x) |
 
 
@@ -294,11 +298,11 @@ from `2600:4040:25fa:e400::/64`. Devices directly on the Verizon LAN (like
 home-pi at 192.168.0.154) get working IPv6 this way.
 
 The MikroTik sits at 192.168.0.2 on this subnet. It requests **no** DHCPv6 prefix delegation
-(there is no `/ipv6 dhcp-client`). **Current 2026-09-24** — 2GWAN holds a static
-`2600:4040:25fa:e400:6f4:1cff:fee3:7127/64` plus a dynamic/SLAAC `2600:4040:25fc:8d00::/64`,
-and the bridge advertises only ULA `fd00:1::1/64` to the LAN.
-(The older "stale static `2600:4040:2602::/48`" note is obsolete — re-check live with
-`/ipv6 address print terse` before trusting either.) See the `## IPv6` section.
+(there is no `/ipv6 dhcp-client`). **Current 2026-10-11** — 2GWAN holds only the dynamic/SLAAC
+`2600:4040:25fc:8d00:6f4:1cff:fee3:7127/64` (the stale static `25fa:e400::…/64` was removed
+2026-10-11; NAT66 already used the SLAAC address), and the bridge advertises only ULA
+`fd00:1::1/64` to the LAN. Re-check live with `/ipv6 address print terse` before trusting either.
+See the `## IPv6` section.
 
 ## Port Forwarding (dst-nat)
 
@@ -307,8 +311,8 @@ and the bridge advertises only ULA `fd00:1::1/64` to the LAN.
 mikrotik-connect r '/ip firewall nat print terse where chain=dstnat'
 ```
 
-Baseline — **live-verified 2026-09-24: 15 dst-nat rules** (some rows below cover more than one
-rule; the 51820 and 6767 rows are not MikroTik dst-nat rules):
+Baseline — **live-verified 2026-10-11: 15 dst-nat rules** (some rows below cover more than one
+rule; the 51820 and 6767 rows are not MikroTik dst-nat rules). **2026-10-13: 16 rules** (added `headscale stun (udp/3479) -> .6.18`):
 
 | WAN Port(s) | Proto | MikroTik → (live target) | Service | Notes |
 |------------|-------|--------------------------|---------|-------|
@@ -319,12 +323,18 @@ rule; the 51820 and 6767 rows are not MikroTik dst-nat rules):
 | 11753 | TCP | `.6.17:11753` | default/openrct2-game | OpenRCT2 |
 | 7881 | TCP | `.6.22:7881` | matrix/livekit-server-rtc | LiveKit WebRTC signal |
 | 3478 | TCP+UDP | `.6.14:3478` | steam-lobby/coturn | TURN (live) |
+| 3479 | UDP | `.6.18:3479` | default/headscale-stun | Headscale embedded-DERP STUN (added 2026-10-13; own port because 3478 is coturn's; Service `externalTrafficPolicy: Local` so clients see their real address). Needs the Verizon UDP 3479 forward too |
 | 45000-45063 | UDP | `.6.14:45000-45063` | steam-lobby/coturn | TURN relay range (live) |
-| 4143 | TCP | `.5.36` | linkerd multicluster gateway | target is closet, not a `.6.x` LB IP |
+| 25565 | TCP | `.6.29:25565` | default/minecraft-game | Minecraft (LoadBalancer) |
 | **51820** | **UDP** | **the router itself (`wg-remote`)** | WireGuard tunnel (DO cluster peer) | **not a dst-nat** — terminated on the router by an input rule; added 2026-09-17 |
 | 18080 | TCP | `.5.76:18080` | Monero P2P (NixOS bare-metal) | Monero |
 | 34197 | UDP | `.6.28:34197` | default/factorio-game | Factorio |
-| 6767 | Both | Verizon → home-pi:6767 | home-pi Headscale | **lives on the Verizon router, not the MikroTik** |
+| 6767 | Both | Verizon → home-pi:6767 | home-pi Headscale | **obsolete** (retired 2026-10-13); lives on the Verizon router, not the MikroTik |
+
+**Removed 2026-10-11:** `4143/tcp → .5.36` (comment `linkerd multicluster (tcp/4143) -> .5.36`).
+No linkerd namespace or gateway exists in the cluster; the rule had seen 22 packets in its life
+(scanners). To restore:
+`/ip firewall nat add chain=dstnat action=dst-nat to-addresses=192.168.5.36 to-ports=4143 protocol=tcp in-interface-list=WAN dst-port=4143 comment="linkerd multicluster (tcp/4143) -> .5.36"`.
 
 **Removed 2026-09-24:** `7233/tcp → .6.20` (comment `temporal-grpc mtls (tcp/7233) -> .6.20`). It
 exposed the Temporal frontend to the internet as plaintext, unauthenticated gRPC — the "mtls" label
@@ -335,8 +345,8 @@ TLSRoute `temporal-grpc` (passthrough on 443 → frontend:7233) cannot work — 
 
 **Also absent from the live list** (present in the 2026-09-17 table): `5432 → .5.36` (Postgres —
 WAN 5432 is now dropped by the input rule `no public postgres; log attempts`; see
-**PostgreSQL (closet)**), `25565, 32565 → .5.175` (Minecraft), `5349 → .6.21`, and
-`30478/udp → .6.18` (headscale-stun).
+**PostgreSQL (closet)**), `32565 → .5.175` (Minecraft's old nodePort path; 25565 is back, see above), `5349 → .6.21`, and
+`30478/udp → .6.18` (headscale-stun's old nodePort; it now uses 3479 above).
 
 **Removed 2026-09-17:** `50000-60000 UDP → .6.14` (comment `LiveKit WebRTC media`). It was
 vestigial — its target (steam-lobby/coturn) relays on `45000-45063`, and livekit's LB
@@ -358,9 +368,9 @@ UDP 51820 behind the (since-removed) LiveKit range — external probes were DNAT
 instead of reaching the router.
 
 **No dst-nat (LAN-only):** mimir-lb `.6.23:8080`, loki-push-lb `.6.24:3100`,
-frigate `.6.26`, pihole-dns `.6.27:53`, temporal-frontend `.6.20:7233` (LAN + WireGuard tunnel).
+frigate `.6.26`, temporal-frontend `.6.20:7233` (LAN + WireGuard tunnel), lan-dns `.6.30:53`. (pihole-dns `.6.27` was retired 2026-10-13.)
 
-**Note:** The Headscale port 6767 forward lives on the Verizon router (192.168.0.1), not the MikroTik. home-pi (192.168.0.154) sits on the WAN subnet (192.168.0.0/24) directly behind the Verizon router. The MikroTik has a secondary DHCP WAN IP at 192.168.0.152 (not to be confused with home-pi).
+**Note:** The Headscale port 6767 forward lives on the Verizon router (192.168.0.1), not the MikroTik, and is obsolete (home-pi headscale retired 2026-10-13). home-pi (192.168.0.154) sits on the WAN subnet (192.168.0.0/24) directly behind the Verizon router. The MikroTik has a secondary DHCP WAN IP at 192.168.0.152 (not to be confused with home-pi).
 **Migration (2026-08-04):** all k8s dst-nat targets moved from the kube-vip VIP `.10` to MetalLB `.6.x` LB IPs. **Fix (2026-08-03):** the 5432 dst-nat rule was re-pointed from a dead target (`.35`) to closet `.36` (that rule is gone from the 2026-09-24 list). **Selecting rules — owner policy: no numeric selectors, ever.** Never `set <number>` / `remove <number>` from a `print`. Select by a unique exact comment (`[find comment="..."]`, after `:put [:len [/ip firewall nat find comment="..."]]` prints 1) or by an exact multi-property identity printed immediately before and returning one row. RouterOS 7.19 `find`/`where` on port/protocol properties (`dst-port`, `to-ports`, `protocol`) matches nothing, so those cannot be part of that identity.
 
 ## WireGuard (`wg-remote` — built 2026-09-17, key rotated 2026-09-24)
@@ -384,8 +394,8 @@ arm64: interface listening, inbound path proven end-to-end from external nodes.
 | Client endpoint | `john2143.com:51820` (public DNS tracks the DHCP WAN IP) |
 | Firewall (input) | `input accept udp dst-port=51820 in-interface-list=WAN`, placed **before** `drop all not coming from LAN` |
 | Firewall (forward) | **Tunnel ACL** — default-deny for everything arriving on `wg-remote` except the listed allows |
-| `LAN` list | `wg-remote` is a member — required so tunnel traffic *to the router itself* (DNS, SSH, Winbox) isn't dropped by that same rule |
-| Verizon | **nothing to forward** — the CR1000B DMZ already delivers all inbound to 192.168.0.2 |
+| `LAN` list | `wg-remote` is **not** a member (checked 2026-10-11: the list holds only `bridge`). Tunnel traffic to the router itself is dropped by `drop all not coming from LAN`, except DNS: input rules `wg: doks -> router DNS udp`/`tcp` (`in-interface=wg-remote dst-port=53`) sit above it. The DO side cannot reach router SSH/Winbox |
+| Verizon | UDP 51820 reaches the router (re-proven 2026-10-13). The CR1000B forwards per port, not a full DMZ |
 
 ### How it works
 
@@ -398,7 +408,7 @@ arm64: interface listening, inbound path proven end-to-end from external nodes.
   are rejected after 3 min. Per-packet authentication means peers roam between networks with
   no reconnection.
 - **UDP only, no TCP fallback.** If UDP 51820 is blocked anywhere, nothing comes up and there
-  is no diagnostic signal — which is why the DMZ was verified for UDP, not inferred from TCP.
+  is no diagnostic signal — which is why the Verizon path was verified for UDP, not inferred from TCP.
 - **Throughput is CPU-bound** (software crypto, no offload). `cpu-frequency: auto` in
   `/system/routerboard/settings` costs throughput; pinning to 1400 MHz helps. RB5009 measures
   ~300-900 Mbps real-world, ~1.1-1.4 Gbps in lab conditions.
@@ -466,8 +476,8 @@ mikrotik-connect r '/interface wireguard peers add interface=wg-remote public-ke
 
 The handshake needs no firewall change, but **every forwarded packet from the new peer (LAN or
 internet) hits the tunnel ACL's final drop** — add a matching allow above it first (see
-**Tunnel ACL**). Traffic to the router itself (e.g. DNS on 192.168.5.1) is input-chain and already
-allowed via the `LAN` list.
+**Tunnel ACL**). Traffic to the router itself is input-chain: only DNS (53/udp+tcp) is allowed
+from `wg-remote`, by the `wg: doks -> router DNS` rules; anything else needs its own input allow.
 
 Client config:
 
@@ -505,7 +515,7 @@ kubectl --context 2143prod -n default exec deploy/wireguard-doks -- wg show wg0
 ```
 
 Because the router never dials `peer1`, **a fresh handshake also proves inbound UDP 51820 reaches
-the router through the Verizon DMZ** — the DO side has to get in on its own.
+the router through the Verizon router** — the DO side has to get in on its own.
 
 ### Key rotation (as executed 2026-09-24; ~30 s tunnel outage)
 
@@ -541,7 +551,7 @@ mikrotik-connect r '/interface list member remove [find comment="wg-remote tunne
 ### Gotchas
 
 - **Two layers of access control.** The peer list gates the handshake: the firewall accepts UDP
-  51820 unconditionally (the DMZ hands everything inbound to the router), so only configured public
+  51820 unconditionally (the Verizon router forwards it to the MikroTik), so only configured public
   keys get in. The **tunnel ACL** gates what an admitted peer may reach — forwarded traffic from
   `wg-remote` is default-deny.
 - **No IPv6 over the tunnel** until a v6 address is added to `wg-remote`.
@@ -577,7 +587,7 @@ mikrotik-connect r '/interface list member remove [find comment="wg-remote tunne
 All MikroTiks run Eastern time and sync from **public anycast NTP by literal IP** (no DNS
 dependency). The iDRAC syncs from the router *and* those same public servers. **No firewall
 rule was needed** — the input chain's `drop all not coming from LAN` already covers the LAN,
-and the Verizon DMZ forwards all inbound, so NTP is never WAN-exposed.
+and the Verizon router forwards only specific ports, so NTP is never WAN-exposed.
 
 | Device | Time source | Path |
 |---|---|---|
@@ -666,10 +676,10 @@ are in each device's export, so restoring from `network-configs/` restores time 
 192.168.0.0/24  — 2GWAN (upstream ISP via Verizon, DHCP from 192.168.0.1)
 192.168.1.0/24  — bridge (main LAN, router at .1) — cameras + reserved
 192.168.5.0/24  — bridge (switch LAN, router at .1) — general devices + IoT
-192.168.88.0/24 — bridge (legacy factory-default, router at .254, unused)
-192.168.6.0/24  — MetalLB v4 LB pool (`services` IPAddressPool), BGP /32s, NOT a bridge subnet
+192.168.88.0/24 — bridge (factory-default subnet, router at .254). Keep it: upstairs-core still holds its defconf `192.168.88.1/24`, and any factory-reset MikroTik comes up at `192.168.88.1` — this is how the LAN reaches it
+192.168.6.0/24  — MetalLB v4 LB pool (`services` IPAddressPool `.10-.200`), BGP /32s, NOT a bridge subnet. Since 2026-10-13 the router has no `192.168.6.1/24`; a `blackhole distance=250` aggregate (comment `fail-closed: MetalLB v4 pool …`) drops traffic to unannounced VIPs instead of ARPing on the bridge. Same for `192.168.7.0/24`, `fd00:6::/64`, `fd00:7::/64` (nonprod reserve). Rollback: `/ip address add address=192.168.6.1/24 interface=bridge comment="rollback: service pool connected"`
 fd00:1::/64     — node ULA (advertised on bridge + stateful DHCPv6 `ula-dhcp`, router ::1) — all k3s nodes
-fd00:6::/64     — MetalLB v6 LB pool (`services` IPAddressPool), BGP /128s, NOT a bridge subnet
+fd00:6::/64     — MetalLB v6 LB pool (`services` IPAddressPool), BGP /128s, NOT a bridge subnet (blackhole aggregate since 2026-10-13)
 10.99.0.0/24    — wg-remote WireGuard tunnel subnet (router at .1, DO node at .2, next peer .3 — see below)
 ```
 
@@ -689,8 +699,8 @@ Lives on router `wg-remote` (details: **WireGuard**). Not a bridge subnet — a 
 - DO pod CIDR `10.244.0.0/16` is in `peer1`'s allowed-address, but the DO pod masquerades out
   `wg0`, so home sees every DO pod as src `10.99.0.2`.
 - DO service CIDR `10.245.0.0/16` is **not** routed over the tunnel.
-- The router also carries an inert, invalid `10.99.0.1/24 interface=*C` address row left from the
-  interface recreation. Leave it alone — there is no safe selector for it.
+- The invalid leftover `10.99.0.1/24 interface=*C` address row was removed 2026-10-11 (by
+  `[find invalid and comment="wg-remote tunnel subnet"]`); the valid row on `wg-remote` stays.
 
 ### DHCP Allocation (192.168.5.0/24)
 
@@ -736,8 +746,9 @@ All three on firmware 8.7.11.
 
 - U7 Lite port confirmed 2026-09-24 by `/ip neighbor` and the router's bridge host table.
 - **ether5 PoE fault fixed 2026-09-24:** it was `short-circuit` with `LLDP 12.9W request denied :
-  low-voltage` every 30 s; now `powered-on`, ~5 W. ether3 and ether7 still report `short-circuit`
-  with nothing drawing.
+  low-voltage` every 30 s; now `powered-on`, ~5 W. On 2026-10-11 `2GWAN`, `ether3` and `ether7`
+  report `short-circuit` (PoE detection on non-PoE devices; harmless). **`pi` (ether2) is
+  `powered-on` at ~10 W — it powers the core switch CRS305 via PoE-in. Never set `poe-out=off` on `pi`.**
 
 To (re)point an AP at the controller:
 ```bash
@@ -755,7 +766,7 @@ set-inform http://192.168.5.30:8080/inform
 `.6.25`, BackendTLSPolicy `unifi-web-tls`, ConfigMap `unifi-web-ca`) and, by owner decision, PVCs
 `unifi-data` + `unifi-mongodb-data` with their Retain PVs and Longhorn volumes. Longhorn backups of
 both volumes (last 2026-09-15T07:02Z) still exist in the backup target. Freed LB IPs: `.6.10`,
-`.6.12`, `.6.25` and `fd00:6::30`, `::12`, `::25`. Monitoring probes for `.6.10`/`.6.25` were removed
+`.6.12`, `.6.25` and `::12`, `::25` (`.6.30`/`fd00:6::30` were reused by `lan-dns` on 2026-10-11). Monitoring probes for `.6.10`/`.6.25` were removed
 from `nixos/pite-canary.nix` and `nixos/status-page/generate.py`.
 
 ### Accessing the UniFi Controller
@@ -763,9 +774,9 @@ from `nixos/pite-canary.nix` and `nixos/status-page/generate.py`.
 **Web UI:** `https://192.168.5.30:11443/network/default` (self-signed cert), or
 `https://unifi.ts.2143.me` — argo app `unifi-os`: selectorless Service `unifi-os` + EndpointSlice →
 `192.168.5.30:11443`, BackendTLSPolicy `unifi-os-tls` pins the console's self-signed cert via
-ConfigMap `unifi-os-ca`, HTTPRoute `unifi-os-ts-2143` with the `lan-only` middleware. Router static
-DNS `unifi.ts.2143.me → 192.168.6.11` and the headscale extra_record are correct (traefik) — keep
-them.
+ConfigMap `unifi-os-ca`, HTTPRoute `unifi-os-ts-2143` with the `lan-only` middleware. LAN clients
+resolve `unifi.ts.2143.me → 192.168.6.11` through `lan-dns` (generated from the HTTPRoute since
+2026-10-11; the router's static record is gone). The headscale extra_record is still hand-kept.
 
 **API (programmatic access)** — this is a UniFi OS console:
 - Login: `POST /api/auth/login` with `{"username","password","remember":true}` → cookie `TOKEN`.
@@ -829,14 +840,18 @@ mikrotik-connect uc '/interface print terse where running'
 mikrotik-connect r /export
 ```
 
-## IPv6 (ULA + stateful DHCPv6 + NAT66 — current 2026-09-24)
+## IPv6 (ULA + stateful DHCPv6 + NAT66 — current 2026-10-11)
 
 - **No `/ipv6 dhcp-client`** — the router requests no prefix delegation.
-- **2GWAN:** static `2600:4040:25fa:e400:6f4:1cff:fee3:7127/64` plus a dynamic/SLAAC
-  `2600:4040:25fc:8d00::/64`.
+- **2GWAN:** only the dynamic/SLAAC `2600:4040:25fc:8d00:6f4:1cff:fee3:7127/64` (the stale static
+  `2600:4040:25fa:e400:…/64` was removed 2026-10-11). NAT66 and the router's own v6 egress use it.
 - **LAN:** only ULA `fd00:1::1/64` is advertised on the bridge, with a stateful DHCPv6 server
   `ula-dhcp` (pool `fd00:1::/64`, /128 leases). Egress is one NAT66 masquerade out 2GWAN.
-- **Brittle:** works today, but breaks silently when Verizon rotates the static prefix.
+- **LAN IPv6 DNS (2026-10-11):** RAs carry no DNS (`/ipv6 nd advertise-dns=no`) and `ula-dhcp`
+  hands out `fd00:1::1` via option `dns-router-ula` (code 23). Before this, the router passed
+  Verizon's `2600:4040:25fc:8d00::1` to LAN devices, which answered public (bypassing split-horizon).
+- **Still brittle in one way:** the router learns its WAN prefix by SLAAC; if Verizon renumbers,
+  the address follows automatically, but any hard-coded copy of the prefix goes stale.
 - Native IPv6 is **deliberately deferred** (`argo/docs/2026-09-17-network-hardening.md`,
   "Deferred deliberately").
 
@@ -854,7 +869,7 @@ mikrotik-connect r '/ipv6 dhcp-server print'
 # Traceroute from a LAN host (e.g. arch) to see where IPv6 dies
 ping -6 -c 2 google.com
 ```
-2GWAN should have the static 2600:4040:25fa:e400:6f4:1cff:fee3:7127/64 (plus the SLAAC 2600:4040:25fc:8d00::/64)
+2GWAN should have the SLAAC 2600:4040:25fc:8d00:…/64 (Verizon may renumber it)
 bridge should have fd00:1::1/64
 
 ## Source NAT Rules
@@ -882,18 +897,18 @@ Pod network: `10.42.0.0/16` (IPv4) + `fd42:42:42::/56` (IPv6) flannel VXLAN. Key
 | ts-voice | LoadBalancer | 192.168.6.15:9987/UDP | fd00:6::15 | Teamspeak voice |
 | ts-files | LoadBalancer | 192.168.6.16:30033 | fd00:6::16 | Teamspeak file transfer |
 | openrct2-game | LoadBalancer | 192.168.6.17:11753 | fd00:6::17 | OpenRCT2 |
-| headscale-stun | LoadBalancer | 192.168.6.18:3478/UDP | fd00:6::18 | STUN for Headscale DERP |
+| headscale-stun | LoadBalancer | 192.168.6.18:3479/UDP | fd00:6::18 | STUN for Headscale embedded DERP; eTP Local (only the headscale pod's node announces it) |
 | mosquitto | LoadBalancer | 192.168.6.19:1883 | fd00:6::19 | MQTT |
 | temporal-frontend | LoadBalancer | 192.168.6.20:7233 | — (v4-only, chart limitation) | Temporal gRPC |
 | coturn (steam-lobby) | LoadBalancer | 192.168.6.14:3478 + 45000-45063/UDP | fd00:6::14 | TURN for steam-lobby — **live**, 41d, 1/1, `coturn-wan-ip-watcher` cronjob every 5m |
 | coturn (matrix) | LoadBalancer | 192.168.6.21:3478 + 49152-49215/UDP | fd00:6::21 | TURN for matrix — **live**. Relay range has no dst-nat rule (see above) |
 | livekit | LoadBalancer | 192.168.6.22:7881 + 50000/UDP | fd00:6::22 | LiveKit RTC, ns `matrix` — **live**, 74d, 1/1. Only `50000/UDP`, not a range |
 | frigate | LoadBalancer | 192.168.6.26:5000,1984,8554,8555/UDP | fd00:6::26 | cameras |
-| pihole-dns | LoadBalancer | 192.168.6.27:53 UDP+TCP | — | LAN DNS |
 | factorio-game | LoadBalancer | 192.168.6.28:34197/UDP | fd00:6::28 | Factorio |
 | mimir-lb | LoadBalancer | 192.168.6.23:8080 | fd00:6::23 | Mimir push/query (LAN-only) |
 | loki-push-lb | LoadBalancer | 192.168.6.24:3100 | fd00:6::24 | Loki push (LAN-only) |
-| minecraft-game | NodePort | :32565/TCP | — | Minecraft (unchanged, nodePort path) |
+| minecraft-game | LoadBalancer | 192.168.6.29:25565/TCP | fd00:6::29 | Minecraft (dst-nat 25565) |
+| lan-dns | LoadBalancer | 192.168.6.30:53 UDP+TCP | fd00:6::30 | LAN DNS for the split-horizon zones (argo `docs/lan-dns.md`); the router forwards to it |
 
 Query live: `ssh closet 'kubectl get nodes,pods,svc -A'`
 
@@ -980,7 +995,7 @@ Loki's `max_entries_limit_per_query` is **5000** — narrow the window or pagina
 |------|--------|------|
 | Public DNS | External provider | john2143.com, net.2143.me → home public IP |
 | Tailnet DNS | home-pi (PowerDNS) | ts.9s.pics (authoritative) |
-| LAN DNS | MikroTik (static only) | router.lan → 192.168.5.1 |
+| LAN DNS | MikroTik `192.168.5.1` | `router.lan` static; 6 FWD entries (`comment="lan-dns forward"`) send `2143.me`, `john2143.com`, `aross.studio`, `balabusta.homes`, `chess.dsstar.us`, `mm.b.hero.rehab` to `lan-dns` `192.168.6.30`; netwatch `lan-dns` fails over to public answers (argo `docs/lan-dns.md`, since 2026-10-11) |
 | mDNS/Avahi | aman (reflector) | .local across subnets |
 
 ## Notable Observations
@@ -1085,7 +1100,9 @@ disaster recovery. Files are named per device — `router.rsc`, `router.verbose.
 `core.rsc`, `upstairs.rsc`, `office.rsc`, `upstairs-core.rsc` (each with a `.verbose.rsc`
 twin). **Git tracks history, so there are no dates in the filenames — and there is no
 `mikrotik-export-*.rsc`.** Last refreshed: **2026-09-24** (router only, after the tunnel ACL and
-7233 changes; the switches date from 2026-06-14). RouterOS 7.19 returns **CRLF** even over plain
+7233 changes; the switches date from 2026-06-14). **Stale as of 2026-10-11:** the router has since
+gained the lan-dns FWD entries, netwatch + scripts, the DHCPv6 option and ND change, lost the 4143
+dst-nat and the static WAN v6 address, and had services disabled. RouterOS 7.19 returns **CRLF** even over plain
 non-pty `ssh`, while the committed baselines are LF — strip it (`sed -i 's/\r$//' <file>`) after
 exporting, or every line shows as changed in git. `network-configs/check-drift.sh` normalises line
 endings itself.
@@ -1150,7 +1167,7 @@ When answering a question or diagnosing a problem:
     - TCP: `curl -s -H 'Accept: application/json' 'https://check-host.net/check-tcp?host=<pubip>:<port>&max_nodes=5'`, then poll `https://check-host.net/check-result/<request_id>`.
     - UDP: `check-udp` — **its verdicts are useless** (it reports `timeout` even for ports known to be live), but the packets it sends are real. Fire a burst, then poll `mikrotik-connect r '/ip firewall connection print terse where dst-address~":<port>"'` and correlate source IPs against the check-host nodes via `socket.gethostbyname`.
     - Lone UDP conntrack entries expire in ~30 s: fire the burst and poll **concurrently**.
-    - This is how the DMZ was proven to forward UDP (263 external packets landed on `192.168.0.2:51820`) — and how the DNAT hijack was caught (all of them arriving at `.6.14` beforehand).
+    - This is how UDP 51820 was proven to reach the router (263 external packets landed on `192.168.0.2:51820`), how the DNAT hijack was caught (all of them arriving at `.6.14` beforehand), and how the Verizon router was shown on 2026-10-13 to forward only specific ports (TCP/UDP 40404 never arrived; UDP 3479 arrived only after the owner added a Verizon forward).
 14. **A failed external `ping` to the public IP means NOTHING.** ICMP to `108.56.153.222` is filtered upstream — TIMEOUT / DEST_UNREACH from every external node — while TCP 80/443/993 and UDP both pass. Never conclude "the WAN path is broken" from a failed ping.
 
 ## Safety
@@ -1158,6 +1175,19 @@ When answering a question or diagnosing a problem:
 - All RouterOS commands through this skill are **read-only** (`print`, `export` without `file=`, `monitor`, `get`).
 - **NEVER** run add/remove/set/enable/disable/move/reset/reboot/shutdown without explicit user approval.
 - **No numeric selectors, ever** (owner policy): never `set <n> …` / `remove <n>` from a `print`. Select by a unique exact comment, or an exact multi-property identity printed immediately before and returning one row (check `:put [:len [find …]]` = 1 first).
+- **Router management services (2026-10-11):** only `ssh` (22) and `winbox` (8291) are enabled;
+  `telnet`, `ftp`, `www` (8081, which also carries REST), `www-ssl`, `api`, `api-ssl` and
+  `/tool bandwidth-server` are disabled. The 2026-09-18 recovery used REST on `:8081`; the
+  break-glass path is now Winbox (IP or MAC). Re-enable REST only for an emergency:
+  `/ip service enable [find name="www" and !dynamic]`.
+- **Recovery paths (checked 2026-10-13):** no device has a serial console (`/port print` and
+  `/system console print` are empty on all five), and USB is a host port only, so there is no USB
+  recovery. In order: Winbox by IP; Winbox by MAC from any LAN port (works with broken IP
+  config); reset button → defconf `192.168.88.1` (reachable via the router's `192.168.88.254`);
+  Netinstall over Ethernet. No dedicated management port exists (owner decision 2026-10-13);
+  free candidates if that changes: router `ether6`, office `ether1-8`, upstairs `ether3`/`ether7`.
+- **Flash holds no backups** (7 stale files, including a binary `.backup` with the rotated-out
+  WireGuard key, were deleted 2026-10-11). Never leave `/system backup save` output on the router.
 - A plain `/interface wireguard print` (not only `print detail`) exposes the WireGuard private key — use `print proplist=name,listen-port,public-key,running` or `:put [/interface wireguard get [find name="wg-remote"] public-key]`.
 - **NEVER** run `nixos-rebuild switch` or `home-manager switch` without explicit user approval.
 - When in doubt whether a command is read-only, show it to the user and ask.
