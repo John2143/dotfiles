@@ -335,7 +335,7 @@ in
       modelRoles:
         default: anthropic/claude-opus-5-5
         smol: litellm/deepseek/deepseek-v4-flash
-        slow: litellm/chatgpt/gpt-6-sol
+        slow: anthropic/claude-fable-5-1
         advisor: litellm/deepseek/deepseek-v4-flash
 
       modelProviderOrder:

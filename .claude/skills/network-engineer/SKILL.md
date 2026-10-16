@@ -661,8 +661,10 @@ in the registry at all**; the POSIX form works (`EST5EDT`). Verify with
 `GET /redfish/v1/Managers/iDRAC.Embedded.1` → `DateTime` should track UTC and
 `DateTimeLocalOffset` should be `-04:00`.
 
-The iDRAC root password is **deliberately not stored in this repo** — prompt for it at run time,
-and never pass it as a command-line argument (it lands in shell history and `ps`).
+Attribute PATCHes like this one need `ConfigureManager`, which **only `root` (Administrator) has** —
+`aiuser` (Operator) cannot make them, so ask the owner. Root's password is owner-only and stored
+nowhere (see **Proxmox (bigp) → iDRAC accounts**). Never pass any iDRAC password as a command-line
+argument (it lands in shell history and `ps`).
 
 ### Verify
 
@@ -737,6 +739,26 @@ mikrotik-connect r '/ip dhcp-server lease make-static [find host-name=Side]'
 
 - **bigp and big share one physical link** (big = VM bridged onto bigp's NIC → upstairs switch sfp-sfpplus2). Different SSH host keys is expected (VM ≠ hypervisor); don't read it as two machines.
 - **iDRAC (confirmed 2026-09-18):** Dell **PowerEdge R740** BMC at `192.168.5.254` — iDRAC9 fw `7.00.00.181`, Redfish 1.17.0, MAC `2C:EA:7F:7B:12:75` (Dell OUI, same block as bigp), static `/24` with gateway `192.168.5.1`. This is the R740's own BMC, not another host's iDRAC. Time/NTP is managed over Redfish — see **NTP / time sync**.
+- **iDRAC accounts (verified over Redfish 2026-10-16):**
+
+  | Slot | User | Role | Privileges | Credential | Used by |
+  |------|------|------|------------|------------|---------|
+  | 2 | `root` | Administrator | all five | owner only, stored nowhere (rotated 2026-10-16 after it leaked into a transcript) | the owner |
+  | 3 | `readonly` | ReadOnly | `Login`, `ConfigureSelf` | not in agenix | read-only diagnosis |
+  | 4 | `aiuser` | Operator | `Login`, `ConfigureComponents`, `ConfigureSelf` | agenix `secrets/idrac-aiuser.age` | Home Assistant `custom_components.idrac_power` (logs in from closet `.36` every ~5 min, over both Redfish and the GUI); agents |
+
+  - **`aiuser` can power the server off, on and reset it** (`ConfigureComponents`). bigp runs `big` (a k3s node), the UniFi controller and the github/steam VMs. Anything other than a `GET` (`POST`/`PATCH`/`DELETE`, especially `ComputerSystem.Reset`) needs explicit owner approval.
+  - **Using `aiuser` from office/arch:** `/run/agenix/idrac-aiuser` holds one netrc line (`machine 192.168.5.254 login aiuser password …`), declared in `nixos/shared-cli-configuration.nix` and readable only by `john` (mode 0400). Pass it to curl and never open it:
+
+    ```
+    curl -sk --netrc-file /run/agenix/idrac-aiuser https://192.168.5.254/redfish/v1/Managers/iDRAC.Embedded.1
+    ```
+
+    - **Never add `-v`, `--trace` or `--trace-ascii`.** curl then prints `Authorization: Basic …`, which is the password in reversible base64.
+    - It's hidden from agents by policy only, not by permissions: agents run as `john`, who has passwordless sudo. What keeps it out of transcripts is never `cat`-ing it, never sourcing it, and never running verbose curl.
+    - A `401` with IP blocking on burns 1 of the 3 failures allowed per 60 s. Don't retry in a loop.
+  - **IP blocking is on:** 3 failed logins within 60 s blocks the source IP for 60 s. Every closet pod shares `.36`, so a client with a bad password can lock out Home Assistant too.
+  - **The lifecycle log only goes back about 8 days**, because routine entries flood it: the iDRAC's IPv6 address switches between `fd00:1::4c` and an auto-configured address (`IPA0100`) every few minutes, plus Home Assistant's logins. For older events read the SEL (`LogServices/Sel/Entries`), which still had 2026-08 entries on 2026-10-13.
 - PVE API (`/api2/json/*`) needs a ticket; 8006 cert is self-signed (`curl -k`).
 
 ## UniFi (APs + Controller)

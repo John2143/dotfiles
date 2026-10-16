@@ -394,6 +394,22 @@
       group = "users";
     };
 
+  # iDRAC (bigp's R740 BMC, 192.168.5.254): Operator account `aiuser`, shared
+  # with Home Assistant's idrac_power integration. curl netrc format, one line:
+  #   machine 192.168.5.254 login aiuser password <password>
+  # Use: curl -sk --netrc-file /run/agenix/idrac-aiuser https://192.168.5.254/redfish/v1/...
+  # Never add -v/--trace: curl then prints the Authorization header (base64 user:password).
+  # Operator can power-cycle the server, so agents only GET.
+  age.secrets.idrac-aiuser =
+    lib.mkIf
+    (builtins.elem config.networking.hostName ["office" "arch"])
+    {
+      file = ../secrets/idrac-aiuser.age;
+      mode = "0400";
+      owner = "john";
+      group = "users";
+    };
+
   security.rtkit.enable = true;
   services.udisks2.enable = true;
 
