@@ -150,7 +150,7 @@ When connecting to any MikroTik device, run `/system routerboard print` on first
 Internet
   └─ Verizon router (192.168.0.1)
        ├─ Per-port forwards → 192.168.0.2 (MikroTik). NOT a full DMZ (tested 2026-10-13, see below)
-       ├─ Port 6767 → 192.168.0.154 (home-pi Headscale) — home-pi headscale retired 2026-10-13; remove if still present
+       ├─ Port 8280 → 192.168.0.154 (home-pi Attic cache, used by the Hetzner nodes)
        └─ DHCP: 192.168.0.152 (MikroTik secondary WAN), .154 (home-pi)
             │
             ├─ home-pi (192.168.0.154) — on WAN subnet, not behind MikroTik
@@ -272,8 +272,15 @@ connection and forwards **specific ports** to the MikroTik. It is **not** a full
 2026-10-13 external check-host probes to WAN UDP 3479 and TCP/UDP 40404 never reached the
 router (no conntrack, no NAT hits), while UDP 3478 and 51820 did. **Every new WAN port needs a
 Verizon forward to 192.168.0.2 in addition to the MikroTik dst-nat** (UDP 3479 was added by the
-owner on 2026-10-13). The old home-pi Headscale forward (6767) is obsolete: the control server is
-in-cluster at `https://net.john2143.com`.
+owner on 2026-10-13). **Full port table, add/remove steps and the outside-probe method live in
+argo `docs/network-edge.md`** (the guide that owns this; update it with any router change).
+
+Verizon forwards as of 2026-10-16 (all to `192.168.0.2` unless noted; most are "Both" TCP+UDP):
+80, 443, 25, 587, 993, 3478, 3479, 7881 (TCP), 9987, 11753, 18080, 25565, 30033, 34197,
+45000-45063, 51820 (WireGuard; own entry since 2026-10-16), 8280 → home-pi, and
+25555 → 32565 (**dead**: no MikroTik rule for 32565; remove it). Removed 2026-10-16 because the
+MikroTik had no matching rule: 4143, 5349, 5432, 5999, 7233, 8080, 30478, 50000-60000 (that range
+was the only thing letting WireGuard in until 51820 got its own entry). 6767 → home-pi is gone.
 
 | Property | Value |
 |----------|-------|
@@ -329,7 +336,7 @@ rule; the 51820 and 6767 rows are not MikroTik dst-nat rules). **2026-10-13: 16 
 | **51820** | **UDP** | **the router itself (`wg-remote`)** | WireGuard tunnel (DO cluster peer) | **not a dst-nat** — terminated on the router by an input rule; added 2026-09-17 |
 | 18080 | TCP | `.5.76:18080` | Monero P2P (NixOS bare-metal) | Monero |
 | 34197 | UDP | `.6.28:34197` | default/factorio-game | Factorio |
-| 6767 | Both | Verizon → home-pi:6767 | home-pi Headscale | **obsolete** (retired 2026-10-13); lives on the Verizon router, not the MikroTik |
+| 8280 | Both | Verizon → home-pi:8280 | home-pi Attic cache | lives on the Verizon router, not the MikroTik; public on purpose (Hetzner nodes) |
 
 **Removed 2026-10-11:** `4143/tcp → .5.36` (comment `linkerd multicluster (tcp/4143) -> .5.36`).
 No linkerd namespace or gateway exists in the cluster; the rule had seen 22 packets in its life
