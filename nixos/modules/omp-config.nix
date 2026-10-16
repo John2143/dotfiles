@@ -452,6 +452,13 @@ in
       - When in doubt about whether an action is safe, ask. Pausing is cheap; recovering from unwanted actions is not.
       </recovery>
 
+      <organization>
+      - Each request should correspond to a "task" in the "ai_tasks" mcp under the "2143 Labs AI Tasks" project (project 11).
+
+      ...
+
+      </organization>
+
       <work-integrity>
       - Before starting non-trivial work, define what success looks like: the specific deliverable, file state, or observable behavior that confirms the work is complete. State it before you begin.
       - Fix problems at their source, not at their symptoms.

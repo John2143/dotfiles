@@ -213,9 +213,14 @@ spec:
           insecure: true
       serviceName: traefik
       sampleRate: 1.0
+    # Pin BOTH families: the chart renders this Service as PreferDualStack
+    # (k3s's bundled traefik manifest sets service.spec.ipFamilyPolicy), and
+    # MetalLB rejects a single-IP request for a 2-family Service with
+    # "does not match the ipFamily" — leaving traefik with no LB IP at all.
+    # The v6 twin is ::10 (not ::11); that asymmetry is intentional.
     service:
       annotations:
-        metallb.io/loadBalancerIPs: "192.168.6.11"
+        metallb.io/loadBalancerIPs: "192.168.6.11,fd00:6::10"
       spec:
         externalTrafficPolicy: Local
 '';
