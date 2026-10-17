@@ -362,7 +362,10 @@ async def async_main(prompts_path: str, provider_path: str, mode: str = "trigger
         format="%(asctime)s [%(name)s] %(levelname)s: %(message)s",
     )
     _main_event_loop = asyncio.get_running_loop()
-    log.info("OpenAI client warmed (schemas_complete=%s)", warm_openai_client())
+    if mode in ("genai-gemini", "genai-ollama"):
+        # Only the LLM workers import openai; it adds ~50-70 MB RSS, which
+        # OOM-killed the 128Mi mqtt-listener when every mode warmed it.
+        log.info("OpenAI client warmed (schemas_complete=%s)", warm_openai_client())
     stop = _install_stop_signal_handlers(_main_event_loop)
 
     prompts = load_json(prompts_path)
