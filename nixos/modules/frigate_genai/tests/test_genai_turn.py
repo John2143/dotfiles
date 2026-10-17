@@ -191,14 +191,18 @@ class RunGenaiTurnSideEffectFreeTests(unittest.TestCase):
     }
 
     def _run(self, message, state_messages):
-        import frigate_genai.activities.genai_turn as gt
         from types import SimpleNamespace
 
         usage = SimpleNamespace(prompt_tokens=10, completion_tokens=5,
                                 cached_tokens=0, prompt_tokens_details=None)
         choice = SimpleNamespace(message=message,
                                  finish_reason="tool_calls" if message.tool_calls else "stop")
-        resp = SimpleNamespace(choices=[choice], usage=usage)
+        return self._run_response(SimpleNamespace(choices=[choice], usage=usage), state_messages)
+
+    def _run_response(self, resp, state_messages):
+        import frigate_genai.activities.genai_turn as gt
+        from types import SimpleNamespace
+
         client = SimpleNamespace(
             chat=SimpleNamespace(completions=SimpleNamespace(create=lambda **kw: resp)))
         state = {"messages": state_messages}
@@ -207,6 +211,15 @@ class RunGenaiTurnSideEffectFreeTests(unittest.TestCase):
              patch.object(gt, "load_json", return_value={}), \
              patch.object(gt, "_resolve_provider", return_value=(client, "gemini-2.5-flash")):
             return asyncio.run(gt.run_genai_turn_activity(self._turn_arg))
+
+    def _run_no_choices(self, state_messages):
+        """Provider response with no candidates and no usage block (Gemini via
+        LiteLLM); previously IndexError on choices[0], retried to exhaustion."""
+        from types import SimpleNamespace
+
+        with self.assertLogs("frigate-genai-sidecar", level="WARNING") as logs:
+            result = self._run_response(SimpleNamespace(choices=[], usage=None), state_messages)
+        return result, logs.output
 
     def test_module_has_no_atomic_write(self):
         """Contract guard: the activity no longer imports any S3 write helper."""
@@ -242,6 +255,33 @@ class RunGenaiTurnSideEffectFreeTests(unittest.TestCase):
         # nudge appended (no identical last user message in the mock state)
         self.assertEqual(result["messages_to_persist"][1]["role"], "user")
         self.assertNotIn("tool_calls", result)
+
+    def test_empty_choices_is_blank_text_only_turn(self):
+        result, logs = self._run_no_choices(state_messages=[])
+        self.assertIs(result["text_only"], True)
+        self.assertNotIn("tool_calls", result)
+        # usage=None must count as zero tokens, not crash on attribute access
+        self.assertEqual(
+            (result["prompt_tokens"], result["completion_tokens"], result["cached_tokens"]),
+            (0, 0, 0))
+        # Blank content so the workflow's 4-blank conclusion reports
+        # "Agentic failed" rather than echoing assistant text.
+        self.assertEqual(result["assistant_message"]["role"], "assistant")
+        self.assertEqual((result["assistant_message"].get("content") or "").strip(), "")
+        # Only the nudge is persisted; the blank assistant message never is.
+        persisted = result["messages_to_persist"]
+        self.assertEqual([m["role"] for m in persisted], ["user"])
+        self.assertTrue(persisted[0]["content"].endswith(
+            _build_nudge("", self._turn_arg["tool_names"])), persisted[0]["content"])
+        # Loki query for production verification (P5) keys on this phrase.
+        self.assertTrue(any("returned no choices" in line for line in logs), logs)
+
+    def test_empty_choices_streak_does_not_restack_nudge(self):
+        first, _ = self._run_no_choices(state_messages=[])
+        nudge = first["messages_to_persist"][0]
+        again, _ = self._run_no_choices(state_messages=[{"role": "system", "content": "s"}, nudge])
+        self.assertIs(again["text_only"], True)
+        self.assertEqual(again["messages_to_persist"], [])
 
 if __name__ == "__main__":
     unittest.main()
