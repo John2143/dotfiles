@@ -67,6 +67,11 @@ _EXTRACT_RETRY = RetryPolicy(
     backoff_coefficient=2.0,
 )
 
+# Shorter than terminationGracePeriodSeconds (180) in argo
+# workloads/frigate-genai/*-workerdeployment.yaml, so in-flight activities get
+# 150 s to finish and cancellations are reported before SIGKILL.
+WORKER_GRACEFUL_SHUTDOWN = timedelta(seconds=150)
+
 # ── Image resolution presets ──────────────────────────────────────────
 _RES_LEVELS = {
     "tiny": 320,

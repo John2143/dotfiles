@@ -7,6 +7,7 @@ import os
 import re
 import threading
 import shutil
+import signal
 import subprocess
 import tempfile
 import time
@@ -38,6 +39,7 @@ from frigate_genai.config import (
     _SEARCH_CAMERA,
     _SEARCH_LABEL,
     _SEARCH_EVENT_ID,
+    WORKER_GRACEFUL_SHUTDOWN,
     _frigate_url,
 )
 from frigate_genai.s3_helpers import (
@@ -318,6 +320,40 @@ def _temporal_tls_config() -> TLSConfig | None:
         "Failed to fetch SPIRE X.509 SVID after 3 attempts: %s" % last_err
     )
 
+
+def _install_stop_signal_handlers(loop: asyncio.AbstractEventLoop) -> asyncio.Event:
+    """Return an Event set on SIGTERM/SIGINT. As container PID 1, python
+    ignores SIGTERM unless a handler is installed, so pods sat out the full
+    termination grace period and were SIGKILLed mid-activity."""
+    stop = asyncio.Event()
+
+    def _on_signal(signame: str) -> None:
+        log.info("Received %s; shutting down (graceful timeout %s)", signame, WORKER_GRACEFUL_SHUTDOWN)
+        stop.set()
+
+    for sig in (signal.SIGTERM, signal.SIGINT):
+        loop.add_signal_handler(sig, _on_signal, sig.name)
+    return stop
+
+
+async def _run_until_stopped(workers: list[Worker], stop: asyncio.Event) -> None:
+    """Run workers until one exits or `stop` is set, then gracefully shut down
+    the ones still running. Re-raises the first worker error so a crashed
+    worker still exits the process non-zero (container restart)."""
+    run_tasks = [asyncio.create_task(w.run()) for w in workers]
+    stop_task = asyncio.create_task(stop.wait())
+    await asyncio.wait([*run_tasks, stop_task], return_when=asyncio.FIRST_COMPLETED)
+    stop_task.cancel()
+    # Only shut down workers whose run() is still going: Worker.shutdown()
+    # waits for run() to finish normally and would hang on one that raised.
+    await asyncio.gather(*(w.shutdown() for w, t in zip(workers, run_tasks) if not t.done()))
+    results = await asyncio.gather(*run_tasks, return_exceptions=True)
+    errors = [r for r in results if isinstance(r, BaseException)]
+    if errors:
+        raise errors[0]
+    log.info("Workers shut down")
+
+
 async def async_main(prompts_path: str, provider_path: str, mode: str = "triggers") -> None:
     global _temporal_client, _main_event_loop
 
@@ -327,6 +363,7 @@ async def async_main(prompts_path: str, provider_path: str, mode: str = "trigger
     )
     _main_event_loop = asyncio.get_running_loop()
     log.info("OpenAI client warmed (schemas_complete=%s)", warm_openai_client())
+    stop = _install_stop_signal_handlers(_main_event_loop)
 
     prompts = load_json(prompts_path)
     provider_cfg = load_json(provider_path)
@@ -367,7 +404,7 @@ async def async_main(prompts_path: str, provider_path: str, mode: str = "trigger
     except Exception as e:
         log.debug("Search attribute registration skipped: %s", e)
 
-    mode_tasks = []
+    workers: list[Worker] = []
     misc_activities = [select_model_activity, update_description_activity, fetch_snapshot_activity, cleanup_cancelled_activity, init_agent_state_activity, init_subagent_state_activity, tool_upscale_activity]
 
     if mode == "triggers":
@@ -385,8 +422,9 @@ async def async_main(prompts_path: str, provider_path: str, mode: str = "trigger
             workflows=[GenAIWorkflow, AgentSessionWorkflow, SubAgentWorkflow],
             activities=misc_activities,
             deployment_config=deployment_config,
+            graceful_shutdown_timeout=WORKER_GRACEFUL_SHUTDOWN,
         )
-        mode_tasks = [asyncio.create_task(main_worker.run())]
+        workers = [main_worker]
     elif mode == "ffmpeg":
         deployment_config = WorkerDeploymentConfig(
             version=WorkerDeploymentVersion(
@@ -403,8 +441,9 @@ async def async_main(prompts_path: str, provider_path: str, mode: str = "trigger
             activity_executor=ThreadPoolExecutor(max_workers=2),
             max_concurrent_activities=int(os.environ.get("TEMPORAL_MAX_FFMPEG", "2")),
             deployment_config=deployment_config,
+            graceful_shutdown_timeout=WORKER_GRACEFUL_SHUTDOWN,
         )
-        mode_tasks = [asyncio.create_task(ffmpeg_worker.run())]
+        workers = [ffmpeg_worker]
     elif mode == "genai-gemini":
         deployment_config = WorkerDeploymentConfig(
             version=WorkerDeploymentVersion(
@@ -419,6 +458,7 @@ async def async_main(prompts_path: str, provider_path: str, mode: str = "trigger
             task_queue=TASK_QUEUE,
             activities=misc_activities,
             deployment_config=deployment_config,
+            graceful_shutdown_timeout=WORKER_GRACEFUL_SHUTDOWN,
         )
         gemini_worker = Worker(
             _temporal_client,
@@ -434,8 +474,9 @@ async def async_main(prompts_path: str, provider_path: str, mode: str = "trigger
                         init_subagent_state_activity],
             max_concurrent_activities=int(os.environ.get("TEMPORAL_MAX_GEMINI_GENAI", "5")),
             deployment_config=deployment_config,
+            graceful_shutdown_timeout=WORKER_GRACEFUL_SHUTDOWN,
         )
-        mode_tasks = [asyncio.create_task(w.run()) for w in [main_worker, gemini_worker]]
+        workers = [main_worker, gemini_worker]
     elif mode == "genai-ollama":
         deployment_config = WorkerDeploymentConfig(
             version=WorkerDeploymentVersion(
@@ -450,6 +491,7 @@ async def async_main(prompts_path: str, provider_path: str, mode: str = "trigger
             task_queue=TASK_QUEUE,
             activities=misc_activities,
             deployment_config=deployment_config,
+            graceful_shutdown_timeout=WORKER_GRACEFUL_SHUTDOWN,
         )
         ollama_worker = Worker(
             _temporal_client,
@@ -465,15 +507,16 @@ async def async_main(prompts_path: str, provider_path: str, mode: str = "trigger
                         init_subagent_state_activity],
             max_concurrent_activities=int(os.environ.get("TEMPORAL_MAX_OLLAMA_GENAI", "1")),
             deployment_config=deployment_config,
+            graceful_shutdown_timeout=WORKER_GRACEFUL_SHUTDOWN,
         )
-        mode_tasks = [asyncio.create_task(w.run()) for w in [main_worker, ollama_worker]]
+        workers = [main_worker, ollama_worker]
     elif mode == "mqtt-listener":
         # No Temporal worker — MQTT client starts workflows via async_main.
         # Health HTTP handled by the mode != "dashboard" branch below.
-        mode_tasks = []  # MQTT runs on its own thread, not via asyncio
+        workers = []  # MQTT runs on its own thread, not via asyncio
     elif mode == "dashboard":
         # No Temporal worker, no MQTT. HTTP dashboard started below.
-        mode_tasks = []
+        workers = []
 
     # ── Health HTTP server (all modes) ──────────────────────────────────
     class _HealthHandler(BaseHTTPRequestHandler):
@@ -1010,16 +1053,6 @@ async def async_main(prompts_path: str, provider_path: str, mode: str = "trigger
         http_thread.start()
         log.info("HTTP reprocess endpoint on http://%s:%d", http_host, http_port)
 
-    try:
-        if mode == "mqtt-listener":
-            # Keep event loop alive for MQTT callbacks
-            await asyncio.Event().wait()
-        elif mode_tasks:
-            await asyncio.gather(*mode_tasks)
-        elif mode == "dashboard":
-            # HTTP thread keeps process alive; wait indefinitely
-            await asyncio.Event().wait()
-    except asyncio.CancelledError:
-        log.info("Workers shutting down")
-        if mode == 'mqtt-listener':
-            client_mqtt.disconnect()
+    await _run_until_stopped(workers, stop)
+    if mode == "mqtt-listener":
+        client_mqtt.disconnect()
