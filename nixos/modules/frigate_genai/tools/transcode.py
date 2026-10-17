@@ -9,7 +9,7 @@ from pathlib import Path
 from temporalio import activity
 
 from frigate_genai.s3_helpers import _find_tc_id, _load_state, _s3_put
-from frigate_genai.config import _frigate_url
+from frigate_genai.config import FFMPEG_THREADS, _frigate_url
 
 log = logging.getLogger("frigate-genai-sidecar")
 
@@ -51,6 +51,8 @@ def _transcode_frames(
             "-y",
             "-v", "error",
             "-ss", "0.000",
+            "-threads", FFMPEG_THREADS,
+            "-filter_threads", FFMPEG_THREADS,
             "-i", input_path,
             "-map", "0:v",
             "-t", f"{duration:.3f}",
@@ -58,6 +60,7 @@ def _transcode_frames(
         if fps is not None:
             cmd += ["-vf", f"fps={fps}"]
         cmd += [
+            "-threads", FFMPEG_THREADS,
             "-q:v", "3",
             out_pattern,
         ]

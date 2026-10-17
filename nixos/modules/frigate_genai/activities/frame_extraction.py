@@ -13,7 +13,7 @@ from pathlib import Path
 from temporalio import activity
 from temporalio.exceptions import ApplicationError
 
-from frigate_genai.config import _frigate_url
+from frigate_genai.config import FFMPEG_THREADS, _frigate_url
 from frigate_genai.s3_helpers import _s3_event_prefix, _s3_put
 from frigate_genai.activities.genai_turn import _run_with_heartbeat
 
@@ -54,12 +54,15 @@ def transcode_into_parts(
             "ffmpeg",
             "-y",
             "-loglevel", "error",
+            "-threads", FFMPEG_THREADS,
+            "-filter_threads", FFMPEG_THREADS,
             "-i", hls_url,
             "-map", "0:v",
         ]
         if fps is not None:
             cmd += ["-vf", f"fps={fps}"]
         cmd += [
+            "-threads", FFMPEG_THREADS,
             "-q:v", "3",
             f"{tmp}/frame_%03d.jpg",
         ]

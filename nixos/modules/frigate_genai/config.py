@@ -22,6 +22,13 @@ FFMPEG_TASK_QUEUE = "genai-tasks-ffmpeg"
 GEMINI_TASK_QUEUE = "genai-tasks-gemini"
 OLLAMA_TASK_QUEUE = "genai-tasks-ollama"
 
+# ── ffmpeg ────────────────────────────────────────────────────────────
+# Unset, ffmpeg sizes its decode/filter/encode thread pools to the host CPU
+# count (64 on `big`), not the pod's 4-CPU limit; each 4K HEVC decode then
+# holds ~3-4 GiB and two concurrent transcodes OOM the 8 GiB ffmpeg pod.
+# Matches resources.limits.cpu in argo workloads/frigate-genai/ffmpeg-workerdeployment.yaml.
+FFMPEG_THREADS = "4"
+
 # ── Worker deployment identity ────────────────────────────────────────
 DEPLOYMENT_NAME = os.environ.get("TEMPORAL_DEPLOYMENT_NAME", "local-dev")
 BUILD_ID = os.environ.get("TEMPORAL_WORKER_BUILD_ID", "local-dev")
