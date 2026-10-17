@@ -1,4 +1,4 @@
-# 2026-09-24 04:11:24 by RouterOS 7.19.6
+# 2026-10-17 08:13:31 by RouterOS 7.24.5
 # software id = 7RHC-3MMG
 #
 # model = RB5009UPr+S+
@@ -6,10 +6,15 @@
 /interface bridge
 add admin-mac=04:F4:1C:E3:71:28 auto-mac=no comment=defconf name=bridge
 /interface ethernet
-set [ find default-name=ether1 ] name=2GWAN
-set [ find default-name=sfp-sfpplus1 ] name=10GsfpLAN
-set [ find default-name=ether2 ] name=pi
-set [ find default-name=ether8 ] name=to-wifi
+set [ find default-name=ether1 ] l2mtu=1514 name=2GWAN
+set [ find default-name=sfp-sfpplus1 ] l2mtu=1514 name=10GsfpLAN
+set [ find default-name=ether3 ] l2mtu=1514
+set [ find default-name=ether4 ] l2mtu=1514
+set [ find default-name=ether5 ] l2mtu=1514
+set [ find default-name=ether6 ] l2mtu=1514
+set [ find default-name=ether7 ] l2mtu=1514
+set [ find default-name=ether2 ] l2mtu=1514 name=pi
+set [ find default-name=ether8 ] l2mtu=1514 name=to-wifi
 /interface wireguard
 add comment="WireGuard remote access" listen-port=51820 mtu=1420 name=\
     wg-remote
@@ -20,12 +25,42 @@ add comment=defconf name=LAN
 add name=dhcp ranges=192.168.5.50-192.168.5.254
 /ip dhcp-server
 add address-pool=dhcp interface=bridge name=dchp1
-/ipv6 dhcp-server
-add address-pool=ula-addr-pool interface=bridge name=ula-dhcp
+/ipv6 dhcp-server option
+add code=23 comment="lan-dns: DHCPv6 DNS = router ULA, not Verizon" name=\
+    dns-router-ula value=0xfd000001000000000000000000000001
 /ipv6 pool
 add name=ula-addr-pool prefix=fd00:1::/64 prefix-length=128
+/routing bgp instance
+add as=65001 name=bgp-instance-1 vrf=main
 /routing bgp template
-set default afi=ip,ipv6
+set default afi=ip,ipv6 as=65530
+/system logging action
+add name=loki remote=192.168.6.25 remote-log-format=syslog src-address=\
+    192.168.5.1 syslog-facility=local0 target=remote
+/system script
+add comment=\
+    "lan-dns failover: starts lan-dns-watch once; see argo docs/lan-dns.md" \
+    dont-require-permissions=no name=lan-dns-down owner=admin policy=\
+    read,write,test source=":if ([:len [/system script job find where script=\
+    \"lan-dns-watch\"]] = 0) do={ :execute script=\"/system script run lan-dns\
+    -watch\" }"
+add comment="lan-dns failover; see argo docs/lan-dns.md" \
+    dont-require-permissions=no name=lan-dns-up owner=admin policy=\
+    read,write,test source="/ip dns static enable [find comment=\"lan-dns forw\
+    ard\"]; /ip dns cache flush; :log warning \"lan-dns up: LAN forwards enabl\
+    ed\""
+add comment="lan-dns failover loop, started by lan-dns-down; see argo docs/lan\
+    -dns.md" dont-require-permissions=no name=lan-dns-watch owner=admin \
+    policy=read,write,test source=":local bad 0; :local done false; :log info \
+    \"lan-dns watch: netwatch down, re-checking\"; :while ((!\$done) && ([/too\
+    l netwatch get [find name=\"lan-dns\"] status] = \"down\")) do={ :local ok\
+    \_false; :do { :if ([:resolve john2143.com server=192.168.6.30] in 192.168\
+    .0.0/16) do={ :set ok true } } on-error={ :set ok false }; :if (\$ok) do={\
+    \_:set bad 0 } else={ :set bad (\$bad + 1) }; :if (\$bad >= 3) do={ /ip dn\
+    s static disable [find comment=\"lan-dns forward\"]; /ip dns cache flush; \
+    :log warning \"lan-dns down: LAN forwards disabled\"; :set done true } els\
+    e={ :delay 5s } }; :if (!\$done) do={ :log info \"lan-dns watch: netwatch \
+    up again, no failover\" }"
 /disk settings
 set auto-media-interface=bridge auto-media-sharing=yes auto-smb-sharing=yes
 /interface bridge port
@@ -52,9 +87,6 @@ add allowed-address=10.99.0.2/32,10.244.0.0/16 comment=\
 add address=192.168.0.2/24 interface=2GWAN network=192.168.0.0
 add address=192.168.1.1/24 interface=bridge network=192.168.1.0
 add address=192.168.88.254/24 interface=bridge network=192.168.88.0
-add address=192.168.6.1/24 interface=bridge network=192.168.6.0
-add address=10.99.0.1/24 comment="wg-remote tunnel subnet" interface=*C \
-    network=10.99.0.0
 add address=10.99.0.1/24 comment="wg-remote tunnel subnet" interface=\
     wg-remote network=10.99.0.0
 add address=192.168.5.1/24 comment=defconf interface=bridge network=\
@@ -62,7 +94,7 @@ add address=192.168.5.1/24 comment=defconf interface=bridge network=\
 /ip arp
 add address=192.168.5.36 interface=bridge mac-address=0C:C4:7A:BD:63:3D
 /ip dhcp-client
-add comment=defconf interface=2GWAN
+add comment=defconf interface=2GWAN name=2GWAN
 /ip dhcp-server lease
 add address=192.168.1.66 client-id=1:ec:71:db:3e:2f:21 mac-address=\
     EC:71:DB:3E:2F:21 server=dchp1
@@ -103,43 +135,18 @@ set allow-remote-requests=yes mdns-repeat-ifaces=bridge,2GWAN servers=\
     1.1.1.1,1.0.0.1
 /ip dns static
 add address=192.168.5.1 comment=defconf name=router.lan type=A
-add address=192.168.6.11 name=argo-webhook.john2143.com type=A
-add address=192.168.6.11 name=argocd.ts.2143.me type=A
-add address=192.168.6.11 name=au.2143.me type=A
-add address=192.168.6.11 name=auth.john2143.com type=A
-add address=192.168.6.11 name=cameras.john2143.com type=A
-add address=192.168.6.11 name=cameras.ts.2143.me type=A
-add address=192.168.6.11 name=cams.ts.2143.me type=A
-add address=192.168.6.11 name=chat.2143.me type=A
-add address=192.168.6.11 name=containerstore.john2143.com type=A
-add address=192.168.6.11 name=element.john2143.com type=A
-add address=192.168.6.11 name=files-ui.ts.2143.me type=A
-add address=192.168.6.11 name=files.john2143.com type=A
-add address=192.168.6.11 name=grafana.john2143.com type=A
-add address=192.168.6.11 name=home.ts.2143.me type=A
-add address=192.168.6.11 name=images.2143.me type=A
-add address=192.168.6.11 name=immich.ts.2143.me type=A
-add address=192.168.6.11 name=john2143.com type=A
-add address=192.168.6.11 name=livekit.john2143.com type=A
-add address=192.168.6.11 name=llm.2143.me type=A
-add address=192.168.6.11 name=longhorn.ts.2143.me type=A
-add address=192.168.6.11 name=m.2143.me type=A
-add address=192.168.6.11 name=matrix.2143.me type=A
-add address=192.168.6.11 name=mattermost.john2143.com type=A
-add address=192.168.6.11 name=net.2143.me type=A
-add address=192.168.6.11 name=net.john2143.com type=A
-add address=192.168.6.11 name=pihole.ts.2143.me type=A
-add address=192.168.6.11 name=prod.rots.2143.me type=A
-add address=192.168.6.11 name=pvp.john2143.com type=A
-add address=192.168.6.11 name=rots.2143.me type=A
-add address=192.168.6.11 name=seafile.john2143.com type=A
-add address=192.168.6.11 name=status.2143.me type=A
-add address=192.168.6.11 name=temporal.john2143.com type=A
-add address=192.168.6.11 name=temporal.ts.2143.me type=A
-add address=192.168.6.11 name=unifi.ts.2143.me type=A
-add address=192.168.6.13 name=imap.m.2143.me type=A
-add address=192.168.6.13 name=smtp.m.2143.me type=A
-add address=192.168.6.20 name=temporal-grpc.john2143.com type=A
+add comment="lan-dns forward" forward-to=192.168.6.30 match-subdomain=yes \
+    name=2143.me type=FWD
+add comment="lan-dns forward" forward-to=192.168.6.30 match-subdomain=yes \
+    name=aross.studio type=FWD
+add comment="lan-dns forward" forward-to=192.168.6.30 match-subdomain=yes \
+    name=balabusta.homes type=FWD
+add comment="lan-dns forward" forward-to=192.168.6.30 match-subdomain=yes \
+    name=chess.dsstar.us type=FWD
+add comment="lan-dns forward" forward-to=192.168.6.30 match-subdomain=yes \
+    name=mm.b.hero.rehab type=FWD
+add comment="lan-dns forward" forward-to=192.168.6.30 match-subdomain=yes \
+    name=john2143.com type=FWD
 /ip firewall filter
 add action=accept chain=forward comment="allow inter-subnet routing" \
     dst-address=192.168.0.0/16 src-address=192.168.0.0/16
@@ -167,7 +174,7 @@ add action=accept chain=forward comment="defconf: accept in ipsec policy" \
 add action=accept chain=forward comment="defconf: accept out ipsec policy" \
     ipsec-policy=out,ipsec
 add action=fasttrack-connection chain=forward comment="defconf: fasttrack" \
-    connection-state=established,related hw-offload=yes
+    connection-state=established,related
 add action=accept chain=forward comment=\
     "defconf: accept established,related, untracked" connection-state=\
     established,related,untracked
@@ -182,6 +189,8 @@ add action=accept chain=forward comment="wg: doks -> postgres" dst-address=\
     192.168.5.36 dst-port=5432 in-interface=wg-remote protocol=tcp
 add action=accept chain=forward comment="wg: doks -> temporal" dst-address=\
     192.168.6.20 dst-port=7233 in-interface=wg-remote protocol=tcp
+add action=accept chain=forward comment="wg: doks -> seaweed s3" dst-address=\
+    192.168.6.31 dst-port=8333 in-interface=wg-remote protocol=tcp
 add action=drop chain=forward comment=\
     "wg: deny tunnel traffic not allowed above" in-interface=wg-remote log=\
     yes log-prefix=wg-drop
@@ -228,28 +237,45 @@ add action=dst-nat chain=dstnat comment=\
     in-interface-list=WAN protocol=udp to-addresses=192.168.6.14 to-ports=\
     3478
 add action=dst-nat chain=dstnat comment=\
-    "linkerd multicluster (tcp/4143) -> .5.36" dst-port=4143 \
-    in-interface-list=WAN protocol=tcp to-addresses=192.168.5.36 to-ports=\
-    4143
-add action=dst-nat chain=dstnat comment=\
     "steam-lobby coturn relay (udp/45000-45063) -> .6.14" dst-port=\
     45000-45063 in-interface-list=WAN protocol=udp to-addresses=192.168.6.14 \
     to-ports=45000-45063
 add action=dst-nat chain=dstnat comment="factorio (udp/34197) -> .6.28" \
     dst-port=34197 in-interface-list=WAN protocol=udp to-addresses=\
     192.168.6.28 to-ports=34197
+add action=dst-nat chain=dstnat comment="minecraft (tcp/25565) -> .6.29" \
+    dst-port=25565 in-interface-list=WAN protocol=tcp to-addresses=\
+    192.168.6.29 to-ports=25565
+add action=dst-nat chain=dstnat comment="headscale stun (udp/3479) -> .6.18" \
+    dst-port=3479 in-interface-list=WAN protocol=udp to-addresses=\
+    192.168.6.18 to-ports=3479
 /ip route
-add disabled=no dst-address=192.168.1.0/24 gateway=bridge routing-table=main \
-    suppress-hw-offload=no
+add disabled=no dst-address=192.168.1.0/24 gateway=bridge routing-table=main
+add blackhole comment="fail-closed: MetalLB v4 pool (unannounced VIPs drop)" \
+    distance=250 dst-address=192.168.6.0/24
+add blackhole comment="fail-closed: reserved nonprod v4 pool" distance=250 \
+    dst-address=192.168.7.0/24
+/ipv6 route
+add blackhole comment="fail-closed: MetalLB v6 pool (unannounced VIPs drop)" \
+    distance=250 dst-address=fd00:6::/64
+add blackhole comment="fail-closed: reserved nonprod v6 pool" distance=250 \
+    dst-address=fd00:7::/64
 /ip service
-set www port=8081
+set ftp disabled=yes
+set telnet disabled=yes
+set reverse-proxy disabled=yes
+set www disabled=yes port=8081
+set api disabled=yes
+set api-ssl disabled=yes
 /ipv6 address
-add address=2600:4040:25fa:e400:6f4:1cff:fee3:7127 advertise=no interface=\
-    2GWAN
 add address=fd00:1::1 interface=bridge
+/ipv6 dhcp-server
+add address-pool=ula-addr-pool dhcp-option=dns-router-ula interface=bridge \
+    name=ula-dhcp
 /ipv6 dhcp-server binding
-add address=fd00:1::36/128 duid=0x48750ccae3a454a0f9f03492c0c3c4ed ia-type=na \
-    iaid=2138897477 life-time=3d prefix-pool=ula-addr-pool server=ula-dhcp
+add address=fd00:1::36/128 duid=0x000448750ccae3a454a0f9f03492c0c3c4ed \
+    ia-type=na iaid=2138897477 life-time=3d prefix-pool=ula-addr-pool server=\
+    ula-dhcp
 /ipv6 firewall address-list
 add address=::/128 comment="defconf: unspecified address" list=bad_ipv6
 add address=::1/128 comment="defconf: lo" list=bad_ipv6
@@ -311,27 +337,31 @@ add action=accept chain=forward comment=\
 add action=drop chain=forward comment=\
     "defconf: drop everything else not coming from LAN" in-interface-list=\
     !LAN
-add action=accept chain=input connection-state=established,related
-add action=accept chain=forward connection-state=established,related
 /ipv6 firewall nat
 add action=masquerade chain=srcnat out-interface=2GWAN
 /ipv6 nd
 set [ find default=yes ] managed-address-configuration=yes
 /routing bgp connection
-add afi=ip,ipv6 as=65001 hold-time=3m local.address=192.168.5.1 .role=ebgp \
-    name=metallb-arch remote.address=192.168.5.76 .as=65000
-add afi=ip,ipv6 as=65001 local.address=192.168.5.1 .role=ebgp name=\
-    metallb-closet remote.address=192.168.5.36 .as=65000
-add afi=ip,ipv6 as=65001 local.address=192.168.5.1 .role=ebgp name=\
-    metallb-nas remote.address=192.168.5.175 .as=65000
-add afi=ip,ipv6 as=65001 local.address=192.168.5.1 .role=ebgp name=\
-    metallb-big remote.address=192.168.5.68 .as=65000
-add afi=ip,ipv6 as=65001 local.address=192.168.5.1 .role=ebgp name=\
-    metallb-pite remote.address=192.168.5.9 .as=65000
+add afi=ip,ipv6 hold-time=3m instance=bgp-instance-1 local.address=\
+    192.168.5.1 .role=ebgp name=metallb-arch remote.address=192.168.5.76 .as=\
+    65000
+add afi=ip,ipv6 instance=bgp-instance-1 local.address=192.168.5.1 .role=ebgp \
+    name=metallb-closet remote.address=192.168.5.36 .as=65000
+add afi=ip,ipv6 instance=bgp-instance-1 local.address=192.168.5.1 .role=ebgp \
+    name=metallb-nas remote.address=192.168.5.175 .as=65000
+add afi=ip,ipv6 instance=bgp-instance-1 local.address=192.168.5.1 .role=ebgp \
+    name=metallb-big remote.address=192.168.5.68 .as=65000
+add afi=ip,ipv6 instance=bgp-instance-1 local.address=192.168.5.1 .role=ebgp \
+    name=metallb-pite remote.address=192.168.5.9 .as=65000
 /system clock
 set time-zone-name=America/New_York
 /system identity
 set name=router
+/system logging
+add action=loki topics=info
+add action=loki topics=warning
+add action=loki topics=error
+add action=loki topics=critical
 /system ntp client
 set enabled=yes
 /system ntp server
@@ -339,6 +369,8 @@ set enabled=yes
 /system ntp client servers
 add address=216.239.35.12
 add address=162.159.200.1
+/tool bandwidth-server
+set enabled=no
 /tool graphing interface
 add allow-address=192.168.5.0/24 interface=2GWAN store-on-disk=no
 add allow-address=192.168.5.0/24 interface=10GsfpLAN store-on-disk=no
@@ -355,6 +387,11 @@ add allow-address=192.168.5.0/24 store-on-disk=no
 set allowed-interface-list=LAN
 /tool mac-server mac-winbox
 set allowed-interface-list=LAN
+/tool netwatch
+add comment="lan-dns failover" dns-server=192.168.6.30 down-script=\
+    "/system script run lan-dns-down" host=john2143.com interval=10s name=\
+    lan-dns record-type=A timeout=3s type=dns up-script=\
+    "/system script run lan-dns-up"
 /tool sniffer
 set filter-interface=2GWAN filter-ip-address=108.56.153.222/32 filter-port=\
     18080

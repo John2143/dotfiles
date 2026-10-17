@@ -1,15 +1,8 @@
-# 2026-09-24 04:11:25 by RouterOS 7.19.6
+# 2026-10-17 08:13:32 by RouterOS 7.24.5
 # software id = 7RHC-3MMG
 #
 # model = RB5009UPr+S+
 # serial number = HKG0AWJZPCK
-/interface bridge
-add admin-mac=04:F4:1C:E3:71:28 ageing-time=5m arp=enabled arp-timeout=auto \
-    auto-mac=no comment=defconf dhcp-snooping=no disabled=no fast-forward=yes \
-    forward-delay=15s igmp-snooping=no max-learned-entries=auto \
-    max-message-age=20s mtu=auto mvrp=no name=bridge port-cost-mode=long \
-    priority=0x8000 protocol-mode=rstp transmit-hold-count=6 vlan-filtering=\
-    no
 /interface ethernet
 set [ find default-name=ether1 ] advertise="10M-baseT-half,10M-baseT-full,100M\
     -baseT-half,100M-baseT-full,1G-baseT-half,1G-baseT-full,2.5G-baseT" arp=\
@@ -92,47 +85,45 @@ set [ find default-name=ether8 ] advertise="10M-baseT-half,10M-baseT-full,100M\
     poe-priority=10 power-cycle-interval=none !power-cycle-ping-address \
     power-cycle-ping-enabled=no !power-cycle-ping-timeout rx-flow-control=off \
     tx-flow-control=off
-/queue interface
-set bridge queue=no-queue
 /interface wireguard
 add comment="WireGuard remote access" disabled=no listen-port=51820 mtu=1420 \
     name=wg-remote
 /queue interface
 set wg-remote queue=no-queue
 /interface ethernet switch
-set 0 cpu-flow-control=yes mirror-egress-target=none name=switch1
+set switch1 cpu-flow-control=yes mirror-egress-target=none name=switch1
 /interface ethernet switch port
-set 0 !egress-rate !ingress-rate mirror-egress=no mirror-ingress=no \
+set "2GWAN" !egress-rate !ingress-rate mirror-egress=no mirror-ingress=no \
     mirror-ingress-target=none
-set 1 !egress-rate !ingress-rate mirror-egress=no mirror-ingress=no \
+set pi !egress-rate !ingress-rate mirror-egress=no mirror-ingress=no \
     mirror-ingress-target=none
-set 2 !egress-rate !ingress-rate mirror-egress=no mirror-ingress=no \
+set ether3 !egress-rate !ingress-rate mirror-egress=no mirror-ingress=no \
     mirror-ingress-target=none
-set 3 !egress-rate !ingress-rate mirror-egress=no mirror-ingress=no \
+set ether4 !egress-rate !ingress-rate mirror-egress=no mirror-ingress=no \
     mirror-ingress-target=none
-set 4 !egress-rate !ingress-rate mirror-egress=no mirror-ingress=no \
+set ether5 !egress-rate !ingress-rate mirror-egress=no mirror-ingress=no \
     mirror-ingress-target=none
-set 5 !egress-rate !ingress-rate mirror-egress=no mirror-ingress=no \
+set ether6 !egress-rate !ingress-rate mirror-egress=no mirror-ingress=no \
     mirror-ingress-target=none
-set 6 !egress-rate !ingress-rate mirror-egress=no mirror-ingress=no \
+set ether7 !egress-rate !ingress-rate mirror-egress=no mirror-ingress=no \
     mirror-ingress-target=none
-set 7 !egress-rate !ingress-rate mirror-egress=no mirror-ingress=no \
+set to-wifi !egress-rate !ingress-rate mirror-egress=no mirror-ingress=no \
     mirror-ingress-target=none
-set 8 !egress-rate !ingress-rate mirror-egress=no mirror-ingress=no \
+set "10GsfpLAN" !egress-rate !ingress-rate mirror-egress=no mirror-ingress=no \
     mirror-ingress-target=none
-set 9 !egress-rate !ingress-rate mirror-egress=no mirror-ingress=no \
+set switch1-cpu !egress-rate !ingress-rate mirror-egress=no mirror-ingress=no \
     mirror-ingress-target=none
 /interface ethernet switch port-isolation
-set 0 !forwarding-override
-set 1 !forwarding-override
-set 2 !forwarding-override
-set 3 !forwarding-override
-set 4 !forwarding-override
-set 5 !forwarding-override
-set 6 !forwarding-override
-set 7 !forwarding-override
-set 8 !forwarding-override
-set 9 !forwarding-override
+set "2GWAN" !forwarding-override
+set pi !forwarding-override
+set ether3 !forwarding-override
+set ether4 !forwarding-override
+set ether5 !forwarding-override
+set ether6 !forwarding-override
+set ether7 !forwarding-override
+set to-wifi !forwarding-override
+set "10GsfpLAN" !forwarding-override
+set switch1-cpu !forwarding-override
 /interface list
 set [ find name=all ] comment="contains all interfaces" exclude="" include="" \
     name=all
@@ -149,7 +140,8 @@ set [ find default=yes ] add-default-route=yes apn=internet authentication=\
     none default-route-distance=2 ip-type=auto name=default use-network-apn=\
     yes use-peer-dns=yes
 /interface macsec profile
-set [ find default-name=default ] name=default server-priority=10
+set [ find default-name=default ] ciphers=aes-gcm-128 name=default \
+    server-priority=10
 /ip dhcp-client option
 set clientid_duid code=61 name=clientid_duid value="0xff\$(CLIENT_DUID)"
 set clientid code=61 name=clientid value="0x01\$(CLIENT_MAC)"
@@ -172,43 +164,42 @@ set [ find default=yes ] name=default
 /ip ipsec profile
 set [ find default=yes ] dh-group=modp2048,modp1024 dpd-interval=8s \
     dpd-maximum-failures=4 enc-algorithm=aes-128,3des hash-algorithm=sha1 \
-    lifetime=1d name=default nat-traversal=yes proposal-check=obey
+    lifetime=1d name=default nat-traversal=yes ppk=no proposal-check=obey
 /ip ipsec proposal
 set [ find default=yes ] auth-algorithms=sha1 disabled=no enc-algorithms=\
     aes-256-cbc,aes-192-cbc,aes-128-cbc lifetime=30m name=default pfs-group=\
     modp1024
 /ip pool
 add name=dhcp ranges=192.168.5.50-192.168.5.254
-/ip dhcp-server
-add address-lists="" address-pool=dhcp disabled=no interface=bridge \
-    lease-script="" lease-time=30m name=dchp1 use-radius=no use-reconfigure=\
-    no
 /ip smb users
 set [ find default=yes ] disabled=no name=guest read-only=yes
-/ipv6 dhcp-server
-add address-lists="" address-pool=ula-addr-pool dhcp-option="" disabled=no \
-    interface=bridge lease-time=3d name=ula-dhcp preference=255 prefix-pool=\
-    static-only rapid-commit=yes route-distance=1 use-radius=no \
-    use-reconfigure=no
+/ipv6 dhcp-relay option
+set client_mac code=79 name=client_mac only-if-mac-available=yes value=\
+    "0x0001\$(CLIENT_MAC)"
+/ipv6 dhcp-server option
+add code=23 comment="lan-dns: DHCPv6 DNS = router ULA, not Verizon" name=\
+    dns-router-ula value=0xfd000001000000000000000000000001
 /ipv6 pool
 add name=ula-addr-pool prefix=fd00:1::/64 prefix-length=128
 /ppp profile
 set *0 address-list="" !bridge !bridge-horizon bridge-learning=default \
     !bridge-path-cost !bridge-port-priority !bridge-port-trusted \
-    !bridge-port-vid change-tcp-mss=yes !dns-server !idle-timeout \
-    !incoming-filter !insert-queue-before !interface-list !local-address \
-    name=default on-down="" on-up="" only-one=default !outgoing-filter \
-    !parent-queue !queue-type !rate-limit !remote-address !session-timeout \
+    !bridge-port-vid change-tcp-mss=yes !dhcpv6-lease-time !dhcpv6-use-radius \
+    !dns-server !idle-timeout !incoming-filter !insert-queue-before \
+    !interface-list !local-address name=default on-down="" on-up="" only-one=\
+    default !outgoing-filter !parent-queue !queue-type !rate-limit \
+    !remote-address !remote-ipv6-prefix-reuse !session-timeout \
     use-compression=default use-encryption=default use-ipv6=yes use-mpls=\
     default use-upnp=default !wins-server
 set *FFFFFFFE address-list="" !bridge !bridge-horizon bridge-learning=default \
     !bridge-path-cost !bridge-port-priority !bridge-port-trusted \
-    !bridge-port-vid change-tcp-mss=yes !dns-server !idle-timeout \
-    !incoming-filter !insert-queue-before !interface-list !local-address \
-    name=default-encryption on-down="" on-up="" only-one=default \
-    !outgoing-filter !parent-queue !queue-type !rate-limit !remote-address \
-    !session-timeout use-compression=default use-encryption=yes use-ipv6=yes \
-    use-mpls=default use-upnp=default !wins-server
+    !bridge-port-vid change-tcp-mss=yes !dhcpv6-lease-time !dhcpv6-use-radius \
+    !dns-server !idle-timeout !incoming-filter !insert-queue-before \
+    !interface-list !local-address name=default-encryption on-down="" on-up=\
+    "" only-one=default !outgoing-filter !parent-queue !queue-type \
+    !rate-limit !remote-address !remote-ipv6-prefix-reuse !session-timeout \
+    use-compression=default use-encryption=yes use-ipv6=yes use-mpls=default \
+    use-upnp=default !wins-server
 /queue type
 set 0 kind=pfifo name=default pfifo-limit=50
 set 1 kind=pfifo name=ethernet-default pfifo-limit=50
@@ -238,6 +229,8 @@ set ether6 queue=only-hardware-queue
 set ether7 queue=only-hardware-queue
 set pi queue=only-hardware-queue
 set to-wifi queue=only-hardware-queue
+/routing bgp instance
+add as=65001 name=bgp-instance-1 vrf=main
 /routing bgp template
 set default afi=ip,ipv6 as=65530 name=default
 /snmp community
@@ -250,8 +243,35 @@ set 1 disk-file-count=2 disk-file-name=log disk-lines-per-file=1000 \
     disk-stop-on-full=no name=disk target=disk
 set 2 name=echo remember=yes target=echo
 set 3 name=remote remote=0.0.0.0 remote-log-format=default remote-port=514 \
-    remote-protocol=udp src-address=0.0.0.0 syslog-facility=daemon \
-    syslog-severity=auto syslog-time-format=bsd-syslog target=remote vrf=main
+    remote-protocol=udp src-address=0.0.0.0 target=remote vrf=main
+add add-topics-string=no name=loki remote=192.168.6.25 remote-log-format=\
+    syslog remote-port=514 remote-protocol=udp src-address=192.168.5.1 \
+    syslog-facility=local0 syslog-severity=auto syslog-time-format=bsd-syslog \
+    target=remote vrf=main
+/system script
+add comment=\
+    "lan-dns failover: starts lan-dns-watch once; see argo docs/lan-dns.md" \
+    dont-require-permissions=no name=lan-dns-down owner=admin policy=\
+    read,write,test source=":if ([:len [/system script job find where script=\
+    \"lan-dns-watch\"]] = 0) do={ :execute script=\"/system script run lan-dns\
+    -watch\" }"
+add comment="lan-dns failover; see argo docs/lan-dns.md" \
+    dont-require-permissions=no name=lan-dns-up owner=admin policy=\
+    read,write,test source="/ip dns static enable [find comment=\"lan-dns forw\
+    ard\"]; /ip dns cache flush; :log warning \"lan-dns up: LAN forwards enabl\
+    ed\""
+add comment="lan-dns failover loop, started by lan-dns-down; see argo docs/lan\
+    -dns.md" dont-require-permissions=no name=lan-dns-watch owner=admin \
+    policy=read,write,test source=":local bad 0; :local done false; :log info \
+    \"lan-dns watch: netwatch down, re-checking\"; :while ((!\$done) && ([/too\
+    l netwatch get [find name=\"lan-dns\"] status] = \"down\")) do={ :local ok\
+    \_false; :do { :if ([:resolve john2143.com server=192.168.6.30] in 192.168\
+    .0.0/16) do={ :set ok true } } on-error={ :set ok false }; :if (\$ok) do={\
+    \_:set bad 0 } else={ :set bad (\$bad + 1) }; :if (\$bad >= 3) do={ /ip dn\
+    s static disable [find comment=\"lan-dns forward\"]; /ip dns cache flush; \
+    :log warning \"lan-dns down: LAN forwards disabled\"; :set done true } els\
+    e={ :delay 5s } }; :if (!\$done) do={ :log info \"lan-dns watch: netwatch \
+    up again, no failover\" }"
 /user group
 set read name=read policy="local,telnet,ssh,reboot,read,test,winbox,password,w\
     eb,sniff,sensitive,api,romon,rest-api,!ftp,!write,!policy" skin=default
@@ -260,15 +280,25 @@ set write name=write policy="local,telnet,ssh,reboot,read,write,test,winbox,pa\
 set full name=full policy="local,telnet,ssh,ftp,reboot,read,write,policy,test,\
     winbox,password,web,sniff,sensitive,api,romon,rest-api" skin=default
 /certificate settings
-set builtin-trust-anchors=not-trusted crl-download=no crl-store=ram crl-use=\
-    no
+set builtin-trust-store=default crl-download=no crl-store=ram crl-use=no
 /console settings
-set log-script-errors=yes sanitize-names=no
+set log-script-errors=yes sanitize-names=no tab-width=4
 /disk settings
 set auto-media-interface=bridge auto-media-sharing=yes auto-smb-sharing=yes \
     auto-smb-user=guest default-mount-point-template="[slot]"
 /ip smb
 set comment=MikrotikSMB domain=MSHOME enabled=auto interfaces=all
+/interface bridge
+add admin-mac=04:F4:1C:E3:71:28 ageing-time=5m arp=enabled arp-timeout=auto \
+    auto-mac=no comment=defconf !dhcp-agent-circuit-id !dhcp-agent-remote-id \
+    dhcp-snooping=no !dhcpv6-agent-circuit-id !dhcpv6-agent-remote-id \
+    dhcpv6-snooping=no disabled=no fast-forward=yes forward-delay=15s \
+    igmp-snooping=no max-learned-entries=auto max-message-age=20s \
+    mlag-heartbeat=5s mlag-peer-port=none mlag-priority=128 mtu=auto name=\
+    bridge port-cost-mode=long priority=0x8000 protocol-mode=rstp ra-guard=no \
+    transmit-hold-count=6 vlan-filtering=no
+/queue interface
+set bridge queue=no-queue
 /interface bridge port
 add auto-isolate=no bpdu-guard=no bridge=bridge broadcast-flood=yes comment=\
     defconf disabled=no edge=auto fast-leave=no frame-types=admit-all \
@@ -276,96 +306,100 @@ add auto-isolate=no bpdu-guard=no bridge=bridge broadcast-flood=yes comment=\
     !internal-path-cost learn=auto multicast-router=temporary-query \
     mvrp-applicant-state=normal-participant mvrp-registrar-state=normal \
     !path-cost point-to-point=auto priority=0x80 pvid=1 restricted-role=no \
-    restricted-tcn=no tag-stacking=no trusted=no unknown-multicast-flood=yes \
-    unknown-unicast-flood=yes
+    restricted-tcn=no tag-stacking=no trusted=no trusted-dhcpv6=no \
+    trusted-ra=no unknown-multicast-flood=yes unknown-unicast-flood=yes
 add auto-isolate=no bpdu-guard=no bridge=bridge broadcast-flood=yes comment=\
     defconf disabled=no edge=auto fast-leave=no frame-types=admit-all \
     horizon=none hw=yes ingress-filtering=yes interface=ether3 \
     !internal-path-cost learn=auto multicast-router=temporary-query \
     mvrp-applicant-state=normal-participant mvrp-registrar-state=normal \
     !path-cost point-to-point=auto priority=0x80 pvid=1 restricted-role=no \
-    restricted-tcn=no tag-stacking=no trusted=no unknown-multicast-flood=yes \
-    unknown-unicast-flood=yes
+    restricted-tcn=no tag-stacking=no trusted=no trusted-dhcpv6=no \
+    trusted-ra=no unknown-multicast-flood=yes unknown-unicast-flood=yes
 add auto-isolate=no bpdu-guard=no bridge=bridge broadcast-flood=yes comment=\
     defconf disabled=no edge=auto fast-leave=no frame-types=admit-all \
     horizon=none hw=yes ingress-filtering=yes interface=ether4 \
     !internal-path-cost learn=auto multicast-router=temporary-query \
     mvrp-applicant-state=normal-participant mvrp-registrar-state=normal \
     !path-cost point-to-point=auto priority=0x80 pvid=1 restricted-role=no \
-    restricted-tcn=no tag-stacking=no trusted=no unknown-multicast-flood=yes \
-    unknown-unicast-flood=yes
+    restricted-tcn=no tag-stacking=no trusted=no trusted-dhcpv6=no \
+    trusted-ra=no unknown-multicast-flood=yes unknown-unicast-flood=yes
 add auto-isolate=no bpdu-guard=no bridge=bridge broadcast-flood=yes comment=\
     defconf disabled=no edge=auto fast-leave=no frame-types=admit-all \
     horizon=none hw=yes ingress-filtering=yes interface=ether5 \
     !internal-path-cost learn=auto multicast-router=temporary-query \
     mvrp-applicant-state=normal-participant mvrp-registrar-state=normal \
     !path-cost point-to-point=auto priority=0x80 pvid=1 restricted-role=no \
-    restricted-tcn=no tag-stacking=no trusted=no unknown-multicast-flood=yes \
-    unknown-unicast-flood=yes
+    restricted-tcn=no tag-stacking=no trusted=no trusted-dhcpv6=no \
+    trusted-ra=no unknown-multicast-flood=yes unknown-unicast-flood=yes
 add auto-isolate=no bpdu-guard=no bridge=bridge broadcast-flood=yes comment=\
     defconf disabled=no edge=auto fast-leave=no frame-types=admit-all \
     horizon=none hw=yes ingress-filtering=yes interface=ether6 \
     !internal-path-cost learn=auto multicast-router=temporary-query \
     mvrp-applicant-state=normal-participant mvrp-registrar-state=normal \
     !path-cost point-to-point=auto priority=0x80 pvid=1 restricted-role=no \
-    restricted-tcn=no tag-stacking=no trusted=no unknown-multicast-flood=yes \
-    unknown-unicast-flood=yes
+    restricted-tcn=no tag-stacking=no trusted=no trusted-dhcpv6=no \
+    trusted-ra=no unknown-multicast-flood=yes unknown-unicast-flood=yes
 add auto-isolate=no bpdu-guard=no bridge=bridge broadcast-flood=yes comment=\
     defconf disabled=no edge=auto fast-leave=no frame-types=admit-all \
     horizon=none hw=yes ingress-filtering=yes interface=ether7 \
     !internal-path-cost learn=auto multicast-router=temporary-query \
     mvrp-applicant-state=normal-participant mvrp-registrar-state=normal \
     !path-cost point-to-point=auto priority=0x80 pvid=1 restricted-role=no \
-    restricted-tcn=no tag-stacking=no trusted=no unknown-multicast-flood=yes \
-    unknown-unicast-flood=yes
+    restricted-tcn=no tag-stacking=no trusted=no trusted-dhcpv6=no \
+    trusted-ra=no unknown-multicast-flood=yes unknown-unicast-flood=yes
 add auto-isolate=no bpdu-guard=no bridge=bridge broadcast-flood=yes comment=\
     defconf disabled=no edge=auto fast-leave=no frame-types=admit-all \
     horizon=none hw=yes ingress-filtering=yes interface=to-wifi \
     !internal-path-cost learn=auto multicast-router=temporary-query \
     mvrp-applicant-state=normal-participant mvrp-registrar-state=normal \
     !path-cost point-to-point=auto priority=0x80 pvid=1 restricted-role=no \
-    restricted-tcn=no tag-stacking=no trusted=no unknown-multicast-flood=yes \
-    unknown-unicast-flood=yes
+    restricted-tcn=no tag-stacking=no trusted=no trusted-dhcpv6=no \
+    trusted-ra=no unknown-multicast-flood=yes unknown-unicast-flood=yes
 add auto-isolate=no bpdu-guard=no bridge=bridge broadcast-flood=yes comment=\
     defconf disabled=no edge=auto fast-leave=no frame-types=admit-all \
     horizon=none hw=yes ingress-filtering=yes interface=10GsfpLAN \
     !internal-path-cost learn=auto multicast-router=temporary-query \
     mvrp-applicant-state=normal-participant mvrp-registrar-state=normal \
     !path-cost point-to-point=auto priority=0x80 pvid=1 restricted-role=no \
-    restricted-tcn=no tag-stacking=no trusted=no unknown-multicast-flood=yes \
-    unknown-unicast-flood=yes
+    restricted-tcn=no tag-stacking=no trusted=no trusted-dhcpv6=no \
+    trusted-ra=no unknown-multicast-flood=yes unknown-unicast-flood=yes
 /interface bridge settings
 set allow-fast-path=yes use-ip-firewall=no use-ip-firewall-for-pppoe=no \
     use-ip-firewall-for-vlan=no
 /ip firewall connection tracking
-set enabled=auto generic-timeout=10m icmp-timeout=10s loose-tcp-tracking=yes \
-    tcp-close-timeout=10s tcp-close-wait-timeout=10s tcp-established-timeout=\
-    1d tcp-fin-wait-timeout=10s tcp-last-ack-timeout=10s \
-    tcp-max-retrans-timeout=5m tcp-syn-received-timeout=5s \
+set enabled=auto generic-timeout=10m icmp-timeout=10s liberal-tcp-tracking=no \
+    loose-tcp-tracking=yes tcp-close-timeout=10s tcp-close-wait-timeout=10s \
+    tcp-established-timeout=1d tcp-fin-wait-timeout=10s tcp-last-ack-timeout=\
+    10s tcp-max-retrans-timeout=5m tcp-syn-received-timeout=5s \
     tcp-syn-sent-timeout=5s tcp-time-wait-timeout=10s tcp-unacked-timeout=5m \
     udp-stream-timeout=3m udp-timeout=30s
 /ip neighbor discovery-settings
-set discover-interface-list=LAN discover-interval=30s lldp-mac-phy-config=no \
-    lldp-max-frame-size=no lldp-med-net-policy-vlan=disabled lldp-poe-power=\
-    yes lldp-vlan-info=no mode=tx-and-rx protocol=cdp,lldp,mndp
+set add-dns-entries=no add-dns-entries-suffix=lan discover-interface-list=LAN \
+    discover-interval=30s dying-gasp=no lldp-mac-phy-config=no \
+    lldp-max-frame-size=no lldp-med=yes lldp-med-net-policy-vlan=disabled \
+    lldp-poe-in-power=yes lldp-poe-power=yes lldp-vlan-info=no mode=tx-and-rx \
+    protocol=cdp,lldp,mndp
 /ip settings
 set accept-redirects=no accept-source-route=no allow-fast-path=yes \
     arp-timeout=30s icmp-errors-use-inbound-interface-address=no \
     icmp-rate-limit=10 icmp-rate-mask=0x1818 ip-forward=yes \
+    ipv4-fragment-time=3 ipv4-high-fragment-thresh=16.0MiB \
     ipv4-multipath-hash-policy=l3 max-neighbor-entries=16384 rp-filter=no \
     secure-redirects=yes send-redirects=yes tcp-syncookies=no tcp-timestamps=\
     random-offset
 /ipv6 settings
 set accept-redirects=yes-if-forwarding-disabled accept-router-advertisements=\
-    yes allow-fast-path=yes disable-ipv6=no disable-link-local-address=no \
-    forward=yes max-neighbor-entries=16384 min-neighbor-entries=4096 \
-    multipath-hash-policy=l3 soft-max-neighbor-entries=8192 \
-    stale-neighbor-detect-interval=30 stale-neighbor-timeout=60
+    yes accept-router-advertisements-on=all allow-fast-path=yes disable-ipv6=\
+    no disable-link-local-address=no forward=yes max-neighbor-entries=16384 \
+    min-neighbor-entries=4096 multipath-hash-policy=l3 \
+    soft-max-neighbor-entries=8192 stale-neighbor-detect-interval=30 \
+    stale-neighbor-timeout=60
 /interface detect-internet
 set detect-interface-list=none internet-interface-list=none \
-    lan-interface-list=none wan-interface-list=none
+    lan-interface-list=none request-interval=2m wan-interface-list=none
 /interface ethernet poe settings
-set psu1-max-power=96W psu2-max-power=150W
+set psu1-max-power="96W (jack)" psu2-max-power="150W (2pin)"
 /interface l2tp-server server
 set accept-proto-version=all accept-pseudowire-type=all allow-fast-path=no \
     authentication=pap,chap,mschap1,mschap2 caller-id-type=ip-address \
@@ -393,19 +427,15 @@ set enabled=no
 /interface wifi capsman
 set enabled=no
 /interface wireguard peers
-add allowed-address=10.99.0.2/32,10.244.0.0/16 client-endpoint="" comment=\
-    "2143-k8s cluster: postgres client + tunnel" disabled=no \
-    endpoint-address="" endpoint-port=0 interface=wg-remote name=peer1 \
-    preshared-key="" private-key="" public-key=\
-    "jUMIaOQP8hPqzw3t//WZrpt/WTFkRzkD18LBM27RlEE="
+add allowed-address=10.99.0.2/32,10.244.0.0/16 client-allowed-address="" \
+    client-endpoint="" comment="2143-k8s cluster: postgres client + tunnel" \
+    disabled=no endpoint-address="" endpoint-port=0 interface=wg-remote name=\
+    peer1 public-key="jUMIaOQP8hPqzw3t//WZrpt/WTFkRzkD18LBM27RlEE="
 /ip address
 add address=192.168.0.2/24 disabled=no interface=2GWAN network=192.168.0.0
 add address=192.168.1.1/24 disabled=no interface=bridge network=192.168.1.0
 add address=192.168.88.254/24 disabled=no interface=bridge network=\
     192.168.88.0
-add address=192.168.6.1/24 disabled=no interface=bridge network=192.168.6.0
-add address=10.99.0.1/24 comment="wg-remote tunnel subnet" disabled=no \
-    interface=*C network=10.99.0.0
 add address=10.99.0.1/24 comment="wg-remote tunnel subnet" disabled=no \
     interface=wg-remote network=10.99.0.0
 add address=192.168.5.1/24 comment=defconf disabled=no interface=bridge \
@@ -421,62 +451,83 @@ set use-local-address=no
 /ip dhcp-client
 add add-default-route=yes allow-reconfigure=no check-gateway=none comment=\
     defconf default-route-distance=1 default-route-tables=default \
-    dhcp-options=hostname,clientid disabled=no interface=2GWAN use-peer-dns=\
-    yes use-peer-ntp=yes
+    dhcp-options=hostname,clientid disabled=no interface=2GWAN name=2GWAN \
+    use-broadcast=both use-peer-dns=yes use-peer-ntp=yes
+/ip dhcp-server
+add add-dns-entries-suffix=lan address-lists="" address-pool=dhcp disabled=no \
+    dynamic-lease-identifiers=client-mac,client-id interface=bridge \
+    lease-script="" lease-time=30m name=dchp1 support-broadband-tr101=no \
+    use-radius=no use-reconfigure=no
 /ip dhcp-server config
 set accounting=yes interim-update=0s radius-password=empty store-leases-disk=\
     5m
 /ip dhcp-server lease
-add address=192.168.1.66 address-lists="" !allow-dual-stack-queue client-id=\
-    1:ec:71:db:3e:2f:21 dhcp-option="" disabled=no !insert-queue-before \
-    mac-address=EC:71:DB:3E:2F:21 !parent-queue !queue-type server=dchp1
-add address=192.168.5.170 address-lists="" !allow-dual-stack-queue client-id=\
-    1:94:a9:90:6c:70:88 dhcp-option="" disabled=no !insert-queue-before \
-    mac-address=94:A9:90:6C:70:88 !parent-queue !queue-type server=dchp1
-add address=192.168.1.65 address-lists="" !allow-dual-stack-queue client-id=\
-    1:94:b3:f7:18:52:cc dhcp-option="" disabled=no !insert-queue-before \
-    mac-address=94:B3:F7:18:52:CC !parent-queue !queue-type server=dchp1
-add address=192.168.5.165 address-lists="" !allow-dual-stack-queue client-id=\
-    1:80:f1:b2:52:f0:c8 dhcp-option="" disabled=no !insert-queue-before \
-    mac-address=80:F1:B2:52:F0:C8 !parent-queue !queue-type server=dchp1
-add address=192.168.5.175 address-lists="" !allow-dual-stack-queue client-id=\
-    1:e8:4d:d0:c1:54:20 dhcp-option="" disabled=no !insert-queue-before \
-    mac-address=E8:4D:D0:C1:54:20 !parent-queue !queue-type server=dchp1
-add address=192.168.1.67 address-lists="" !allow-dual-stack-queue comment=\
-    "Reolink NVR" dhcp-option="" disabled=no !insert-queue-before \
-    mac-address=EC:71:DB:8B:92:93 !parent-queue !queue-type server=dchp1
-add address=192.168.1.60 address-lists="" !allow-dual-stack-queue comment=\
-    "Back yard" dhcp-option="" disabled=no !insert-queue-before mac-address=\
-    78:93:C3:8E:34:9F !parent-queue !queue-type server=dchp1
-add address=192.168.1.61 address-lists="" !allow-dual-stack-queue comment=\
-    Garage dhcp-option="" disabled=no !insert-queue-before mac-address=\
-    EC:71:DB:F4:DC:49 !parent-queue !queue-type server=dchp1
-add address=192.168.1.63 address-lists="" !allow-dual-stack-queue comment=\
-    "Front porch" dhcp-option="" disabled=no !insert-queue-before \
-    mac-address=EC:71:DB:89:D8:8B !parent-queue !queue-type server=dchp1
-add address=192.168.1.64 address-lists="" !allow-dual-stack-queue comment=\
-    "Front Gate" dhcp-option="" disabled=no !insert-queue-before mac-address=\
-    EC:71:DB:65:58:A3 !parent-queue !queue-type server=dchp1
-add address=192.168.5.127 address-lists="" !allow-dual-stack-queue \
+add address=192.168.1.66 address-lists="" agent-circuit-id="" \
+    agent-remote-id="" !allow-dual-stack-queue client-id=1:ec:71:db:3e:2f:21 \
     dhcp-option="" disabled=no !insert-queue-before mac-address=\
-    C8:FF:77:57:E0:3D !parent-queue !queue-type server=dchp1
-add address=192.168.5.36 address-lists="" !allow-dual-stack-queue comment=\
-    "closet 10GbE NIC" dhcp-option="" disabled=no !insert-queue-before \
-    mac-address=0C:C4:7A:BD:63:3D !parent-queue !queue-type server=dchp1
-add address=192.168.5.76 address-lists="" !allow-dual-stack-queue comment=\
-    arch dhcp-option="" disabled=no !insert-queue-before mac-address=\
-    98:B7:85:23:48:90 !parent-queue !queue-type
-add address=192.168.5.9 address-lists="" !allow-dual-stack-queue client-id=\
-    1:dc:a6:32:25:51:6e dhcp-option="" disabled=no !insert-queue-before \
-    mac-address=DC:A6:32:25:51:6E !parent-queue !queue-type server=dchp1
-add address=192.168.5.209 address-lists="" !allow-dual-stack-queue client-id=\
-    1:c4:3d:1a:f3:e:76 comment="office k3s node (static)" dhcp-option="" \
-    disabled=no !insert-queue-before mac-address=C4:3D:1A:F3:0E:76 \
+    EC:71:DB:3E:2F:21 !parent-queue !queue-type server=dchp1
+add address=192.168.5.170 address-lists="" agent-circuit-id="" \
+    agent-remote-id="" !allow-dual-stack-queue client-id=1:94:a9:90:6c:70:88 \
+    dhcp-option="" disabled=no !insert-queue-before mac-address=\
+    94:A9:90:6C:70:88 !parent-queue !queue-type server=dchp1
+add address=192.168.1.65 address-lists="" agent-circuit-id="" \
+    agent-remote-id="" !allow-dual-stack-queue client-id=1:94:b3:f7:18:52:cc \
+    dhcp-option="" disabled=no !insert-queue-before mac-address=\
+    94:B3:F7:18:52:CC !parent-queue !queue-type server=dchp1
+add address=192.168.5.165 address-lists="" agent-circuit-id="" \
+    agent-remote-id="" !allow-dual-stack-queue client-id=1:80:f1:b2:52:f0:c8 \
+    dhcp-option="" disabled=no !insert-queue-before mac-address=\
+    80:F1:B2:52:F0:C8 !parent-queue !queue-type server=dchp1
+add address=192.168.5.175 address-lists="" agent-circuit-id="" \
+    agent-remote-id="" !allow-dual-stack-queue client-id=1:e8:4d:d0:c1:54:20 \
+    dhcp-option="" disabled=no !insert-queue-before mac-address=\
+    E8:4D:D0:C1:54:20 !parent-queue !queue-type server=dchp1
+add address=192.168.1.67 address-lists="" agent-circuit-id="" \
+    agent-remote-id="" !allow-dual-stack-queue comment="Reolink NVR" \
+    dhcp-option="" disabled=no !insert-queue-before mac-address=\
+    EC:71:DB:8B:92:93 !parent-queue !queue-type server=dchp1
+add address=192.168.1.60 address-lists="" agent-circuit-id="" \
+    agent-remote-id="" !allow-dual-stack-queue comment="Back yard" \
+    dhcp-option="" disabled=no !insert-queue-before mac-address=\
+    78:93:C3:8E:34:9F !parent-queue !queue-type server=dchp1
+add address=192.168.1.61 address-lists="" agent-circuit-id="" \
+    agent-remote-id="" !allow-dual-stack-queue comment=Garage dhcp-option="" \
+    disabled=no !insert-queue-before mac-address=EC:71:DB:F4:DC:49 \
     !parent-queue !queue-type server=dchp1
-add address=192.168.5.68 address-lists="" !allow-dual-stack-queue client-id=\
-    1:bc:24:11:19:22:f9 comment="big k3s node (static)" dhcp-option="" \
-    disabled=no !insert-queue-before mac-address=BC:24:11:19:22:F9 \
+add address=192.168.1.63 address-lists="" agent-circuit-id="" \
+    agent-remote-id="" !allow-dual-stack-queue comment="Front porch" \
+    dhcp-option="" disabled=no !insert-queue-before mac-address=\
+    EC:71:DB:89:D8:8B !parent-queue !queue-type server=dchp1
+add address=192.168.1.64 address-lists="" agent-circuit-id="" \
+    agent-remote-id="" !allow-dual-stack-queue comment="Front Gate" \
+    dhcp-option="" disabled=no !insert-queue-before mac-address=\
+    EC:71:DB:65:58:A3 !parent-queue !queue-type server=dchp1
+add address=192.168.5.127 address-lists="" agent-circuit-id="" \
+    agent-remote-id="" !allow-dual-stack-queue dhcp-option="" disabled=no \
+    !insert-queue-before mac-address=C8:FF:77:57:E0:3D !parent-queue \
+    !queue-type server=dchp1
+add address=192.168.5.36 address-lists="" agent-circuit-id="" \
+    agent-remote-id="" !allow-dual-stack-queue comment="closet 10GbE NIC" \
+    dhcp-option="" disabled=no !insert-queue-before mac-address=\
+    0C:C4:7A:BD:63:3D !parent-queue !queue-type server=dchp1
+add address=192.168.5.76 address-lists="" agent-circuit-id="" \
+    agent-remote-id="" !allow-dual-stack-queue comment=arch dhcp-option="" \
+    disabled=no !insert-queue-before mac-address=98:B7:85:23:48:90 \
+    !parent-queue !queue-type
+add address=192.168.5.9 address-lists="" agent-circuit-id="" agent-remote-id=\
+    "" !allow-dual-stack-queue client-id=1:dc:a6:32:25:51:6e dhcp-option="" \
+    disabled=no !insert-queue-before mac-address=DC:A6:32:25:51:6E \
     !parent-queue !queue-type server=dchp1
+add address=192.168.5.209 address-lists="" agent-circuit-id="" \
+    agent-remote-id="" !allow-dual-stack-queue client-id=1:c4:3d:1a:f3:e:76 \
+    comment="office k3s node (static)" dhcp-option="" disabled=no \
+    !insert-queue-before mac-address=C4:3D:1A:F3:0E:76 !parent-queue \
+    !queue-type server=dchp1
+add address=192.168.5.68 address-lists="" agent-circuit-id="" \
+    agent-remote-id="" !allow-dual-stack-queue client-id=1:bc:24:11:19:22:f9 \
+    comment="big k3s node (static)" dhcp-option="" disabled=no \
+    !insert-queue-before mac-address=BC:24:11:19:22:F9 !parent-queue \
+    !queue-type server=dchp1
 /ip dhcp-server network
 add address=192.168.1.0/24 caps-manager="" dhcp-option="" dns-server=\
     192.168.5.1 gateway=192.168.1.1 !next-server ntp-server="" wins-server=""
@@ -494,47 +545,18 @@ set address-list-extra-time=0s allow-remote-requests=yes cache-max-ttl=1w \
 /ip dns static
 add address=192.168.5.1 comment=defconf disabled=no name=router.lan ttl=1d \
     type=A
-add address=192.168.6.11 disabled=no name=argo-webhook.john2143.com ttl=1d \
-    type=A
-add address=192.168.6.11 disabled=no name=argocd.ts.2143.me ttl=1d type=A
-add address=192.168.6.11 disabled=no name=au.2143.me ttl=1d type=A
-add address=192.168.6.11 disabled=no name=auth.john2143.com ttl=1d type=A
-add address=192.168.6.11 disabled=no name=cameras.john2143.com ttl=1d type=A
-add address=192.168.6.11 disabled=no name=cameras.ts.2143.me ttl=1d type=A
-add address=192.168.6.11 disabled=no name=cams.ts.2143.me ttl=1d type=A
-add address=192.168.6.11 disabled=no name=chat.2143.me ttl=1d type=A
-add address=192.168.6.11 disabled=no name=containerstore.john2143.com ttl=1d \
-    type=A
-add address=192.168.6.11 disabled=no name=element.john2143.com ttl=1d type=A
-add address=192.168.6.11 disabled=no name=files-ui.ts.2143.me ttl=1d type=A
-add address=192.168.6.11 disabled=no name=files.john2143.com ttl=1d type=A
-add address=192.168.6.11 disabled=no name=grafana.john2143.com ttl=1d type=A
-add address=192.168.6.11 disabled=no name=home.ts.2143.me ttl=1d type=A
-add address=192.168.6.11 disabled=no name=images.2143.me ttl=1d type=A
-add address=192.168.6.11 disabled=no name=immich.ts.2143.me ttl=1d type=A
-add address=192.168.6.11 disabled=no name=john2143.com ttl=1d type=A
-add address=192.168.6.11 disabled=no name=livekit.john2143.com ttl=1d type=A
-add address=192.168.6.11 disabled=no name=llm.2143.me ttl=1d type=A
-add address=192.168.6.11 disabled=no name=longhorn.ts.2143.me ttl=1d type=A
-add address=192.168.6.11 disabled=no name=m.2143.me ttl=1d type=A
-add address=192.168.6.11 disabled=no name=matrix.2143.me ttl=1d type=A
-add address=192.168.6.11 disabled=no name=mattermost.john2143.com ttl=1d \
-    type=A
-add address=192.168.6.11 disabled=no name=net.2143.me ttl=1d type=A
-add address=192.168.6.11 disabled=no name=net.john2143.com ttl=1d type=A
-add address=192.168.6.11 disabled=no name=pihole.ts.2143.me ttl=1d type=A
-add address=192.168.6.11 disabled=no name=prod.rots.2143.me ttl=1d type=A
-add address=192.168.6.11 disabled=no name=pvp.john2143.com ttl=1d type=A
-add address=192.168.6.11 disabled=no name=rots.2143.me ttl=1d type=A
-add address=192.168.6.11 disabled=no name=seafile.john2143.com ttl=1d type=A
-add address=192.168.6.11 disabled=no name=status.2143.me ttl=1d type=A
-add address=192.168.6.11 disabled=no name=temporal.john2143.com ttl=1d type=A
-add address=192.168.6.11 disabled=no name=temporal.ts.2143.me ttl=1d type=A
-add address=192.168.6.11 disabled=no name=unifi.ts.2143.me ttl=1d type=A
-add address=192.168.6.13 disabled=no name=imap.m.2143.me ttl=1d type=A
-add address=192.168.6.13 disabled=no name=smtp.m.2143.me ttl=1d type=A
-add address=192.168.6.20 disabled=no name=temporal-grpc.john2143.com ttl=1d \
-    type=A
+add comment="lan-dns forward" disabled=no forward-to=192.168.6.30 \
+    match-subdomain=yes name=2143.me ttl=1d type=FWD
+add comment="lan-dns forward" disabled=no forward-to=192.168.6.30 \
+    match-subdomain=yes name=aross.studio ttl=1d type=FWD
+add comment="lan-dns forward" disabled=no forward-to=192.168.6.30 \
+    match-subdomain=yes name=balabusta.homes ttl=1d type=FWD
+add comment="lan-dns forward" disabled=no forward-to=192.168.6.30 \
+    match-subdomain=yes name=chess.dsstar.us ttl=1d type=FWD
+add comment="lan-dns forward" disabled=no forward-to=192.168.6.30 \
+    match-subdomain=yes name=mm.b.hero.rehab ttl=1d type=FWD
+add comment="lan-dns forward" disabled=no forward-to=192.168.6.30 \
+    match-subdomain=yes name=john2143.com ttl=1d type=FWD
 /ip firewall filter
 add action=accept chain=forward comment="allow inter-subnet routing" \
     dst-address=192.168.0.0/16 src-address=192.168.0.0/16
@@ -562,7 +584,7 @@ add action=accept chain=forward comment="defconf: accept in ipsec policy" \
 add action=accept chain=forward comment="defconf: accept out ipsec policy" \
     ipsec-policy=out,ipsec
 add action=fasttrack-connection chain=forward comment="defconf: fasttrack" \
-    connection-state=established,related hw-offload=yes
+    connection-state=established,related
 add action=accept chain=forward comment=\
     "defconf: accept established,related, untracked" connection-state=\
     established,related,untracked
@@ -577,6 +599,8 @@ add action=accept chain=forward comment="wg: doks -> postgres" dst-address=\
     192.168.5.36 dst-port=5432 in-interface=wg-remote protocol=tcp
 add action=accept chain=forward comment="wg: doks -> temporal" dst-address=\
     192.168.6.20 dst-port=7233 in-interface=wg-remote protocol=tcp
+add action=accept chain=forward comment="wg: doks -> seaweed s3" dst-address=\
+    192.168.6.31 dst-port=8333 in-interface=wg-remote protocol=tcp
 add action=drop chain=forward comment=\
     "wg: deny tunnel traffic not allowed above" in-interface=wg-remote log=\
     yes log-prefix=wg-drop
@@ -636,7 +660,7 @@ add action=dst-nat chain=dstnat comment="traefik https (tcp/443) -> .6.11" \
 add action=masquerade chain=srcnat !connection-bytes !connection-limit \
     !connection-mark !connection-rate !connection-type !content disabled=no \
     !dscp dst-address=!192.168.0.0/24 !dst-address-list !dst-address-type \
-    !dst-limit !dst-port !fragment !hotspot !icmp-options !in-bridge-port \
+    !dst-limit !dst-port !fragment !icmp-options !in-bridge-port \
     !in-bridge-port-list !in-interface !in-interface-list !ingress-priority \
     !ipsec-policy !ipv4-options !layer7-protocol !limit log=no log-prefix="" \
     !nth !out-bridge-port !out-bridge-port-list out-interface=2GWAN \
@@ -677,16 +701,18 @@ add action=dst-nat chain=dstnat comment=\
     in-interface-list=WAN protocol=udp to-addresses=192.168.6.14 to-ports=\
     3478
 add action=dst-nat chain=dstnat comment=\
-    "linkerd multicluster (tcp/4143) -> .5.36" dst-port=4143 \
-    in-interface-list=WAN protocol=tcp to-addresses=192.168.5.36 to-ports=\
-    4143
-add action=dst-nat chain=dstnat comment=\
     "steam-lobby coturn relay (udp/45000-45063) -> .6.14" dst-port=\
     45000-45063 in-interface-list=WAN protocol=udp to-addresses=192.168.6.14 \
     to-ports=45000-45063
 add action=dst-nat chain=dstnat comment="factorio (udp/34197) -> .6.28" \
     dst-port=34197 in-interface-list=WAN protocol=udp to-addresses=\
     192.168.6.28 to-ports=34197
+add action=dst-nat chain=dstnat comment="minecraft (tcp/25565) -> .6.29" \
+    dst-port=25565 in-interface-list=WAN protocol=tcp to-addresses=\
+    192.168.6.29 to-ports=25565
+add action=dst-nat chain=dstnat comment="headscale stun (udp/3479) -> .6.18" \
+    dst-port=3479 in-interface-list=WAN protocol=udp to-addresses=\
+    192.168.6.18 to-ports=3479
 /ip firewall service-port
 set ftp disabled=no ports=21
 set tftp disabled=no ports=69
@@ -702,12 +728,13 @@ set sctp disabled=no
 set ftp disabled=no ports=21
 /ip hotspot user
 set [ find default=yes ] comment="counters and limits for trial users" \
-    disabled=no name=default-trial
+    disabled=no name=default-trial server=all
 /ip ipsec policy
 set 0 disabled=no dst-address=::/0 group=default proposal=default protocol=\
     all src-address=::/0 template=yes
 /ip ipsec settings
-set accounting=yes interim-update=0s xauth-use-radius=no
+set accounting=yes ddos-cookie-threshold=20 interim-update=0s \
+    xauth-use-radius=no
 /ip media settings
 set thumbnails=""
 /ip nat-pmp
@@ -721,29 +748,40 @@ set always-from-cache=no anonymous=no cache-administrator=webmaster \
     parent-proxy=:: parent-proxy-port=0 port=8080 serialize-connections=no \
     src-address=::
 /ip route
-add disabled=no dst-address=192.168.1.0/24 gateway=bridge routing-table=main \
-    suppress-hw-offload=no
+add disabled=no dst-address=192.168.1.0/24 gateway=bridge routing-table=main
+add blackhole comment="fail-closed: MetalLB v4 pool (unannounced VIPs drop)" \
+    distance=250 dst-address=192.168.6.0/24
+add blackhole comment="fail-closed: reserved nonprod v4 pool" distance=250 \
+    dst-address=192.168.7.0/24
+/ipv6 route
+add blackhole comment="fail-closed: MetalLB v6 pool (unannounced VIPs drop)" \
+    distance=250 dst-address=fd00:6::/64
+add blackhole comment="fail-closed: reserved nonprod v6 pool" distance=250 \
+    dst-address=fd00:7::/64
 /ip service
-set ftp address="" disabled=no max-sessions=20 port=21 vrf=main
-set ssh address="" disabled=no max-sessions=20 port=22 vrf=main
-set telnet address="" disabled=no max-sessions=20 port=23 vrf=main
-set www-ssl address="" certificate=none disabled=yes max-sessions=20 port=443 \
-    tls-version=any vrf=main
-set www address="" disabled=no max-sessions=20 port=8081 vrf=main
-set winbox address="" disabled=no max-sessions=20 port=8291 vrf=main
-set api address="" disabled=no max-sessions=20 port=8728 vrf=main
-set api-ssl address="" certificate=none disabled=no max-sessions=20 port=8729 \
-    tls-version=any vrf=main
+set ftp available-from="" disabled=yes max-sessions=20 port=21 vrf=main
+set ssh available-from="" disabled=no max-sessions=20 port=22 vrf=main
+set telnet available-from="" disabled=yes max-sessions=20 port=23 vrf=main
+set www-ssl available-from="" certificate=none disabled=yes max-sessions=20 \
+    port=443 tls-version=any vrf=main
+set reverse-proxy available-from="" certificate=none disabled=yes \
+    max-sessions=20 port=443 tls-version=any vrf=main
+set www available-from="" disabled=yes max-sessions=20 port=8081 vrf=main
+set winbox available-from="" disabled=no max-sessions=20 port=8291 vrf=main
+set api available-from="" disabled=yes max-sessions=20 port=8728 vrf=main
+set api-ssl available-from="" certificate=none disabled=yes max-sessions=20 \
+    port=8729 tls-version=any vrf=main
 /ip smb shares
-set [ find default=yes ] directory=pub disabled=yes invalid-users="" name=pub \
-    read-only=no require-encryption=no valid-users=""
+set [ find default=yes ] directory=/pub disabled=yes invalid-users="" name=\
+    pub read-only=no require-encryption=no valid-users=""
 /ip socks
 # inactivated, not allowed by device-mode
 set auth-method=none connection-idle-timeout=2m enabled=no max-connections=\
     200 port=1080 version=4 vrf=main
 /ip ssh
-set always-allow-password-login=no ciphers=auto forwarding-enabled=no \
-    host-key-size=2048 host-key-type=rsa strong-crypto=no
+set ciphers=auto forwarding-enabled=no host-key-size=2048 host-key-type=rsa \
+    password-authentication=yes-if-no-key publickey-authentication-options=\
+    none strong-crypto=no
 /ip tftp settings
 set max-block-size=4096
 /ip traffic-flow
@@ -763,14 +801,16 @@ set bytes=yes dst-address=yes dst-address-mask=yes dst-mac-address=yes \
 /ip upnp
 set allow-disable-external-interface=no enabled=no show-dummy-rule=yes
 /ipv6 address
-add address=2600:4040:25fa:e400:6f4:1cff:fee3:7127/64 advertise=no \
-    auto-link-local=yes disabled=no eui-64=no from-pool="" interface=2GWAN \
-    no-dad=no
 add address=fd00:1::1/64 advertise=yes auto-link-local=yes disabled=no \
     eui-64=no from-pool="" interface=bridge no-dad=no
+/ipv6 dhcp-server
+add address-lists="" address-pool=ula-addr-pool dhcp-option=dns-router-ula \
+    disabled=no ignore-ia-na-bindings=no interface=bridge lease-time=3d name=\
+    ula-dhcp preference=255 prefix-pool=static-only rapid-commit=yes \
+    route-distance=1 use-radius=no use-reconfigure=no
 /ipv6 dhcp-server binding
 add address=fd00:1::36/128 address-lists="" !allow-dual-stack-queue \
-    dhcp-option="" disabled=no duid=0x48750ccae3a454a0f9f03492c0c3c4ed \
+    dhcp-option="" disabled=no duid=0x000448750ccae3a454a0f9f03492c0c3c4ed \
     ia-type=na iaid=2138897477 !insert-queue-before life-time=3d \
     !parent-queue prefix-pool=ula-addr-pool !queue-type server=ula-dhcp
 /ipv6 firewall address-list
@@ -843,18 +883,20 @@ add action=accept chain=forward comment=\
 add action=drop chain=forward comment=\
     "defconf: drop everything else not coming from LAN" in-interface-list=\
     !LAN
-add action=accept chain=input connection-state=established,related
-add action=accept chain=forward connection-state=established,related
 /ipv6 firewall nat
 add action=masquerade chain=srcnat out-interface=2GWAN !to-address !to-ports
 /ipv6 nd
-set [ find default=yes ] advertise-dns=yes advertise-mac-address=yes \
-    disabled=no hop-limit=unspecified interface=all \
+set [ find default=yes ] advertise-dns=no advertise-mac-address=yes disabled=\
+    no !dns hop-limit=unspecified interface=all \
     managed-address-configuration=yes mtu=unspecified other-configuration=no \
-    ra-delay=3s ra-interval=3m20s-10m ra-lifetime=30m ra-preference=medium \
-    reachable-time=unspecified retransmit-interval=unspecified
+    !pref64 ra-delay=3s ra-interval=3m20s-10m ra-lifetime=30m ra-preference=\
+    medium reachable-time=unspecified retransmit-interval=unspecified
 /ipv6 nd prefix default
-set autonomous=yes preferred-lifetime=1w valid-lifetime=4w2d
+set autonomous=yes dhcp6-pd-preferred=no preferred-lifetime=1w \
+    valid-lifetime=4w2d
+/ipv6 nd settings
+set router-advertisement-ignored-options="" \
+    router-advertisement-route-distance=1
 /mpls settings
 set allow-fast-path=yes dynamic-label-range=16-1048575 propagate-ttl=yes
 /ppp aaa
@@ -863,20 +905,23 @@ set accounting=yes enable-ipv6-accounting=no interim-update=0s \
 /radius incoming
 set accept=no port=3799 vrf=main
 /routing bgp connection
-add afi=ip,ipv6 as=65001 hold-time=3m local.address=192.168.5.1 .role=ebgp \
-    name=metallb-arch remote.address=192.168.5.76 .as=65000
-add afi=ip,ipv6 as=65001 local.address=192.168.5.1 .role=ebgp name=\
-    metallb-closet remote.address=192.168.5.36 .as=65000
-add afi=ip,ipv6 as=65001 local.address=192.168.5.1 .role=ebgp name=\
-    metallb-nas remote.address=192.168.5.175 .as=65000
-add afi=ip,ipv6 as=65001 local.address=192.168.5.1 .role=ebgp name=\
-    metallb-big remote.address=192.168.5.68 .as=65000
-add afi=ip,ipv6 as=65001 local.address=192.168.5.1 .role=ebgp name=\
-    metallb-pite remote.address=192.168.5.9 .as=65000
+add afi=ip,ipv6 hold-time=3m instance=bgp-instance-1 local.address=\
+    192.168.5.1 .role=ebgp name=metallb-arch remote.address=192.168.5.76 .as=\
+    65000
+add afi=ip,ipv6 instance=bgp-instance-1 local.address=192.168.5.1 .role=ebgp \
+    name=metallb-closet remote.address=192.168.5.36 .as=65000
+add afi=ip,ipv6 instance=bgp-instance-1 local.address=192.168.5.1 .role=ebgp \
+    name=metallb-nas remote.address=192.168.5.175 .as=65000
+add afi=ip,ipv6 instance=bgp-instance-1 local.address=192.168.5.1 .role=ebgp \
+    name=metallb-big remote.address=192.168.5.68 .as=65000
+add afi=ip,ipv6 instance=bgp-instance-1 local.address=192.168.5.1 .role=ebgp \
+    name=metallb-pite remote.address=192.168.5.9 .as=65000
 /routing igmp-proxy
 set query-interval=2m5s query-response-interval=10s quick-leave=no
 /routing settings
-set single-process=no
+set check-gateway-ping-count=2 check-gateway-ping-interval=10s \
+    check-gateway-ping-timeout=1s policy-rules=\
+    mangle,vrf-lookup,vrf-unreach,local,user,main single-process=no
 /snmp
 set contact="" enabled=no engine-id-suffix="" location="" src-address=:: \
     trap-community=public trap-generators=temp-exception trap-target="" \
@@ -901,6 +946,10 @@ set 0 action=memory disabled=no prefix="" regex="" topics=info
 set 1 action=memory disabled=no prefix="" regex="" topics=error
 set 2 action=memory disabled=no prefix="" regex="" topics=warning
 set 3 action=echo disabled=no prefix="" regex="" topics=critical
+add action=loki disabled=no prefix="" regex="" topics=info
+add action=loki disabled=no prefix="" regex="" topics=warning
+add action=loki disabled=no prefix="" regex="" topics=error
+add action=loki disabled=no prefix="" regex="" topics=critical
 /system note
 set note="" show-at-cli-login=no show-at-login=yes
 /system ntp client
@@ -915,8 +964,12 @@ add address=216.239.35.12 auth-key=none disabled=no iburst=yes max-poll=10 \
 add address=162.159.200.1 auth-key=none disabled=no iburst=yes max-poll=10 \
     min-poll=6
 /system package local-update mirror
-set check-interval=1d enabled=no primary-server=0.0.0.0 secondary-server=\
-    0.0.0.0 user=""
+set check-interval=1d enabled=no primary-server=:: secondary-server=:: user=\
+    ""
+/system package update
+set channel=stable check-certificate=yes ip-version=auto mode=https
+/system resource hardware usb-settings
+set authorization=no
 /system resource irq
 set 0 cpu=auto
 set 1 cpu=auto
@@ -934,6 +987,8 @@ set 12 cpu=auto
 set 13 cpu=auto
 set 14 cpu=auto
 set 15 cpu=auto
+set 16 cpu=auto
+set 17 cpu=auto
 /system resource irq rps
 set "2GWAN" disabled=yes
 set pi disabled=yes
@@ -944,8 +999,6 @@ set ether6 disabled=yes
 set ether7 disabled=yes
 set to-wifi disabled=yes
 set "10GsfpLAN" disabled=yes
-/system resource usb settings
-set authorization=no
 /system routerboard reset-button
 set enabled=no hold-time=0s..1m on-event=""
 /system routerboard settings
@@ -958,9 +1011,10 @@ set auto-send-supout=no automatic-supout=yes ping-start-after-boot=5m \
     ping-timeout=1m watch-address=none watchdog-timer=yes
 /tool bandwidth-server
 set allocate-udp-ports-from=2000 allowed-addresses4="" allowed-addresses6="" \
-    authenticate=yes enabled=yes max-sessions=100
+    authenticate=yes enabled=no max-sessions=100
 /tool e-mail
-set from=<> port=25 server=0.0.0.0 tls=no user="" vrf=main
+set certificate-verification=no from=<> port=25 server=0.0.0.0 tls=no user="" \
+    vrf=main
 /tool graphing
 set page-refresh=300 store-every=5min
 /tool graphing interface
@@ -988,6 +1042,11 @@ set allowed-interface-list=LAN
 set allowed-interface-list=LAN
 /tool mac-server ping
 set enabled=yes
+/tool netwatch
+add comment="lan-dns failover" dns-server=192.168.6.30 down-script=\
+    "/system script run lan-dns-down" host=john2143.com interval=10s name=\
+    lan-dns record-type=A timeout=3s type=dns up-script=\
+    "/system script run lan-dns-up"
 /tool romon
 # inactivated, not allowed by device-mode
 set enabled=no id=00:00:00:00:00:00
@@ -996,7 +1055,7 @@ set enabled=no id=00:00:00:00:00:00
 set [ find default=yes ] cost=100 disabled=no forbid=no interface=all
 /tool sms
 set allowed-number="" channel=0 polling=no port=none receive-enabled=no \
-    sms-storage=sim
+    remove-sent-sms-after-send=no sms-storage=sim
 /tool sniffer
 set file-limit=1000KiB file-name="" filter-cpu="" filter-direction=any \
     filter-dst-ip-address="" filter-dst-ipv6-address="" \

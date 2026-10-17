@@ -1,4 +1,4 @@
-# 2026-09-17 23:23:03 by RouterOS 7.19.6
+# 2026-10-17 08:13:49 by RouterOS 7.24.5
 # software id = UL5S-M34T
 #
 # model = CRS310-8G+2S+
@@ -26,6 +26,9 @@ set [ find default=yes ] html-directory=hotspot
 /ip route
 add comment="NTP Google" dst-address=216.239.35.12/32 gateway=192.168.5.1
 add comment="NTP Cloudflare" dst-address=162.159.200.1/32 gateway=192.168.5.1
+/ipv6 nd
+# automatic dns option advertising is not started, re-apply dns config
+set [ find default=yes ] advertise-dns=yes
 /system clock
 set time-zone-autodetect=no time-zone-name=America/New_York
 /system identity

@@ -1,15 +1,8 @@
-# 2026-09-17 23:23:04 by RouterOS 7.19.6
+# 2026-10-17 08:13:50 by RouterOS 7.24.5
 # software id = UL5S-M34T
 #
 # model = CRS310-8G+2S+
 # serial number = HKG0AJ14YM5
-/interface bridge
-add admin-mac=04:F4:1C:E7:24:3C ageing-time=5m arp=enabled arp-timeout=auto \
-    auto-mac=no comment=defconf dhcp-snooping=no disabled=no fast-forward=yes \
-    forward-delay=15s igmp-snooping=no max-learned-entries=auto \
-    max-message-age=20s mtu=auto mvrp=no name=bridge port-cost-mode=long \
-    priority=0x8000 protocol-mode=rstp transmit-hold-count=6 vlan-filtering=\
-    no
 /interface ethernet
 set [ find default-name=ether1 ] advertise="10M-baseT-half,10M-baseT-full,100M\
     -baseT-half,100M-baseT-full,1G-baseT-full,2.5G-baseT" arp=enabled \
@@ -85,58 +78,56 @@ set [ find default-name=sfp-sfpplus2 ] advertise="10M-baseT-half,10M-baseT-ful\
     04:F4:1C:E7:24:45 mtu=1500 name=sfp-sfpplus2 orig-mac-address=\
     04:F4:1C:E7:24:45 rx-flow-control=off sfp-ignore-rx-los=no \
     sfp-rate-select=high sfp-shutdown-temperature=95C tx-flow-control=off
-/queue interface
-set bridge queue=no-queue
 /interface ethernet switch
-set 0 !cpu-flow-control l3-hw-offloading=no mirror-target=none name=switch1 \
+set switch1 l3-hw-offloading=no mirror-target=none name=switch1 \
     qos-hw-offloading=no rspan=no rspan-egress-vlan-id=1 \
     rspan-ingress-vlan-id=1
 /interface ethernet switch port
-set 0 !egress-rate !ingress-rate l3-hw-offloading=yes limit-broadcasts=yes \
-    limit-unknown-multicasts=no limit-unknown-unicasts=no mirror-egress=no \
-    mirror-ingress=no storm-rate=100
-set 1 !egress-rate !ingress-rate l3-hw-offloading=yes limit-broadcasts=yes \
-    limit-unknown-multicasts=no limit-unknown-unicasts=no mirror-egress=no \
-    mirror-ingress=no storm-rate=100
-set 2 !egress-rate !ingress-rate l3-hw-offloading=yes limit-broadcasts=yes \
-    limit-unknown-multicasts=no limit-unknown-unicasts=no mirror-egress=no \
-    mirror-ingress=no storm-rate=100
-set 3 !egress-rate !ingress-rate l3-hw-offloading=yes limit-broadcasts=yes \
-    limit-unknown-multicasts=no limit-unknown-unicasts=no mirror-egress=no \
-    mirror-ingress=no storm-rate=100
-set 4 !egress-rate !ingress-rate l3-hw-offloading=yes limit-broadcasts=yes \
-    limit-unknown-multicasts=no limit-unknown-unicasts=no mirror-egress=no \
-    mirror-ingress=no storm-rate=100
-set 5 !egress-rate !ingress-rate l3-hw-offloading=yes limit-broadcasts=yes \
-    limit-unknown-multicasts=no limit-unknown-unicasts=no mirror-egress=no \
-    mirror-ingress=no storm-rate=100
-set 6 !egress-rate !ingress-rate l3-hw-offloading=yes limit-broadcasts=yes \
-    limit-unknown-multicasts=no limit-unknown-unicasts=no mirror-egress=no \
-    mirror-ingress=no storm-rate=100
-set 7 !egress-rate !ingress-rate l3-hw-offloading=yes limit-broadcasts=yes \
-    limit-unknown-multicasts=no limit-unknown-unicasts=no mirror-egress=no \
-    mirror-ingress=no storm-rate=100
-set 8 !egress-rate !ingress-rate l3-hw-offloading=yes limit-broadcasts=yes \
-    limit-unknown-multicasts=no limit-unknown-unicasts=no mirror-egress=no \
-    mirror-ingress=no storm-rate=100
-set 9 !egress-rate !ingress-rate l3-hw-offloading=yes limit-broadcasts=yes \
-    limit-unknown-multicasts=no limit-unknown-unicasts=no mirror-egress=no \
-    mirror-ingress=no storm-rate=100
-set 10 !egress-rate !ingress-rate limit-broadcasts=yes \
+set ether1 !egress-rate !ingress-rate l3-hw-offloading=yes limit-broadcasts=\
+    yes limit-unknown-multicasts=no limit-unknown-unicasts=no mirror-egress=\
+    no mirror-ingress=no storm-rate=100
+set ether2 !egress-rate !ingress-rate l3-hw-offloading=yes limit-broadcasts=\
+    yes limit-unknown-multicasts=no limit-unknown-unicasts=no mirror-egress=\
+    no mirror-ingress=no storm-rate=100
+set ether3 !egress-rate !ingress-rate l3-hw-offloading=yes limit-broadcasts=\
+    yes limit-unknown-multicasts=no limit-unknown-unicasts=no mirror-egress=\
+    no mirror-ingress=no storm-rate=100
+set ether4 !egress-rate !ingress-rate l3-hw-offloading=yes limit-broadcasts=\
+    yes limit-unknown-multicasts=no limit-unknown-unicasts=no mirror-egress=\
+    no mirror-ingress=no storm-rate=100
+set ether5 !egress-rate !ingress-rate l3-hw-offloading=yes limit-broadcasts=\
+    yes limit-unknown-multicasts=no limit-unknown-unicasts=no mirror-egress=\
+    no mirror-ingress=no storm-rate=100
+set ether6 !egress-rate !ingress-rate l3-hw-offloading=yes limit-broadcasts=\
+    yes limit-unknown-multicasts=no limit-unknown-unicasts=no mirror-egress=\
+    no mirror-ingress=no storm-rate=100
+set ether7 !egress-rate !ingress-rate l3-hw-offloading=yes limit-broadcasts=\
+    yes limit-unknown-multicasts=no limit-unknown-unicasts=no mirror-egress=\
+    no mirror-ingress=no storm-rate=100
+set ether8 !egress-rate !ingress-rate l3-hw-offloading=yes limit-broadcasts=\
+    yes limit-unknown-multicasts=no limit-unknown-unicasts=no mirror-egress=\
+    no mirror-ingress=no storm-rate=100
+set sfp-sfpplus1 !egress-rate !ingress-rate l3-hw-offloading=yes \
+    limit-broadcasts=yes limit-unknown-multicasts=no limit-unknown-unicasts=\
+    no mirror-egress=no mirror-ingress=no storm-rate=100
+set sfp-sfpplus2 !egress-rate !ingress-rate l3-hw-offloading=yes \
+    limit-broadcasts=yes limit-unknown-multicasts=no limit-unknown-unicasts=\
+    no mirror-egress=no mirror-ingress=no storm-rate=100
+set switch1-cpu !egress-rate !ingress-rate limit-broadcasts=yes \
     limit-unknown-multicasts=no limit-unknown-unicasts=no mirror-egress=no \
     mirror-ingress=no storm-rate=100
 /interface ethernet switch port-isolation
-set 0 !forwarding-override
-set 1 !forwarding-override
-set 2 !forwarding-override
-set 3 !forwarding-override
-set 4 !forwarding-override
-set 5 !forwarding-override
-set 6 !forwarding-override
-set 7 !forwarding-override
-set 8 !forwarding-override
-set 9 !forwarding-override
-set 10 !forwarding-override
+set ether1 !forwarding-override
+set ether2 !forwarding-override
+set ether3 !forwarding-override
+set ether4 !forwarding-override
+set ether5 !forwarding-override
+set ether6 !forwarding-override
+set ether7 !forwarding-override
+set ether8 !forwarding-override
+set sfp-sfpplus1 !forwarding-override
+set sfp-sfpplus2 !forwarding-override
+set switch1-cpu !forwarding-override
 /interface ethernet switch qos port
 set ether1 !egress-rate-queue0 !egress-rate-queue1 !egress-rate-queue2 \
     !egress-rate-queue3 !egress-rate-queue4 !egress-rate-queue5 \
@@ -196,7 +187,8 @@ set [ find default=yes ] add-default-route=yes apn=internet authentication=\
     none default-route-distance=2 ip-type=auto name=default use-network-apn=\
     yes use-peer-dns=yes
 /interface macsec profile
-set [ find default-name=default ] name=default server-priority=10
+set [ find default-name=default ] ciphers=aes-gcm-128 name=default \
+    server-priority=10
 /ip dhcp-client option
 set clientid_duid code=61 name=clientid_duid value="0xff\$(CLIENT_DUID)"
 set clientid code=61 name=clientid value="0x01\$(CLIENT_MAC)"
@@ -219,30 +211,35 @@ set [ find default=yes ] name=default
 /ip ipsec profile
 set [ find default=yes ] dh-group=modp2048,modp1024 dpd-interval=8s \
     dpd-maximum-failures=4 enc-algorithm=aes-128,3des hash-algorithm=sha1 \
-    lifetime=1d name=default nat-traversal=yes proposal-check=obey
+    lifetime=1d name=default nat-traversal=yes ppk=no proposal-check=obey
 /ip ipsec proposal
 set [ find default=yes ] auth-algorithms=sha1 disabled=no enc-algorithms=\
     aes-256-cbc,aes-192-cbc,aes-128-cbc lifetime=30m name=default pfs-group=\
     modp1024
 /ip smb users
 set [ find default=yes ] disabled=no name=guest read-only=yes
+/ipv6 dhcp-relay option
+set client_mac code=79 name=client_mac only-if-mac-available=yes value=\
+    "0x0001\$(CLIENT_MAC)"
 /ppp profile
 set *0 address-list="" !bridge !bridge-horizon bridge-learning=default \
     !bridge-path-cost !bridge-port-priority !bridge-port-trusted \
-    !bridge-port-vid change-tcp-mss=yes !dns-server !idle-timeout \
-    !incoming-filter !insert-queue-before !interface-list !local-address \
-    name=default on-down="" on-up="" only-one=default !outgoing-filter \
-    !parent-queue !queue-type !rate-limit !remote-address !session-timeout \
+    !bridge-port-vid change-tcp-mss=yes !dhcpv6-lease-time !dhcpv6-use-radius \
+    !dns-server !idle-timeout !incoming-filter !insert-queue-before \
+    !interface-list !local-address name=default on-down="" on-up="" only-one=\
+    default !outgoing-filter !parent-queue !queue-type !rate-limit \
+    !remote-address !remote-ipv6-prefix-reuse !session-timeout \
     use-compression=default use-encryption=default use-ipv6=yes use-mpls=\
     default use-upnp=default !wins-server
 set *FFFFFFFE address-list="" !bridge !bridge-horizon bridge-learning=default \
     !bridge-path-cost !bridge-port-priority !bridge-port-trusted \
-    !bridge-port-vid change-tcp-mss=yes !dns-server !idle-timeout \
-    !incoming-filter !insert-queue-before !interface-list !local-address \
-    name=default-encryption on-down="" on-up="" only-one=default \
-    !outgoing-filter !parent-queue !queue-type !rate-limit !remote-address \
-    !session-timeout use-compression=default use-encryption=yes use-ipv6=yes \
-    use-mpls=default use-upnp=default !wins-server
+    !bridge-port-vid change-tcp-mss=yes !dhcpv6-lease-time !dhcpv6-use-radius \
+    !dns-server !idle-timeout !incoming-filter !insert-queue-before \
+    !interface-list !local-address name=default-encryption on-down="" on-up=\
+    "" only-one=default !outgoing-filter !parent-queue !queue-type \
+    !rate-limit !remote-address !remote-ipv6-prefix-reuse !session-timeout \
+    use-compression=default use-encryption=yes use-ipv6=yes use-mpls=default \
+    use-upnp=default !wins-server
 /queue type
 set 0 kind=pfifo name=default pfifo-limit=50
 set 1 kind=pfifo name=ethernet-default pfifo-limit=50
@@ -274,7 +271,7 @@ set ether8 queue=only-hardware-queue
 set sfp-sfpplus1 queue=only-hardware-queue
 set sfp-sfpplus2 queue=only-hardware-queue
 /routing bgp template
-set default as=65530 name=default
+set default name=default
 /snmp community
 set [ find default=yes ] addresses=::/0 authentication-protocol=MD5 disabled=\
     no encryption-protocol=DES name=public read-access=yes security=none \
@@ -285,8 +282,7 @@ set 1 disk-file-count=2 disk-file-name=flash/log disk-lines-per-file=1000 \
     disk-stop-on-full=no name=disk target=disk
 set 2 name=echo remember=yes target=echo
 set 3 name=remote remote=0.0.0.0 remote-log-format=default remote-port=514 \
-    remote-protocol=udp src-address=0.0.0.0 syslog-facility=daemon \
-    syslog-severity=auto syslog-time-format=bsd-syslog target=remote vrf=main
+    remote-protocol=udp src-address=0.0.0.0 target=remote vrf=main
 /user group
 set read name=read policy="local,telnet,ssh,reboot,read,test,winbox,password,w\
     eb,sniff,sensitive,api,romon,rest-api,!ftp,!write,!policy" skin=default
@@ -295,18 +291,25 @@ set write name=write policy="local,telnet,ssh,reboot,read,write,test,winbox,pa\
 set full name=full policy="local,telnet,ssh,ftp,reboot,read,write,policy,test,\
     winbox,password,web,sniff,sensitive,api,romon,rest-api" skin=default
 /certificate settings
-set builtin-trust-anchors=not-trusted crl-download=no crl-store=ram crl-use=\
-    no
+set builtin-trust-store=default crl-download=no crl-store=ram crl-use=no
 /console settings
-set log-script-errors=yes sanitize-names=no
+set log-script-errors=yes sanitize-names=no tab-width=4
 /disk settings
 set auto-media-interface=none auto-media-sharing=no auto-smb-sharing=no \
     auto-smb-user=guest default-mount-point-template="[slot]"
 /ip smb
 set comment=MikrotikSMB domain=MSHOME enabled=auto interfaces=all
-/interface bridge mlag
-# disabled
-set bridge=none heartbeat=5s peer-port=none priority=128
+/interface bridge
+add admin-mac=04:F4:1C:E7:24:3C ageing-time=5m arp=enabled arp-timeout=auto \
+    auto-mac=no comment=defconf !dhcp-agent-circuit-id !dhcp-agent-remote-id \
+    dhcp-snooping=no !dhcpv6-agent-circuit-id !dhcpv6-agent-remote-id \
+    dhcpv6-snooping=no disabled=no fast-forward=yes forward-delay=15s \
+    igmp-snooping=no max-learned-entries=auto max-message-age=20s \
+    mlag-heartbeat=5s mlag-peer-port=none mlag-priority=128 mtu=auto name=\
+    bridge port-cost-mode=long priority=0x8000 protocol-mode=rstp ra-guard=no \
+    transmit-hold-count=6 vlan-filtering=no
+/queue interface
+set bridge queue=no-queue
 /interface bridge port
 add auto-isolate=no bpdu-guard=no bridge=bridge broadcast-flood=yes comment=\
     defconf disabled=no edge=auto fast-leave=no frame-types=admit-all \
@@ -314,80 +317,80 @@ add auto-isolate=no bpdu-guard=no bridge=bridge broadcast-flood=yes comment=\
     !internal-path-cost learn=auto multicast-router=temporary-query \
     mvrp-applicant-state=normal-participant mvrp-registrar-state=normal \
     !path-cost point-to-point=auto priority=0x80 pvid=1 restricted-role=no \
-    restricted-tcn=no tag-stacking=no trusted=no unknown-multicast-flood=yes \
-    unknown-unicast-flood=yes
+    restricted-tcn=no tag-stacking=no trusted=no trusted-dhcpv6=no \
+    trusted-ra=no unknown-multicast-flood=yes unknown-unicast-flood=yes
 add auto-isolate=no bpdu-guard=no bridge=bridge broadcast-flood=yes comment=\
     defconf disabled=no edge=auto fast-leave=no frame-types=admit-all \
     horizon=none hw=yes ingress-filtering=yes interface=ether2 \
     !internal-path-cost learn=auto multicast-router=temporary-query \
     mvrp-applicant-state=normal-participant mvrp-registrar-state=normal \
     !path-cost point-to-point=auto priority=0x80 pvid=1 restricted-role=no \
-    restricted-tcn=no tag-stacking=no trusted=no unknown-multicast-flood=yes \
-    unknown-unicast-flood=yes
+    restricted-tcn=no tag-stacking=no trusted=no trusted-dhcpv6=no \
+    trusted-ra=no unknown-multicast-flood=yes unknown-unicast-flood=yes
 add auto-isolate=no bpdu-guard=no bridge=bridge broadcast-flood=yes comment=\
     defconf disabled=no edge=auto fast-leave=no frame-types=admit-all \
     horizon=none hw=yes ingress-filtering=yes interface=ether3 \
     !internal-path-cost learn=auto multicast-router=temporary-query \
     mvrp-applicant-state=normal-participant mvrp-registrar-state=normal \
     !path-cost point-to-point=auto priority=0x80 pvid=1 restricted-role=no \
-    restricted-tcn=no tag-stacking=no trusted=no unknown-multicast-flood=yes \
-    unknown-unicast-flood=yes
+    restricted-tcn=no tag-stacking=no trusted=no trusted-dhcpv6=no \
+    trusted-ra=no unknown-multicast-flood=yes unknown-unicast-flood=yes
 add auto-isolate=no bpdu-guard=no bridge=bridge broadcast-flood=yes comment=\
     defconf disabled=no edge=auto fast-leave=no frame-types=admit-all \
     horizon=none hw=yes ingress-filtering=yes interface=ether4 \
     !internal-path-cost learn=auto multicast-router=temporary-query \
     mvrp-applicant-state=normal-participant mvrp-registrar-state=normal \
     !path-cost point-to-point=auto priority=0x80 pvid=1 restricted-role=no \
-    restricted-tcn=no tag-stacking=no trusted=no unknown-multicast-flood=yes \
-    unknown-unicast-flood=yes
+    restricted-tcn=no tag-stacking=no trusted=no trusted-dhcpv6=no \
+    trusted-ra=no unknown-multicast-flood=yes unknown-unicast-flood=yes
 add auto-isolate=no bpdu-guard=no bridge=bridge broadcast-flood=yes comment=\
     defconf disabled=no edge=auto fast-leave=no frame-types=admit-all \
     horizon=none hw=yes ingress-filtering=yes interface=ether5 \
     !internal-path-cost learn=auto multicast-router=temporary-query \
     mvrp-applicant-state=normal-participant mvrp-registrar-state=normal \
     !path-cost point-to-point=auto priority=0x80 pvid=1 restricted-role=no \
-    restricted-tcn=no tag-stacking=no trusted=no unknown-multicast-flood=yes \
-    unknown-unicast-flood=yes
+    restricted-tcn=no tag-stacking=no trusted=no trusted-dhcpv6=no \
+    trusted-ra=no unknown-multicast-flood=yes unknown-unicast-flood=yes
 add auto-isolate=no bpdu-guard=no bridge=bridge broadcast-flood=yes comment=\
     defconf disabled=no edge=auto fast-leave=no frame-types=admit-all \
     horizon=none hw=yes ingress-filtering=yes interface=ether6 \
     !internal-path-cost learn=auto multicast-router=temporary-query \
     mvrp-applicant-state=normal-participant mvrp-registrar-state=normal \
     !path-cost point-to-point=auto priority=0x80 pvid=1 restricted-role=no \
-    restricted-tcn=no tag-stacking=no trusted=no unknown-multicast-flood=yes \
-    unknown-unicast-flood=yes
+    restricted-tcn=no tag-stacking=no trusted=no trusted-dhcpv6=no \
+    trusted-ra=no unknown-multicast-flood=yes unknown-unicast-flood=yes
 add auto-isolate=no bpdu-guard=no bridge=bridge broadcast-flood=yes comment=\
     defconf disabled=no edge=auto fast-leave=no frame-types=admit-all \
     horizon=none hw=yes ingress-filtering=yes interface=ether7 \
     !internal-path-cost learn=auto multicast-router=temporary-query \
     mvrp-applicant-state=normal-participant mvrp-registrar-state=normal \
     !path-cost point-to-point=auto priority=0x80 pvid=1 restricted-role=no \
-    restricted-tcn=no tag-stacking=no trusted=no unknown-multicast-flood=yes \
-    unknown-unicast-flood=yes
+    restricted-tcn=no tag-stacking=no trusted=no trusted-dhcpv6=no \
+    trusted-ra=no unknown-multicast-flood=yes unknown-unicast-flood=yes
 add auto-isolate=no bpdu-guard=no bridge=bridge broadcast-flood=yes comment=\
     defconf disabled=no edge=auto fast-leave=no frame-types=admit-all \
     horizon=none hw=yes ingress-filtering=yes interface=ether8 \
     !internal-path-cost learn=auto multicast-router=temporary-query \
     mvrp-applicant-state=normal-participant mvrp-registrar-state=normal \
     !path-cost point-to-point=auto priority=0x80 pvid=1 restricted-role=no \
-    restricted-tcn=no tag-stacking=no trusted=no unknown-multicast-flood=yes \
-    unknown-unicast-flood=yes
+    restricted-tcn=no tag-stacking=no trusted=no trusted-dhcpv6=no \
+    trusted-ra=no unknown-multicast-flood=yes unknown-unicast-flood=yes
 add auto-isolate=no bpdu-guard=no bridge=bridge broadcast-flood=yes comment=\
     defconf disabled=no edge=auto fast-leave=no frame-types=admit-all \
     horizon=none hw=yes ingress-filtering=yes interface=sfp-sfpplus1 \
     !internal-path-cost learn=auto multicast-router=temporary-query \
     mvrp-applicant-state=normal-participant mvrp-registrar-state=normal \
     !path-cost point-to-point=auto priority=0x80 pvid=1 restricted-role=no \
-    restricted-tcn=no tag-stacking=no trusted=no unknown-multicast-flood=yes \
-    unknown-unicast-flood=yes
+    restricted-tcn=no tag-stacking=no trusted=no trusted-dhcpv6=no \
+    trusted-ra=no unknown-multicast-flood=yes unknown-unicast-flood=yes
 add auto-isolate=no bpdu-guard=no bridge=bridge broadcast-flood=yes comment=\
     defconf disabled=no edge=auto fast-leave=no frame-types=admit-all \
     horizon=none hw=yes ingress-filtering=yes interface=sfp-sfpplus2 \
     !internal-path-cost learn=auto multicast-router=temporary-query \
     mvrp-applicant-state=normal-participant mvrp-registrar-state=normal \
     !path-cost point-to-point=auto priority=0x80 pvid=1 restricted-role=no \
-    restricted-tcn=no tag-stacking=no trusted=no unknown-multicast-flood=yes \
-    unknown-unicast-flood=yes
+    restricted-tcn=no tag-stacking=no trusted=no trusted-dhcpv6=no \
+    trusted-ra=no unknown-multicast-flood=yes unknown-unicast-flood=yes
 /interface bridge settings
 set allow-fast-path=yes use-ip-firewall=no use-ip-firewall-for-pppoe=no \
     use-ip-firewall-for-vlan=no
@@ -400,35 +403,39 @@ set neigh-discovery-burst-delay=300ms neigh-discovery-burst-limit=64 \
     route-index-delay-min=1s route-queue-limit-high=256 \
     route-queue-limit-low=0 shwp-reset-counter=128
 /ip firewall connection tracking
-set enabled=auto generic-timeout=10m icmp-timeout=10s loose-tcp-tracking=yes \
-    tcp-close-timeout=10s tcp-close-wait-timeout=10s tcp-established-timeout=\
-    1d tcp-fin-wait-timeout=10s tcp-last-ack-timeout=10s \
-    tcp-max-retrans-timeout=5m tcp-syn-received-timeout=5s \
+set enabled=auto generic-timeout=10m icmp-timeout=10s liberal-tcp-tracking=no \
+    loose-tcp-tracking=yes tcp-close-timeout=10s tcp-close-wait-timeout=10s \
+    tcp-established-timeout=1d tcp-fin-wait-timeout=10s tcp-last-ack-timeout=\
+    10s tcp-max-retrans-timeout=5m tcp-syn-received-timeout=5s \
     tcp-syn-sent-timeout=5s tcp-time-wait-timeout=10s tcp-unacked-timeout=5m \
     udp-stream-timeout=3m udp-timeout=30s
 /ip neighbor discovery-settings
-set discover-interface-list=static discover-interval=30s lldp-dcbx=yes \
-    lldp-mac-phy-config=no lldp-max-frame-size=no lldp-med-net-policy-vlan=\
-    disabled lldp-vlan-info=no mode=tx-and-rx protocol=cdp,lldp,mndp
+set add-dns-entries=no add-dns-entries-suffix=lan discover-interface-list=\
+    static discover-interval=30s dying-gasp=no lldp-dcbx=yes \
+    lldp-mac-phy-config=no lldp-max-frame-size=no lldp-med=yes \
+    lldp-med-net-policy-vlan=disabled lldp-vlan-info=no mode=tx-and-rx \
+    protocol=cdp,lldp,mndp
 /ip settings
 set accept-redirects=no accept-source-route=no allow-fast-path=yes \
     arp-timeout=30s icmp-errors-use-inbound-interface-address=no \
     icmp-rate-limit=10 icmp-rate-mask=0x1818 ip-forward=yes \
+    ipv4-fragment-time=3 ipv4-high-fragment-thresh=2048.0KiB \
     ipv4-multipath-hash-policy=l3 max-neighbor-entries=8192 rp-filter=no \
     secure-redirects=yes send-redirects=yes tcp-syncookies=no tcp-timestamps=\
     random-offset
 /ipv6 settings
 set accept-redirects=yes-if-forwarding-disabled accept-router-advertisements=\
-    yes-if-forwarding-disabled allow-fast-path=yes disable-ipv6=no \
-    disable-link-local-address=no forward=yes max-neighbor-entries=4096 \
-    min-neighbor-entries=1024 multipath-hash-policy=l3 \
-    soft-max-neighbor-entries=2048 stale-neighbor-detect-interval=30 \
-    stale-neighbor-timeout=60
+    yes-if-forwarding-disabled accept-router-advertisements-on=all \
+    allow-fast-path=yes disable-ipv6=no disable-link-local-address=no \
+    forward=yes max-neighbor-entries=4096 min-neighbor-entries=1024 \
+    multipath-hash-policy=l3 soft-max-neighbor-entries=2048 \
+    stale-neighbor-detect-interval=30 stale-neighbor-timeout=60
 /interface detect-internet
 set detect-interface-list=none internet-interface-list=none \
-    lan-interface-list=none wan-interface-list=none
+    lan-interface-list=none request-interval=2m wan-interface-list=none
 /interface ethernet switch qos settings
-set multicast-buffers=10% shared-buffers=40%
+set mirror-buffers=auto mirror-profile=default multicast-buffers=auto \
+    shared-buffers=auto
 /interface ethernet switch qos tx-manager queue
 set 0 queue-buffers=auto schedule=low-priority-group use-shared-buffers=no \
     weight=1
@@ -500,12 +507,13 @@ set sctp disabled=no
 set ftp disabled=no ports=21
 /ip hotspot user
 set [ find default=yes ] comment="counters and limits for trial users" \
-    disabled=no name=default-trial
+    disabled=no name=default-trial server=all
 /ip ipsec policy
 set 0 disabled=no dst-address=::/0 group=default proposal=default protocol=\
     all src-address=::/0 template=yes
 /ip ipsec settings
-set accounting=yes interim-update=0s xauth-use-radius=no
+set accounting=yes ddos-cookie-threshold=20 interim-update=0s \
+    xauth-use-radius=no
 /ip media settings
 set thumbnails=""
 /ip nat-pmp
@@ -522,26 +530,29 @@ set always-from-cache=no anonymous=no cache-administrator=webmaster \
 add comment="NTP Google" dst-address=216.239.35.12/32 gateway=192.168.5.1
 add comment="NTP Cloudflare" dst-address=162.159.200.1/32 gateway=192.168.5.1
 /ip service
-set ftp address="" disabled=no max-sessions=20 port=21 vrf=main
-set ssh address="" disabled=no max-sessions=20 port=22 vrf=main
-set telnet address="" disabled=no max-sessions=20 port=23 vrf=main
-set www address="" disabled=no max-sessions=20 port=80 vrf=main
-set www-ssl address="" certificate=none disabled=yes max-sessions=20 port=443 \
-    tls-version=any vrf=main
-set winbox address="" disabled=no max-sessions=20 port=8291 vrf=main
-set api address="" disabled=no max-sessions=20 port=8728 vrf=main
-set api-ssl address="" certificate=none disabled=no max-sessions=20 port=8729 \
-    tls-version=any vrf=main
+set ftp available-from="" disabled=no max-sessions=20 port=21 vrf=main
+set ssh available-from="" disabled=no max-sessions=20 port=22 vrf=main
+set telnet available-from="" disabled=no max-sessions=20 port=23 vrf=main
+set www available-from="" disabled=no max-sessions=20 port=80 vrf=main
+set www-ssl available-from="" certificate=none disabled=yes max-sessions=20 \
+    port=443 tls-version=any vrf=main
+set reverse-proxy available-from="" certificate=none disabled=no \
+    max-sessions=20 port=443 tls-version=any vrf=main
+set winbox available-from="" disabled=no max-sessions=20 port=8291 vrf=main
+set api available-from="" disabled=no max-sessions=20 port=8728 vrf=main
+set api-ssl available-from="" certificate=none disabled=no max-sessions=20 \
+    port=8729 tls-version=any vrf=main
 /ip smb shares
-set [ find default=yes ] directory=flash/pub disabled=yes invalid-users="" \
+set [ find default=yes ] directory=/flash/pub disabled=yes invalid-users="" \
     name=pub read-only=no require-encryption=no valid-users=""
 /ip socks
 # inactivated, not allowed by device-mode
 set auth-method=none connection-idle-timeout=2m enabled=no max-connections=\
     200 port=1080 version=4 vrf=main
 /ip ssh
-set always-allow-password-login=no ciphers=auto forwarding-enabled=no \
-    host-key-size=2048 host-key-type=rsa strong-crypto=no
+set ciphers=auto forwarding-enabled=no host-key-size=2048 host-key-type=rsa \
+    password-authentication=yes-if-no-key publickey-authentication-options=\
+    none strong-crypto=no
 /ip tftp settings
 set max-block-size=4096
 /ip traffic-flow
@@ -561,13 +572,18 @@ set bytes=yes dst-address=yes dst-address-mask=yes dst-mac-address=yes \
 /ip upnp
 set allow-disable-external-interface=no enabled=no show-dummy-rule=yes
 /ipv6 nd
+# automatic dns option advertising is not started, re-apply dns config
 set [ find default=yes ] advertise-dns=yes advertise-mac-address=yes \
-    disabled=no hop-limit=unspecified interface=all \
+    disabled=no !dns hop-limit=unspecified interface=all \
     managed-address-configuration=no mtu=unspecified other-configuration=no \
-    ra-delay=3s ra-interval=3m20s-10m ra-lifetime=30m ra-preference=medium \
-    reachable-time=unspecified retransmit-interval=unspecified
+    !pref64 ra-delay=3s ra-interval=3m20s-10m ra-lifetime=30m ra-preference=\
+    medium reachable-time=unspecified retransmit-interval=unspecified
 /ipv6 nd prefix default
-set autonomous=yes preferred-lifetime=1w valid-lifetime=4w2d
+set autonomous=yes dhcp6-pd-preferred=no preferred-lifetime=1w \
+    valid-lifetime=4w2d
+/ipv6 nd settings
+set router-advertisement-ignored-options="" \
+    router-advertisement-route-distance=1
 /mpls settings
 set allow-fast-path=yes dynamic-label-range=16-1048575 propagate-ttl=yes
 /ppp aaa
@@ -578,7 +594,9 @@ set accept=no port=3799 vrf=main
 /routing igmp-proxy
 set query-interval=2m5s query-response-interval=10s quick-leave=no
 /routing settings
-set single-process=no
+set check-gateway-ping-count=2 check-gateway-ping-interval=10s \
+    check-gateway-ping-timeout=1s policy-rules=\
+    mangle,vrf-lookup,vrf-unreach,local,user,main single-process=no
 /snmp
 set contact="" enabled=no engine-id-suffix="" location="" src-address=:: \
     trap-community=public trap-generators=temp-exception trap-target="" \
@@ -624,25 +642,16 @@ add address=216.239.35.12 auth-key=none disabled=no iburst=yes max-poll=10 \
 add address=162.159.200.1 auth-key=none disabled=no iburst=yes max-poll=10 \
     min-poll=6
 /system package local-update mirror
-set check-interval=1d enabled=no primary-server=0.0.0.0 secondary-server=\
-    0.0.0.0 user=""
+set check-interval=1d enabled=no primary-server=:: secondary-server=:: user=\
+    ""
+/system package update
+set channel=stable check-certificate=yes ip-version=auto mode=https
+/system resource hardware usb-settings
+set authorization=no
 /system resource irq
 set 0 cpu=auto
 set 1 cpu=auto
 set 2 cpu=auto
-/system resource irq rps
-set ether1 disabled=yes
-set ether2 disabled=yes
-set ether3 disabled=yes
-set ether4 disabled=yes
-set ether5 disabled=yes
-set ether6 disabled=yes
-set ether7 disabled=yes
-set ether8 disabled=yes
-set sfp-sfpplus1 disabled=yes
-set sfp-sfpplus2 disabled=yes
-/system resource usb settings
-set authorization=no
 /system routerboard reset-button
 set enabled=no hold-time=0s..1m on-event=""
 /system routerboard settings
@@ -661,7 +670,8 @@ set auto-send-supout=no automatic-supout=yes ping-start-after-boot=5m \
 set allocate-udp-ports-from=2000 allowed-addresses4="" allowed-addresses6="" \
     authenticate=yes enabled=yes max-sessions=100
 /tool e-mail
-set from=<> port=25 server=0.0.0.0 tls=no user="" vrf=main
+set certificate-verification=no from=<> port=25 server=0.0.0.0 tls=no user="" \
+    vrf=main
 /tool graphing
 set page-refresh=300 store-every=5min
 /tool graphing interface
@@ -683,7 +693,7 @@ set enabled=no id=00:00:00:00:00:00
 set [ find default=yes ] cost=100 disabled=no forbid=no interface=all
 /tool sms
 set allowed-number="" channel=0 polling=no port=none receive-enabled=no \
-    sms-storage=sim
+    remove-sent-sms-after-send=no sms-storage=sim
 /tool sniffer
 set file-limit=1000KiB file-name="" filter-cpu="" filter-direction=any \
     filter-dst-ip-address="" filter-dst-ipv6-address="" \

@@ -1,4 +1,4 @@
-# 2026-09-17 23:22:57 by RouterOS 7.20.8
+# 2026-10-17 08:13:37 by RouterOS 7.24.5
 # software id = BFGZ-NVN3
 #
 # model = CRS305-1G-4S+
@@ -18,6 +18,9 @@ add address=192.168.1.250/24 comment=temp-recovery interface=bridge network=\
     192.168.1.0
 /ip route
 add gateway=192.168.5.1
+/ipv6 nd
+# automatic dns option advertising is not started, re-apply dns config
+set [ find default=yes ] advertise-dns=yes
 /system clock
 set time-zone-autodetect=no time-zone-name=America/New_York
 /system identity
