@@ -223,15 +223,26 @@ async def run_genai_turn_activity(turn_arg: dict) -> dict:
                 non_retryable=True)
         log.warning("LLM API error (HTTP %s): %s", e.status_code, _first_line(str(e)))
         raise
-    msg = response.choices[0].message
+    if response.choices:
+        msg = response.choices[0].message
+        finish_reason = response.choices[0].finish_reason
+    else:
+        # Provider returned no candidates (seen from Gemini via LiteLLM). It
+        # repeats on retry, so handle it as a blank turn: the workflow nudges,
+        # and concludes after 4 consecutive blanks (agent_session.py).
+        from openai.types.chat import ChatCompletionMessage
+        log.warning("GenAI turn: event=%s model=%s returned no choices; treating as blank turn",
+                    event_id, model)
+        msg = ChatCompletionMessage(role="assistant", content="")
+        finish_reason = "no_choices"
 
-    prompt_tok = response.usage.prompt_tokens
-    comp_tok = response.usage.completion_tokens
+    usage = response.usage
+    prompt_tok = usage.prompt_tokens if usage else 0
+    comp_tok = usage.completion_tokens if usage else 0
     # LiteLLM reports cached tokens under prompt_tokens_details.cached_tokens
     # for Gemini; fall back to usage.cached_tokens for other providers.
-    details = getattr(response.usage, "prompt_tokens_details", None)
-    cached_tok = getattr(details, "cached_tokens", 0) if details else getattr(response.usage, "cached_tokens", 0) or 0
-    finish_reason = response.choices[0].finish_reason
+    details = getattr(usage, "prompt_tokens_details", None)
+    cached_tok = getattr(details, "cached_tokens", 0) if details else getattr(usage, "cached_tokens", 0) or 0
     log.info("GenAI turn: event=%s prompt=%d comp=%d cached=%d finish=%s",
              event_id, prompt_tok, comp_tok, cached_tok, finish_reason)
 
