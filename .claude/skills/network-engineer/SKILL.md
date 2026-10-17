@@ -136,11 +136,11 @@ When connecting to any MikroTik device, run `/system routerboard print` on first
 
 | Device | Alias | Model | S/N | Firmware |
 |--------|-------|-------|-----|----------|
-| Router | r | RB5009UPr+S+ | HKG0AWJZPCK | 7.19.6 |
-| Core | c | CRS305-1G-4S+ r2 | HMC0B8ZZ7F2 | 7.20.8 |
-| Upstairs | u | CRS310-8G+2S+ | HKG0AVERD3V | 7.19.6 |
-| Office | o | CRS310-8G+2S+ | HKG0AJ14YM5 | 7.19.6 |
-| Upstairs-Core | uc | CRS305-1G-4S+ r2 | HMB0BED9WV8 | 7.20.8 |
+| Router | r | RB5009UPr+S+ | HKG0AWJZPCK | 7.24.5 |
+| Core | c | CRS305-1G-4S+ r2 | HMC0B8ZZ7F2 | 7.24.5 |
+| Upstairs | u | CRS310-8G+2S+ | HKG0AVERD3V | 7.24.5 |
+| Office | o | CRS310-8G+2S+ | HKG0AJ14YM5 | 7.24.5 |
+| Upstairs-Core | uc | CRS305-1G-4S+ r2 | HMB0BED9WV8 | 7.24.5 |
 
 **Note:** RouterOS version (from `/system resource print`) is NOT the same as Routerboard model (from `/system routerboard print`). Always check both to confirm identity.
 
