@@ -2,9 +2,15 @@
 
 import argparse
 import asyncio
+import os
 import sys
 
-from frigate_genai.worker import async_main
+# Must run before anything imports openai: the SDK defers pydantic schema
+# builds by default, and concurrent first use from activity threads races
+# ("'MockCoreSchema' object does not support item assignment").
+os.environ.setdefault("DEFER_PYDANTIC_BUILD", "false")
+
+from frigate_genai.worker import async_main  # noqa: E402
 
 
 def main():

@@ -114,6 +114,20 @@ def _resolve_provider(provider_cfg: dict, model: str, timeout: float = 120.0):
     return client, model_name
 
 
+def warm_openai_client() -> bool:
+    """Import the OpenAI SDK's lazy chat resources and build their pydantic
+    schemas on the calling (main) thread, before any activity thread can race
+    on first use. Requires DEFER_PYDANTIC_BUILD=false (set in __main__) before
+    openai is first imported. Returns ChatCompletion.__pydantic_complete__."""
+    from openai import OpenAI
+    from openai.types.chat import ChatCompletion
+
+    client = OpenAI(api_key="warmup", base_url="http://127.0.0.1:9/v1")
+    client.chat.completions  # first access imports openai.resources.chat
+    client.close()
+    return ChatCompletion.__pydantic_complete__
+
+
 @activity.defn(name="run_genai_turn")
 async def run_genai_turn_activity(turn_arg: dict) -> dict:
     """Single-turn LLM call. Loads messages.json, deserializes [[ ]] refs,

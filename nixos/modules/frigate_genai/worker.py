@@ -53,7 +53,7 @@ from frigate_genai.s3_helpers import (
 from frigate_genai.activities.select_model import select_model_activity
 from frigate_genai.activities.lifecycle import update_description_activity, cleanup_cancelled_activity, summarize_agent_activity, save_agent_log_activity
 from frigate_genai.activities.agent_state import init_agent_state_activity, init_subagent_state_activity
-from frigate_genai.activities.genai_turn import run_genai_turn_activity
+from frigate_genai.activities.genai_turn import run_genai_turn_activity, warm_openai_client
 from frigate_genai.activities.tool_apply import apply_tool_messages_activity
 from frigate_genai.activities.frame_extraction import transcode_into_parts_activity, fetch_snapshot_activity
 from frigate_genai.activities.mqtt import _start_workflow_sync, _build_workflow_input, build_mqtt_client
@@ -326,6 +326,7 @@ async def async_main(prompts_path: str, provider_path: str, mode: str = "trigger
         format="%(asctime)s [%(name)s] %(levelname)s: %(message)s",
     )
     _main_event_loop = asyncio.get_running_loop()
+    log.info("OpenAI client warmed (schemas_complete=%s)", warm_openai_client())
 
     prompts = load_json(prompts_path)
     provider_cfg = load_json(provider_path)
