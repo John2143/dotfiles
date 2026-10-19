@@ -193,6 +193,20 @@
         headers = {"X-Scope-OrgID" = "anonymous";};
       }
     ];
+    # Read kube-state-metrics series back from Mimir for the "loadbalancers"
+    # alert group. required_matchers scopes remote reads to selectors that
+    # carry job="kube-state-metrics"; read_recent is required because these
+    # series never exist in local storage.
+    remoteRead = [
+      {
+        name = "mimir-ksm";
+        url = "http://192.168.6.23:8080/prometheus/api/v1/read";
+        headers = {"X-Scope-OrgID" = "anonymous";};
+        read_recent = true;
+        required_matchers = {job = "kube-state-metrics";};
+        remote_timeout = "30s";
+      }
+    ];
     ruleFiles = let
       alertRules = pkgs.writeText "alerts.yml" ''
         groups:
@@ -230,6 +244,18 @@
                 expr: node_boot_time_seconds > 0 and (time() - node_boot_time_seconds) < 300
                 labels: { severity: info }
                 annotations: { summary: "{{ $labels.instance }} rebooted within last 5m" }
+          - name: loadbalancers
+            rules:
+              - alert: LoadBalancerNoIP
+                expr: 'max by (namespace, service) (kube_service_spec_type{job="kube-state-metrics",type="LoadBalancer"}) unless on (namespace, service) max by (namespace, service) (kube_service_status_load_balancer_ingress{job="kube-state-metrics"})'
+                for: 5m
+                labels: { severity: critical }
+                annotations: { summary: "LoadBalancer {{ $labels.namespace }}/{{ $labels.service }} has no IP: MetalLB refused or lost the allocation, so the VIP is not announced" }
+              - alert: LoadBalancerNoReadyEndpoints
+                expr: '(max by (namespace, service) (kube_service_spec_type{job="kube-state-metrics",type="LoadBalancer"}) unless on (namespace, service) max by (namespace, service) (label_replace(kube_endpointslice_endpoints{job="kube-state-metrics",ready="true"}, "service", "$1", "endpointslice", "(.+?)(-[a-z0-9]{5})?"))) and on (namespace, service) (max by (namespace, service) (label_replace(kube_endpointslice_endpoints{job="kube-state-metrics"}, "service", "$1", "endpointslice", "(.+?)(-[a-z0-9]{5})?")) or max by (namespace, service) (label_replace(max_over_time(kube_endpointslice_endpoints{job="kube-state-metrics",ready="true"}[1h]), "service", "$1", "endpointslice", "(.+?)(-[a-z0-9]{5})?")))'
+                for: 5m
+                labels: { severity: critical }
+                annotations: { summary: "LoadBalancer {{ $labels.namespace }}/{{ $labels.service }} has no ready endpoints: MetalLB withdrew its VIP" }
       '';
     in [alertRules];
     alertmanagers = [
