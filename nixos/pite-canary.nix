@@ -309,11 +309,16 @@
         group_wait: 30s
         group_interval: 5m
         repeat_interval: 4h
+        routes:
+          - receiver: blackhole
+            matchers:
+              - alertname="DeadMansSwitch"
       receivers:
         - name: ntfy
           webhook_configs:
             - url: "$NTFY_URL"
               send_resolved: true
+        - name: blackhole
       CONFIGEOF
     '';
     serviceConfig = {
