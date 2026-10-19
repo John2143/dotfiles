@@ -462,7 +462,7 @@ mikrotik-connect r '/ip firewall filter add chain=forward action=accept protocol
 | DO → home | `192.168.6.20:7233` | Temporal frontend (plaintext gRPC, no TLS/auth) | DO `john2143-com` (`TEMPORAL_ADDRESS=192.168.6.20:7233`, set 2026-09-24; log shows `Temporal: connected to 192.168.6.20:7233`, workflows start) |
 | home → DO | `10.99.0.2:32040` | DO MongoDB via Service `mongo-tunnel` (ClusterIP, `externalIPs: [10.99.0.2]`, port 32040 → 27017) | home `john2143-com-worker-209` (worker-uri `mongodb://…@10.99.0.2:32040/`, composed by ESO in argo) |
 
-Verified after the 2026-09-24 rotation: Postgres reachable from DO; DO → `192.168.6.11:443` blocked
+Verified after the 2026-09-24 rotation: Postgres reachable from DO; DO → `192.168.6.6:443` blocked
 (the `wg-drop` counter rose); Temporal connected and an `UploadWorkflow` started; Mongo `hello` over
 the tunnel returns `isWritablePrimary`.
 
@@ -804,7 +804,7 @@ from `nixos/pite-canary.nix` and `nixos/status-page/generate.py`.
 `https://unifi.ts.2143.me` — argo app `unifi-os`: selectorless Service `unifi-os` + EndpointSlice →
 `192.168.5.30:11443`, BackendTLSPolicy `unifi-os-tls` pins the console's self-signed cert via
 ConfigMap `unifi-os-ca`, HTTPRoute `unifi-os-ts-2143` with the `lan-only` middleware. LAN clients
-resolve `unifi.ts.2143.me → 192.168.6.11` through `lan-dns` (generated from the HTTPRoute since
+resolve `unifi.ts.2143.me → 192.168.6.6` through `lan-dns` (generated from the HTTPRoute since
 2026-10-11; the router's static record is gone). The headscale extra_record is still hand-kept.
 
 **API (programmatic access)** — this is a UniFi OS console:
@@ -1036,7 +1036,7 @@ Loki's `max_entries_limit_per_query` is **5000** — narrow the window or pagina
 3. **ULA IPv6 (fd00:1::/64):** Site-local IPv6 on MikroTik bridge. All 3 k3s servers have static ULA addresses (.36, .76, .175) for stable dual-stack node-ip. Survives ISP prefix delegation changes.
 4. **k3s pod network uses flannel VXLAN:** 10.42.0.0/16 + fd42:42:42::/56 dual-stack overlay.
 
-5. **Tailnet service DNS (since 2026-08-05):** `*.ts.2143.me` service names (cameras, home, temporal, …) resolve via headscale MagicDNS `extra_records` to the traefik LB `192.168.6.11`; `192.168.6.0/24` is reachable from the tailnet via the subnet route advertised by arch + closet (approved in headscale). Device names (arch/closet/nas/…) are MagicDNS-generated and unaffected.
+5. **Tailnet service DNS (since 2026-08-05):** `*.ts.2143.me` service names (cameras, home, temporal, …) resolve via headscale MagicDNS `extra_records` to the traefik LB `192.168.6.6`; `192.168.6.0/24` is reachable from the tailnet via the subnet route advertised by arch + closet (approved in headscale). Device names (arch/closet/nas/…) are MagicDNS-generated and unaffected.
 
 ## BGP (MetalLB + frr-k8s — since 2026-08-04)
 
