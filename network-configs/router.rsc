@@ -1,4 +1,4 @@
-# 2026-10-17 08:13:31 by RouterOS 7.24.5
+# 2026-10-19 06:56:34 by RouterOS 7.24.5
 # software id = 7RHC-3MMG
 #
 # model = RB5009UPr+S+
@@ -31,9 +31,9 @@ add code=23 comment="lan-dns: DHCPv6 DNS = router ULA, not Verizon" name=\
 /ipv6 pool
 add name=ula-addr-pool prefix=fd00:1::/64 prefix-length=128
 /routing bgp instance
-add as=65001 name=bgp-instance-1 vrf=main
+add as=65001 name=bgp-instance-1 router-id=192.168.5.1 vrf=main
 /routing bgp template
-set default afi=ip,ipv6 as=65530
+set default afi=ip,ipv6 as=65001
 /system logging action
 add name=loki remote=192.168.6.25 remote-log-format=syslog src-address=\
     192.168.5.1 syslog-facility=local0 target=remote
@@ -61,6 +61,51 @@ add comment="lan-dns failover loop, started by lan-dns-down; see argo docs/lan\
     :log warning \"lan-dns down: LAN forwards disabled\"; :set done true } els\
     e={ :delay 5s } }; :if (!\$done) do={ :log info \"lan-dns watch: netwatch \
     up again, no failover\" }"
+add comment="ingress-follow; see argo docs/2026-10-15-fungible-ingress.md" \
+    dont-require-permissions=no name=ingress-follow owner=admin policy=\
+    read,write,test source="# ingress-follow - RouterOS script source (not an \
+    /export). Installed as\
+    \n# /system script \"ingress-follow\"; run every minute by the test-script\
+    \_of\
+    \n# /tool netwatch \"ingress-follow\" (device-mode home blocks /system sch\
+    eduler).\
+    \n# Points WAN 80/443 at the cluster ingress VIP: john2143.com -> router D\
+    NS ->\
+    \n# lan-dns -> k8s_gateway -> Gateway address -> Traefik VIP. Answers outs\
+    ide\
+    \n# 192.168.6.0/24 (resolve failure, or lan-dns down so the router saw the\
+    \_public\
+    \n# answer) keep the current target. Install/verify: argo docs/2026-10-15-\
+    fungible-ingress.md.\
+    \n:local ok false\
+    \n:local ip\
+    \n:do { :set ip [:resolve \"john2143.com\"]; :set ok true } on-error={}\
+    \n:if (!\$ok) do={\
+    \n  :log warning \"ingress-follow: cannot resolve john2143.com; keeping cu\
+    rrent dst-nat target\"\
+    \n} else={\
+    \n  :if (!(\$ip in 192.168.6.0/24)) do={\
+    \n    :log warning (\"ingress-follow: john2143.com resolved to \" . \$ip .\
+    \_\" (outside 192.168.6.0/24); keeping current dst-nat target\")\
+    \n  } else={\
+    \n    :foreach c in={\"ingress http (tcp/80) -> traefik VIP (ingress-follo\
+    w)\";\"ingress https (tcp/443) -> traefik VIP (ingress-follow)\"} do={\
+    \n      :local ids [/ip firewall nat find comment=\$c]\
+    \n      :if ([:len \$ids] != 1) do={\
+    \n        :log error (\"ingress-follow: expected 1 nat rule with comment '\
+    \" . \$c . \"', found \" . [:len \$ids])\
+    \n      } else={\
+    \n        :local cur [/ip firewall nat get (\$ids->0) to-addresses]\
+    \n        :if (\$cur != [:tostr \$ip]) do={\
+    \n          /ip firewall nat set (\$ids->0) to-addresses=\$ip\
+    \n          :log warning (\"ingress-follow: \" . \$c . \" \" . \$cur . \" \
+    -> \" . \$ip)\
+    \n        }\
+    \n      }\
+    \n    }\
+    \n  }\
+    \n}\
+    \n"
 /disk settings
 set auto-media-interface=bridge auto-media-sharing=yes auto-smb-sharing=yes
 /interface bridge port
@@ -147,6 +192,13 @@ add comment="lan-dns forward" forward-to=192.168.6.30 match-subdomain=yes \
     name=mm.b.hero.rehab type=FWD
 add comment="lan-dns forward" forward-to=192.168.6.30 match-subdomain=yes \
     name=john2143.com type=FWD
+/ip firewall address-list
+add address=192.168.5.36 comment=closet list=k8s-nodes
+add address=192.168.5.76 comment=arch list=k8s-nodes
+add address=192.168.5.175 comment=nas list=k8s-nodes
+add address=192.168.5.68 comment=big list=k8s-nodes
+add address=192.168.5.9 comment=pite list=k8s-nodes
+add address=192.168.5.209 comment=office list=k8s-nodes
 /ip firewall filter
 add action=accept chain=forward comment="allow inter-subnet routing" \
     dst-address=192.168.0.0/16 src-address=192.168.0.0/16
@@ -167,6 +219,9 @@ add action=accept chain=input comment="wg: doks -> router DNS tcp" dst-port=\
 add action=drop chain=input comment="no public postgres; log attempts" \
     dst-port=5432 in-interface-list=WAN log=yes log-prefix=pg-public-attempt \
     protocol=tcp
+add action=drop chain=input comment=\
+    "bgp: only k8s-nodes (argo docs/node-maintenance.md)" dst-port=179 \
+    protocol=tcp src-address-list=!k8s-nodes
 add action=drop chain=input comment="defconf: drop all not coming from LAN" \
     in-interface-list=!LAN
 add action=accept chain=forward comment="defconf: accept in ipsec policy" \
@@ -205,12 +260,12 @@ add action=dst-nat chain=dstnat comment=\
     "teamspeak file transfer (tcp/30033) -> .6.16" dst-port=30033 \
     in-interface-list=WAN protocol=tcp to-addresses=192.168.6.16 to-ports=\
     30033
-add action=dst-nat chain=dstnat comment="traefik http (tcp/80) -> .6.11" \
-    dst-port=80 in-interface-list=WAN protocol=tcp to-addresses=192.168.6.11 \
-    to-ports=80
-add action=dst-nat chain=dstnat comment="traefik https (tcp/443) -> .6.11" \
-    dst-port=443 in-interface-list=WAN protocol=tcp to-addresses=192.168.6.11 \
-    to-ports=443
+add action=dst-nat chain=dstnat comment=\
+    "ingress http (tcp/80) -> traefik VIP (ingress-follow)" dst-port=80 \
+    in-interface-list=WAN protocol=tcp to-addresses=192.168.6.6 to-ports=80
+add action=dst-nat chain=dstnat comment=\
+    "ingress https (tcp/443) -> traefik VIP (ingress-follow)" dst-port=443 \
+    in-interface-list=WAN protocol=tcp to-addresses=192.168.6.6 to-ports=443
 add action=masquerade chain=srcnat dst-address=!192.168.0.0/24 out-interface=\
     2GWAN
 add action=dst-nat chain=dstnat comment="openrct2 (tcp/11753) -> .6.17" \
@@ -341,18 +396,27 @@ add action=drop chain=forward comment=\
 add action=masquerade chain=srcnat out-interface=2GWAN
 /ipv6 nd
 set [ find default=yes ] managed-address-configuration=yes
+/routing bfd configuration
+add addresses=192.168.5.0/24 comment="metallb speakers: BFD for BGP (argo docs\
+    /2026-10-15-fungible-ingress.md)" min-rx=300ms min-tx=300ms multiplier=5
 /routing bgp connection
-add afi=ip,ipv6 hold-time=3m instance=bgp-instance-1 local.address=\
-    192.168.5.1 .role=ebgp name=metallb-arch remote.address=192.168.5.76 .as=\
-    65000
-add afi=ip,ipv6 instance=bgp-instance-1 local.address=192.168.5.1 .role=ebgp \
-    name=metallb-closet remote.address=192.168.5.36 .as=65000
-add afi=ip,ipv6 instance=bgp-instance-1 local.address=192.168.5.1 .role=ebgp \
-    name=metallb-nas remote.address=192.168.5.175 .as=65000
-add afi=ip,ipv6 instance=bgp-instance-1 local.address=192.168.5.1 .role=ebgp \
-    name=metallb-big remote.address=192.168.5.68 .as=65000
 add afi=ip,ipv6 instance=bgp-instance-1 local.address=192.168.5.1 .role=ebgp \
     name=metallb-pite remote.address=192.168.5.9 .as=65000
+add afi=ip,ipv6 as=65001 comment="MetalLB speakers on any k8s-nodes address (a\
+    rgo docs/node-maintenance.md)" connect=no disabled=no input.filter=\
+    metallb-in .limit-process-routes-ipv4=1000 .limit-process-routes-ipv6=\
+    1000 instance=bgp-instance-1 listen=yes local.address=192.168.5.1 .role=\
+    ebgp name=metallb-speakers remote.address=192.168.5.0/24 .allowed-as=\
+    metallb-as routing-table=main use-bfd=yes
+/routing filter num-list
+add comment="MetalLB speaker AS" list=metallb-as range=65000
+/routing filter rule
+add chain=metallb-in comment="metallb service /32s" rule=\
+    "if (dst in 192.168.6.0/24 && dst-len == 32) { accept }"
+add chain=metallb-in comment="k3s API VIP" rule=\
+    "if (dst == 192.168.5.10/32) { accept }"
+add chain=metallb-in comment="metallb service /128s" rule=\
+    "if (dst in fd00:6::/64 && dst-len == 128) { accept }"
 /system clock
 set time-zone-name=America/New_York
 /system identity
@@ -392,6 +456,10 @@ add comment="lan-dns failover" dns-server=192.168.6.30 down-script=\
     "/system script run lan-dns-down" host=john2143.com interval=10s name=\
     lan-dns record-type=A timeout=3s type=dns up-script=\
     "/system script run lan-dns-up"
+add comment="ingress-follow: runs the follower every minute (test-script; devi\
+    ce-mode home blocks scheduler); see argo docs/2026-10-15-fungible-ingress.\
+    md" host=john2143.com interval=1m name=ingress-follow test-script=\
+    "/system script run ingress-follow" timeout=3s type=dns
 /tool sniffer
 set filter-interface=2GWAN filter-ip-address=108.56.153.222/32 filter-port=\
     18080
