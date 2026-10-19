@@ -213,19 +213,19 @@ spec:
           insecure: true
       serviceName: traefik
       sampleRate: 1.0
-    # Pin BOTH families: the chart renders this Service as PreferDualStack
-    # (k3s's bundled traefik manifest sets service.spec.ipFamilyPolicy), and
-    # MetalLB rejects a single-IP request for a 2-family Service with
-    # "does not match the ipFamily" — leaving traefik with no LB IP at all.
-    # The v6 twin is ::10 (not ::11); that asymmetry is intentional.
+    # The VIP pair comes from MetalLB pool `ingress` (argo
+    # workloads/metallb/ipaddresspool.yaml). Never pin metallb.io/loadBalancerIPs
+    # here: a pin naming one family of this PreferDualStack Service makes MetalLB
+    # refuse allocation ("does not match the ipFamily"; outages 2026-10-15 and
+    # 10-16). The pool holds exactly one address per family: .6.6 + fd00:6::6.
     service:
       annotations:
-        metallb.io/loadBalancerIPs: "192.168.6.11,fd00:6::10"
+        metallb.io/address-pool: ingress
       spec:
         externalTrafficPolicy: Local
 '';
     # Split-horizon DNS for pods: public hostnames resolve to the internal
-    # traefik LB (192.168.6.11) instead of the public IP, so pod traffic never
+    # traefik LB (192.168.6.6) instead of the public IP, so pod traffic never
     # hairpins through the router (see argo/docs/2026-08-10-auto-instrumentation.md).
     # k3s's coredns chart mounts a `coredns-custom` ConfigMap at
     # /etc/coredns/custom (volume custom-config-volume, optional) and the
@@ -241,8 +241,8 @@ metadata:
   namespace: kube-system
 data:
   hosts.split-horizon: |
-    192.168.6.11 2143.me argocd.ts.2143.me au.2143.me cameras.ts.2143.me cams.ts.2143.me chat.2143.me files-ui.ts.2143.me home.ts.2143.me images.2143.me immich.ts.2143.me llm.2143.me longhorn.ts.2143.me m.2143.me matrix.2143.me net.2143.me pihole.ts.2143.me prod.rots.2143.me rots.2143.me status.2143.me temporal.ts.2143.me unifi.ts.2143.me anni.2143.me listen.2143.me mail.ts.2143.me mm.timestone.2143.me openbao.ts.2143.me stalwart.ts.2143.me tasks.2143.me
-    192.168.6.11 john2143.com argo-webhook.john2143.com auth.john2143.com cameras.john2143.com containerstore.john2143.com element.john2143.com files.john2143.com grafana.john2143.com livekit.john2143.com mattermost.john2143.com net.john2143.com pvp.john2143.com seafile.john2143.com temporal.john2143.com applicationset-webhook.john2143.com factorio.john2143.com mm.timestone.john2143.com openbao.john2143.com pelican.john2143.com terminals.john2143.com i.john2143.com
+    192.168.6.6 2143.me argocd.ts.2143.me au.2143.me cameras.ts.2143.me cams.ts.2143.me chat.2143.me files-ui.ts.2143.me home.ts.2143.me images.2143.me immich.ts.2143.me llm.2143.me longhorn.ts.2143.me m.2143.me matrix.2143.me net.2143.me pihole.ts.2143.me prod.rots.2143.me rots.2143.me status.2143.me temporal.ts.2143.me unifi.ts.2143.me anni.2143.me listen.2143.me mail.ts.2143.me mm.timestone.2143.me openbao.ts.2143.me stalwart.ts.2143.me tasks.2143.me
+    192.168.6.6 john2143.com argo-webhook.john2143.com auth.john2143.com cameras.john2143.com containerstore.john2143.com element.john2143.com files.john2143.com grafana.john2143.com livekit.john2143.com mattermost.john2143.com net.john2143.com pvp.john2143.com seafile.john2143.com temporal.john2143.com applicationset-webhook.john2143.com factorio.john2143.com mm.timestone.john2143.com openbao.john2143.com pelican.john2143.com terminals.john2143.com i.john2143.com
     192.168.6.13 imap.m.2143.me smtp.m.2143.me
     192.168.6.20 temporal-grpc.john2143.com
   split-horizon.server: |
@@ -257,7 +257,7 @@ data:
 '';
   };
   # Tailscale subnet route — advertises LAN + service subnets to the tailnet:
-  # 192.168.5.0/24 (MetalLB API VIP .10) and 192.168.6.0/24 (traefik LB .6.11).
+  # 192.168.5.0/24 (MetalLB API VIP .10) and 192.168.6.0/24 (traefik LB .6.6).
   # Approved in headscale per-node.
   services.tailscale.extraUpFlags = [ "--advertise-routes=192.168.6.0/24,192.168.5.0/24" ];
   # Keep Longhorn data mount active during k3s shutdown so iSCSI can

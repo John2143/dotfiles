@@ -160,7 +160,7 @@
               "192.168.6.16:30033" # TeamSpeak file transfer
               "192.168.5.9:9100" # self (node_exporter)
               # MetalLB service IPs (post-migration 2026-08-04) — per-service status
-              "192.168.6.11:443" # traefik (HTTPS)
+              "192.168.6.6:443" # traefik (HTTPS)
               "192.168.6.13:25" # stalwart (SMTP)
               "192.168.6.19:1883" # mosquitto
               "192.168.6.20:7233" # temporal-frontend
