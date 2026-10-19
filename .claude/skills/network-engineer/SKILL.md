@@ -323,7 +323,7 @@ rule; the 51820 and 6767 rows are not MikroTik dst-nat rules). **2026-10-13: 16 
 
 | WAN Port(s) | Proto | MikroTik → (live target) | Service | Notes |
 |------------|-------|--------------------------|---------|-------|
-| 80, 443 | TCP | `.6.11:80,443` | kube-system/traefik | HTTP/HTTPS ingress |
+| 80, 443 | TCP | ingress VIP (`.6.6`) | kube-system/traefik | Target maintained by router script `ingress-follow` (follows lan-dns's answer for `john2143.com`); rule comments `ingress http/https … (ingress-follow)` |
 | 25, 587, 993 | TCP | `.6.13:25,587,993` | stalwart/stalwart-stalwart | SMTP / submission / IMAPS |
 | 9987 | UDP | `.6.15:9987` | default/ts-voice | Teamspeak voice |
 | 30033 | TCP | `.6.16:30033` | default/ts-files | Teamspeak file transfer |
@@ -913,7 +913,7 @@ chain=srcnat action=masquerade out-interface=2GWAN dst-address=!192.168.0.0/24
 
 ## k3s Cluster
 
-**Control plane:** 3-node HA (closet, arch, nas) with embedded etcd. **MetalLB** (BGP + frr-k8s, since 2026-08-04) announces the API VIP `192.168.5.10` (Service `kubernetes-api` + custom EndpointSlice over closet/arch/nas, port 6443) and all LoadBalancer service IPs from the dual-stack `services` pool (`192.168.6.0/24` + `fd00:6::/64`). **Dual-stack** (IPv4 + IPv6) with static ULA addresses (`fd00:1::/64`) for stable node-ip.
+**Control plane:** 3-node HA (closet, arch, nas) with embedded etcd. **MetalLB** (BGP + frr-k8s, since 2026-08-04) announces the API VIP `192.168.5.10` (Service `kubernetes-api` + custom EndpointSlice over closet/arch/nas, port 6443) and all LoadBalancer service IPs from the dual-stack `services` pool (`192.168.6.0/24` + `fd00:6::/64`, minus Traefik's pair, which is the dedicated `ingress` pool `192.168.6.6` + `fd00:6::6`). **Dual-stack** (IPv4 + IPv6) with static ULA addresses (`fd00:1::/64`) for stable node-ip.
 Agents: office (.209, wifi — never a BGP speaker), pite (.9), big (.68, NixOS VM on bigp, joined 2026-07-29) — 6 nodes total.
 
 Pod network: `10.42.0.0/16` (IPv4) + `fd42:42:42::/56` (IPv6) flannel VXLAN. Key services (LB IPs are MetalLB-announced; v6 twins live since 2026-08-13):
@@ -921,7 +921,7 @@ Pod network: `10.42.0.0/16` (IPv4) + `fd42:42:42::/56` (IPv6) flannel VXLAN. Key
 | Service | Type | External IP (v4) | External IP (v6) | Notes |
 |---------|------|------------------|------------------|-------|
 | kubernetes-api | LoadBalancer | 192.168.5.10:6443 | — (v4-only by design) | k3s API (MetalLB, custom EndpointSlice) |
-| traefik | LoadBalancer | 192.168.6.11 | fd00:6::10 (manual annotate) | HTTP/HTTPS ingress |
+| traefik | LoadBalancer | 192.168.6.6 | fd00:6::6 | HTTP/HTTPS ingress. Pool `ingress` (no address pin; a dual-stack single-family pin caused the 2026-10-15 outage) |
 | stalwart | LoadBalancer | 192.168.6.13 | fd00:6::13 | SMTP/IMAP (25/587/993) |
 | ts-voice | LoadBalancer | 192.168.6.15:9987/UDP | fd00:6::15 | Teamspeak voice |
 | ts-files | LoadBalancer | 192.168.6.16:30033 | fd00:6::16 | Teamspeak file transfer |
@@ -1040,7 +1040,7 @@ Loki's `max_entries_limit_per_query` is **5000** — narrow the window or pagina
 
 ## BGP (MetalLB + frr-k8s — since 2026-08-04)
 
-MetalLB (v0.16.1, frr-k8s) announces the k3s API VIP `192.168.5.10` and every LoadBalancer service IP via BGP to the MikroTik (AS 65001). **Dual-stack since 2026-08-13**: the `services` IPAddressPool carries both `192.168.6.0/24` (announced as /32s) and `fd00:6::/64` (announced as /128s). frr-k8s runs one FRR daemon per node; every **speaker node** advertises **all** service prefixes — no leader lease, no loopback VIP. The router installs each /32 or /128 with 5 next-hops (one active path, the rest as failover backups — RouterOS 7.19 picks a single active path, not ECMP). Traffic lands on the node with the active route, and kube-proxy DNATs it to the service's endpoints. The BGPPeer has `dualStackAddressFamily: true` (`argo/workloads/metallb/bgppeer.yaml`) — without it frr-k8s renders `ipv6 prefix-list … deny any` and never advertises v6 even after the router negotiates both AFIs. RouterOS side: both the default template AND each `metallb-*` connection carry `afi=ip,ipv6` — the template change alone is NOT enough on 7.19.6 (sessions keep `local.afi=ip` until each connection is set directly).
+MetalLB (v0.16.1, frr-k8s) announces the k3s API VIP `192.168.5.10` and every LoadBalancer service IP via BGP to the MikroTik (AS 65001). **Dual-stack since 2026-08-13**: the `services` IPAddressPool carries both `192.168.6.0/24` (announced as /32s) and `fd00:6::/64` (announced as /128s). frr-k8s runs one FRR daemon per node; every **speaker node** advertises **all** service prefixes — no leader lease, no loopback VIP. The router installs each /32 or /128 with 5 next-hops (one active path, the rest as failover backups — RouterOS 7.19 picks a single active path, not ECMP). Traffic lands on the node with the active route, and kube-proxy DNATs it to the service's endpoints. The BGPPeer has `dualStackAddressFamily: true` (`argo/workloads/metallb/bgppeer.yaml`) — without it frr-k8s renders `ipv6 prefix-list … deny any` and never advertises v6 even after the router negotiates both AFIs. RouterOS side: one listener connection `metallb-speakers` carries every property itself (`afi=ip,ipv6`, `use-bfd=yes`, the input filter and route limits) — nothing is inherited from a template, and the built-in `default` template is neutralised (`as=65001`). Admission is firewall address-list `k8s-nodes` on TCP/179 (`argo/docs/node-maintenance.md`).
 
 ### Topology
 
@@ -1054,14 +1054,14 @@ MetalLB speakers (AS 65000, hostNetwork, port 179)
 office (.209) is wifi — intentionally NOT a speaker.
 
 ```
-Each speaker advertises every allocated /32 (v4: .5.10 API VIP + all .6.x LB IPs) and /128 (v6: fd00:6::X LB IPs).
+Each speaker advertises every allocated /32 and /128 of an `externalTrafficPolicy: Cluster` Service; `Local` Services only from nodes with a ready local endpoint; a node labelled `node.kubernetes.io/exclude-from-external-load-balancers` (pite permanently, drained nodes temporarily) advertises nothing but keeps its session.
 ### Live Status
 
 ```bash
 # MetalLB's view of the 5 sessions (all should be Established):
 ssh closet.local 'kubectl get bgpsessionstates -n metallb-system'
 
-# Router's view (5 lines with E flag, names ~"metallb*"):
+# Router's view (one E line per speaker, all from listener metallb-speakers; match by remote.address — RouterOS may keep old session names):
 mikrotik-connect r '/routing bgp session print'
 
 # A service route (5 gateways, one active DAb) — v4 and v6:
@@ -1075,21 +1075,14 @@ kubectl --context closet-as-developer exec -n metallb-system ds/metallb-frr-k8s 
 ssh closet.local 'kubectl get svc -A | grep -E "192.168.6|fd00:6"'
 ```
 
-### Adding/Removing Nodes
+### Adding/Removing/Draining Nodes
 
-**Add a node as BGP speaker (wired worker or control-plane):**
-```bash
-# 1. Add the peer to argo/workloads/metallb/bgppeer.yaml
-#    (myASN 65000, peerASN 65001, peerAddress 192.168.5.1) — commit + push + sync.
-
-# 2. Add the BGP connection on the MikroTik:
-mikrotik-connect r '/routing bgp connection add name=metallb-<node> as=65001 local.address=192.168.5.1 local.role=ebgp remote.address=192.168.5.<IP> remote.as=65000'
-
-# 3. Ensure firewall port 179 is open on the node's NixOS config
-#    (dotfiles/nixos/<node>-configuration.nix).
-```
-
-**Remove a node:** drop its entry from `bgppeer.yaml` (commit + sync) and remove the router connection (`remove [find name=metallb-<node>]`). If office ever gets wired: untaint `wifi`, add the peer + router connection — it becomes a 6th speaker automatically.
+Runbook: `argo/docs/node-maintenance.md`. The router needs no BGP edit: listener
+`metallb-speakers` accepts any address in firewall address-list `k8s-nodes` (add/remove one
+entry per node, comment = node name). Drain = storage pre-check (CNPG primary or
+single-replica Longhorn volume on the node -> stop), cordon, then label
+`node.kubernetes.io/exclude-from-external-load-balancers=true` and wait for `prefix-count=0`
+before `kubectl drain --timeout=15m`; never unlabel pite.
 
 ### Troubleshooting
 
@@ -1119,7 +1112,7 @@ ssh <node>.local 'iptables -t nat -L KUBE-SERVICES -n | grep 192.168.6.X'
 | MetalLB chart app (frr-k8s enabled) | `argo/apps/metallb.yaml` |
 | Pool / peers / advertisement | `argo/workloads/metallb/{ipaddresspool,bgppeer,bgpadvertisement}.yaml` |
 | k8s API VIP Service + EndpointSlice | `argo/workloads/metallb/kubernetes-api-lb.yaml` |
-| MikroTik BGP connections | on router (`mikrotik-connect r /routing bgp connection print`) |
+| MikroTik BGP listener | router: connection `metallb-speakers` (192.168.5.0/24, `connect=no`), filter chain `metallb-in`, num-list `metallb-as`, address-list `k8s-nodes` + input rule `bgp: only k8s-nodes` |
 | Firewall port 179 | `dotfiles/nixos/<host>-configuration.nix` → `networking.firewall.allowedTCPPorts` |
 | MikroTik dst-nat (.6.x targets) | on router (`mikrotik-connect r /ip firewall nat print where chain=dstnat`) |
 
