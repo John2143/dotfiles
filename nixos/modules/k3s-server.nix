@@ -105,6 +105,7 @@
     ];
     networking.firewall.allowedUDPPorts = [
       8472   # k3s flannel VXLAN
+      3784   # BFD for BGP (MetalLB frr-k8s <-> MikroTik)
     ];
     networking.firewall.allowedTCPPortRanges = [
       { from = 30000; to = 32767; }  # NodePort range

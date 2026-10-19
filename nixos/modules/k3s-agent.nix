@@ -56,6 +56,9 @@
       7946   # MetalLB speaker memberlist gossip
       19443  # frr-k8s validation webhook
     ];
+    networking.firewall.allowedUDPPorts = [
+      3784   # BFD for BGP (MetalLB frr-k8s <-> MikroTik)
+    ];
     # Clean resolv.conf for k3s pods — strips the Tailscale MagicDNS search
     # domain (ts.2143.me) to prevent ndots:5 expansion from prepending it
     # to external hostnames. Keeps 100.100.100.100 as the upstream so pods
