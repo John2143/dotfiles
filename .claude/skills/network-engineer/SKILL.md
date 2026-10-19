@@ -1040,7 +1040,7 @@ Loki's `max_entries_limit_per_query` is **5000** — narrow the window or pagina
 
 ## BGP (MetalLB + frr-k8s — since 2026-08-04)
 
-MetalLB (v0.16.1, frr-k8s) announces the k3s API VIP `192.168.5.10` and every LoadBalancer service IP via BGP to the MikroTik (AS 65001). **Dual-stack since 2026-08-13**: the `services` IPAddressPool carries both `192.168.6.0/24` (announced as /32s) and `fd00:6::/64` (announced as /128s). frr-k8s runs one FRR daemon per node; every **speaker node** advertises **all** service prefixes — no leader lease, no loopback VIP. The router installs each /32 or /128 with 5 next-hops (one active path, the rest as failover backups — RouterOS 7.19 picks a single active path, not ECMP). Traffic lands on the node with the active route, and kube-proxy DNATs it to the service's endpoints. The BGPPeer has `dualStackAddressFamily: true` (`argo/workloads/metallb/bgppeer.yaml`) — without it frr-k8s renders `ipv6 prefix-list … deny any` and never advertises v6 even after the router negotiates both AFIs. RouterOS side: one listener connection `metallb-speakers` carries every property itself (`afi=ip,ipv6`, `use-bfd=yes`, the input filter and route limits) — nothing is inherited from a template, and the built-in `default` template is neutralised (`as=65001`). Admission is firewall address-list `k8s-nodes` on TCP/179 (`argo/docs/node-maintenance.md`).
+MetalLB (v0.16.1, frr-k8s) announces the k3s API VIP `192.168.5.10` and every LoadBalancer service IP via BGP to the MikroTik (AS 65001). **Dual-stack since 2026-08-13**: the `services` IPAddressPool carries both `192.168.6.0/24` (announced as /32s) and `fd00:6::/64` (announced as /128s). frr-k8s runs one FRR daemon per node; every **speaker node** advertises **all** service prefixes — no leader lease, no loopback VIP. The router installs each /32 or /128 with one active next-hop and the other announcing speakers as failover backups. RouterOS ≥7.22 has BGP `multipath`, but it was trialled on 2026-10-19 and reverted: it broke TLS on the WAN hairpin path (`Recv failure: Connection reset by peer` mid-handshake) while route shapes were correct — see follow-up #78 before re-enabling. BFD (300 ms × 5) withdraws a dead or stalled speaker in ~1.5 s. `externalTrafficPolicy: Local` VIPs (traefik, stalwart, headscale-stun, games, TeamSpeak) are announced only by the pod's node. Traffic lands on the node with the active route, and kube-proxy DNATs it to the service's endpoints. The BGPPeer has `dualStackAddressFamily: true` (`argo/workloads/metallb/bgppeer.yaml`) — without it frr-k8s renders `ipv6 prefix-list … deny any` and never advertises v6 even after the router negotiates both AFIs. RouterOS side: one listener connection `metallb-speakers` carries every property itself (`afi=ip,ipv6`, `use-bfd=yes`, the input filter and route limits) — nothing is inherited from a template, and the built-in `default` template is neutralised (`as=65001`). Admission is firewall address-list `k8s-nodes` on TCP/179 (`argo/docs/node-maintenance.md`).
 
 ### Topology
 
@@ -1064,8 +1064,8 @@ ssh closet.local 'kubectl get bgpsessionstates -n metallb-system'
 # Router's view (one E line per speaker, all from listener metallb-speakers; match by remote.address — RouterOS may keep old session names):
 mikrotik-connect r '/routing bgp session print'
 
-# A service route (5 gateways, one active DAb) — v4 and v6:
-mikrotik-connect r '/ip route print where dst-address=192.168.6.11/32'
+# A service route (one active DAb, other speakers as D b backups) — v4 and v6:
+mikrotik-connect r '/ip route print where dst-address=192.168.6.6/32'
 mikrotik-connect r '/ipv6 route print where dst-address=fd00:6::13/128'
 
 # FRR's own view (per node):
