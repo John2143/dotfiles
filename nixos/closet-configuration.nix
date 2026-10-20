@@ -10,7 +10,18 @@
   sshKeys,
   compName,
   ...
-}: {
+}: let
+  # Store path of the CrowdSec bouncer plugin source, defined once in
+  # modules/k3s-server.nix (imported by every Traefik node, so the directory
+  # exists on all three). Used directly as the hostPath: the mount source is a
+  # real /nix/store directory, with no /etc symlink to resolve, and the store
+  # is read-only, which is all localPlugins needs. The rev is part of the path,
+  # so bumping the plugin changes this manifest and Helm rolls Traefik —
+  # required, because Traefik reads plugin source only at startup.
+  # unsafeDiscardStringContext: builtins.toFile rejects derivation references.
+  traefikPluginSource = builtins.unsafeDiscardStringContext (toString
+    config.environment.etc."traefik-plugins/crowdsec-bouncer-traefik-plugin".source);
+in {
   imports = [
     ./closet-hardware-configuration.nix
     ./modules/user-john.nix
@@ -151,10 +162,17 @@ spec:
         enabled: true
         format: json
     experimental:
-      plugins:
+      # Fail closed: if the plugin cannot load, Traefik exits (CrashLoopBackOff)
+      # instead of serving with every bouncer-gated router dropped (2026-10-16).
+      abortOnPluginFailure: true
+      # Source comes from disk (dotfiles nixos/modules/k3s-server.nix), not
+      # plugins.traefik.io, so a Traefik start needs no DNS and no network.
+      localPlugins:
         bouncer:
+          type: localPath
           moduleName: github.com/maxlerebourg/crowdsec-bouncer-traefik-plugin
-          version: v1.7.1
+          mountPath: /plugins-local/src/github.com/maxlerebourg/crowdsec-bouncer-traefik-plugin
+          volumeName: crowdsec-bouncer-plugin
     additionalVolumeMounts:
       - name: crowdsec-bouncer-key
         mountPath: /etc/traefik/secrets
@@ -165,6 +183,10 @@ spec:
         - name: crowdsec-bouncer-key
           secret:
             secretName: crowdsec-bouncer-key
+        - name: crowdsec-bouncer-plugin
+          hostPath:
+            path: ${traefikPluginSource}
+            type: Directory
     nodeSelector:
       node-role.kubernetes.io/control-plane: "true"
     affinity:
