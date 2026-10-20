@@ -212,7 +212,14 @@ nixpkgs.overlays = [
         interface-name = "bond0";
         autoconnect = "true";
       };
-      bond.options = "mode=active-backup,primary=enp1s0f1,miimon=100,fail_over_mac=none";
+      # NM 1.58 keyfiles take bond options as individual keys, not an
+      # `options=` string (that key is rejected as "invalid bond option").
+      bond = {
+        mode = "active-backup";
+        miimon = "100";
+        primary = "enp1s0f1";
+        fail_over_mac = "none";
+      };
       ethernet.cloned-mac-address = "E8:4D:D0:C1:54:20";
       ipv4 = {
         method = "auto";
