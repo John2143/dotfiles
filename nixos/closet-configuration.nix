@@ -55,8 +55,9 @@
 
   networking.hostName = compName; # Define your hostname.
   networking.networkmanager.enable = true; # Easiest to use and most distros use this by default.
-  # No hardware-specific network config in NixOS — NM profiles managed via nmcli
-  # DHCPv4 (.36) and DHCPv6 (fd00:1::36) are assigned by MikroTik router
+  # No hardware-specific network config in NixOS — NM profiles are managed via nmcli.
+  # DHCPv4 (.36) and DHCPv6 (fd00:1::36, static router binding) come from the MikroTik.
+  # Profile "enp8s0f1" must keep ipv6.method=auto: the RA supplies the fd00:1::/64 on-link and default routes; with method=dhcp closet cannot reach any other node over IPv6 (2026-10-16).
 
   time.timeZone = "America/New_York";
   i18n.defaultLocale = "en_US.UTF-8";

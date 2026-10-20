@@ -26,6 +26,10 @@
 
   # Node identity and shared flags come from modules/k3s-net.nix.
   custom.k3sNet = {
+    ipv4 = "192.168.5.9";
+    # end0's EUI-64 address is fd00:1::dea6:32ff:fe25:516e. Auto-detection had
+    # latched onto a stable-privacy address that later changed (stale InternalIP).
+    ipv6Mac = "dc:a6:32:25:51:6e";
     # Reserve 1 core and 1Gi for system daemons — leaves 3 cores / 2.7Gi allocatable for workloads
     systemReserved = "cpu=1,memory=1Gi";
     # Never a MetalLB announcer (1G Pi running Mullvad). Registration-time

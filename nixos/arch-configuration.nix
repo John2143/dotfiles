@@ -106,7 +106,10 @@
   # come from modules/k3s-net.nix.
   custom.k3sNet = {
     ipv4 = "192.168.5.76";
-    ipv6 = "fd00:1::7ce1:b412:3068:c799";
+    # The node IPv6 is this NIC MAC's EUI-64 form under the router's fd00:1::/64,
+    # i.e. fd00:1::9ab7:85ff:fe23:4890. Derived, so it cannot rotate the way the
+    # old stable-privacy address did — flannel's VTEP must not move.
+    ipv6Mac = "98:b7:85:23:48:90";
     # Reserve 12 CPU + 16 GiB RAM for the system (Hyprland desktop, 32 GiB total per lshw). k8s gets 4 CPU, ~15.3 GiB.
     systemReserved = "cpu=12,memory=16Gi";
   };
