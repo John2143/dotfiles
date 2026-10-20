@@ -659,7 +659,7 @@ async def async_main(prompts_path: str, provider_path: str, mode: str = "trigger
                     self.send_header("Content-type", "application/json; charset=utf-8")
                     self.end_headers()
                     if _stats["events_processed"] == 0:
-                        saved = _s3_read_text("events/_stats.json")
+                        saved = _s3_read_text("_state/stats.json")
                         if saved:
                             self.wfile.write(saved.encode())
                             return
@@ -671,7 +671,7 @@ async def async_main(prompts_path: str, provider_path: str, mode: str = "trigger
                     self.end_headers()
                     stats = _stats
                     if _stats["events_processed"] == 0:
-                        saved = _s3_read_text("events/_stats.json")
+                        saved = _s3_read_text("_state/stats.json")
                         if saved:
                             stats = json.loads(saved)
                     self.wfile.write(json.dumps({
@@ -685,17 +685,17 @@ async def async_main(prompts_path: str, provider_path: str, mode: str = "trigger
                 elif self.path.startswith("/api/events"):
                     self._proxy("application/json")
                 elif self.path == "/api/pause":
-                    paused = _s3_get("events/_paused/ollama") is not None
+                    paused = _s3_get("_state/paused/ollama") is not None
                     self.send_response(200)
                     self._cors()
                     self.send_header("Content-type", "application/json")
                     self.end_headers()
                     self.wfile.write(json.dumps({"paused": paused}).encode())
                 elif self.path == "/api/genai-pause":
-                    paused_global = _s3_get("events/_paused/genai") is not None
+                    paused_global = _s3_get("_state/paused/genai") is not None
                     paused_labels = {}
-                    for k in _s3_list("events/_paused/genai-"):
-                        paused_labels[k[len("events/_paused/genai-"):]] = True
+                    for k in _s3_list("_state/paused/genai-"):
+                        paused_labels[k[len("_state/paused/genai-"):]] = True
                     self.send_response(200)
                     self._cors()
                     self.send_header("Content-type", "application/json")
@@ -1018,28 +1018,28 @@ async def async_main(prompts_path: str, provider_path: str, mode: str = "trigger
                         self.end_headers()
                         self.wfile.write(str(e).encode())
                 elif self.path == "/api/pause":
-                    existing = _s3_get("events/_paused/ollama")
+                    existing = _s3_get("_state/paused/ollama")
                     if existing is None:
-                        _s3_put("events/_paused/ollama", b"1")
+                        _s3_put("_state/paused/ollama", b"1")
                     else:
-                        _s3_delete("events/_paused/ollama")
+                        _s3_delete("_state/paused/ollama")
 
                     # Re-check paused state and send response
-                    paused = _s3_get("events/_paused/ollama") is not None
+                    paused = _s3_get("_state/paused/ollama") is not None
                     self.send_response(200)
                     self._cors()
                     self.send_header("Content-type", "application/json")
                     self.end_headers()
                     self.wfile.write(json.dumps({"paused": paused}).encode())
                 elif self.path == "/api/genai-pause":
-                    existing = _s3_get("events/_paused/genai")
+                    existing = _s3_get("_state/paused/genai")
                     if existing is None:
-                        _s3_put("events/_paused/genai", b"1")
+                        _s3_put("_state/paused/genai", b"1")
                     else:
-                        _s3_delete("events/_paused/genai")
+                        _s3_delete("_state/paused/genai")
 
                     # Re-check paused state and send response
-                    paused = _s3_get("events/_paused/genai") is not None
+                    paused = _s3_get("_state/paused/genai") is not None
                     self.send_response(200)
                     self._cors()
                     self.send_header("Content-type", "application/json")

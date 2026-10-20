@@ -24,15 +24,18 @@ def transcode_into_parts(
     camera: str,
     start_time: float,
     end_time: float,
+    event_prefix: str,
     fps: int | None = 1,
-) -> list[bytes]:
+) -> int:
     """
     Extract JPEG frames from Frigate recording via HLS.
     If fps is set, decimate to that rate (default 1 fps for initial scan).
     If fps is None, extract all frames at source framerate.
     Full source quality — no scaling.
 
-    Returns list of JPEG byte strings, chronologically ordered.
+    Uploads each frame to {event_prefix}/frames/frame_NNN.jpg and returns the
+    number uploaded. Runs on a worker thread via _run_with_heartbeat, so both
+    ffmpeg and the uploads are covered by heartbeats.
     """
     hls_url = _frigate_url(
         f"/vod/{camera}"
@@ -75,24 +78,23 @@ def transcode_into_parts(
             stderr = (e.stderr or "").strip()
             if "404 Not Found" in stderr or "Connection refused" in stderr:
                 log.debug("ffmpeg: recording not ready for %s", hls_url)
-                return []  # transient — caller will retry
+                return 0  # transient — caller will retry
             else:
                 log.error("ffmpeg failed for %s: %s", hls_url, stderr)
                 raise  # fatal — do not retry
         except subprocess.TimeoutExpired:
             log.warning("ffmpeg timed out after %ds for %s (Frigate VOD not ready?)", clip_timeout, hls_url)
-            return []  # transient — caller will retry
+            return 0  # transient — caller will retry
 
-        frames = []
-        for p in sorted(Path(tmp).glob("frame_*.jpg")):
-            frames.append(p.read_bytes())
-
-        if not frames:
+        files = sorted(Path(tmp).glob("frame_*.jpg"),
+                       key=lambda p: int(p.stem.rsplit("_", 1)[1]))
+        if not files:
             log.warning("No frames extracted")
-        else:
-            log.info("Extracted %d frames", len(frames))
-
-        return frames
+            return 0
+        for i, p in enumerate(files):
+            _s3_put(f"{event_prefix}/frames/frame_{i:03d}.jpg", p.read_bytes())
+        log.info("Extracted %d frames", len(files))
+        return len(files)
 
 
 def fetch_snapshot(event_id: str) -> bytes | None:
@@ -123,19 +125,15 @@ async def transcode_into_parts_activity(input_data: dict) -> tuple[str, int]:
         event_id, camera, duration, event_prefix,
     )
 
-    frames = await _run_with_heartbeat(
-        transcode_into_parts, camera, start_time, end_time, 1,
+    uploaded = await _run_with_heartbeat(
+        transcode_into_parts, camera, start_time, end_time, event_prefix, 1,
     )
-    if not frames:
+    if not uploaded:
         raise ApplicationError(
             f"Recording not ready for {event_id}", non_retryable=False,
         )
-
-    for i, frame_bytes in enumerate(frames):
-        _s3_put(f"{event_prefix}/frames/frame_{i:03d}.jpg", frame_bytes)
-
-    log.info("Extracted %d ffmpeg frames (1fps) to s3://%s/frames", len(frames), event_prefix)
-    return event_prefix, len(frames)
+    log.info("Extracted %d ffmpeg frames (1fps) to s3://%s/frames", uploaded, event_prefix)
+    return event_prefix, uploaded
 
 
 @activity.defn(name="fetch_snapshot")

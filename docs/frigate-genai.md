@@ -280,10 +280,11 @@ All event data lives in SeaweedFS S3 (`frigate-genai` bucket):
 
 | Path | Purpose | TTL |
 |---|---|---|
-| `events/<event_id>/frames/` | Extracted JPEG frames | 14d |
-| `events/<event_id>/agent/` | Conversation history, agent log | 14d |
-| `events/_paused/<model>` | Pause markers (empty object) | permanent |
-| `events/_stats.json` | Processing statistics | permanent |
+| `events/<event_id>/frames/` | Extracted JPEG frames | 14d (lifecycle rule `events-14d`) |
+| `events/<event_id>/agent/` | Conversation history, agent log | 14d (lifecycle rule `events-14d`) |
+| `history/<event_id>/agent/` | Agent artifacts archived when a workflow ends | 30d (lifecycle rule `history-30d`) |
+| `_state/paused/<name>` | Pause markers: `ollama`, `genai`, `genai-<label>` (existence is the signal) | permanent |
+| `_state/stats.json` | Processing statistics snapshot | permanent |
 
 **Why S3 instead of local disk?** Pods come and go (scale to zero). Local disk state is lost on pod termination. S3 is the shared persistence layer across all workers. The triggers pod writes pause state to S3; Gemini pods read it to check if Ollama is paused.
 

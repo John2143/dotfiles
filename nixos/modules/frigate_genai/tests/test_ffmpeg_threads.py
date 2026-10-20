@@ -45,11 +45,13 @@ def _pair_indices(cmd: list[str], flag: str) -> list[int]:
 
 class FfmpegThreadCapTests(unittest.TestCase):
 
-    def _run(self, module, fn, *args, **kwargs) -> list[str]:
+    def _run(self, module, fn, *args, expected=0, **kwargs) -> list[str]:
+        # transcode_into_parts returns the frame count; _transcode_frames still
+        # returns the frame bytes, so each caller states what it expects.
         rec = _RecordingRun()
         with patch.object(module.subprocess, "run", rec):
             frames = fn(*args, **kwargs)
-        self.assertEqual(frames, [])
+        self.assertEqual(frames, expected)
         self.assertEqual(len(rec.cmds), 1, rec.cmds)
         cmd = rec.cmds[0]
         self.assertEqual(cmd[0], "ffmpeg")
@@ -74,15 +76,41 @@ class FfmpegThreadCapTests(unittest.TestCase):
         for fps in (1, None):
             with self.subTest(fps=fps):
                 cmd = self._run(frame_extraction, frame_extraction.transcode_into_parts,
-                                "cam01", 0, 5, fps)
+                                "cam01", 0, 5, "events/test", fps)
                 self._assert_threads_capped(cmd)
 
     def test_transcode_frames_caps_decoder_filter_and_encoder_threads(self):
         for fps in (None, 2):
             with self.subTest(fps=fps):
                 cmd = self._run(transcode, transcode._transcode_frames,
-                                "cam01", 0, 5, 0, 1.0, fps)
+                                "cam01", 0, 5, 0, 1.0, fps, expected=[])
                 self._assert_threads_capped(cmd)
+
+    def test_transcode_into_parts_uploads_by_frame_number_not_string_sort(self):
+        # ffmpeg writes frame_%03d.jpg, so frame 1000 must not sort before
+        # frame_999: the upload index has to come from the numeric suffix.
+        numbers = (1, 2, 999, 1000, 1001)
+
+        def fake_run(cmd, **kwargs):
+            pattern = cmd[-1]
+            for n in numbers:
+                with open(pattern % n, "wb") as f:
+                    f.write(str(n).encode())
+            return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
+
+        uploaded: list[tuple[str, bytes]] = []
+
+        with patch.object(frame_extraction.subprocess, "run", fake_run):
+            with patch.object(frame_extraction, "_s3_put",
+                              lambda key, body: uploaded.append((key, body))):
+                count = frame_extraction.transcode_into_parts(
+                    "cam01", 0, 5, "events/e", 1)
+
+        self.assertEqual(count, 5)
+        self.assertEqual([key for key, _ in uploaded],
+                         [f"events/e/frames/frame_{i:03d}.jpg" for i in range(5)])
+        self.assertEqual([body for _, body in uploaded],
+                         [b"1", b"2", b"999", b"1000", b"1001"])
 
     def test_thread_cap_is_an_explicit_count(self):
         # "0" is ffmpeg's "auto" (host CPU count): the pre-fix behavior.

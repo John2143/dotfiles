@@ -68,10 +68,10 @@ def _build_workflow_input(event: dict, bypass_pause: bool = False) -> dict | Non
     """
     label = event.get("label", "")
     if not bypass_pause:
-        if _s3_get("events/_paused/genai") is not None:
+        if _s3_get("_state/paused/genai") is not None:
             log.info("Global pause active, skipping event %s (%s/%s)", event.get("id"), event.get("camera"), label)
             return None
-        if label and _s3_get(f"events/_paused/genai-{label}") is not None:
+        if label and _s3_get(f"_state/paused/genai-{label}") is not None:
             log.info("Label pause active for '%s', skipping event %s", label, event.get("id"))
             return None
     input_data = {
@@ -83,7 +83,7 @@ def _build_workflow_input(event: dict, bypass_pause: bool = False) -> dict | Non
         "end_time": event.get("end_time", event.get("start_time", 0)),
         "prompts_path": "/var/lib/frigate-genai-sidecar/prompts.json",
         "provider_path": "/var/lib/frigate-genai-sidecar/provider.json",
-        "paused-ollama": _s3_get("events/_paused/ollama") is not None,
+        "paused-ollama": _s3_get("_state/paused/ollama") is not None,
         "agentic": True,
     }
     return input_data
@@ -120,7 +120,7 @@ def build_mqtt_client(loop: asyncio.AbstractEventLoop) -> mqtt.Client:
                 _start_workflow_sync(after)
                 _stats["events_processed"] += 1
                 _stats["last_event"] = eid
-                _s3_put("events/_stats.json", json.dumps(_stats).encode())
+                _s3_put("_state/stats.json", json.dumps(_stats).encode())
 
             elif event_type == "update":
                 before = payload.get("before", {})
@@ -132,7 +132,7 @@ def build_mqtt_client(loop: asyncio.AbstractEventLoop) -> mqtt.Client:
                     _start_workflow_sync(after)
                     _stats["events_processed"] += 1
                     _stats["last_event"] = eid
-                    _s3_put("events/_stats.json", json.dumps(_stats).encode())
+                    _s3_put("_state/stats.json", json.dumps(_stats).encode())
         except json.JSONDecodeError:
             log.debug("Non-JSON MQTT message on %s", msg.topic)
         except Exception as e:
