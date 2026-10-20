@@ -196,6 +196,76 @@ nixpkgs.overlays = [
   # ZFS requires a stable hostId — generate with: head -c 8 /etc/machine-id
   networking.hostId = "115e93a1";
 
+  # All three NICs in one active-backup bond so any port can be cabled.
+  # 802.3ad is impossible here: enp1s0f1 is on the core switch while enp7s0
+  # is on the router, and a 10G+1G LAG would strand half the flows.
+  # cloned-mac-address pins the bond to the 10G NIC's MAC so the router's
+  # DHCP lease for 192.168.5.175 (client-id 1:e8:4d:d0:c1:54:20) keeps
+  # matching; fail_over_mac=none keeps that MAC across a failover so peers'
+  # ARP entries survive.
+  networking.networkmanager.ensureProfiles.profiles = {
+    bond0 = {
+      connection = {
+        id = "bond0";
+        uuid = "26e3a615-bb20-431f-80d0-da1d8584a737";
+        type = "bond";
+        interface-name = "bond0";
+        autoconnect = "true";
+      };
+      bond.options = "mode=active-backup,primary=enp1s0f1,miimon=100,fail_over_mac=none";
+      ethernet.cloned-mac-address = "E8:4D:D0:C1:54:20";
+      ipv4 = {
+        method = "auto";
+        route-metric = "50";
+      };
+      ipv6 = {
+        method = "auto";
+        addr-gen-mode = "default";
+        route-metric = "50";
+        address1 = "fd00:1::175/64";
+      };
+    };
+    bond0-port-enp1s0f0 = {
+      connection = {
+        id = "bond0-port-enp1s0f0";
+        uuid = "25d43c9c-d407-4444-bb66-4dde62df4b91";
+        type = "ethernet";
+        interface-name = "enp1s0f0";
+        controller = "bond0";
+        port-type = "bond";
+      };
+      ethernet.cloned-mac-address = "E8:4D:D0:C1:54:20";
+      ipv4.method = "disabled";
+      ipv6.method = "disabled";
+    };
+    bond0-port-enp1s0f1 = {
+      connection = {
+        id = "bond0-port-enp1s0f1";
+        uuid = "893d38e9-14a4-4af6-b6d2-fd7482dc4cf3";
+        type = "ethernet";
+        interface-name = "enp1s0f1";
+        controller = "bond0";
+        port-type = "bond";
+      };
+      ethernet.cloned-mac-address = "E8:4D:D0:C1:54:20";
+      ipv4.method = "disabled";
+      ipv6.method = "disabled";
+    };
+    bond0-port-enp7s0 = {
+      connection = {
+        id = "bond0-port-enp7s0";
+        uuid = "e351ac6d-671c-44ce-b6e6-f0313942f638";
+        type = "ethernet";
+        interface-name = "enp7s0";
+        controller = "bond0";
+        port-type = "bond";
+      };
+      ethernet.cloned-mac-address = "E8:4D:D0:C1:54:20";
+      ipv4.method = "disabled";
+      ipv6.method = "disabled";
+    };
+  };
+
   time.timeZone = "America/New_York";
   i18n.defaultLocale = "en_US.UTF-8";
   console = {
@@ -303,7 +373,8 @@ nixpkgs.overlays = [
   ];
 
   # Dual-stack cluster CIDRs mirror closet's init node config.
-  # NAS uses the 10GbE interface at 192.168.5.175 (the 1GbE at .176 is being retired).
+  # NAS reaches the cluster over bond0 (10G x2 + 1G, active-backup) at
+  # 192.168.5.175; --node-ip stays pinned to that address and fd00:1::175.
   services.k3s.extraFlags = lib.concatStringsSep " " [
     "--server=https://192.168.5.10:6443"
     "--disable=servicelb"
