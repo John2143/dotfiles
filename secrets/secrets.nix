@@ -184,6 +184,7 @@ in {
   "timestone-watcher.env.age".publicKeys = [steam office];
 
   "immich-oidc-client-secret.age".publicKeys = [office arch nas];
+  "status-report-token.age".publicKeys = [office arch];
 
   "idrac-aiuser.age".publicKeys = [office arch];
 }

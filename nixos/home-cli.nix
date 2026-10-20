@@ -81,7 +81,6 @@ in {
       nixd
       trash-cli # bound to "rmm"
       s3cmd
-      minio-client # provides `mc` for RustFS/S3 operations
       websocat
       zip
       pandoc # markdown → HTML/Typst/PDF conversion

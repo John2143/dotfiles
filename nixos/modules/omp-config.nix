@@ -375,7 +375,13 @@ in
       calc.enabled: true
       render_mermaid.enabled: true
       checkpoint.enabled: true
-      providers.webSearch: brave
+      # DeepSeek Search API (POST /v1/tools/search). Uses DEEPSEEK_API_KEY
+      # from /run/agenix/llm-runtime-keys; needs the fork's deepseek search
+      # provider (John2143/oh-my-pi@john). Must be a nested mapping: omp does
+      # not expand dotted keys, so `providers.webSearch: x` is ignored.
+      providers:
+        webSearch: brave
+        #webSearch: deepseek
     '';
 
     ".omp/agent/keybindings.json".text = ''
