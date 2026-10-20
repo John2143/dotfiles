@@ -16,6 +16,13 @@
         rev = rev;
       };
     };
+
+  # OpenBao API. The *.ts.2143.me records are split-horizon and resolve only on
+  # the LAN; the Mac roams, so it gets the public hostname instead.
+  openbaoAddr =
+    if pkgs.stdenv.hostPlatform.isDarwin
+    then "https://openbao.john2143.com"
+    else "https://openbao.ts.2143.me";
 in {
   imports = [
     ./modules/fish-functions.nix
@@ -69,6 +76,7 @@ in {
       kubecolor # kubectl color
       k9s
       argocd
+      openbao # bao CLI — server address comes from BAO_ADDR below
 
       cargo-generate # rust project generator
 
@@ -153,6 +161,8 @@ in {
   home.sessionVariables = {
     EDITOR = "nvim";
     KUBECONFIG = "$HOME/.kube/config";
+    BAO_ADDR = openbaoAddr;
+    VAULT_ADDR = openbaoAddr; # Vault-compatible tooling
   };
 
 

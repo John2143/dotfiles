@@ -325,12 +325,13 @@ in
 
     '';
     ".omp/agent/config.yml".text = ''
-      # Fish is the default shell on *most* machines in this flake. A few
-      # (NAS, embedded) use bash. Agent bash commands are spawned in fish
-      # wherever this config applies — the functions, aliases, and
-      # completions defined in home.nix are available during agent sessions.
-      shell: fish
-      startup.quiet: true
+      # The agent's bash tool runs **bash**, not fish. omp accepts $SHELL only
+      # when it contains bash or zsh, otherwise it falls back to bash/sh
+      # (packages/utils/src/procmgr.ts, getShellConfig). There is no `shell`
+      # setting; `shellPath` exists but forces a POSIX shell, so fish is not an
+      # option for agent commands.
+      startup:
+        quiet: true
       setupVersion: 1
       modelRoles:
         default: anthropic/claude-opus-5-5
@@ -371,10 +372,14 @@ in
             - "litellm/openrouter/openrouter/auto"
 
       # Tools — enable setting-gated tools that ship disabled by default.
-      inspect_image.enabled: true
-      calc.enabled: true
-      render_mermaid.enabled: true
-      checkpoint.enabled: true
+      # Names must be nested mappings; dotted keys are silently ignored.
+      inspect_image:
+        enabled: true
+      checkpoint:
+        enabled: true
+      # Dropped as dead keys (no such setting in omp 16.3.11):
+      #   calc.enabled          — no calc tool or setting exists.
+      #   render_mermaid.enabled — real knob is tui.renderMermaid, on by default.
       # DeepSeek Search API (POST /v1/tools/search). Uses DEEPSEEK_API_KEY
       # from /run/agenix/llm-runtime-keys; needs the fork's deepseek search
       # provider (John2143/oh-my-pi@john). Must be a nested mapping: omp does
@@ -541,7 +546,7 @@ in
       - Never run `nixos-rebuild switch`.
       - Never run `home-manager switch`.
       - Never try to edit this computer's system configuration. This machine is not managed by the agent; system mutation is prohibited.
-      - Your shell is *fish* on most machines in this flake. Bash commands you run via `bash()` are spawned in fish — fish syntax, functions, and aliases work. Only the NAS and a few embedded hosts use bash.
+      - Your shell is *fish* interactively, but the agent's `bash()` tool runs **bash**: omp accepts $SHELL only when it is bash or zsh and otherwise falls back to bash/sh. Write POSIX/bash syntax, never fish — `if set -q X`, `set -gx`, and `end` fail with a syntax error.
       </remember>
 
       <permissions>
