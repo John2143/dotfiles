@@ -161,13 +161,10 @@
 
   security.rtkit.enable = true;
 
-  # === k3s worker labels ===
-  services.k3s.extraFlags = [
-    "--node-label=workload-type=general"
-    "--node-label=node.longhorn.io/create-default-disk=true"
-    # Let pods request forwarded-packet sysctls (VPN exit nodes need them).
-    "--kubelet-arg=allowed-unsafe-sysctls=net.ipv4.ip_forward,net.ipv6.conf.all.forwarding"
-  ];
+  # === k3s node identity (flags live in modules/k3s-net.nix) ===
+  custom.k3sNet = {
+    nodeLabels = ["workload-type=general" "node.longhorn.io/create-default-disk=true"];
+  };
 
   # Firewall — k3s ports
   networking.firewall.allowedTCPPorts = [

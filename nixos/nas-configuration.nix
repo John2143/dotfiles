@@ -379,34 +379,17 @@ nixpkgs.overlays = [
     "--advertise-exit-node"
   ];
 
-  # Dual-stack cluster CIDRs mirror closet's init node config.
   # NAS reaches the cluster over bond0 (10G x2 + 1G, active-backup) at
   # 192.168.5.175; --node-ip stays pinned to that address and fd00:1::175.
-  services.k3s.extraFlags = lib.concatStringsSep " " [
-    "--server=https://192.168.5.10:6443"
-    "--disable=servicelb"
-    "--tls-san=nas.local"
-    "--tls-san=closet.local"
-    "--tls-san=192.168.5.175"
-    "--tls-san=192.168.5.10"
-    "--cluster-cidr=10.42.0.0/16,fd42:42:42::/56"
-    "--service-cidr=10.43.0.0/16,fd42:42:43::/112"
-    "--flannel-ipv6-masq"
-    "--node-ip=192.168.5.175,fd00:1::175"
-    # Also serve etcd /metrics on the node IPv4 :2381 (default is 127.0.0.1 only); scraped by pite Prometheus job=etcd.
-    "--etcd-expose-metrics"
-    # Fast crash recovery — detect downed nodes in 20s, evict pods in 40s
-    "--kube-apiserver-arg=default-not-ready-toleration-seconds=40"
-    "--kube-apiserver-arg=default-unreachable-toleration-seconds=40"
-    "--kube-controller-manager-arg=node-monitor-grace-period=20s"
-    "--kube-controller-manager-arg=node-monitor-period=2s"
-    "--node-label=node.longhorn.io/create-default-disk=true"
+  custom.k3sNet = {
+    ipv4 = "192.168.5.175";
+    ipv6 = "fd00:1::175";
     # Reserve 2 CPU + 3 GiB RAM for OS functions (ZFS, Samba, Immich run
     # natively on NAS; k3s must not starve them — 2026-07-31 OOM panic).
-    "--kubelet-arg=system-reserved=cpu=2,memory=3Gi"
-    # Let pods request forwarded-packet sysctls (VPN exit nodes need them).
-    "--kubelet-arg=allowed-unsafe-sysctls=net.ipv4.ip_forward,net.ipv6.conf.all.forwarding"
-  ];
+    systemReserved = "cpu=2,memory=3Gi";
+    # Registration-time only: k3s applies --node-label when the node first joins.
+    nodeLabels = ["node.longhorn.io/create-default-disk=true"];
+  };
 
   # ================
   # === NFS      ===

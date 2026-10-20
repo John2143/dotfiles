@@ -114,50 +114,25 @@
   security.rtkit.enable = true;
   services.printing.enable = true;
 
+  # Node identity and cluster networking come from modules/k3s-net.nix.
+  custom.k3sNet = {
+    # Primary via 10G NIC (enp8s0f1); fd00:1::36 is the router's DHCPv6 binding.
+    ipv4 = "192.168.5.36";
+    ipv6 = "fd00:1::36";
+    # Reserve RAM for OS + k3s server (etcd/Longhorn/iscsid are host
+    # processes, not pods). 7.7 GiB total - 4 GiB reserved ≈ 3.4 GiB for
+    # kube pods (HA must run here — USB hardware affinity; user priority).
+    # Host procs measure ~4.7 GiB — 4096Mi matches measured usage so the
+    # kubelet evicts pods before the host OOMs (2700Mi overcommitted and
+    # the OOM hang returned; 5120Mi would leave only ~2.4 GiB for pods on
+    # a control-plane hosting argocd/cert-manager/keda).
+    systemReserved = "cpu=1,memory=4096Mi";
+    # Backup via the old 1GbE NIC (enp6s0), still a valid API endpoint.
+    extraTlsSans = ["192.168.5.35"];
+  };
   services.k3s = {
     enable = true;
     role = "server";
-    extraFlags = lib.concatStringsSep " " [
-      # mDNS hostnames for k3s TLS cert — needed for server-to-server join
-      "--tls-san=closet.local"
-      "--tls-san=arch.local"
-      "--tls-san=nas.local"
-      # Primary via 10G NIC (enp8s0f1)
-      "--tls-san=192.168.5.36"
-      # Backup via old 1GbE NIC (enp6s0)
-      "--tls-san=192.168.5.35"
-      "--tls-san=192.168.5.10"
-      # Dual-stack pod and service networks (IPv4 + IPv6)
-      # Join existing cluster via VIP (MetalLB-announced .10)
-      "--server=https://192.168.5.10:6443"
-      "--disable=servicelb"
-      "--cluster-cidr=10.42.0.0/16,fd42:42:42::/56"
-      "--service-cidr=10.43.0.0/16,fd42:42:43::/112"
-      # Dual-stack nodes must use explicit IPv4+IPv6 addresses
-      "--node-ip=192.168.5.36,fd00:1::36"
-      # Also serve etcd /metrics on the node IPv4 :2381 (default is 127.0.0.1 only); scraped by pite Prometheus job=etcd.
-      "--etcd-expose-metrics"
-      # Required for IPv6 pod egress when using flannel
-      "--flannel-ipv6-masq"
-      # Fast crash recovery — detect downed nodes in 20s, evict pods in 40s
-      "--kube-apiserver-arg=default-not-ready-toleration-seconds=40"
-      "--kube-apiserver-arg=default-unreachable-toleration-seconds=40"
-      "--kube-controller-manager-arg=node-monitor-grace-period=20s"
-      "--kube-controller-manager-arg=node-monitor-period=2s"
-      # Keep standard per-node subnet sizing across families
-      "--kube-controller-manager-arg=node-cidr-mask-size-ipv4=24"
-      "--kube-controller-manager-arg=node-cidr-mask-size-ipv6=64"
-      # Reserve RAM for OS + k3s server (etcd/Longhorn/iscsid are host
-      # processes, not pods). 7.7 GiB total - 4 GiB reserved ≈ 3.4 GiB for
-      # kube pods (HA must run here — USB hardware affinity; user priority).
-      # Host procs measure ~4.7 GiB — 4096Mi matches measured usage so the
-      # kubelet evicts pods before the host OOMs (2700Mi overcommitted and
-      # the OOM hang returned; 5120Mi would leave only ~2.4 GiB for pods on
-      # a control-plane hosting argocd/cert-manager/keda).
-      "--kubelet-arg=system-reserved=cpu=1,memory=4096Mi"
-      # Let pods request forwarded-packet sysctls (VPN exit nodes need them).
-      "--kubelet-arg=allowed-unsafe-sysctls=net.ipv4.ip_forward,net.ipv6.conf.all.forwarding"
-    ];
     # Raw manifest via `source` (not `content`): pkgs.formats.yaml in current
     # nixpkgs emits a `%YAML 1.1` directive that the k3s helm-controller's
     # yaml parser rejects ("line 1: did not find expected <document start>").

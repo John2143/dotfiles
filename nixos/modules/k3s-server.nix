@@ -5,9 +5,8 @@
 #   - arch + nas join via --server https://closet.local:6443
 #   - All three advertise 192.168.5.0/24 as a tailscale subnet route for the MetalLB-announced .10 API VIP.
 #
-# Every server node imports this identically. Node-specific flags
-# (--node-ip, --cluster-init, --server, dual-stack CIDRs) go in the
-# host configuration.nix as `services.k3s.extraFlags`.
+# Every server node imports this identically. Node identity and cluster
+# networking live in modules/k3s-net.nix; hosts set custom.k3sNet.
 {
   config,
   lib,
@@ -15,6 +14,7 @@
 }: {
   imports = [
     ./longhorn-host.nix
+    ./k3s-net.nix
   ];
 
   options.custom.k3sStorageAfter = lib.mkOption {
@@ -35,9 +35,6 @@
       enable = true;
       role = "server";
       tokenFile = config.age.secrets.k3s-local-token.path;
-      extraFlags = lib.mkDefault (toString [
-        "--tls-san=192.168.5.10"
-      ]);
     };
     # Clean resolv.conf for k3s pods — strips the Tailscale MagicDNS search
     # domain (ts.2143.me) to prevent ndots:5 expansion from prepending it

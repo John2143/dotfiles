@@ -24,16 +24,15 @@
     extraSetFlags = ["--advertise-exit-node=false"];
   };
 
-  # Reserve 1 core and 1Gi for system daemons — leaves 3 cores / 2.7Gi allocatable for workloads
-  services.k3s.extraFlags = [
-    "--kubelet-arg=system-reserved=cpu=1,memory=1Gi"
-    # Let pods request forwarded-packet sysctls (VPN exit nodes need them).
-    "--kubelet-arg=allowed-unsafe-sysctls=net.ipv4.ip_forward,net.ipv6.conf.all.forwarding"
+  # Node identity and shared flags come from modules/k3s-net.nix.
+  custom.k3sNet = {
+    # Reserve 1 core and 1Gi for system daemons — leaves 3 cores / 2.7Gi allocatable for workloads
+    systemReserved = "cpu=1,memory=1Gi";
     # Never a MetalLB announcer (1G Pi running Mullvad). Registration-time
     # only: k3s applies --node-label when the node first joins; the running
     # node is labelled with kubectl (argo docs/node-maintenance.md).
-    "--node-label=node.kubernetes.io/exclude-from-external-load-balancers=true"
-  ];
+    nodeLabels = ["node.kubernetes.io/exclude-from-external-load-balancers=true"];
+  };
   # ── Agenix Secrets ─────────────────────────────────────────────
   # ntfy topic URL for Alertmanager notifications.
   age.secrets.ntfy-topic-url = {

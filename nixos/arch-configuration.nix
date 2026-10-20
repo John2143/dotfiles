@@ -102,31 +102,14 @@
 
   custom.k3sStorageAfter = ["mnt-longhorn.mount"];
 
-  # k3s server — join existing cluster via mDNS (bootstrap without tailscale dependency).
-  # Dual-stack cluster CIDRs mirror closet's init node config.
-  services.k3s.extraFlags = lib.concatStringsSep " " [
-    "--server=https://192.168.5.10:6443"
-    "--disable=servicelb"
-    "--tls-san=arch.local"
-    "--tls-san=closet.local"
-    "--tls-san=192.168.5.76"
-    "--tls-san=192.168.5.10"
-    "--cluster-cidr=10.42.0.0/16,fd42:42:42::/56"
-    "--service-cidr=10.43.0.0/16,fd42:42:43::/112"
-    "--flannel-ipv6-masq"
-    "--node-ip=192.168.5.76,fd00:1::7ce1:b412:3068:c799"
-    # Also serve etcd /metrics on the node IPv4 :2381 (default is 127.0.0.1 only); scraped by pite Prometheus job=etcd.
-    "--etcd-expose-metrics"
-    # Fast crash recovery — detect downed nodes in 20s, evict pods in 40s
-    "--kube-apiserver-arg=default-not-ready-toleration-seconds=40"
-    "--kube-apiserver-arg=default-unreachable-toleration-seconds=40"
-    "--kube-controller-manager-arg=node-monitor-grace-period=20s"
-    "--kube-controller-manager-arg=node-monitor-period=2s"
+  # k3s server — joins through the API VIP; identity and cluster networking
+  # come from modules/k3s-net.nix.
+  custom.k3sNet = {
+    ipv4 = "192.168.5.76";
+    ipv6 = "fd00:1::7ce1:b412:3068:c799";
     # Reserve 12 CPU + 16 GiB RAM for the system (Hyprland desktop, 32 GiB total per lshw). k8s gets 4 CPU, ~15.3 GiB.
-    "--kubelet-arg=system-reserved=cpu=12,memory=16Gi"
-    # Let pods request forwarded-packet sysctls (VPN exit nodes need them).
-    "--kubelet-arg=allowed-unsafe-sysctls=net.ipv4.ip_forward,net.ipv6.conf.all.forwarding"
-  ];
+    systemReserved = "cpu=12,memory=16Gi";
+  };
   custom.backup.enable = true;
 
   # Building screen-control directly instead of nix run (which was slow and

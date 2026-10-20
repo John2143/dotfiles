@@ -4,7 +4,7 @@
   pkgs,
   ...
 }: {
-  imports = [./longhorn-host.nix];
+  imports = [./longhorn-host.nix ./k3s-net.nix];
 
   options.custom.k3sNodeTaints = lib.mkOption {
     type = lib.types.listOf lib.types.str;
@@ -21,10 +21,10 @@
       group = "root";
     };
 
+    # Node identity and shared flags come from modules/k3s-net.nix (custom.k3sNet).
     services.k3s = {
       enable = true;
       role = "agent";
-      serverAddr = "https://192.168.5.10:6443";
       tokenFile = config.age.secrets.k3s-local-token.path;
       # Registration-time taints: k3s applies --node-taint only when the node
       # first joins. Retaint a running node with `kubectl taint`.
