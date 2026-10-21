@@ -17,7 +17,7 @@
 #      agenix -e restic-password.age -i ~/.ssh/age
 #    Enter a strong random passphrase (e.g. `openssl rand -base64 32`).
 #
-# 3. Re-encrypt after adding new machine keys to secrets.nix:
+# 3. Re-encrypt after adding new machine keys to agenix-rules.nix:
 #      agenix -r -i ~/.ssh/age
 #
 # 4. Set up backup directories on the NAS. ChrootDirectory requires

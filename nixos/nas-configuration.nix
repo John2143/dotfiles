@@ -580,19 +580,6 @@ nixpkgs.overlays = [
       PermitTunnel no
   '';
 
-  services.avahi = {
-    enable = true;
-    nssmdns4 = true;
-    settings.publish = {
-      disable-publishing = false;
-      disable-user-service-publishing = false;
-      publish-addresses = true;
-      publish-domain = true;
-      publish-hinfo = true;
-      publish-workstation = true;
-    };
-  };
-
   # ── NUT UPS monitoring ────────────────────────────────────────────
   # power.ups handles usbhid-ups auto-detect, webhooks, and k3s drain.
   # See modules/nut-ups.nix for the shared config.

@@ -354,7 +354,7 @@
     };
 
   # Vast.ai credentials (combined API key + SSH private key, see
-  # secrets/secrets.nix for format). Sourced by:
+  # secrets/agenix-rules.nix for format). Sourced by:
   #   - the `vastai` wrapper below (reads VAST_API_KEY)
   #   - the _vast-load fish helper in home-cli.nix (reads
   #     VAST_SSH_PRIVATE_KEY_B64, materializes it to /run/user/$UID/...)

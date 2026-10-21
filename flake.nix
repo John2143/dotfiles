@@ -273,8 +273,8 @@
 
           ({...}: {
             services.avahi = {
-              reflector = true;
-              allowInterfaces = ["end0" "wlan0"];
+              settings.reflector.enable-reflector = true;
+              settings.server.allow-interfaces = ["end0" "wlan0"];
             };
           })
           ./nixos/modules/observability-agent.nix

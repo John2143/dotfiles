@@ -141,19 +141,6 @@
   services.openssh.enable = true;
   users.users."john".openssh.authorizedKeys.keys = sshKeys;
 
-  services.avahi = {
-    enable = true;
-    nssmdns4 = true;
-    settings.publish = {
-      disable-publishing = false;
-      disable-user-service-publishing = false;
-      publish-addresses = true;
-      publish-domain = true;
-      publish-hinfo = true;
-      publish-workstation = true;
-    };
-  };
-
   security.rtkit.enable = true;
 
   # Do NOT change this value unless you have manually inspected all the changes it would make to your configuration,

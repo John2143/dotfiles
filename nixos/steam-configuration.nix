@@ -51,7 +51,7 @@ in {
   ];
   # Watcher env vars (DISCORD_TOKEN and friends, one NAME=value line each) —
   # agenix secret, decrypted at boot to a file the steam user can read; the
-  # lobby-watcher-up wrapper sources it. See secrets/secrets.nix.
+  # lobby-watcher-up wrapper sources it. See secrets/agenix-rules.nix.
   age.secrets.timestone-watcher-env = {
     file = ../secrets/timestone-watcher.env.age;
     mode = "0400";

@@ -7,7 +7,7 @@
 #
 # === POST-INSTALL (age key + secrets) ===
 #   1. On big:  ssh-keygen -f ~/.ssh/age -N "" -C "john@big" && cat ~/.ssh/age.pub
-#   2. On office: paste into secrets/secrets.nix as big = "...", add big to:
+#   2. On office: paste into secrets/agenix-rules.nix as big = "...", add big to:
 #      - k3s-local-token, attic-admin-token, build-cluster-key publicKeys
 #      - agenix -r -i ~/.ssh/age && git commit -am "add big" && git push
 #   3. On big:  git pull && uncomment big-post-install.nix in flake.nix
@@ -145,19 +145,6 @@
   users.users."john".openssh.authorizedKeys.keys = sshKeys;
   # Proxmox guest agent — enables qm guest exec / graceful shutdown from hypervisor
   services.qemuGuest.enable = true;
-
-  services.avahi = {
-    enable = true;
-    nssmdns4 = true;
-    settings.publish = {
-      disable-publishing = false;
-      disable-user-service-publishing = false;
-      publish-addresses = true;
-      publish-domain = true;
-      publish-hinfo = true;
-      publish-workstation = true;
-    };
-  };
 
   security.rtkit.enable = true;
 

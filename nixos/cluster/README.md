@@ -74,7 +74,7 @@ nixos/hetzner/
 │   ├── home-pi.nix                 # Home Pi (Headscale + deSEC DDNS)
 │   └── home-pi-hardware-configuration.nix
 ├── secrets/
-│   ├── secrets.nix                 # agenix public key mapping
+│   ├── agenix-rules.nix            # agenix public key mapping
 │   └── hetzner/*.age               # Encrypted secrets
 └── scripts/
     ├── provision.sh                # VM create → nixos-anywhere → deSEC DNS → tailscale

@@ -377,7 +377,7 @@ in {
         email = "john@john2143.com";
         name = "John Schmidt";
         signingkey =
-          if pkgs.stdenv.isDarwin
+          if pkgs.stdenv.hostPlatform.isDarwin
           then "/Users/jschmidt/.ssh/id_github_sign.pub"
           else "/home/john/.ssh/id_github_sign.pub";
       };

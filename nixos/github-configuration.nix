@@ -12,7 +12,7 @@
 #   Pre-seed the agenix identity so first-boot activation can decrypt secrets:
 #     sudo mkdir -p /mnt/home/john/.ssh
 #     sudo ssh-keygen -f /mnt/home/john/.ssh/age -N "" -C "john@github"
-#   Re-encrypt secrets on office (secrets/secrets.nix + agenix -r), then:
+#   Re-encrypt secrets on office (secrets/agenix-rules.nix + agenix -r), then:
 #     sudo nixos-install --no-root-passwd --flake /tmp/dotfiles#github
 #
 # === GOTCHAS ===
@@ -122,19 +122,6 @@ in {
   users.users."john".openssh.authorizedKeys.keys = sshKeys;
   # Proxmox guest agent — graceful shutdown from hypervisor
   services.qemuGuest.enable = true;
-
-  services.avahi = {
-    enable = true;
-    nssmdns4 = true;
-    settings.publish = {
-      disable-publishing = false;
-      disable-user-service-publishing = false;
-      publish-addresses = true;
-      publish-domain = true;
-      publish-hinfo = true;
-      publish-workstation = true;
-    };
-  };
 
   # Tailscale for tailnet connectivity — no subnet route advertisement.
   services.tailscale.enable = true;
