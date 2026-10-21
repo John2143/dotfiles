@@ -759,7 +759,7 @@ in {
     settings = {
       auto_sync = false;
       search_mode = "fuzzy";
-      filter_mode = "directory";
+      filter_mode = "global";
       style = "compact";
     };
   };
