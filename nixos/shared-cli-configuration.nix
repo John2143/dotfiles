@@ -410,6 +410,26 @@
       group = "users";
     };
 
+  # Home Assistant (home.ts.2143.me): read-only account `aiuser`, used by the
+  # home-assistant-engineer skill. dotenv, two lines:
+  #   HA_USERNAME=aiuser
+  #   HA_PASSWORD=<password>
+  # The account is in HA's read-only group (entities:read only), and the skill mints a
+  # short-lived access token per session, so no permanent bearer token exists.
+  # Guarded on the file: a rebuild before `agenix -e` still evaluates.
+  age.secrets.ha-aiuser =
+    lib.mkIf
+    (
+      (builtins.elem config.networking.hostName [ "office" "arch" ])
+      && builtins.pathExists ../secrets/ha-aiuser.age
+    )
+    {
+      file = ../secrets/ha-aiuser.age;
+      mode = "0400";
+      owner = "john";
+      group = "users";
+    };
+
   security.rtkit.enable = true;
   services.udisks2.enable = true;
 
