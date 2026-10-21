@@ -42,7 +42,7 @@
   # The lobby watcher (timestone-lobby-watcher flake input) built into the
   # system closure. The lobby-watcher-up autostart wrapper below waits for the
   # Steam client, then keeps it running inside this graphical session.
-  lobbyWatcherExec = "${inputs.timestone-lobby-watcher.packages.${pkgs.system}.default}/bin/lobby-watcher";
+  lobbyWatcherExec = "${inputs.timestone-lobby-watcher.packages.${pkgs.stdenv.hostPlatform.system}.default}/bin/lobby-watcher";
 in {
   imports = [
     (modulesPath + "/profiles/qemu-guest.nix") # Proxmox VM virtio drivers
@@ -79,6 +79,11 @@ in {
   networking.hostName = "steam";
   networking.networkmanager.enable = true;
 
+  # Let the deploy user copy locally built closures (the watcher, etc.) to this
+  # host without signatures. john is already wheel with passwordless sudo, so
+  # this grants no additional privilege in practice.
+  nix.settings.trusted-users = [ "root" "john" ];
+
   time.timeZone = "America/New_York";
   i18n.defaultLocale = "en_US.UTF-8";
   console = {
@@ -90,7 +95,7 @@ in {
     git
     curl
     htop
-    xfce.xfce4-terminal # terminal for the one-time Steam login on the console
+    xfce4-terminal # terminal for the one-time Steam login on the console
     # Waits for the Steam client (up to ~2 min), then keeps the lobby watcher
     # alive; respawns on exit after 10s. Absolute tool paths: XDG-autostarted
     # sessions may not put sw/bin on PATH.
@@ -180,6 +185,48 @@ in {
     Name=Lobby watcher
     Exec=/run/current-system/sw/bin/lobby-watcher-up
   '';
+
+  # Keep the watcher logs bounded. The wrapper holds the state log open with
+  # O_APPEND, so copytruncate is required; the history log is opened per event.
+  services.logrotate.settings.lobby-watcher = {
+    files = [
+      "/home/steam/.local/state/lobby-watcher.log"
+      "/home/steam/lobby-watcher.log"
+    ];
+    frequency = "weekly";
+    rotate = 8;
+    compress = true;
+    missingok = true;
+    notifempty = true;
+    copytruncate = true;
+  };
+
+  # Weekly pull-and-stage update: fetch the committed dotfiles lock from
+  # GitHub (office updates the lock daily), build on this VM with the 4 GiB
+  # swap, and stage the new generation. It does not reboot; reboot when
+  # convenient to apply it.
+  systemd.services.steam-update = {
+    after = [ "network-online.target" ];
+    wants = [ "network-online.target" ];
+    script = ''
+      exec ${config.system.build.nixos-rebuild}/bin/nixos-rebuild boot \
+        --flake github:John2143/dotfiles#steam --refresh --max-jobs 1
+    '';
+    serviceConfig = {
+      Type = "oneshot";
+      Nice = 19;
+      IOSchedulingClass = "idle";
+      TimeoutStartSec = "2h";
+    };
+  };
+
+  systemd.timers.steam-update = {
+    wantedBy = [ "timers.target" ];
+    timerConfig = {
+      OnCalendar = "Sun *-*-* 05:00:00";
+      Persistent = true;
+    };
+  };
 
   system.stateVersion = "25.11";
 }
