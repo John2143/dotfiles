@@ -416,13 +416,11 @@
   #   HA_PASSWORD=<password>
   # The account is in HA's read-only group (entities:read only), and the skill mints a
   # short-lived access token per session, so no permanent bearer token exists.
-  # Guarded on the file: a rebuild before `agenix -e` still evaluates.
+  # No existence guard: the file is committed, and a guard made a skip silent
+  # (generation 11 was built before the secret existed and shipped without it).
   age.secrets.ha-aiuser =
     lib.mkIf
-    (
-      (builtins.elem config.networking.hostName [ "office" "arch" ])
-      && builtins.pathExists ../secrets/ha-aiuser.age
-    )
+    (builtins.elem config.networking.hostName [ "office" "arch" ])
     {
       file = ../secrets/ha-aiuser.age;
       mode = "0400";
