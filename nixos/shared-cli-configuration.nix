@@ -251,14 +251,14 @@
     # serves its own MagicDNS, and avahi on tailscale0 is the leading suspect
     # behind the boot-time hostname-conflict cascade that makes a host rename
     # itself to <host>-2/-3/… and stop answering <host>.local (secu, 2026-09-19).
-    denyInterfaces = ["tailscale0" "cni0" "flannel.1" "flannel-v6.1" "docker0"];
-    publish = {
-      enable = true;
-      addresses = true;
-      domain = true;
-      hinfo = true;
-      userServices = true;
-      workstation = true;
+    settings.server.deny-interfaces = ["tailscale0" "cni0" "flannel.1" "flannel-v6.1" "docker0"];
+    settings.publish = {
+      disable-publishing = false;
+      disable-user-service-publishing = false;
+      publish-addresses = true;
+      publish-domain = true;
+      publish-hinfo = true;
+      publish-workstation = true;
     };
   };
 
