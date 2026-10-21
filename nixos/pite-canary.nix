@@ -46,6 +46,15 @@
     group = "root";
   };
 
+  # Shared with statusd on the droplet: it stores only the SHA-256 of this
+  # token, and every report/backfill/snapshot request carries it.
+  age.secrets.status-report-token = {
+    file = ../secrets/status-report-token.age;
+    mode = "0400";
+    owner = "root";
+    group = "root";
+  };
+
   # ── Firewall — Prometheus + Alertmanager + Blackbox + nginx ────
   networking.firewall.allowedTCPPorts = [
     9090 # Prometheus
@@ -138,6 +147,7 @@
               "https://2143.me"
               "https://i.2143.me"
               "https://files.john2143.com"
+              "https://status-origin.2143.me/healthz" # the droplet itself — pages via BlackboxProbeFailed
             ];
           }
         ];
@@ -407,6 +417,76 @@
     wantedBy = ["timers.target"];
     timerConfig = {
       OnCalendar = "*:*:0/30";  # every 30 s at :00 and :30 — wall-clock, survives rebuilds
+      Persistent = true;
+    };
+  };
+
+  # ── Report LAN checks to the status droplet ────────────────────
+  # statusd probes the websites from outside; these are the checks only pite can
+  # make. AccuracySec matters: the old status-page timer above inherits systemd's
+  # 1-minute accuracy, so :00/:30 runs coalesce. Same calendar, 1 s accuracy here.
+  systemd.services.status-report = {
+    description = "Report LAN checks to status-origin.2143.me";
+    serviceConfig = {
+      Type = "oneshot";
+      User = "root";
+      Group = "root";
+    };
+    path = [pkgs.python3];
+    script = "python3 ${./status-page/report.py} --token-file ${config.age.secrets.status-report-token.path}";
+  };
+
+  systemd.timers.status-report = {
+    description = "Report LAN checks every 30s";
+    wantedBy = ["timers.target"];
+    timerConfig = {
+      OnCalendar = "*:*:0/30";
+      AccuracySec = "1s";
+      Persistent = true;
+    };
+  };
+
+  # Runs once, by hand, after the first deploy: 29 days of history from Mimir.
+  # RemainAfterExit keeps `systemctl start` idempotent; rerunning is safe anyway.
+  systemd.services.status-report-backfill = {
+    description = "One-shot history backfill from Mimir into statusd";
+    serviceConfig = {
+      Type = "oneshot";
+      RemainAfterExit = true;
+      User = "root";
+      Group = "root";
+    };
+    path = [pkgs.python3];
+    script = "python3 ${./status-page/report.py} --token-file ${config.age.secrets.status-report-token.path} --backfill 29";
+  };
+
+  # History durability: the droplet keeps hourly rows forever, this keeps 30 days
+  # of daily snapshots. quick_check before the rename, so a truncated download is
+  # never mistaken for a backup. Before the droplet's first 03:30 UTC backup
+  # /v1/snapshot answers 404 and this unit fails — expected on day one.
+  systemd.services.status-snapshot = {
+    description = "Pull the newest statusd snapshot";
+    serviceConfig = {
+      Type = "oneshot";
+      StateDirectory = "status-snapshots";
+    };
+    path = [pkgs.curl pkgs.sqlite pkgs.coreutils pkgs.findutils];
+    script = ''
+      TOKEN=$(cat ${config.age.secrets.status-report-token.path})
+      DEST=/var/lib/status-snapshots/history-$(date -u +%Y%m%d).db
+      curl -fsS --max-time 120 -H "Authorization: Bearer $TOKEN" \
+        https://status-origin.2143.me/v1/snapshot -o "$DEST.tmp"
+      test "$(sqlite3 "$DEST.tmp" 'pragma quick_check')" = ok
+      mv "$DEST.tmp" "$DEST"
+      find /var/lib/status-snapshots -name 'history-*.db' -mtime +30 -delete
+    '';
+  };
+
+  systemd.timers.status-snapshot = {
+    description = "Pull the daily snapshot at 03:50 UTC";
+    wantedBy = ["timers.target"];
+    timerConfig = {
+      OnCalendar = "*-*-* 03:50:00 UTC";
       Persistent = true;
     };
   };
