@@ -63,6 +63,10 @@ in {
   # boot.loader.grub.device (big-configuration.nix gotcha: duplicate-device assertion).
   boot.loader.grub.enable = true;
 
+  # 4 GiB swap: Steam + XFCE leave little memory headroom, and a local Rust
+  # build (e.g. the watcher) otherwise thrashes this 4 GiB VM.
+  swapDevices = [ { device = "/swapfile"; size = 4096; } ];
+
   boot.initrd.availableKernelModules = [
     "virtio_pci"
     "virtio_scsi"
