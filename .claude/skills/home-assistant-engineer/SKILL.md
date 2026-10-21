@@ -29,6 +29,16 @@ POST /auth/token                          grant_type=authorization_code&code=…
 Tokens last ~30 minutes. Put one in a file and pass it as `-H @file` so it never appears in `ps` or
 shell history.
 
+**Helper.** `ha-api.py`, in this skill directory, runs the login and prints JSON. Use it instead of
+re-deriving the flow:
+
+```
+ha-api.py GET /api/states
+ha-api.py GET /api/states/<entity_id>
+ha-api.py history <entity_id> 6        # last 6 hours, minimal_response
+ha-api.py GET /api/config
+```
+
 **Files (when the API is not enough).** No credentials needed — read through the cluster:
 
 ```
@@ -37,9 +47,23 @@ ssh closet 'kubectl -n default exec deploy/home-assistant -- python -' < script.
 
 ## The privilege boundary
 
-The read-only group is `{"entities": {"all": {"read": true}}}`. That means: read states and history,
-**no** service calls, no control, no editing, and **no config entries** — integration settings are
-invisible to this account. Anything that needs an integration's configuration is an owner task.
+The read-only group is `{"entities": {"all": {"read": true}}}`: read states and history, **no**
+service calls, no control, no editing, and **no config entries** — integration settings are
+invisible to this account. Anything needing an integration's configuration is an owner task.
+
+**Verify it — do not assume it.** A newly created user lands in `system-users`, whose policy is
+`{"entities": true}` and which **can** control entities. Read the group before trusting the
+boundary:
+
+```
+ssh closet 'kubectl -n default exec -i deploy/home-assistant -- python -' <<'PY'
+import json
+for u in json.load(open('/config/.storage/auth'))['data']['users']:
+    print(u['name'], u['group_ids'])
+PY
+```
+
+`system-read-only` is the only group that cannot actuate.
 
 ## What to use for what
 
@@ -47,9 +71,11 @@ invisible to this account. Anything that needs an integration's configuration is
 |---|---|
 | Current state, attributes | `GET /api/states`, `/api/states/<entity_id>` |
 | History / trends | `GET /api/history/period/<iso8601>?filter_entity_id=<id>&minimal_response` |
-| Derived values | `POST /api/template` with `{"template": "…"}` |
+| Derived values | compute client-side from `/api/states` — `POST /api/template` is **401** for this account |
 | Device/entity/area registries, integrations | `.storage/core.*_registry` from inside the pod |
 | Long-term numeric history, thresholds | `/config/home-assistant_v2.db` opened `mode=ro` |
+| Integration summary | `GET /api/config` |
+| Available services | `GET /api/services` — listing is allowed; calling one is control |
 
 The registries are the truth for *identity*; the database is the truth for *what happened*. State
 objects alone will not tell you which integration created a device.
