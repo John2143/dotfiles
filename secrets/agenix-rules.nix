@@ -184,7 +184,9 @@ in {
   "timestone-watcher.env.age".publicKeys = [steam office];
 
   "immich-oidc-client-secret.age".publicKeys = [office arch nas];
-  "status-report-token.age".publicKeys = [office arch];
+  # pite reads it to authenticate /v1/report, /v1/backfill and /v1/snapshot;
+  # statusd only stores the SHA-256.
+  "status-report-token.age".publicKeys = [office arch pite];
 
   "idrac-aiuser.age".publicKeys = [office arch];
 }
