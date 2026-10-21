@@ -334,9 +334,9 @@ in
         quiet: true
       setupVersion: 1
       modelRoles:
-        default: anthropic/claude-opus-5-5
-        smol: litellm/deepseek/deepseek-v4-flash
-        slow: anthropic/claude-fable-5-1
+        default: litellm/deepseek/deepseek-v4-flash
+        smol: litellm/ollama/gemma4:e4b
+        slow: anthropic/claude-opus-5-5
         advisor: litellm/deepseek/deepseek-v4-flash
 
       modelProviderOrder:
