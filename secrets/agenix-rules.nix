@@ -189,4 +189,7 @@ in {
   "status-report-token.age".publicKeys = [office arch pite];
 
   "idrac-aiuser.age".publicKeys = [office arch];
+
+  # Read-only Home Assistant account for the home-assistant-engineer skill.
+  "ha-aiuser.age".publicKeys = [office arch];
 }
