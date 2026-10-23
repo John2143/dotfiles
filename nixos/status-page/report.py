@@ -59,6 +59,10 @@ RANGE_TIMEOUT = 30
 STEP = 30
 CHUNK_HOURS = 6
 ATTEMPTS = 3
+# Caddy caps /v1/* bodies at 64 KiB and a 29-day backfill is ~700 KB of rows,
+# so the upload is sliced. 200 rows is ~16 KB; statusd's INSERT OR IGNORE makes
+# a partial backfill safe to resume.
+BATCH = 200
 
 
 def floor_hour(ts):
@@ -225,6 +229,19 @@ def post(path, token, payload, timeout=30):
         return json.load(r)
 
 
+def post_backfill(token, rows, runs):
+    """Upload the backfill in slices; returns (accepted, rejected) summed over them."""
+    accepted = rejected = 0
+    for key, items in (("hours", rows), ("outages", runs)):
+        for i in range(0, len(items), BATCH):
+            payload = {"v": 1, "hours": [], "outages": []}
+            payload[key] = items[i:i + BATCH]
+            result = post("/v1/backfill", token, payload, timeout=60)
+            accepted += result.get("accepted", 0)
+            rejected += result.get("rejected", 0)
+    return accepted, rejected
+
+
 def read_token(path):
     with open(path, encoding="utf-8") as f:
         token = f.read().strip()
@@ -279,9 +296,9 @@ def run_backfill(token, days):
     buckets = hourly_rows(points["success"], mapping)
     rows = attach_latency(buckets, points["duration"], mapping, points["success"])
     runs = outage_runs(points["success"], mapping, until=end)
-    result = post("/v1/backfill", token, {"v": 1, "hours": rows, "outages": runs})
+    accepted, rejected = post_backfill(token, rows, runs)
     print(
-        f"backfill: {result.get('accepted', 0)} accepted, {result.get('rejected', 0)} rejected, "
+        f"backfill: {accepted} accepted, {rejected} rejected, "
         f"{len(rows)} hour rows, {len(runs)} outages, {days} days requested"
         + (f", {len(set(skipped))} chunks skipped" if skipped else "")
     )
