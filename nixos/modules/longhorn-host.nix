@@ -21,13 +21,14 @@
   services.openiscsi = {
     enable = true;
     name = "iqn.2026-05.me.2143:${config.networking.hostName}";
+    # Reduce kernel SCSI replacement_timeout from 120s to 15s — Longhorn handles
+    # replication at the app level, so slow SCSI error recovery just adds
+    # needless delays on reboot (5 minutes compounding across ~30 LUNs).
+    # This used to be boot.iscsi-initiator.extraConfig, which nixpkgs removed.
+    extraConfig = ''
+      node.session.timeo.replacement_timeout = 15
+    '';
   };
-  # Reduce kernel SCSI replacement_timeout from 120s to 15s — Longhorn handles
-  # replication at the app level, so slow SCSI error recovery just adds
-  # needless delays on reboot (5 minutes compounding across ~30 LUNs).
-  boot.iscsi-initiator.extraConfig = ''
-    node.session.timeo.replacement_timeout = 15
-  '';
   # Give iscsid enough time for clean iSCSI logout before SIGKILL
   systemd.services.iscsid.serviceConfig.TimeoutStopSec = "60s";
 
