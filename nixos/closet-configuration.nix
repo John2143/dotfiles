@@ -158,9 +158,11 @@ spec:
       initContainers:
         - name: plugin-copy
           # busybox carries tar; the tarball is a cluster ConfigMap, so this
-          # touches no node's store, only the image pull.
+          # touches no node's store, only the image pull. The pod runs as uid
+          # 65532 (runAsNonRoot) and the emptyDir survives container restarts,
+          # so clear a previous partial extraction before writing again.
           image: busybox:1.38.0
-          command: ["sh", "-c", "set -e; tar -xzf /src/plugin.tar.gz -C /plugins; test -f /plugins/go.mod"]
+          command: ["sh", "-c", "set -e; chmod -R u+rwX /plugins 2>/dev/null || true; rm -rf /plugins/* /plugins/.[!.]* 2>/dev/null || true; tar -xzf /src/plugin.tar.gz -C /plugins; test -f /plugins/go.mod"]
           volumeMounts:
             - name: crowdsec-bouncer-plugin-src
               mountPath: /src
