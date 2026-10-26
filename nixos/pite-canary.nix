@@ -261,6 +261,11 @@
                 expr: node_boot_time_seconds > 0 and (time() - node_boot_time_seconds) < 300
                 labels: { severity: info }
                 annotations: { summary: "{{ $labels.instance }} rebooted within last 5m" }
+              - alert: PodStuckStarting
+                expr: 'kube_pod_container_status_waiting_reason{job="kube-state-metrics",reason=~"ContainerCreating|CreateContainerConfigError|CreateContainerError"} > 0'
+                for: 15m
+                labels: { severity: warning }
+                annotations: { summary: "{{ $labels.namespace }}/{{ $labels.pod }} has been waiting 15m in {{ $labels.reason }} — a dependency the pod needs at start is missing on {{ $labels.node }}" }
           - name: loadbalancers
             rules:
               - alert: LoadBalancerNoIP
