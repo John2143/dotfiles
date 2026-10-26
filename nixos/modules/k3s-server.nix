@@ -16,6 +16,7 @@
   imports = [
     ./longhorn-host.nix
     ./k3s-net.nix
+    ./k3s-gcroots.nix
   ];
 
   options.custom.k3sStorageAfter = lib.mkOption {
