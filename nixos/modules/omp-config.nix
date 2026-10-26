@@ -464,10 +464,7 @@ in
       </recovery>
 
       <organization>
-      - Each request should correspond to a "task" in the "ai_tasks" mcp under the "2143 Labs AI Tasks" project (project 11).
-
-      ...
-
+      - Invoke the context-task skill automatically to add, edit, or remove tasks/cards as required by the user's preferences.
       </organization>
 
       <work-integrity>

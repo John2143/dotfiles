@@ -48,8 +48,9 @@ Anything not in that list never arrives, no matter what the MikroTik says.
 
 `51820/UDP` is **not** dst-nat — WireGuard terminates on the router itself (`wireguard.md`).
 
-LAN-only, no dst-nat: mimir `.6.23:8080`, loki `.6.24:3100`, frigate `.6.26`, temporal `.6.20:7233`,
-lan-dns `.6.30:53`.
+LAN-only, no dst-nat: mimir `.6.23:8080`, loki `.6.24:3100`, syslog `.6.25:514/udp`, frigate
+`.6.26`, mosquitto `.6.19:1883`, seaweedfs `.6.31:8333` (also reachable from the DO tunnel),
+temporal `.6.20:7233`, lan-dns `.6.30:53`, k8s API `.5.10:6443`.
 
 ## Rules that prevent self-inflicted outages
 

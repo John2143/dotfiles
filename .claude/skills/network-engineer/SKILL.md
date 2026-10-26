@@ -61,8 +61,9 @@ fd00:6::/64      MetalLB v6 pool
 ```
 
 DHCP pool on 5.0/24 is `.50`–`.254`. **Everything below `.50` is statically assignable** — check ARP
-for the current holder before taking one. Reservations inside the pool are explicit
-(`.127`, `.165`, `.170`).
+for the current holder before taking one. Below-pool statics in use: `.9` pite, `.36` closet.
+Reservations inside the pool are explicit: `.68` big, `.76` arch, `.127`, `.165`, `.170`, `.175` nas,
+`.209` office.
 
 ## Live state
 
@@ -83,8 +84,9 @@ The reference files are snapshots. Regenerate the current state with:
 ```
 
 It prints leases, ARP, routes, dst-nat, IPv6 and BGP as markdown. Diff it against the files here
-and update what moved. Router/switch configs themselves are backed up separately — see
-`network-configs/check-drift.sh`.
+and update what moved. Router/switch configs themselves are backed up separately — the committed
+exports live in `network-configs/`, and `network-configs/check-drift.sh` diffs the **router** against
+its baseline (the switches are diffed the same way by hand).
 
 ## Rules that prevent wasted hours
 

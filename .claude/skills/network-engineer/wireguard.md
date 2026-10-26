@@ -10,7 +10,7 @@ and Temporal, and home → DO MongoDB.
 | Router public key | `26mSa5AF67ZCYagY8TBwlMLSo1YkQLUKAUjJajBwEgQ=` |
 | Peer `peer1` | DO cluster, `allowed-address=10.99.0.2/32,10.244.0.0/16`, router never dials |
 | Firewall | input accept UDP 51820 from WAN, **above** `drop all not coming from LAN` |
-| Forwarding | tunnel ACL: default-deny, two allows (`→ .5.36:5432` postgres, `→ .6.20:7233` temporal) |
+| Forwarding | tunnel ACL: default-deny, three allows (`→ .5.36:5432` postgres, `→ .6.20:7233` temporal, `→ .6.31:8333` seaweedfs S3) |
 
 Not a member of the `LAN` list — tunnel traffic to the router itself is dropped except the DNS
 allow. `allowed-address` doubles as source filter: a mismatch fails silently.

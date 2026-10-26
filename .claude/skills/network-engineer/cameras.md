@@ -6,7 +6,8 @@ Reolink, ONVIF/RTSP — not UniFi Protect.
 |---|---|
 | Subnet | `192.168.1.0/24`, cameras only |
 | Egress | WAN blocked for the whole subnet by firewall rule |
-| NVR duties | `secu` (192.168.5.140) |
+| NVR | Reolink NVR `.1.67` (static lease "Reolink NVR"); cameras record to it |
+| Wall display | `secu` (192.168.5.140) pulls 6 per-channel RTSP substreams; offline 2026-10-26 |
 | Recording UI | `frigate` LoadBalancer `.6.26` (ports 5000, 1984, 8554, 8555/udp) |
 
 ## Addressing

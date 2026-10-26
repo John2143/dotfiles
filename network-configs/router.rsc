@@ -1,4 +1,4 @@
-# 2026-10-19 06:56:34 by RouterOS 7.24.5
+# 2026-10-26 06:33:54 by RouterOS 7.24.5
 # software id = 7RHC-3MMG
 #
 # model = RB5009UPr+S+
@@ -106,6 +106,12 @@ add comment="ingress-follow; see argo docs/2026-10-15-fungible-ingress.md" \
     \n  }\
     \n}\
     \n"
+add comment=disarmed dont-require-permissions=no name=fe-revert-pite owner=\
+    admin policy=read,write,test source=":delay 6m; :if ([/system script get [\
+    find name=\"fe-revert-pite\"] comment] != \"disarmed\") do={ /routing bgp \
+    connection enable [find name=\"metallb-pite\"]; :log warning \"fe-revert-p\
+    ite: dead-man fired, metallb-pite re-enabled\" } else={ :log info \"fe-rev\
+    ert-pite: disarmed\" }"
 /disk settings
 set auto-media-interface=bridge auto-media-sharing=yes auto-smb-sharing=yes
 /interface bridge port
@@ -400,8 +406,6 @@ set [ find default=yes ] managed-address-configuration=yes
 add addresses=192.168.5.0/24 comment="metallb speakers: BFD for BGP (argo docs\
     /2026-10-15-fungible-ingress.md)" min-rx=300ms min-tx=300ms multiplier=5
 /routing bgp connection
-add afi=ip,ipv6 instance=bgp-instance-1 local.address=192.168.5.1 .role=ebgp \
-    name=metallb-pite remote.address=192.168.5.9 .as=65000
 add afi=ip,ipv6 as=65001 comment="MetalLB speakers on any k8s-nodes address (a\
     rgo docs/node-maintenance.md)" connect=no disabled=no input.filter=\
     metallb-in .limit-process-routes-ipv4=1000 .limit-process-routes-ipv6=\

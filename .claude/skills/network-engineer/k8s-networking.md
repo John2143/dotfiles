@@ -45,9 +45,11 @@ mikrotik-connect r '/ip route print where dst-address=192.168.6.6/32'
 | temporal | `.6.20` | — |
 | matrix coturn / livekit | `.6.21` / `.6.22` | `::21` / `::22` |
 | mimir / loki | `.6.23:8080` / `.6.24:3100` | `::23` / `::24` |
+| syslog | `.6.25:514/udp` | `::25` |
 | frigate | `.6.26` | `::26` |
 | factorio / minecraft | `.6.28:34197` / `.6.29:25565` | `::28` / `::29` |
 | lan-dns | `.6.30:53` | `fd00:6::30` |
+| seaweedfs S3 | `.6.31:8333` | `::31` |
 | k8s API | `.5.10:6443` (v4 only) | — |
 
 Full inventory with ports: `kubectl get svc -A`.
@@ -65,6 +67,6 @@ curl -sS -G 'http://192.168.6.24:3100/loki/api/v1/query_range' \
 ```
 
 Fields that matter: `DownstreamStatus` (returned to client), `OriginStatus` (from backend),
-`ClientHost` (LAN clients all appear as the WAN IP — hairpin NAT), `RouterName` (maps back to the
-HTTPRoute). `RequestCount` is a cumulative counter, never sum it. `429` is rate limiting, `403` is
-CrowdSec.
+`ClientHost` (LAN clients show their real `192.168.5.x`; hairpin NAT was removed, so only external
+clients share the WAN IP), `RouterName` (maps back to the HTTPRoute). `RequestCount` is a
+cumulative counter, never sum it. `429` is rate limiting, `403` is CrowdSec.
