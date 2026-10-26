@@ -10,18 +10,7 @@
   sshKeys,
   compName,
   ...
-}: let
-  # Store path of the CrowdSec bouncer plugin source, defined once in
-  # modules/k3s-server.nix (imported by every Traefik node, so the directory
-  # exists on all three). Used directly as the hostPath: the mount source is a
-  # real /nix/store directory, with no /etc symlink to resolve, and the store
-  # is read-only, which is all localPlugins needs. The rev is part of the path,
-  # so bumping the plugin changes this manifest and Helm rolls Traefik —
-  # required, because Traefik reads plugin source only at startup.
-  # unsafeDiscardStringContext: builtins.toFile rejects derivation references.
-  traefikPluginSource = builtins.unsafeDiscardStringContext (toString
-    config.environment.etc."traefik-plugins/crowdsec-bouncer-traefik-plugin".source);
-in {
+}: {
   imports = [
     ./closet-hardware-configuration.nix
     ./modules/user-john.nix
@@ -152,8 +141,8 @@ spec:
       # Fail closed: if the plugin cannot load, Traefik exits (CrashLoopBackOff)
       # instead of serving with every bouncer-gated router dropped (2026-10-16).
       abortOnPluginFailure: true
-      # Source comes from disk (dotfiles nixos/modules/k3s-server.nix), not
-      # plugins.traefik.io, so a Traefik start needs no DNS and no network.
+      # Source is a ConfigMap tarball extracted into an emptyDir by plugin-copy,
+      # so no node's store is involved and a start needs no DNS and no network.
       localPlugins:
         bouncer:
           type: localPath
@@ -166,25 +155,46 @@ spec:
         readOnly: true
     deployment:
       replicas: 3
+      initContainers:
+        - name: plugin-copy
+          # busybox carries tar; the tarball is a cluster ConfigMap, so this
+          # touches no node's store, only the image pull.
+          image: busybox:1.38.0
+          command: ["sh", "-c", "set -e; tar -xzf /src/plugin.tar.gz -C /plugins; test -f /plugins/go.mod"]
+          volumeMounts:
+            - name: crowdsec-bouncer-plugin-src
+              mountPath: /src
+              readOnly: true
+            - name: crowdsec-bouncer-plugin
+              mountPath: /plugins
       additionalVolumes:
         - name: crowdsec-bouncer-key
           secret:
             secretName: crowdsec-bouncer-key
+        - name: crowdsec-bouncer-plugin-src
+          configMap:
+            name: crowdsec-bouncer-plugin-src
         - name: crowdsec-bouncer-plugin
-          hostPath:
-            path: ${traefikPluginSource}
-            type: Directory
+          emptyDir: {}
     nodeSelector:
       node-role.kubernetes.io/control-plane: "true"
     affinity:
       podAntiAffinity:
-        preferredDuringSchedulingIgnoredDuringExecution:
-          - weight: 100
-            podAffinityTerm:
-              labelSelector:
-                matchLabels:
-                  app.kubernetes.io/name: traefik
-              topologyKey: kubernetes.io/hostname
+        requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchLabels:
+                app.kubernetes.io/name: traefik
+            topologyKey: kubernetes.io/hostname
+    # Required anti-affinity plus the chart's default maxSurge: 1 /
+    # maxUnavailable: 0 deadlocks a rollout: the surge pod cannot schedule on
+    # any node (all three already hold a traefik pod) and with maxUnavailable: 0
+    # no old pod is ever removed, so the change silently never applies. Free one
+    # node at a time; a crash-looping replacement then stalls at two healthy
+    # replicas instead of taking ingress down.
+    updateStrategy:
+      rollingUpdate:
+        maxSurge: 0
+        maxUnavailable: 1
     providers:
       kubernetesGateway:
         enabled: true

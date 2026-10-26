@@ -70,20 +70,6 @@
             insecure_skip_verify: true
     '';
 
-    # CrowdSec bouncer plugin source for Traefik's experimental.localPlugins
-    # (HelmChartConfig in closet-configuration.nix). Traefik reads it from disk,
-    # so a start needs no DNS and no network: on 2026-10-16 a failed download
-    # from plugins.traefik.io silently dropped every bouncer-gated route on one
-    # replica. Every server node needs it, because Traefik runs on all three.
-    # To upgrade: change rev + hash, rebuild arch and nas before closet.
-    # closet-configuration.nix uses this same store path as the pod's hostPath.
-    environment.etc."traefik-plugins/crowdsec-bouncer-traefik-plugin".source = pkgs.fetchFromGitHub {
-      owner = "maxlerebourg";
-      repo = "crowdsec-bouncer-traefik-plugin";
-      rev = "bef5dfaadbb07381af02ec4e7391e49214ebf953"; # tag v1.7.1
-      hash = "sha256-hefOKDVsBxn+rCAylPHqbCNfPMbU/vtO4QpiftIPcUU=";
-    };
-
     # Tailscale subnet route — advertises LAN + service subnets to the tailnet:
     # 192.168.5.0/24 (MetalLB-announced API VIP .10) and 192.168.6.0/24
     # (MetalLB LoadBalancer services, e.g. traefik at .6.11). Approved in headscale per-node.
