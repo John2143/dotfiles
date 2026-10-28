@@ -1,4 +1,4 @@
-# GitHub runner VM — Proxmox VM (2 cores, 4 GB RAM, SeaBIOS, virtio)
+# GitHub runner VM — Proxmox VM (2 cores, 7 GB RAM, SeaBIOS, virtio)
 #
 # === INSTALL FROM LIVE CD ===
 #   On bigp: qm create 101 --name github-nixos --machine q35 --cpu host \
@@ -77,6 +77,8 @@ in {
   # "This user doesn't have permissions to configure binary caches".
   # mkForce: avoid a dup "root" from nixpkgs' default definition.
   nix.settings.trusted-users = lib.mkForce [ "root" "github-runner" ];
+  # 7 GB RAM is the VM max; bevy's rust-workspace-deps build OOMed at 4 GB (2026-10-27).
+  swapDevices = [ { device = "/var/lib/swapfile"; size = 8192; } ];
   # disko provides boot.loader.grub.devices from the EF02 partition — do NOT set
   # boot.loader.grub.device (big-configuration.nix gotcha: duplicate-device assertion).
 
