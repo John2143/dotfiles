@@ -102,6 +102,11 @@ in {
           "/home/john/private"
           "/home/john/.cache"
           "/home/john/.local/share"
+          # Re-downloadable bulk under the one-big-root layout (office migration):
+          # ollama models and the Steam game library would otherwise add ~300G
+          # to every nightly snapshot.
+          "/home/john/share/ollama"
+          "/home/john/share/SteamLibrary"
           "/home/john/.mozilla/firefox"
           "/home/john/.config"
           "/home/john/.npm"

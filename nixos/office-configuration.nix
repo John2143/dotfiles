@@ -28,7 +28,6 @@
     efi.canTouchEfiVariables = true;
     systemd-boot.enable = true;
   };
-  fileSystems."/".options = [ "noatime" ];
   services.displayManager.lemurs = {
     enable = true;
   };
