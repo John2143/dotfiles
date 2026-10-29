@@ -52,6 +52,9 @@
       PrivateUsers = lib.mkForce false;
       StateDirectory = lib.mkForce "";
       UMask = lib.mkForce "0022";
+      # Models live under /home/john/share since the LVM reinstall; the upstream
+      # unit's ProtectHome=yes hides /home entirely.
+      ProtectHome = lib.mkForce false;
     };
 
     # tmpfiles creates the local state directories.  StateDirectory is cleared

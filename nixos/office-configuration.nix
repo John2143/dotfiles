@@ -39,6 +39,18 @@
 
   networking.hostName = "office"; # Define your hostname.
   networking.networkmanager.enable = true; # Easiest to use and most distros use this by default.
+  # The k3s API VIP (192.168.5.10) is announced by MetalLB over BGP only, so a
+  # direct on-link ARP for it from wifi goes unanswered and the agent cannot
+  # join. Send it via the router, which has the BGP route.
+  networking.networkmanager.dispatcherScripts = [
+    {
+      type = "basic";
+      source = pkgs.writeText "k3s-vip-route" ''
+        [ "$1" = "wlp0s20f3" ] && [ "$2" = "up" ] || exit 0
+        ${pkgs.iproute2}/bin/ip route replace 192.168.5.10/32 via 192.168.5.1 dev wlp0s20f3
+      '';
+    }
+  ];
   #networking.wireless.secretsFile = "/run/secrets/wireless.env";
   #networking.wireless.networks = {
   #jimmys_2G.pskRaw = "ext:PSK_HOME";
