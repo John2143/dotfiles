@@ -335,7 +335,11 @@ in
       setupVersion: 1
       modelRoles:
         default: litellm/deepseek/deepseek-v4-flash
-        smol: litellm/ollama/gemma4:e4b
+        # `ollama_chat/` (not `ollama/`): litellm's `ollama/` prefix is the
+        # completion provider and hits Ollama's /api/generate, which drops
+        # `tools` and sends no chat framing. Gemma 4's renderer/tool channel
+        # only exists on /api/chat — see argo workloads/llm-proxy/configmap.yaml.
+        smol: litellm/ollama_chat/gemma4:e4b
         slow: anthropic/claude-opus-5-5
         advisor: litellm/deepseek/deepseek-v4-flash
 
