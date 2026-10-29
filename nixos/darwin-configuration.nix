@@ -2,6 +2,7 @@
   config,
   lib,
   pkgs,
+  pkgs-stable,
   inputs,
   compName,
   sshKeys,
@@ -97,7 +98,10 @@
     enable = true;
     onActivation = {
       autoUpdate = false;
-      cleanup = "zap";
+      # brew 5 dropped --force-cleanup, which nix-darwin still emits for
+      # cleanup = "zap"; pass the replacement flags directly instead.
+      cleanup = "none";
+      extraFlags = ["--cleanup" "--zap"];
     };
     casks = [
       # "bruno"
@@ -207,7 +211,7 @@
     useGlobalPkgs = true;
     useUserPackages = true;
     backupFileExtension = "hm-backup";
-    extraSpecialArgs = {inherit inputs;};
+    extraSpecialArgs = {inherit inputs pkgs-stable;};
     users.jschmidt = import ./home-cli.nix;
   };
 

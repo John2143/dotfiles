@@ -78,6 +78,14 @@ if [ (uname) = "Darwin" ]
     alias lll="~/scripts/launch.fish; exit"
     alias ptt="pytest -m quick -n 5"
     alias ls=eza
+
+    # flake attr is "mac", not the hostname, so nh needs it spelled out
+    set -x NH_DARWIN_FLAKE "$HOME/dotfiles#mac"
+    alias nos="fish -c 'nh darwin switch'"
+    alias noss="fish -c 'nh darwin switch --fallback'"
+    # darwin has no boot generation; build without activating instead
+    alias nob="fish -c 'nh darwin build'"
+    alias nobs="fish -c 'nh darwin build --fallback'"
 end
 
 alias lat="ls -la --tree"
