@@ -1,28 +1,35 @@
-{ lib, config, osConfig, ... }:
+{ lib, config, osConfig, pkgs, ... }:
 let
-  # Skills — source of truth at ~/dotfiles/.claude/skills/. Enumerate all skill
-  # directories and create symlinks for both Claude Code (~/.claude/skills/)
-  # and OMP (~/.omp/agent/skills/, native provider at priority 100).
+  # Skills — source of truth at ~/dotfiles/.claude/skills/. Every file is linked
+  # recursively, so nested assets (humanizer/personas/*.md, helper scripts)
+  # travel with the skill. OMP reads the raw files as a native provider
+  # (~/.omp/agent/skills/, priority 100); Claude Code reads a copy rewritten for
+  # its own tool vocabulary and /name invocation — see
+  # nixos/scripts/claude-skills.py.
   skillsDir = ../../.claude/skills;
-  skills = builtins.readDir skillsDir;
-  skillNames = builtins.filter (name: skills.${name} == "directory") (builtins.attrNames skills);
+  skillFiles = lib.filesystem.listFilesRecursive skillsDir;
+  rel = file: lib.removePrefix (toString skillsDir + "/") (toString file);
 
-  mkSkillLinks = name:
-    let
-      skillDir = skillsDir + "/${name}";
-      dirContents = builtins.readDir skillDir;
-      files = builtins.filter (fname: dirContents.${fname} == "regular") (builtins.attrNames dirContents);
-      mkLink = fname: {
-        ".claude/skills/${name}/${fname}".source = "${skillsDir}/${name}/${fname}";
-        ".omp/agent/skills/${name}/${fname}".source = "${skillsDir}/${name}/${fname}";
-      };
-    in
-      builtins.foldl' (acc: fname: acc // mkLink fname) { } files;
+  claudeSkills = pkgs.runCommandLocal "claude-skills" {
+    nativeBuildInputs = [pkgs.python3];
+  } ''
+    cp -r ${skillsDir} $out
+    chmod -R u+w $out
+    find $out -name SKILL.md -exec python3 ${../scripts/claude-skills.py} {} \;
+  '';
 
-  skillLinks = builtins.foldl' (acc: name: acc // mkSkillLinks name) { } skillNames;
+  linkSkillFiles = root: mkSource:
+    lib.listToAttrs (map (file: {
+        name = "${root}/${rel file}";
+        value.source = mkSource file;
+      })
+      skillFiles);
 in
 {
-  home.file = skillLinks // {
+  home.file =
+    (linkSkillFiles ".omp/agent/skills" toString)
+    // (linkSkillFiles ".claude/skills" (file: "${claudeSkills}/${rel file}"))
+    // {
     ".omp/agent/models.yml".text = ''
       providers:
         # vLLM on office -- reliable Qwen tool calling (qwen3_xml parser +
