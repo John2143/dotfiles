@@ -28,7 +28,7 @@ in {
     ./modules/fish-functions.nix
     ./modules/vast-fish-functions.nix
     ./modules/omp-config.nix
-    ./modules/vikunja-attachment.nix
+    ./modules/vikunja-cli.nix
     ./modules/vast-profile.nix
     ./modules/language-servers.nix
   ];

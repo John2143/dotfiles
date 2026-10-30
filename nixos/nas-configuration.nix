@@ -272,6 +272,13 @@ nixpkgs.overlays = [
       ipv6.method = "disabled";
     };
   };
+  # NetworkManager-ensure-profiles runs *after* NetworkManager.service, so at
+  # boot NM sees enp7s0 with no profile yet, creates its "Wired connection N"
+  # auto-default (DHCP v4+v6, autoconnect) and activates it. NM never moves an
+  # active device to the bond port profile that appears a moment later, so
+  # enp7s0 ran standalone with the same MAC and 192.168.5.175 as bond0 plus a
+  # second default route, and its DHCPv6 lease collided with the router.
+  networking.networkmanager.settings.main.no-auto-default = "enp1s0f0,enp1s0f1,enp7s0";
 
   time.timeZone = "America/New_York";
   i18n.defaultLocale = "en_US.UTF-8";
