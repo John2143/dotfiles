@@ -17,23 +17,21 @@ digraph G {
     // ── Router ──
     router [shape=box, label="ROUTER\nRB5009UPr+S+IN\n192.168.1.1 / .5.1", fillcolor="#bbdefb", style=filled, width=2.0]
 
-    verizon -> router [label=" 1GbE (2GWAN)\nWAN .0.2"]
+    verizon -> router [label=" 2.5G (2GWAN)\nWAN .0.2"]
 
     // ── Core Switch ──
     core [shape=box, label="CORE SWITCH\nCRS305-1G-4S+\n192.168.5.4", fillcolor="#fff9c4", style=filled, width=2.2]
 
     router -> core [label=" 10G SFP+ (10GsfpLAN→sfp-sfpplus4)"]
-    router -> core [label=" 1G RJ45 (pi→ether1) mgmt", style=dashed, color=gray, weight=0]
+    router -> core [label=" 1G RJ45 (core-poe→ether1) PoE + mgmt", style=dashed, color=gray, weight=0]
 
-    // ── Router direct ports ──
-    vpin        [shape=box, label="vpin\nMullvad exit\n192.168.5.252", fillcolor="#c8e6c9", style=filled]
+    // ── Router direct ports (renamed 2026-10-29; default names in parentheses) ──
     jetkvm      [shape=box, label="JetKVM\n192.168.5.187", fillcolor="#e1bee7", style=filled]
     cam_driveway [shape=box, label="Front Driveway cam\n192.168.1.66", fillcolor="#ffcdd2", style=filled]
 
-    router -> vpin         [label=" eth3 1G"]
-    router -> jetkvm       [label=" ether4 1G"]
-    router -> cam_driveway [label=" ether7 1G"]
-    router -> u7lite   [label=" ether6 1G"]
+    router -> jetkvm       [label=" jetkvm (ether4) 100M"]
+    router -> cam_driveway [label=" cam-front (ether7) 1G"]
+    router -> u7lite   [label=" u7-lite (ether5) 1G PoE"]
 
     // ── Switches ──
     upstairs_core [shape=box, label="UPSTAIRS-CORE\nCRS305-1G-4S+\n192.168.5.5", fillcolor="#fff9c4", style=filled, width=2.0]
@@ -56,15 +54,20 @@ digraph G {
 
     // ── Upstairs wired devices ──
     closet  [shape=box, label="closet\nk3s / Unifi / Postgres\n192.168.5.35 (1G)\n.36 (10G)", fillcolor="#c8e6c9", style=filled]
-    arch    [shape=box, label="arch\nk3s / GPU compute\n192.168.5.76\n(I226 2.5G NIC)", fillcolor="#c8e6c9", style=filled]
+    arch    [shape=box, label="arch\nk3s / GPU compute\n192.168.5.76\n(10G SFP+)", fillcolor="#c8e6c9", style=filled]
     glkvm   [shape=box, label="GL-KVM\nOpenWrt\n192.168.5.8", fillcolor="#e1bee7", style=filled]
     brother [shape=box, label="Brother printer\n192.168.5.6", fillcolor="#e1bee7", style=filled]
 
 
 
 
-    upstairs_core -> glkvm   [label=" ether1 1G (PoE)"]
+    vpin    [shape=box, label="vpin\nMullvad exit (Raspberry Pi)\n192.168.5.118", fillcolor="#c8e6c9", style=filled]
+    bedroom [shape=box, label="Bedroom lightswitch\n192.168.5.85", fillcolor="#e1bee7", style=filled]
+
+    upstairs_core -> glkvm   [label=" ether1 1G"]
+    upstairs -> bedroom [label=" ether4 1G"]
     upstairs -> brother [label=" ether6 100M HD"]
+    upstairs -> vpin    [label=" ether8 100M"]
 
 
     // ── NVR + wired cameras (NVR acts as PoE switch) ──
@@ -136,15 +139,17 @@ digraph G {
     u7proxgs -> macbook [style=dotted, color=gray, weight=0]
     u7proxgs -> iphones [style=dotted, color=gray, weight=0]
 
-    // ── pite (wired via office switch) ──
+    // ── pite (router port pite / ether8, not the office switch) ──
     pite [shape=box, label="pite\nk3s worker / canary\n192.168.5.9", fillcolor="#c8e6c9", style=filled]
 
-    office -> pite [label=" ether1 1G"]
+    router -> pite [label=" pite (ether8) 1G"]
 
-    // ── big (NixOS VM on bigp, wired) ──
-    big [shape=box, label="big\nk3s worker / BGP speaker\n192.168.5.68\n(VM on bigp)", fillcolor="#c8e6c9", style=filled]
+    // ── bigp (R740 Proxmox host) and its VMs ──
+    bigp [shape=box, label="bigp · R740 Proxmox\n192.168.5.19\niDRAC .254", fillcolor="#c8e6c9", style=filled]
+    big  [shape=box, label="big\nk3s worker / BGP speaker\n192.168.5.68\n(VM on bigp)", fillcolor="#c8e6c9", style=filled]
 
-    core -> big [label=" (VM uplink)"]
+    upstairs -> bigp [label=" sfp-sfpplus2 10G SFP+\n(+ ether2 LOM, ether5 iDRAC)"]
+    bigp -> big [label=" VM", style=dashed]
 
     // ── Legend ──
     subgraph cluster_legend {

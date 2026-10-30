@@ -497,7 +497,7 @@ def main():
     # MNDP links → DOT edges
     mndp_dot_map = {
         ("core", "sfp-sfpplus1"): ("router", "10GsfpLAN"),
-        ("core", "ether1"):       ("router", "pi"),
+        ("core", "ether1"):       ("router", "core-poe"),
         ("core", "sfp-sfpplus3"): ("upstairs", "sfp-sfpplus2"),
         ("core", "sfp-sfpplus4"): ("office", "ether8"),
     }

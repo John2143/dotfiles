@@ -349,6 +349,11 @@ in
         smol: litellm/ollama_chat/gemma4:e4b
         slow: anthropic/claude-opus-5-5
         advisor: litellm/deepseek/deepseek-v4-flash
+        # inspect_image resolves pi/vision -> pi/default -> session model, so
+        # without this role image analysis silently runs on the DeepSeek text
+        # model. Pin it to a Claude model that advertises input: [text, image]
+        # (see models.yml anthropic provider).
+        vision: anthropic/claude-opus-5-5
 
       modelProviderOrder:
         - vast-vllm
