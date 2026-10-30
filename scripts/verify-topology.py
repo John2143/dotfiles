@@ -2,60 +2,83 @@
 """
 verify-topology.py — Deterministic network topology verification
 
-Queries MNDP, bridge hosts, ARP, and DHCP from live MikroTik devices,
-builds a structured topology, and diffs it against network-diagram.dot.
+Usage: scripts/verify-topology.py [--dot PATH]
 
-MNDP is the gold standard: /ip neighbor print detail gives us both the
-local port and the neighbor's port via the `interface-name` field.
+Queries neighbors, bridge hosts, ARP and DHCP from the five live MikroTik
+devices (via mikrotik-connect) and diffs them against network-diagram.dot.
+
+- Links between MikroTiks come from LLDP-confirmed neighbors only. LLDP is
+  link-local; CDP/MNDP entries flood across bridges and are ignored.
+- Endpoints come from MAC_TO_NODE: wired MACs learned on leaf (non-uplink) ports.
+- Exit code is 0 when clean, 1 on any counted issue.
 """
 
-import json
-import os
+import argparse
 import re
 import subprocess
 import sys
 from collections import defaultdict
 from pathlib import Path
 
-REPO = Path.home() / "repos" / "dotfiles"
-KEYFILE = f"/run/user/{os.getuid()}/mikrotik-key"
+REPO = Path(__file__).resolve().parent.parent
 
-# ── Device info ──────────────────────────────────────────────────
+# DOT node id -> mikrotik-connect alias. Keys are also the node ids used in network-diagram.dot.
 DEVICES = {
-    "router":   {"ip": "192.168.1.1",   "short": "r", "ssh": True},
-    "core":     {"ip": "192.168.5.4",   "short": "c", "ssh": True},
-    "upstairs": {"ip": "192.168.5.3",   "short": "u", "ssh": False},
-    "office":   {"ip": "192.168.5.2",   "short": "o", "ssh": True},
+    "router":        {"alias": "r"},
+    "core":          {"alias": "c"},
+    "upstairs_core": {"alias": "uc"},
+    "upstairs":      {"alias": "u"},
+    "office":        {"alias": "o"},
+}
+
+# Exact `/system identity` names -> DOT node id. Substring matching is wrong: "upstairs-core" contains "core".
+IDENTITY_TO_NODE = {
+    "router": "router",
+    "core-switch": "core",
+    "upstairs-core": "upstairs_core",
+    "upstairs-switch": "upstairs",
+    "office-switch": "office",
+}
+
+MIKROTIK_OUIS = ("04:F4:1C", "D0:EA:11")
+
+# Wired endpoints whose MAC is learned on exactly one MikroTik leaf port (verified 2026-10-29).
+# Wireless clients and the cameras behind the NVR are deliberately absent.
+MAC_TO_NODE = {
+    "30:52:53:09:E1:72": "jetkvm",        # router jetkvm (ether4)
+    "1C:0B:8B:50:FF:7E": "u7lite",        # router u7-lite (ether5)
+    "EC:71:DB:3E:2F:21": "cam_driveway",  # router cam-front (ether7)
+    "DC:A6:32:25:51:6E": "pite",          # router pite (ether8)
+    "E8:4D:D0:C1:54:20": "nas",           # core sfp-sfpplus1
+    "94:83:C4:C4:9C:4D": "glkvm",         # upstairs-core ether1
+    "0C:C4:7A:BD:63:3D": "closet",        # upstairs-core sfp-sfpplus1
+    "98:B7:85:23:48:90": "arch",          # upstairs-core sfp-sfpplus3
+    "EC:71:DB:8B:92:93": "nvr",           # upstairs ether1
+    "F0:B3:EC:7E:31:64": "bedroom",       # upstairs ether4
+    "2C:EA:7F:7B:12:75": "bigp",          # upstairs ether5 (iDRAC)
+    "3C:2A:F4:95:DF:58": "brother",       # upstairs ether6
+    "B8:27:EB:56:F0:27": "vpin",          # upstairs ether8
+    "2C:EA:7F:E7:13:98": "bigp",          # upstairs sfp-sfpplus2 (Proxmox host NIC)
+    "90:41:B2:D6:74:DB": "u7proxgs",      # office sfp-sfpplus1
 }
 
 
-def ssh(ip, cmd):
-    """Execute command on a MikroTik via SSH with key auth."""
-    args = [
-        "ssh", "-o", "StrictHostKeyChecking=no",
-        "-o", "ConnectTimeout=5",
-        "-i", KEYFILE,
-        f"admin@{ip}", cmd,
-    ]
-    result = subprocess.run(args, capture_output=True, text=True, timeout=15)
-    # Strip SSH warnings
-    lines = [l for l in result.stdout.splitlines()
-             if "vulnerable" not in l.lower() and "WARNING" not in l]
-    return "\n".join(lines)
-
-def mikrotik_connect(name, cmd):
-    """Use mikrotik-connect fish function for devices it supports."""
-    args = ["fish", "-c", f"mikrotik-connect {DEVICES[name]['short']} '{cmd}'"]
-    result = subprocess.run(args, capture_output=True, text=True, timeout=15)
-    return result.stdout
-
-
 def run(device, cmd):
-    """Run a command on a device, choosing the right transport."""
-    if DEVICES[device]["ssh"]:
-        return ssh(DEVICES[device]["ip"], cmd)
-    else:
-        return mikrotik_connect(device, cmd)
+    """Run a read-only RouterOS command via mikrotik-connect; CRs stripped.
+
+    mikrotik-connect exits 0 even when RouterOS rejects the command, so errors are
+    detected from the output: empty output, or a RouterOS error prefix.
+    """
+    alias = DEVICES[device]["alias"]
+    r = subprocess.run(["mikrotik-connect", alias, cmd],
+                       capture_output=True, text=True, timeout=30)
+    out = r.stdout.replace("\r", "")
+    if r.returncode != 0 or not out.strip() or re.match(
+            r"(bad command name|syntax error|no such item|expected end of command|failure:)",
+            out.strip()):
+        sys.exit(f"ERROR: mikrotik-connect {alias} '{cmd}' failed: "
+                 f"rc={r.returncode} {out.strip()[:120]} {r.stderr.strip()[:120]}")
+    return out
 
 
 # ── Parsers ──────────────────────────────────────────────────────
@@ -81,7 +104,8 @@ def parse_mndp(text, device_name):
         # Key fields
         for field, pattern in [
             ("identity", r'identity="([^"]*)"'),
-            ("neighbor_ip", r'address=(\S+)'),
+            ("neighbor_ip", r'(?<![\w-])address=(\S+)'),
+            ("discovered_by", r'discovered-by=(\S+)'),
             ("neighbor_mac", r'mac-address=([0-9A-Fa-f:]+)'),
             ("neighbor_port", r'interface-name="([^"]*)"'),
             ("board", r'board="([^"]*)"'),
@@ -285,6 +309,10 @@ def parse_dot_edges(dot_path):
 # ── Main verification logic ──────────────────────────────────────
 
 def main():
+    ap = argparse.ArgumentParser(description="Verify network-diagram.dot against the live MikroTiks.")
+    ap.add_argument("--dot", type=Path, default=REPO / "network-configs" / "network-diagram.dot")
+    args = ap.parse_args()
+
     print("=" * 70)
     print("  NETWORK TOPOLOGY VERIFICATION")
     print("=" * 70)
@@ -305,11 +333,11 @@ def main():
                  if info.get("status") == "link-ok"}
         print(f"  {name}: {len(links)} active ports")
 
-    # ── Step 3: Collect bridge hosts from SWITCHES only (router's
-    # bridge shows the entire L2 domain — unreliable for endpoints)
-    print("\n── Step 3: Collecting bridge hosts (switches only)...")
+    # ── Step 3: Collect bridge hosts from all devices (the router's leaf
+    # ports are the only place jetkvm/u7-lite/cam-front/pite are learned)
+    print("\n── Step 3: Collecting bridge hosts (all devices)...")
     bridge_hosts = {}
-    for name in ["core", "upstairs", "office"]:
+    for name in DEVICES:
         bridge_hosts[name] = parse_bridge_hosts(
             run(name, "/interface bridge host print detail"), set()
         )
@@ -320,77 +348,40 @@ def main():
     dhcp = parse_dhcp(run("router", "/ip dhcp-server lease print detail"))
     print(f"  ARP: {len(arp)} entries, DHCP: {len(dhcp)} entries")
 
-    # ── Step 4: Build deterministic link table from MNDP ──
+    order = {name: i for i, name in enumerate(DEVICES)}
+
+    # ── Step 4: Physical links from LLDP only ──
     print("\n" + "=" * 70)
-    print("  DETERMINISTIC MIKROTIK-TO-MIKROTIK LINKS (from MNDP)")
+    print("  MIKROTIK-TO-MIKROTIK LINKS (LLDP-confirmed neighbors)")
     print("=" * 70)
 
-    verified_links = []  # [(local_dev, local_port, remote_dev, remote_port, speed)]
-
-    for dev_name, entries in mndp.items():
+    links = {}  # frozenset({(dev, port), (dev, port)}) -> speed of first side seen
+    for dev, entries in mndp.items():
         for e in entries:
-            # Only count MikroTik-to-MikroTik (those with interface-name)
-            if "neighbor_port" not in e:
+            if "lldp" not in e.get("discovered_by", "").split(","):
                 continue
-
-            local_port = e["local_port"]
-            remote_port = e["neighbor_port"]
-
-            # Determine remote device name — only match real MikroTik boards
-            identity = e.get("identity", "").lower()
-            board = e.get("board", "").lower()
-            is_mtik = any(board.startswith(p) for p in ("crs", "rb", "ccr"))
-            remote_dev = None
-            if is_mtik:
-                for dname in DEVICES:
-                    if dname in identity:
-                        remote_dev = dname
-                        break
-            if not remote_dev:
+            remote = IDENTITY_TO_NODE.get(e.get("identity"))
+            if remote not in DEVICES or "neighbor_port" not in e:
                 continue
+            key = frozenset({(dev, e["local_port"]),
+                             (remote, e["neighbor_port"].removeprefix("bridge/"))})
+            if key not in links:
+                links[key] = speeds[dev].get(e["local_port"], {}).get("rate", "?")
 
-            # Get speed from local device
-            speed = "?"
-            if local_port in speeds[dev_name]:
-                speed = speeds[dev_name][local_port].get("rate", "?")
+    def oriented(key):
+        return tuple(sorted(key, key=lambda end: (order[end[0]], end[1])))
 
-            verified_links.append((dev_name, local_port, remote_dev, remote_port, speed))
+    print(f"\n{'LOCAL DEV':<14} {'LOCAL PORT':<18} {'REMOTE DEV':<14} {'REMOTE PORT':<20} {'SPEED':>8}")
+    print("-" * 78)
+    for key in sorted(links, key=lambda k: [(order[d], p) for d, p in oriented(k)]):
+        (a_dev, a_port), (b_dev, b_port) = oriented(key)
+        print(f"{a_dev:<14} {a_port:<18} {b_dev:<14} {b_port:<20} {links[key]:>8}")
 
-
-    # Filter out transitive MNDP (bridge flooding).
-    # A MikroTik neighbor appearing on the same port as OTHER MikroTik
-    # neighbors is transitive — MNDP flooded across the bridge.
-    # Real physical links: exactly 1 MikroTik identity per port,
-    # OR the identity is the only one on that port across all devices.
-    # Heuristic: count MikroTik neighbor appearances per (dev, port).
-    port_neighbor_counts = defaultdict(int)
-    for link in verified_links:
-        a_dev, a_port, _, _, _ = link
-        port_neighbor_counts[(a_dev, a_port)] += 1
-
-    seen = set()
-    unique_links = []
-    for link in verified_links:
-        a_dev, a_port, b_dev, b_port, speed = link
-        # Only keep if EITHER side has exactly 1 MikroTik neighbor on its port
-        # (prevents transitive flooding where e.g. router's 10GsfpLAN sees
-        # office/upstairs/core but only core is physically connected)
-        a_count = port_neighbor_counts.get((a_dev, a_port), 99)
-        b_count = port_neighbor_counts.get((b_dev, b_port), 99)
-        if a_count == 1 or b_count == 1:
-            key = frozenset([(a_dev, a_port), (b_dev, b_port)])
-            if key not in seen:
-                seen.add(key)
-                unique_links.append(link)
-
-    print(f"\n{'LOCAL DEV':<10} {'LOCAL PORT':<18} {'REMOTE DEV':<12} {'REMOTE PORT':<20} {'SPEED':>8}")
-    print("-" * 70)
-    for a_dev, a_port, b_dev, b_port, speed in sorted(unique_links):
-        print(f"{a_dev:<10} {a_port:<18} {b_dev:<12} {b_port:<20} {speed:>8}")
-    # ── Step 5: Identify non-MikroTik endpoints ──
+    # ── Step 5: Endpoints on leaf ports ──
     print("\n" + "=" * 70)
-    print("  NON-MIKROTIK ENDPOINTS (from bridge hosts + ARP/DHCP)")
+    print("  ENDPOINTS ON LEAF PORTS (bridge hosts + ARP/DHCP)")
     print("=" * 70)
+    n = 0
 
     # Build MAC → IP + hostname lookup
     mac_to_ip = {}
@@ -401,184 +392,96 @@ def main():
     for mac, info in dhcp.items():
         mac_to_name[mac] = info.get("hostname") or info.get("comment", "")
 
-    # Identify uplink ports per switch (from verified MNDP links).
-    # Add both sides; strip "bridge/" prefix from remote port names.
     uplink_ports = defaultdict(set)
-    for a_dev, a_port, b_dev, b_port, speed in unique_links:
-        a_port_clean = a_port.replace("bridge/", "")
-        b_port_clean = b_port.replace("bridge/", "")
-        if a_dev in bridge_hosts:
-            uplink_ports[a_dev].add(a_port_clean)
-        if b_dev in bridge_hosts:
-            uplink_ports[b_dev].add(b_port_clean)
+    for key in links:
+        for dev, port in key:
+            uplink_ports[dev].add(port)
 
-    # For each MAC, find its "home switch" — the switch where it appears
-    # on a non-uplink port. Bridge forwarding makes MACs visible on trunks,
-    # so we take the best (non-uplink) port per MAC across all switches.
-    mac_home = {}  # mac -> (switch, port)
-    for sw_name in bridge_hosts:
-        for entry in bridge_hosts[sw_name]:
-            mac = entry["mac"]
-            port = entry["on_port"]
-            if entry["local"]:
+    mac_leaves = defaultdict(set)  # mac -> {(dev, port)}
+    for dev in DEVICES:
+        for entry in bridge_hosts[dev]:
+            mac, port = entry["mac"], entry["on_port"]
+            if entry["local"] or mac.startswith(MIKROTIK_OUIS):
                 continue
-            if mac.startswith("04:F4:1C") or mac.startswith("D0:EA:11"):
+            if port in uplink_ports[dev]:
                 continue
-            # Only consider non-uplink ports
-            if port in uplink_ports[sw_name]:
-                continue
-            # First non-uplink hit wins
-            if mac not in mac_home:
-                mac_home[mac] = (sw_name, port)
+            mac_leaves[mac].add((dev, port))
 
-    # Print and collect
-    print(f"\n{'MAC':<19} {'IP':<17} {'HOSTNAME':<20} {'SWITCH':<10} {'PORT':<16}")
-    print("-" * 70)
-    endpoints = []
-    for mac, (sw, port) in sorted(mac_home.items()):
-        ip = mac_to_ip.get(mac, "?")
-        hostname = mac_to_name.get(mac, "")
-        endpoints.append((mac, ip, hostname, sw, port))
-        print(f"{mac:<19} {ip:<17} {hostname:<20} {sw:<10} {port:<16}")
+    rows = sorted(((mac, dev, port) for mac, locs in mac_leaves.items() for dev, port in locs),
+                  key=lambda r: (order[r[1]], r[2], r[0]))
+    print(f"\n{'MAC':<19} {'IP':<17} {'HOSTNAME':<22} {'NODE':<14} {'DEVICE':<14} {'PORT':<16}")
+    print("-" * 102)
+    for mac, dev, port in rows:
+        print(f"{mac:<19} {mac_to_ip.get(mac, '?'):<17} {mac_to_name.get(mac, ''):<22} "
+              f"{MAC_TO_NODE.get(mac, '-'):<14} {dev:<14} {port:<16}")
 
-
-    # ── Step 6: Cross-reference against DOT ──
-    print("\n" + "=" * 70)
-    print("  DIFF: LIVE TOPOLOGY vs. DOT FILE")
-    print("=" * 70)
-
-    dot_path = REPO / "network-configs" / "network-diagram.dot"
-    dot_nodes, dot_edges = parse_dot_edges(dot_path)
-
-    # Map live hostnames to DOT node IDs
-    hostname_to_dot = {
-        "nas":       "nas",
-        "arch":      "arch",
-        "closet":    "closet",
-        "pite":      "pite",
-        "office":    "officepc",
-        "secu":      "secu",
-        "U7ProXGSOffice": "u7proxgs",
-        "U7LiteBlueRoom": "u7lite",
-        "NVR":       "nvr",
-        "Front":     None,  # ambiguous — multiple "Front" cams
-        "Back":      "cam_back",
-        "Garage":    "cam_garage",
-        "Side":      "cam_side",
-        "vpin":      "vpin",
-        "serverkvm": "jetkvm",
-    }
-    endpoint_to_dot = {}
-    for mac, ip, hostname, sw, port in endpoints:
-        dot_id = hostname_to_dot.get(hostname)
-        if dot_id:
-            endpoint_to_dot[(sw, port)] = (dot_id, hostname, ip)
-
-    # Also map by MAC for camera-specific nodes
-    cam_mac_map = {
-        "EC:71:DB:65:58:A3": "cam_gate",    # Front Gate
-        "EC:71:DB:89:D8:8B": "cam_porch",   # Front Porch
-        "EC:71:DB:3E:2F:21": "cam_driveway",# Front Driveway
-        "EC:71:DB:8B:92:93": "nvr",         # NVR
-        "F0:B3:EC:7E:31:64": "bedroom",     # Bedroom switch
-        "94:83:C4:C4:9C:4D": "glkvm",       # GL-KVM
-        "3C:2A:F4:95:DF:58": "brother",     # Brother
-    }
-    for mac, ip, hostname, sw, port in endpoints:
-        if mac in cam_mac_map:
-            endpoint_to_dot[(sw, port)] = (cam_mac_map[mac], hostname, ip)
-
-    print("\n  Checking DOT edges against live data...")
-    issues = 0
-
-    # Build expected edges from live data
-    live_edges = set()  # {(dot_src, dot_dst, port_info)}
-
-    # MNDP links → DOT edges
-    mndp_dot_map = {
-        ("core", "sfp-sfpplus1"): ("router", "10GsfpLAN"),
-        ("core", "ether1"):       ("router", "core-poe"),
-        ("core", "sfp-sfpplus3"): ("upstairs", "sfp-sfpplus2"),
-        ("core", "sfp-sfpplus4"): ("office", "ether8"),
-    }
-    for a_dev, a_port, b_dev, b_port, speed in unique_links:
-        key = (a_dev, a_port)
-        if key in mndp_dot_map:
-            dot_src, dot_dst_port = mndp_dot_map[key]
-            live_edges.add((a_dev, dot_src))  # (switch, router-or-switch)
-
-    # Endpoints → DOT edges
-    for (sw, port), (dot_id, hostname, ip) in endpoint_to_dot.items():
-        live_edges.add((sw, dot_id))
-        # Check port matches DOT label
-        dot_edge = None
-        for src, dst, label in dot_edges:
-            if src == sw and dst == dot_id:
-                dot_edge = (src, dst, label)
-                break
-        if dot_edge:
-            dot_label = dot_edge[2]
-            if port not in dot_label:
-                print(f"  PORT MISMATCH: {sw}->{dot_id} ({hostname}):")
-                print(f"    DOT says: \"{dot_label}\"")
-                print(f"    Live says: port {port}")
-                issues += 1
-        else:
-            print(f"  MISSING DOT EDGE: {sw} -> {dot_id} ({hostname} .{ip})")
-            issues += 1
-
-    # Check DOT edges exist in live data
-    for src, dst, label in dot_edges:
-        # Skip infrastructure edges that span devices
-        if (src, dst) in live_edges:
-            continue
-        if (dst, src) in live_edges:
-            continue
-        # Skip non-physical edges (WiFi, transient, virtual)
-        if any(w in label.lower() for w in ("wifi", "mgmt", "iot", "dotted")):
-            continue
-        # Skip edges between non-MikroTik nodes (camera chains, Internet, etc.)
-        if src in ("internet", "verizon", "homepi", "iot") or dst in ("internet", "verizon", "homepi", "iot"):
-            continue
-        if src in ("cam_gate", "cam_porch", "cam_back", "cam_garage", "cam_side", "cam_driveway"):
-            continue
-        if dst in ("cam_gate", "cam_porch", "cam_back", "cam_garage", "cam_side", "cam_driveway"):
-            continue
-        # Only warn about server/endpoint edges
-        if src in ("officepc", "secu") or dst in ("officepc", "secu"):
-            continue  # WiFi clients
-        print(f"  UNVERIFIED DOT EDGE: {src} -> {dst} (\"{label}\")")
-        issues += 1
-
-    if issues == 0:
-        print("  All DOT edges verified against live topology!")
-    else:
-        print(f"\n  Total discrepancies: {issues}")
-
-    # Flag potential issues
     print()
-    issues = 0
+    for mac in sorted(mac_leaves):
+        locs = sorted(mac_leaves[mac])
+        if len(locs) < 2:
+            continue
+        if mac in MAC_TO_NODE:
+            print(f"  AMBIGUOUS: {MAC_TO_NODE[mac]} {mac} seen on {locs}")
+            n += 1
+        else:
+            print(f"  note: {mac} on {locs} (roaming/unmapped, not counted)")
 
-    # Check known devices appear as DOT nodes
-    dot_node_ids = set(dot_nodes.keys())
-    known_devices = {"router", "core", "upstairs", "office", "nas", "nvr",
-                     "closet", "arch", "glkvm", "brother", "pite", "u7proxgs",
-                     "u7lite", "officepc", "secu", "verizon", "internet",
-                     "homepi", "vpin", "jetkvm", "cam_driveway", "cam_gate",
-                     "cam_porch", "cam_back", "cam_garage", "cam_side", "iot"}
+    # ── Step 6: Compare with the DOT file ──
+    print("\n" + "=" * 70)
+    print(f"  DIFF: LIVE TOPOLOGY vs. {args.dot}")
+    print("=" * 70)
+    dot_nodes, dot_edges = parse_dot_edges(args.dot)
 
-    for dev in known_devices:
-        if dev not in dot_node_ids:
-            print(f"  WARNING: '{dev}' missing from DOT file!")
-            issues += 1
+    def port_in(port, label):
+        return re.search(r'(?<![\w-])' + re.escape(port) + r'(?![\w-])', label) is not None
 
-    if issues == 0:
-        print("  No issues found!")
+    live = []  # (a, b, ports, desc)
+    for key in links:
+        (a, port_a), (b, port_b) = oriented(key)
+        live.append((a, b, [port_a, port_b], f"{a} {port_a} <-> {b} {port_b}"))
+    seen_nodes = set()
+    for mac, locs in mac_leaves.items():
+        node = MAC_TO_NODE.get(mac)
+        if not node:
+            continue
+        seen_nodes.add(node)
+        for dev, port in sorted(locs):
+            live.append((dev, node, [port], f"{node} {mac}"))
+
+    for a, b, ports, desc in live:
+        cands = [label for src, dst, label in dot_edges if {src, dst} == {a, b}]
+        if not cands:
+            print(f"  MISSING DOT EDGE: {a} -> {b} ({desc}, port(s) {ports})")
+            n += 1
+        elif not any(all(port_in(p, label) for p in ports) for label in cands):
+            print(f"  PORT MISMATCH: {a}<->{b} ({desc}): live port(s) {ports}; DOT label(s) {cands}")
+            n += 1
+
+    checked_pairs = {frozenset({a, b}) for a, b, _, _ in live}
+    unseen = set(MAC_TO_NODE.values()) - seen_nodes
+    for node in sorted(unseen):
+        print(f"  NOT SEEN: {node} (no MAC learned on a leaf port; idle or offline?)")
+
+    nodes_mikrotik = set(DEVICES)
+    checkable = nodes_mikrotik | set(MAC_TO_NODE.values())
+    for src, dst, label in dot_edges:
+        if not ({src, dst} <= checkable and {src, dst} & nodes_mikrotik):
+            continue
+        if {src, dst} & unseen or frozenset({src, dst}) in checked_pairs:
+            continue
+        print(f"  UNVERIFIED DOT EDGE: {src} -> {dst} (\"{label}\")")
+        n += 1
+
+    for node in sorted(checkable - set(dot_nodes)):
+        print(f"  MISSING DOT NODE: {node}")
+        n += 1
+
+    print()
+    if n == 0:
+        print("All checks passed.")
     else:
-        print(f"\n  Total issues: {issues}")
-
-    return 0
-
+        print(f"Total issues: {n}")
+    return 1 if n else 0
 
 if __name__ == "__main__":
     sys.exit(main())

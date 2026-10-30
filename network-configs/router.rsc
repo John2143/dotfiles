@@ -1,4 +1,4 @@
-# 2026-10-26 06:33:54 by RouterOS 7.24.5
+# 2026-10-30 09:37:55 by RouterOS 7.24.5
 # software id = 7RHC-3MMG
 #
 # model = RB5009UPr+S+
@@ -6,15 +6,25 @@
 /interface bridge
 add admin-mac=04:F4:1C:E3:71:28 auto-mac=no comment=defconf name=bridge
 /interface ethernet
-set [ find default-name=ether1 ] l2mtu=1514 name=2GWAN
-set [ find default-name=sfp-sfpplus1 ] l2mtu=1514 name=10GsfpLAN
-set [ find default-name=ether3 ] l2mtu=1514
-set [ find default-name=ether4 ] l2mtu=1514
-set [ find default-name=ether5 ] l2mtu=1514
-set [ find default-name=ether6 ] l2mtu=1514
-set [ find default-name=ether7 ] l2mtu=1514
-set [ find default-name=ether2 ] l2mtu=1514 name=pi
-set [ find default-name=ether8 ] l2mtu=1514 name=to-wifi
+set [ find default-name=ether1 ] comment="WAN: Verizon CR1000B 192.168.0.1" \
+    l2mtu=1514 name=2GWAN
+set [ find default-name=sfp-sfpplus1 ] comment=\
+    "10G uplink to core sfp-sfpplus4" l2mtu=1514 name=10GsfpLAN
+set [ find default-name=ether7 ] comment=\
+    "Front driveway camera 192.168.1.66, own power" l2mtu=1514 name=cam-front
+set [ find default-name=ether2 ] comment=\
+    "core switch ether1: PoE power + 1G mgmt. NEVER poe-out=off" l2mtu=1514 \
+    name=core-poe
+set [ find default-name=ether3 ] comment="unconfirmed peer: link up, no MAC le\
+    arned; flaps coincide with nas reboots" l2mtu=1514
+set [ find default-name=ether6 ] comment=empty l2mtu=1514
+set [ find default-name=ether4 ] comment=\
+    "JetKVM 192.168.5.187 (100M link is normal)" l2mtu=1514 name=jetkvm
+set [ find default-name=ether8 ] comment=\
+    "pite (Raspberry Pi k3s agent) 192.168.5.9" l2mtu=1514 name=pite
+set [ find default-name=ether5 ] comment=\
+    "U7 Lite AP, PoE. U7 Mesh uplinks wirelessly to it" l2mtu=1514 name=\
+    u7-lite
 /interface wireguard
 add comment="WireGuard remote access" listen-port=51820 mtu=1420 name=\
     wg-remote
@@ -115,13 +125,13 @@ add comment=disarmed dont-require-permissions=no name=fe-revert-pite owner=\
 /disk settings
 set auto-media-interface=bridge auto-media-sharing=yes auto-smb-sharing=yes
 /interface bridge port
-add bridge=bridge comment=defconf interface=pi
+add bridge=bridge comment=defconf interface=core-poe
 add bridge=bridge comment=defconf interface=ether3
-add bridge=bridge comment=defconf interface=ether4
-add bridge=bridge comment=defconf interface=ether5
+add bridge=bridge comment=defconf interface=jetkvm
+add bridge=bridge comment=defconf interface=u7-lite
 add bridge=bridge comment=defconf interface=ether6
-add bridge=bridge comment=defconf interface=ether7
-add bridge=bridge comment=defconf interface=to-wifi
+add bridge=bridge comment=defconf interface=cam-front
+add bridge=bridge comment=defconf interface=pite
 add bridge=bridge comment=defconf interface=10GsfpLAN
 /ip neighbor discovery-settings
 set discover-interface-list=LAN
@@ -252,6 +262,10 @@ add action=accept chain=forward comment="wg: doks -> temporal" dst-address=\
     192.168.6.20 dst-port=7233 in-interface=wg-remote protocol=tcp
 add action=accept chain=forward comment="wg: doks -> seaweed s3" dst-address=\
     192.168.6.31 dst-port=8333 in-interface=wg-remote protocol=tcp
+add action=accept chain=forward comment="wg: doks -> mimir" dst-address=\
+    192.168.6.23 dst-port=8080 protocol=tcp src-address=10.99.0.2
+add action=accept chain=forward comment="wg: doks -> loki" dst-address=\
+    192.168.6.24 dst-port=3100 protocol=tcp src-address=10.99.0.2
 add action=drop chain=forward comment=\
     "wg: deny tunnel traffic not allowed above" in-interface=wg-remote log=\
     yes log-prefix=wg-drop
@@ -443,12 +457,12 @@ set enabled=no
 add allow-address=192.168.5.0/24 interface=2GWAN store-on-disk=no
 add allow-address=192.168.5.0/24 interface=10GsfpLAN store-on-disk=no
 add allow-address=192.168.5.0/24 interface=ether3 store-on-disk=no
-add allow-address=192.168.5.0/24 interface=ether4 store-on-disk=no
+add allow-address=192.168.5.0/24 interface=jetkvm store-on-disk=no
 add allow-address=192.168.5.0/24 interface=ether6 store-on-disk=no
-add allow-address=192.168.5.0/24 interface=ether7 store-on-disk=no
-add allow-address=192.168.5.0/24 interface=pi store-on-disk=no
-add allow-address=192.168.5.0/24 interface=to-wifi store-on-disk=no
-add allow-address=192.168.5.0/24 interface=ether5 store-on-disk=no
+add allow-address=192.168.5.0/24 interface=cam-front store-on-disk=no
+add allow-address=192.168.5.0/24 interface=core-poe store-on-disk=no
+add allow-address=192.168.5.0/24 interface=pite store-on-disk=no
+add allow-address=192.168.5.0/24 interface=u7-lite store-on-disk=no
 /tool graphing resource
 add allow-address=192.168.5.0/24 store-on-disk=no
 /tool mac-server

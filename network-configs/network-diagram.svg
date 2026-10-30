@@ -351,7 +351,7 @@
 <title>upstairs&#45;&gt;nvr</title>
 <path fill="none" stroke="black" d="M2225.71,-1433.81C2240.52,-1430.33 2251.5,-1427.75 2251.5,-1427.75 2251.5,-1427.75 2454.97,-1397.65 2562.92,-1381.69"/>
 <polygon fill="black" stroke="black" points="2563.13,-1385.19 2572.51,-1380.27 2562.11,-1378.27 2563.13,-1385.19"/>
-<text xml:space="preserve" text-anchor="middle" x="2361.75" y="-1431.7" font-family="Times,serif" font-size="14.00"> ether1 1G (PoE)</text>
+<text xml:space="preserve" text-anchor="middle" x="2361.75" y="-1431.7" font-family="Times,serif" font-size="14.00"> ether1 1G</text>
 </g>
 <!-- bigp -->
 <g id="node41" class="node">

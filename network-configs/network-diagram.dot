@@ -76,7 +76,7 @@ digraph G {
     cam_porch [shape=box, label="Front Porch cam\n192.168.1.63", fillcolor="#ffcdd2", style=filled]
     secu      [shape=box, label="secu\nCamera NVR (SW)\n192.168.5.140\n(via WiFi to U7Lite)", fillcolor="#c8e6c9", style=filled]
 
-    upstairs -> nvr      [label=" ether1 1G (PoE)"]
+    upstairs -> nvr      [label=" ether1 1G"]
     nvr      -> cam_gate  [label=" PoE 100M"]
     nvr      -> cam_porch [label=" PoE 100M"]
 

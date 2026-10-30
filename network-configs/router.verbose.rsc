@@ -1,4 +1,4 @@
-# 2026-10-26 06:34:06 by RouterOS 7.24.5
+# 2026-10-30 09:37:56 by RouterOS 7.24.5
 # software id = 7RHC-3MMG
 #
 # model = RB5009UPr+S+
@@ -7,81 +7,89 @@
 set [ find default-name=ether1 ] advertise="10M-baseT-half,10M-baseT-full,100M\
     -baseT-half,100M-baseT-full,1G-baseT-half,1G-baseT-full,2.5G-baseT" arp=\
     enabled arp-timeout=auto auto-negotiation=yes bandwidth=\
-    unlimited/unlimited disabled=no l2mtu=1514 loop-protect=default \
-    loop-protect-disable-time=5m loop-protect-send-interval=5s mac-address=\
-    04:F4:1C:E3:71:27 mtu=1500 name=2GWAN orig-mac-address=04:F4:1C:E3:71:27 \
-    poe-out=auto-on poe-priority=10 power-cycle-interval=none \
-    !power-cycle-ping-address power-cycle-ping-enabled=no \
-    !power-cycle-ping-timeout rx-flow-control=off tx-flow-control=off
+    unlimited/unlimited comment="WAN: Verizon CR1000B 192.168.0.1" disabled=\
+    no l2mtu=1514 loop-protect=default loop-protect-disable-time=5m \
+    loop-protect-send-interval=5s mac-address=04:F4:1C:E3:71:27 mtu=1500 \
+    name=2GWAN orig-mac-address=04:F4:1C:E3:71:27 poe-out=auto-on \
+    poe-priority=10 power-cycle-interval=none !power-cycle-ping-address \
+    power-cycle-ping-enabled=no !power-cycle-ping-timeout rx-flow-control=off \
+    tx-flow-control=off
 set [ find default-name=sfp-sfpplus1 ] advertise="10M-baseT-half,10M-baseT-ful\
     l,100M-baseT-half,100M-baseT-full,1G-baseT-half,1G-baseT-full,1G-baseX,2.5\
     G-baseT,2.5G-baseX,5G-baseT,10G-baseT,10G-baseSR-LR,10G-baseCR" arp=\
     enabled arp-timeout=auto auto-negotiation=yes bandwidth=\
-    unlimited/unlimited disabled=no l2mtu=1514 loop-protect=default \
-    loop-protect-disable-time=5m loop-protect-send-interval=5s mac-address=\
-    04:F4:1C:E3:71:2F mtu=1500 name=10GsfpLAN orig-mac-address=\
-    04:F4:1C:E3:71:2F rx-flow-control=off sfp-ignore-rx-los=no \
-    sfp-rate-select=high sfp-shutdown-temperature=95C tx-flow-control=off
-set [ find default-name=ether3 ] advertise="10M-baseT-half,10M-baseT-full,100M\
-    -baseT-half,100M-baseT-full,1G-baseT-half,1G-baseT-full" arp=enabled \
-    arp-timeout=auto auto-negotiation=yes bandwidth=unlimited/unlimited \
-    disabled=no l2mtu=1514 loop-protect=default loop-protect-disable-time=5m \
-    loop-protect-send-interval=5s mac-address=04:F4:1C:E3:71:29 mtu=1500 \
-    name=ether3 orig-mac-address=04:F4:1C:E3:71:29 poe-out=auto-on \
-    poe-priority=10 power-cycle-interval=none !power-cycle-ping-address \
-    power-cycle-ping-enabled=no !power-cycle-ping-timeout rx-flow-control=off \
-    tx-flow-control=off
-set [ find default-name=ether4 ] advertise="10M-baseT-half,10M-baseT-full,100M\
-    -baseT-half,100M-baseT-full,1G-baseT-half,1G-baseT-full" arp=enabled \
-    arp-timeout=auto auto-negotiation=yes bandwidth=unlimited/unlimited \
-    disabled=no l2mtu=1514 loop-protect=default loop-protect-disable-time=5m \
-    loop-protect-send-interval=5s mac-address=04:F4:1C:E3:71:2A mtu=1500 \
-    name=ether4 orig-mac-address=04:F4:1C:E3:71:2A poe-out=auto-on \
-    poe-priority=10 power-cycle-interval=none !power-cycle-ping-address \
-    power-cycle-ping-enabled=no !power-cycle-ping-timeout rx-flow-control=off \
-    tx-flow-control=off
-set [ find default-name=ether5 ] advertise="10M-baseT-half,10M-baseT-full,100M\
-    -baseT-half,100M-baseT-full,1G-baseT-half,1G-baseT-full" arp=enabled \
-    arp-timeout=auto auto-negotiation=yes bandwidth=unlimited/unlimited \
-    disabled=no l2mtu=1514 loop-protect=default loop-protect-disable-time=5m \
-    loop-protect-send-interval=5s mac-address=04:F4:1C:E3:71:2B mtu=1500 \
-    name=ether5 orig-mac-address=04:F4:1C:E3:71:2B poe-out=auto-on \
-    poe-priority=10 power-cycle-interval=none !power-cycle-ping-address \
-    power-cycle-ping-enabled=no !power-cycle-ping-timeout rx-flow-control=off \
-    tx-flow-control=off
-set [ find default-name=ether6 ] advertise="10M-baseT-half,10M-baseT-full,100M\
-    -baseT-half,100M-baseT-full,1G-baseT-half,1G-baseT-full" arp=enabled \
-    arp-timeout=auto auto-negotiation=yes bandwidth=unlimited/unlimited \
-    disabled=no l2mtu=1514 loop-protect=default loop-protect-disable-time=5m \
-    loop-protect-send-interval=5s mac-address=04:F4:1C:E3:71:2C mtu=1500 \
-    name=ether6 orig-mac-address=04:F4:1C:E3:71:2C poe-out=auto-on \
-    poe-priority=10 power-cycle-interval=none !power-cycle-ping-address \
-    power-cycle-ping-enabled=no !power-cycle-ping-timeout rx-flow-control=off \
+    unlimited/unlimited comment="10G uplink to core sfp-sfpplus4" disabled=no \
+    l2mtu=1514 loop-protect=default loop-protect-disable-time=5m \
+    loop-protect-send-interval=5s mac-address=04:F4:1C:E3:71:2F mtu=1500 \
+    name=10GsfpLAN orig-mac-address=04:F4:1C:E3:71:2F rx-flow-control=off \
+    sfp-ignore-rx-los=no sfp-rate-select=high sfp-shutdown-temperature=95C \
     tx-flow-control=off
 set [ find default-name=ether7 ] advertise="10M-baseT-half,10M-baseT-full,100M\
     -baseT-half,100M-baseT-full,1G-baseT-half,1G-baseT-full" arp=enabled \
     arp-timeout=auto auto-negotiation=yes bandwidth=unlimited/unlimited \
-    disabled=no l2mtu=1514 loop-protect=default loop-protect-disable-time=5m \
+    comment="Front driveway camera 192.168.1.66, own power" disabled=no \
+    l2mtu=1514 loop-protect=default loop-protect-disable-time=5m \
     loop-protect-send-interval=5s mac-address=04:F4:1C:E3:71:2D mtu=1500 \
-    name=ether7 orig-mac-address=04:F4:1C:E3:71:2D poe-out=auto-on \
+    name=cam-front orig-mac-address=04:F4:1C:E3:71:2D poe-out=auto-on \
     poe-priority=10 power-cycle-interval=none !power-cycle-ping-address \
     power-cycle-ping-enabled=no !power-cycle-ping-timeout rx-flow-control=off \
     tx-flow-control=off
 set [ find default-name=ether2 ] advertise="10M-baseT-half,10M-baseT-full,100M\
     -baseT-half,100M-baseT-full,1G-baseT-half,1G-baseT-full" arp=enabled \
     arp-timeout=auto auto-negotiation=yes bandwidth=unlimited/unlimited \
+    comment="core switch ether1: PoE power + 1G mgmt. NEVER poe-out=off" \
     disabled=no l2mtu=1514 loop-protect=default loop-protect-disable-time=5m \
     loop-protect-send-interval=5s mac-address=04:F4:1C:E3:71:28 mtu=1500 \
-    name=pi orig-mac-address=04:F4:1C:E3:71:28 poe-out=auto-on poe-priority=\
-    10 power-cycle-interval=none !power-cycle-ping-address \
+    name=core-poe orig-mac-address=04:F4:1C:E3:71:28 poe-out=auto-on \
+    poe-priority=10 power-cycle-interval=none !power-cycle-ping-address \
+    power-cycle-ping-enabled=no !power-cycle-ping-timeout rx-flow-control=off \
+    tx-flow-control=off
+set [ find default-name=ether3 ] advertise="10M-baseT-half,10M-baseT-full,100M\
+    -baseT-half,100M-baseT-full,1G-baseT-half,1G-baseT-full" arp=enabled \
+    arp-timeout=auto auto-negotiation=yes bandwidth=unlimited/unlimited \
+    comment="unconfirmed peer: link up, no MAC learned; flaps coincide with na\
+    s reboots" disabled=no l2mtu=1514 loop-protect=default \
+    loop-protect-disable-time=5m loop-protect-send-interval=5s mac-address=\
+    04:F4:1C:E3:71:29 mtu=1500 name=ether3 orig-mac-address=04:F4:1C:E3:71:29 \
+    poe-out=auto-on poe-priority=10 power-cycle-interval=none \
+    !power-cycle-ping-address power-cycle-ping-enabled=no \
+    !power-cycle-ping-timeout rx-flow-control=off tx-flow-control=off
+set [ find default-name=ether6 ] advertise="10M-baseT-half,10M-baseT-full,100M\
+    -baseT-half,100M-baseT-full,1G-baseT-half,1G-baseT-full" arp=enabled \
+    arp-timeout=auto auto-negotiation=yes bandwidth=unlimited/unlimited \
+    comment=empty disabled=no l2mtu=1514 loop-protect=default \
+    loop-protect-disable-time=5m loop-protect-send-interval=5s mac-address=\
+    04:F4:1C:E3:71:2C mtu=1500 name=ether6 orig-mac-address=04:F4:1C:E3:71:2C \
+    poe-out=auto-on poe-priority=10 power-cycle-interval=none \
+    !power-cycle-ping-address power-cycle-ping-enabled=no \
+    !power-cycle-ping-timeout rx-flow-control=off tx-flow-control=off
+set [ find default-name=ether4 ] advertise="10M-baseT-half,10M-baseT-full,100M\
+    -baseT-half,100M-baseT-full,1G-baseT-half,1G-baseT-full" arp=enabled \
+    arp-timeout=auto auto-negotiation=yes bandwidth=unlimited/unlimited \
+    comment="JetKVM 192.168.5.187 (100M link is normal)" disabled=no l2mtu=\
+    1514 loop-protect=default loop-protect-disable-time=5m \
+    loop-protect-send-interval=5s mac-address=04:F4:1C:E3:71:2A mtu=1500 \
+    name=jetkvm orig-mac-address=04:F4:1C:E3:71:2A poe-out=auto-on \
+    poe-priority=10 power-cycle-interval=none !power-cycle-ping-address \
     power-cycle-ping-enabled=no !power-cycle-ping-timeout rx-flow-control=off \
     tx-flow-control=off
 set [ find default-name=ether8 ] advertise="10M-baseT-half,10M-baseT-full,100M\
     -baseT-half,100M-baseT-full,1G-baseT-half,1G-baseT-full" arp=enabled \
     arp-timeout=auto auto-negotiation=yes bandwidth=unlimited/unlimited \
-    disabled=no l2mtu=1514 loop-protect=default loop-protect-disable-time=5m \
+    comment="pite (Raspberry Pi k3s agent) 192.168.5.9" disabled=no l2mtu=\
+    1514 loop-protect=default loop-protect-disable-time=5m \
     loop-protect-send-interval=5s mac-address=04:F4:1C:E3:71:2E mtu=1500 \
-    name=to-wifi orig-mac-address=04:F4:1C:E3:71:2E poe-out=auto-on \
+    name=pite orig-mac-address=04:F4:1C:E3:71:2E poe-out=auto-on \
+    poe-priority=10 power-cycle-interval=none !power-cycle-ping-address \
+    power-cycle-ping-enabled=no !power-cycle-ping-timeout rx-flow-control=off \
+    tx-flow-control=off
+set [ find default-name=ether5 ] advertise="10M-baseT-half,10M-baseT-full,100M\
+    -baseT-half,100M-baseT-full,1G-baseT-half,1G-baseT-full" arp=enabled \
+    arp-timeout=auto auto-negotiation=yes bandwidth=unlimited/unlimited \
+    comment="U7 Lite AP, PoE. U7 Mesh uplinks wirelessly to it" disabled=no \
+    l2mtu=1514 loop-protect=default loop-protect-disable-time=5m \
+    loop-protect-send-interval=5s mac-address=04:F4:1C:E3:71:2B mtu=1500 \
+    name=u7-lite orig-mac-address=04:F4:1C:E3:71:2B poe-out=auto-on \
     poe-priority=10 power-cycle-interval=none !power-cycle-ping-address \
     power-cycle-ping-enabled=no !power-cycle-ping-timeout rx-flow-control=off \
     tx-flow-control=off
@@ -95,19 +103,19 @@ set switch1 cpu-flow-control=yes mirror-egress-target=none name=switch1
 /interface ethernet switch port
 set "2GWAN" !egress-rate !ingress-rate mirror-egress=no mirror-ingress=no \
     mirror-ingress-target=none
-set pi !egress-rate !ingress-rate mirror-egress=no mirror-ingress=no \
+set core-poe !egress-rate !ingress-rate mirror-egress=no mirror-ingress=no \
     mirror-ingress-target=none
 set ether3 !egress-rate !ingress-rate mirror-egress=no mirror-ingress=no \
     mirror-ingress-target=none
-set ether4 !egress-rate !ingress-rate mirror-egress=no mirror-ingress=no \
+set jetkvm !egress-rate !ingress-rate mirror-egress=no mirror-ingress=no \
     mirror-ingress-target=none
-set ether5 !egress-rate !ingress-rate mirror-egress=no mirror-ingress=no \
+set u7-lite !egress-rate !ingress-rate mirror-egress=no mirror-ingress=no \
     mirror-ingress-target=none
 set ether6 !egress-rate !ingress-rate mirror-egress=no mirror-ingress=no \
     mirror-ingress-target=none
-set ether7 !egress-rate !ingress-rate mirror-egress=no mirror-ingress=no \
+set cam-front !egress-rate !ingress-rate mirror-egress=no mirror-ingress=no \
     mirror-ingress-target=none
-set to-wifi !egress-rate !ingress-rate mirror-egress=no mirror-ingress=no \
+set pite !egress-rate !ingress-rate mirror-egress=no mirror-ingress=no \
     mirror-ingress-target=none
 set "10GsfpLAN" !egress-rate !ingress-rate mirror-egress=no mirror-ingress=no \
     mirror-ingress-target=none
@@ -115,13 +123,13 @@ set switch1-cpu !egress-rate !ingress-rate mirror-egress=no mirror-ingress=no \
     mirror-ingress-target=none
 /interface ethernet switch port-isolation
 set "2GWAN" !forwarding-override
-set pi !forwarding-override
+set core-poe !forwarding-override
 set ether3 !forwarding-override
-set ether4 !forwarding-override
-set ether5 !forwarding-override
+set jetkvm !forwarding-override
+set u7-lite !forwarding-override
 set ether6 !forwarding-override
-set ether7 !forwarding-override
-set to-wifi !forwarding-override
+set cam-front !forwarding-override
+set pite !forwarding-override
 set "10GsfpLAN" !forwarding-override
 set switch1-cpu !forwarding-override
 /interface list
@@ -222,13 +230,13 @@ set 9 kind=pfifo name=default-small pfifo-limit=10
 /queue interface
 set "2GWAN" queue=only-hardware-queue
 set "10GsfpLAN" queue=only-hardware-queue
+set cam-front queue=only-hardware-queue
+set core-poe queue=only-hardware-queue
 set ether3 queue=only-hardware-queue
-set ether4 queue=only-hardware-queue
-set ether5 queue=only-hardware-queue
 set ether6 queue=only-hardware-queue
-set ether7 queue=only-hardware-queue
-set pi queue=only-hardware-queue
-set to-wifi queue=only-hardware-queue
+set jetkvm queue=only-hardware-queue
+set pite queue=only-hardware-queue
+set u7-lite queue=only-hardware-queue
 /routing bgp instance
 add as=65001 name=bgp-instance-1 router-id=192.168.5.1 vrf=main
 /routing bgp template
@@ -353,7 +361,7 @@ set bridge queue=no-queue
 /interface bridge port
 add auto-isolate=no bpdu-guard=no bridge=bridge broadcast-flood=yes comment=\
     defconf disabled=no edge=auto fast-leave=no frame-types=admit-all \
-    horizon=none hw=yes ingress-filtering=yes interface=pi \
+    horizon=none hw=yes ingress-filtering=yes interface=core-poe \
     !internal-path-cost learn=auto multicast-router=temporary-query \
     mvrp-applicant-state=normal-participant mvrp-registrar-state=normal \
     !path-cost point-to-point=auto priority=0x80 pvid=1 restricted-role=no \
@@ -369,7 +377,7 @@ add auto-isolate=no bpdu-guard=no bridge=bridge broadcast-flood=yes comment=\
     trusted-ra=no unknown-multicast-flood=yes unknown-unicast-flood=yes
 add auto-isolate=no bpdu-guard=no bridge=bridge broadcast-flood=yes comment=\
     defconf disabled=no edge=auto fast-leave=no frame-types=admit-all \
-    horizon=none hw=yes ingress-filtering=yes interface=ether4 \
+    horizon=none hw=yes ingress-filtering=yes interface=jetkvm \
     !internal-path-cost learn=auto multicast-router=temporary-query \
     mvrp-applicant-state=normal-participant mvrp-registrar-state=normal \
     !path-cost point-to-point=auto priority=0x80 pvid=1 restricted-role=no \
@@ -377,7 +385,7 @@ add auto-isolate=no bpdu-guard=no bridge=bridge broadcast-flood=yes comment=\
     trusted-ra=no unknown-multicast-flood=yes unknown-unicast-flood=yes
 add auto-isolate=no bpdu-guard=no bridge=bridge broadcast-flood=yes comment=\
     defconf disabled=no edge=auto fast-leave=no frame-types=admit-all \
-    horizon=none hw=yes ingress-filtering=yes interface=ether5 \
+    horizon=none hw=yes ingress-filtering=yes interface=u7-lite \
     !internal-path-cost learn=auto multicast-router=temporary-query \
     mvrp-applicant-state=normal-participant mvrp-registrar-state=normal \
     !path-cost point-to-point=auto priority=0x80 pvid=1 restricted-role=no \
@@ -393,7 +401,7 @@ add auto-isolate=no bpdu-guard=no bridge=bridge broadcast-flood=yes comment=\
     trusted-ra=no unknown-multicast-flood=yes unknown-unicast-flood=yes
 add auto-isolate=no bpdu-guard=no bridge=bridge broadcast-flood=yes comment=\
     defconf disabled=no edge=auto fast-leave=no frame-types=admit-all \
-    horizon=none hw=yes ingress-filtering=yes interface=ether7 \
+    horizon=none hw=yes ingress-filtering=yes interface=cam-front \
     !internal-path-cost learn=auto multicast-router=temporary-query \
     mvrp-applicant-state=normal-participant mvrp-registrar-state=normal \
     !path-cost point-to-point=auto priority=0x80 pvid=1 restricted-role=no \
@@ -401,7 +409,7 @@ add auto-isolate=no bpdu-guard=no bridge=bridge broadcast-flood=yes comment=\
     trusted-ra=no unknown-multicast-flood=yes unknown-unicast-flood=yes
 add auto-isolate=no bpdu-guard=no bridge=bridge broadcast-flood=yes comment=\
     defconf disabled=no edge=auto fast-leave=no frame-types=admit-all \
-    horizon=none hw=yes ingress-filtering=yes interface=to-wifi \
+    horizon=none hw=yes ingress-filtering=yes interface=pite \
     !internal-path-cost learn=auto multicast-router=temporary-query \
     mvrp-applicant-state=normal-participant mvrp-registrar-state=normal \
     !path-cost point-to-point=auto priority=0x80 pvid=1 restricted-role=no \
@@ -663,6 +671,10 @@ add action=accept chain=forward comment="wg: doks -> temporal" dst-address=\
     192.168.6.20 dst-port=7233 in-interface=wg-remote protocol=tcp
 add action=accept chain=forward comment="wg: doks -> seaweed s3" dst-address=\
     192.168.6.31 dst-port=8333 in-interface=wg-remote protocol=tcp
+add action=accept chain=forward comment="wg: doks -> mimir" dst-address=\
+    192.168.6.23 dst-port=8080 protocol=tcp src-address=10.99.0.2
+add action=accept chain=forward comment="wg: doks -> loki" dst-address=\
+    192.168.6.24 dst-port=3100 protocol=tcp src-address=10.99.0.2
 add action=drop chain=forward comment=\
     "wg: deny tunnel traffic not allowed above" in-interface=wg-remote log=\
     yes log-prefix=wg-drop
@@ -1062,13 +1074,13 @@ set 16 cpu=auto
 set 17 cpu=auto
 /system resource irq rps
 set "2GWAN" disabled=yes
-set pi disabled=yes
+set core-poe disabled=yes
 set ether3 disabled=yes
-set ether4 disabled=yes
-set ether5 disabled=yes
+set jetkvm disabled=yes
+set u7-lite disabled=yes
 set ether6 disabled=yes
-set ether7 disabled=yes
-set to-wifi disabled=yes
+set cam-front disabled=yes
+set pite disabled=yes
 set "10GsfpLAN" disabled=yes
 /system routerboard reset-button
 set enabled=no hold-time=0s..1m on-event=""
@@ -1094,16 +1106,16 @@ add allow-address=192.168.5.0/24 disabled=no interface=10GsfpLAN \
     store-on-disk=no
 add allow-address=192.168.5.0/24 disabled=no interface=ether3 store-on-disk=\
     no
-add allow-address=192.168.5.0/24 disabled=no interface=ether4 store-on-disk=\
+add allow-address=192.168.5.0/24 disabled=no interface=jetkvm store-on-disk=\
     no
 add allow-address=192.168.5.0/24 disabled=no interface=ether6 store-on-disk=\
     no
-add allow-address=192.168.5.0/24 disabled=no interface=ether7 store-on-disk=\
-    no
-add allow-address=192.168.5.0/24 disabled=no interface=pi store-on-disk=no
-add allow-address=192.168.5.0/24 disabled=no interface=to-wifi store-on-disk=\
-    no
-add allow-address=192.168.5.0/24 disabled=no interface=ether5 store-on-disk=\
+add allow-address=192.168.5.0/24 disabled=no interface=cam-front \
+    store-on-disk=no
+add allow-address=192.168.5.0/24 disabled=no interface=core-poe \
+    store-on-disk=no
+add allow-address=192.168.5.0/24 disabled=no interface=pite store-on-disk=no
+add allow-address=192.168.5.0/24 disabled=no interface=u7-lite store-on-disk=\
     no
 /tool graphing resource
 add allow-address=192.168.5.0/24 disabled=no store-on-disk=no
