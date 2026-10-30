@@ -16,6 +16,7 @@
     ./secu-hardware-configuration.nix
     ./modules/user-john.nix
     ./modules/secu-startup.nix
+    ./modules/secu-wifi-watchdog.nix
     #./modules/ollama.nix
     # inputs.home-manager.nixosModules.default
   ];
@@ -53,6 +54,10 @@
 
   networking.hostName = compName; # Define your hostname.
   networking.networkmanager.enable = true; # Easiest to use and most distros use this by default.
+  # The USB Wi-Fi adapter (rtw88_8822bu) stalls in power save; see
+  # modules/secu-wifi-watchdog.nix for the failure signature and the recovery.
+  networking.networkmanager.wifi.powersave = false;
+  boot.extraModprobeConfig = "options rtw88_core disable_lps_deep=Y";
 
   time.timeZone = "America/New_York";
   i18n.defaultLocale = "en_US.UTF-8";
