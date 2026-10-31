@@ -339,12 +339,19 @@ in
       # option for agent commands.
       startup:
         quiet: true
-      # Suppresses omp's one-time setup wizard. config.yml is a read-only
-      # home-manager symlink, and completing the wizard flushes settings with an
-      # atomic rename — which replaces the symlink with a real file and silently
-      # detaches this config from home-manager. Bump this whenever omp raises
-      # CURRENT_SETUP_VERSION (pi-tui/src/setup/setup-version.ts).
+      # omp's setup wizard would otherwise run on every launch: config.yml is a
+      # read-only home-manager symlink into the store, and omp writes its temp
+      # file beside the *resolved* target, so every save fails with EROFS and
+      # setupVersion never advances. Pin it; bump when omp raises
+      # CURRENT_SETUP_VERSION (pi-tui/src/setup/setup-version.ts), and make
+      # appearance changes here instead of re-running `omp setup`.
       setupVersion: 2
+      # Appearance, from the setup wizard. Only these two differed from the
+      # defaults (theme.dark=titanium, theme.light=light, colorBlindMode=false
+      # already matched). `nerd` needs a Nerd Font in the terminal.
+      symbolPreset: nerd
+      composer:
+        shape: rail
       modelRoles:
         default: litellm/deepseek/deepseek-v4-flash
         # `task` pins subagent dispatch (default `pi/task` inherits whatever
