@@ -353,10 +353,11 @@ in
         smol: litellm/ollama_chat/gemma4:e4b
         slow: anthropic/claude-opus-5-5
         advisor: litellm/deepseek/deepseek-v4-flash
-        # inspect_image resolves pi/vision -> pi/default -> session model, so
-        # without this role image analysis silently runs on the DeepSeek text
-        # model. Pin it to a Claude model that advertises input: [text, image]
-        # (see models.yml anthropic provider).
+        # Image questions (`read <path>?q=<question>`) resolve @vision ->
+        # @default -> session model, so without this role image analysis
+        # silently runs on the DeepSeek text model. Pin it to a Claude model
+        # that advertises input: [text, image] (see models.yml anthropic
+        # provider).
         vision: anthropic/claude-opus-5-5
 
       modelProviderOrder:
@@ -393,17 +394,20 @@ in
 
       # Tools — enable setting-gated tools that ship disabled by default.
       # Names must be nested mappings; dotted keys are silently ignored.
-      inspect_image:
-        enabled: true
       checkpoint:
         enabled: true
-      # Dropped as dead keys (no such setting in omp 16.3.11):
-      #   calc.enabled          — no calc tool or setting exists.
+      # Dropped as dead keys (no such setting in omp 18.14.0):
+      #   calc.enabled           — no calc tool or setting exists.
       #   render_mermaid.enabled — real knob is tui.renderMermaid, on by default.
+      #   inspect_image.enabled  — the tool was retired upstream; image analysis
+      #                            is built into `read` as `?q=<question>`, driven
+      #                            by modelRoles.vision. omp migrates the old key
+      #                            away, so leaving it here only adds noise.
       # DeepSeek Search API (POST /v1/tools/search). Uses DEEPSEEK_API_KEY
-      # from /run/agenix/llm-runtime-keys; needs the fork's deepseek search
-      # provider (John2143/oh-my-pi@john). Must be a nested mapping: omp does
-      # not expand dotted keys, so `providers.webSearch: x` is ignored.
+      # from /run/agenix/llm-runtime-keys. As of omp 18.14.0 the `deepseek`
+      # search provider ships upstream, so uncommenting webSearch below needs
+      # no fork patch. Must be a nested mapping: omp does not expand dotted
+      # keys, so `providers.webSearch: x` is ignored.
       providers:
         webSearch: brave
         #webSearch: deepseek
@@ -485,7 +489,7 @@ in
 
       <organization>
       - Invoke the context-task skill automatically to add, edit, or remove tasks/cards as required by the user's preferences.
-      - Track time on every task you work on: run `vikunja time start <task-id>` before the first change and `vikunja time stop` as soon as you finish or hand off, so the board itself records when AI started and stopped. Vikunja runs one timer per user — stop the previous one before starting another. Time tracking is a Vikunja Pro feature, so if the call answers 401 (token lacks the time-entry route) or 404 (instance is unlicensed), report it once and stop attempting it for the rest of the session; do not substitute `start_date` edits or "started" comments, and do not retry per task.
+      - Record actual work on the card: when you begin a task, set its `start_date` to now via the board MCP (`tasks_update`, ISO-8601 UTC), and when you finish, set `end_date` to now. Use the real time you started, not a planned one — overwrite a stale future `start_date` once work actually begins.
       - Move files on and off a card with `vikunja attach upload <task-id> <file>` and `vikunja attach download <task-id> <name> <out-path|->`; the board's MCP cannot move attachment bytes, so that pair is the only path. Both take the numeric id from MCP results, not the `#N` identifier.
       </organization>
 
