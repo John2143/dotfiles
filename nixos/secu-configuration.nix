@@ -1,7 +1,8 @@
 # secu — 24/7 camera monitoring station.
 # Boots directly into Hyprland and opens Firefox fullscreen on the
 # GL-KVM web UI (https://glkvm.ts.2143.me), showing the NVR screen.
-# GL-KVM login is manual (password typed once, saved by Firefox).
+# The GL-KVM password is saved by Firefox and submitted by
+# modules/secu-glkvm-autologin.nix, so no click is needed after boot.
 {
   config,
   lib,
@@ -17,6 +18,7 @@
     ./modules/user-john.nix
     ./modules/secu-startup.nix
     ./modules/secu-wifi-watchdog.nix
+    ./modules/secu-glkvm-autologin.nix
     #./modules/ollama.nix
     # inputs.home-manager.nixosModules.default
   ];

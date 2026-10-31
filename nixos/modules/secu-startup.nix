@@ -8,7 +8,7 @@ in {
     on = [
       { _args = ["hyprland.start" (mkLua ''
         function()
-          hl.exec_cmd("sleep 3; firefox https://glkvm.ts.2143.me")
+          hl.exec_cmd("sleep 3; firefox --marionette https://glkvm.ts.2143.me")
         end
       '')]; }
     ];
@@ -16,10 +16,12 @@ in {
     # fullscreen grid experience). Inert on other hosts (no GLKVM-titled window).
     window_rule = [
       { match = { title = "^GLKVM"; }; fullscreen = true; }
-      # Self-signed/expired device cert → Firefox shows an interstitial at
-      # first load each boot (exception does not persist). Fullscreen it too,
-      # so the one-click accept lands on a fullscreen window and the GL-KVM
-      # view below it stays fullscreen.
+      # The device serves a self-signed cert (CN=localhost, expired 1979), so a
+      # one-time "Accept the Risk" is needed. Firefox does persist that override
+      # (cert_override.txt in the profile) — but only for the exact cert, so a
+      # firmware update that regenerates it brings the interstitial back.
+      # Fullscreen it too, so accepting lands on a fullscreen window and the
+      # GL-KVM view below it stays fullscreen.
       { match = { title = "^(Warning: Security Risk|Potential Security Risk Ahead)"; }; fullscreen = true; }
     ];
   };
