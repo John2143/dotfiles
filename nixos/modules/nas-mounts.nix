@@ -23,8 +23,11 @@
     "x-systemd.automount"
     "noauto"
     "x-systemd.idle-timeout=60"
-    "x-systemd.device-timeout=10s"
-    "x-systemd.mount-timeout=10s"
+    # 10s is too tight for CIFS when the NAS is under heavy IO (e.g. a zpool
+    # scrub on the SMR array): the handshake exceeded it and the unit timed out.
+    # Mounts are lazy (automount), so a generous timeout costs nothing at boot.
+    "x-systemd.device-timeout=60s"
+    "x-systemd.mount-timeout=60s"
     # No `_netdev`: it orders the mount after network-online.target, which is
     # reached mid-activation while NetworkManager is restarting. The tailscaled
     # ordering below is the dependency that actually matters here.
