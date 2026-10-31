@@ -339,7 +339,12 @@ in
       # option for agent commands.
       startup:
         quiet: true
-      setupVersion: 1
+      # Suppresses omp's one-time setup wizard. config.yml is a read-only
+      # home-manager symlink, and completing the wizard flushes settings with an
+      # atomic rename — which replaces the symlink with a real file and silently
+      # detaches this config from home-manager. Bump this whenever omp raises
+      # CURRENT_SETUP_VERSION (pi-tui/src/setup/setup-version.ts).
+      setupVersion: 2
       modelRoles:
         default: litellm/deepseek/deepseek-v4-flash
         # `task` pins subagent dispatch (default `pi/task` inherits whatever
