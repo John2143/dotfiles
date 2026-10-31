@@ -1,31 +1,27 @@
-# Re-open the GL-KVM session in the kiosk Firefox after every start.
+# Keep the GL-KVM kiosk signed in.
 #
-# The GL-KVM web UI authenticates with a *browser-session* cookie, so Firefox
-# drops it on restart and the kiosk lands on #/login every boot. The admin
-# password is already stored in the Firefox profile and autofilled into
-# #form_item_passwd, so the only manual step left is pressing "Log In".
+# The GL-KVM web UI authenticates with a *browser-session* cookie, so a Firefox
+# restart drops it and the kiosk sits on #/login. The admin password is already
+# saved in the Firefox profile and autofilled into #form_item_passwd, so the
+# only missing step is pressing "Log In". The script clicks it over Firefox's
+# built-in Marionette protocol (127.0.0.1:2828) — DOM lookup, not fixed
+# coordinates — and is idempotent: with the session intact it does nothing.
 #
-# This service presses it over Firefox's built-in Marionette protocol
-# (127.0.0.1:2828) instead of synthetic mouse events at fixed coordinates: it
-# finds the button in the DOM, so a layout change cannot break it. See
-# secu-startup.nix, which launches Firefox with --marionette.
+# Deliberately a long-running Type=simple service, NOT a oneshot. A oneshot that
+# waits for the browser to appear blocks home-manager activation ("timed out
+# waiting on channel"), which fails the whole `nixos-rebuild switch`. This
+# service starts instantly and simply retries every minute.
 #
-# Failure is visible rather than silent: with no saved password the script logs
-# that and exits 1 instead of guessing.
+# See secu-startup.nix, which launches Firefox with --marionette.
 { pkgs, ... }: {
   home-manager.users.john.systemd.user.services.glkvm-autologin = {
-    Unit = {
-      Description = "Submit the GL-KVM admin login in the kiosk Firefox";
-      After = [ "hyprland-session.target" ];
-      PartOf = [ "hyprland-session.target" ];
-    };
+    Unit.Description = "Keep the GL-KVM login submitted in the kiosk Firefox";
     Service = {
-      Type = "oneshot";
+      Type = "simple";
       ExecStart = "${pkgs.python3}/bin/python3 ${pkgs.writeText "glkvm-autologin.py" (builtins.readFile ./glkvm-autologin.py)}";
-      # Firefox is launched by the compositor a few seconds after the session
-      # target; the script itself waits for the Marionette port to appear.
-      TimeoutStartSec = "15min";
+      Restart = "on-failure";
+      RestartSec = "30s";
     };
-    Install.WantedBy = [ "hyprland-session.target" ];
+    Install.WantedBy = [ "default.target" ];
   };
 }
