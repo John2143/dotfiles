@@ -342,6 +342,10 @@ in
       setupVersion: 1
       modelRoles:
         default: litellm/deepseek/deepseek-v4-flash
+        # `task` pins subagent dispatch (default `pi/task` inherits whatever
+        # the parent session runs, so /model switching would drag subagents
+        # along). Keep subagents on the cheap DeepSeek route.
+        task: litellm/deepseek/deepseek-v4-flash
         # `ollama_chat/` (not `ollama/`): litellm's `ollama/` prefix is the
         # completion provider and hits Ollama's /api/generate, which drops
         # `tools` and sends no chat framing. Gemma 4's renderer/tool channel
@@ -481,7 +485,7 @@ in
 
       <organization>
       - Invoke the context-task skill automatically to add, edit, or remove tasks/cards as required by the user's preferences.
-      - Track time on every task you work on: run `vikunja time start <task-id>` before the first change and `vikunja time stop` as soon as you finish or hand off, so the board itself records when AI started and stopped. Vikunja runs one timer per user — stop the previous one before starting another. Do not fake this with `start_date` edits or "started" comments; if `vikunja` reports the token lacks a route, say so and carry on.
+      - Track time on every task you work on: run `vikunja time start <task-id>` before the first change and `vikunja time stop` as soon as you finish or hand off, so the board itself records when AI started and stopped. Vikunja runs one timer per user — stop the previous one before starting another. Time tracking is a Vikunja Pro feature, so if the call answers 401 (token lacks the time-entry route) or 404 (instance is unlicensed), report it once and stop attempting it for the rest of the session; do not substitute `start_date` edits or "started" comments, and do not retry per task.
       - Move files on and off a card with `vikunja attach upload <task-id> <file>` and `vikunja attach download <task-id> <name> <out-path|->`; the board's MCP cannot move attachment bytes, so that pair is the only path. Both take the numeric id from MCP results, not the `#N` identifier.
       </organization>
 
