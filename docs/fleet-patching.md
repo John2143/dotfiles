@@ -159,6 +159,19 @@ inserted, or type the passphrase at its console (`nixos/modules/disko_secu.nix:2
 
 **`pite`** permanently carries the exclude-from-LB label; never remove it on return.
 
+## How long a run takes
+
+A fresh `nixpkgs` bump usually substitutes from `nas:8280` and `cache.nixos.org`, and the x86
+hosts finish in minutes. The three aarch64 hosts (`pite`, `vpin`, `mirror`) are rank-0 sinks in
+`nixos/modules/remote-builders.nix`: they delegate to nobody, and when Hydra's aarch64 builds
+lag behind a bump they compile from source at `--max-jobs 1`. Seeing `rustc` and `cc1` under
+`nixbld1` on a Pi, with load above 10 for half an hour, is that — not a hang.
+
+The unit has `TimeoutStartSec = 6h`. If a run is still on an ARM host near that, the unit is
+killed mid-fleet: the hosts after it have no rows, and every individual switch that already
+finished stays finished. Finish the remainder by hand with `ONLY="<hosts missing from the
+table>" BUMP=0`. Do not lower `--max-jobs 1` on those hosts to speed it up; they OOM.
+
 ## When a host fails
 
 `FAILED (switch)` on `github` with a Python traceback ending `No usable temporary directory
