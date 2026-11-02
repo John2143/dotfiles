@@ -280,6 +280,53 @@ nixpkgs.overlays = [
   # second default route, and its DHCPv6 lease collided with the router.
   networking.networkmanager.settings.main.no-auto-default = "enp1s0f0,enp1s0f1,enp7s0";
 
+  # Guarded so deploying this cannot disturb a running system: bond0 is only
+  # activated when it is not already up, and each port is only touched when its
+  # device is not already on the matching profile. At boot it is what makes the
+  # declarative bond (not an auto-default) win the link-up race on enp7s0.
+  systemd.services.nas-bond-ensure = {
+    description = "Activate bond0 and its ports from the declarative profiles";
+    wants = ["NetworkManager-ensure-profiles.service"];
+    after = ["NetworkManager.service" "NetworkManager-ensure-profiles.service"];
+    before = ["network-online.target"];
+    wantedBy = ["network-online.target"];
+    serviceConfig = {
+      Type = "oneshot";
+      RemainAfterExit = true;
+    };
+    script = ''
+      NMCLI=${pkgs.networkmanager}/bin/nmcli
+      GREP=${pkgs.gnugrep}/bin/grep
+      for _ in 1 2 3 4 5; do
+        if $NMCLI -t -f NAME connection show --active | $GREP -qx bond0; then
+          break
+        fi
+        $NMCLI connection up bond0 || true
+        sleep 5
+      done
+      for p in enp1s0f1 enp7s0; do
+        if $NMCLI -t -f DEVICE,CONNECTION device status | $GREP -qx "$p:bond0-port-$p"; then
+          continue
+        fi
+        $NMCLI connection up "bond0-port-$p" || true
+      done
+      $NMCLI -t -f NAME connection show --active | $GREP -qx bond0
+    '';
+  };
+
+  # systemd 262's 99-default.link sets MACAddressPolicy=persistent for every
+  # interface, virtual ones included. On bond0 that re-randomizes the MAC after
+  # NetworkManager applies ethernet.cloned-mac-address, which moved the DHCP
+  # lease off 192.168.5.175 to .66 and left the k3s node NotReady on its
+  # advertised address. Sorts after 99-default.link so this wins.
+  systemd.network.links."99-zz-bond0" = {
+    matchConfig.OriginalName = "bond0";
+    linkConfig = {
+      MACAddressPolicy = "none";
+      MACAddress = "E8:4D:D0:C1:54:20";
+    };
+  };
+
   time.timeZone = "America/New_York";
   i18n.defaultLocale = "en_US.UTF-8";
   console = {
