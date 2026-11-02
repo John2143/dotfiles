@@ -159,6 +159,29 @@ inserted, or type the passphrase at its console (`nixos/modules/disko_secu.nix:2
 
 **`pite`** permanently carries the exclude-from-LB label; never remove it on return.
 
+## When a host fails
+
+`FAILED (switch)` on `github` with a Python traceback ending `No usable temporary directory
+found in ['/tmp', '/var/tmp', '/usr/tmp', '/home/john']` is a **full root filesystem**, not a
+broken nixos-rebuild (`tempfile` reports ENOENT whatever the real error was). It happens
+because `John2143/dotfiles` runs the frigate-genai image build on that host whenever a push
+touches `flake.nix` or `flake.lock` — which every weekly bump does — so the switch can land
+while the build is still writing to `/nix`.
+
+```fish
+ssh john@192.168.5.108 'df -h / /dev/sda1'          # root is the one that matters
+gh run list -R John2143/dotfiles --limit 3          # is a build still running
+```
+
+Wait for the build to finish, confirm the root filesystem is back under about 80%, then rerun
+that host alone: `ONLY=github BUMP=0 bash ~/dotfiles/scripts/fleet-patch.sh`. The same run
+logs `No space left on device` from the runner, `swapfile` and k3s etcd if you look at
+`journalctl` on that host at the time — those are symptoms of the same fill, not separate
+faults.
+
+`FAILED (switch)` on any other host is a real error: read the last 40 lines of `run.log`
+before rerunning.
+
 ## Adding a host
 
 1. Add `name:max-jobs:address` to `HOSTS` in `scripts/fleet-patch.sh`, keeping control planes
