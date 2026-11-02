@@ -314,6 +314,19 @@ nixpkgs.overlays = [
     '';
   };
 
+  # systemd 262's 99-default.link sets MACAddressPolicy=persistent for every
+  # interface, virtual ones included. On bond0 that re-randomizes the MAC after
+  # NetworkManager applies ethernet.cloned-mac-address, which moved the DHCP
+  # lease off 192.168.5.175 to .66 and left the k3s node NotReady on its
+  # advertised address. Sorts after 99-default.link so this wins.
+  systemd.network.links."99-zz-bond0" = {
+    matchConfig.OriginalName = "bond0";
+    linkConfig = {
+      MACAddressPolicy = "none";
+      MACAddress = "E8:4D:D0:C1:54:20";
+    };
+  };
+
   time.timeZone = "America/New_York";
   i18n.defaultLocale = "en_US.UTF-8";
   console = {
