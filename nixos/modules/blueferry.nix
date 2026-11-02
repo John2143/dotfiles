@@ -26,6 +26,18 @@ let
     "-P"
     (lib.concatStringsSep "," (["hfp"] ++ bluetooth.disabledPlugins))
   ];
+
+  # Separate derivation so the stock pkgs.bluez (and its cached dependents)
+  # stays untouched; see the obex unit override below.
+  obexd = bluetooth.package.overrideAttrs (old: {
+    postPatch =
+      (old.postPatch or "")
+      + ''
+        substituteInPlace obexd/src/logind.c \
+          --replace-fail "static gboolean monitoring_enabled = TRUE;" \
+            "static gboolean monitoring_enabled = FALSE;"
+      '';
+  });
 in
 {
   options.services.blueferry = {
@@ -65,6 +77,19 @@ in
     # which is the only privileged step the pairing flow needs.
     security.polkit.extraConfig = builtins.readFile
       "${cfg.package}/share/polkit-1/rules.d/49-blueferry-cod.rules";
+
+    # obexd registers the Bluetooth transport (MAP MNS, PBAP, OPP) only from
+    # its logind callback, which fires when logind reports the user active on a
+    # seat. lemurs + seatd sessions have no seat (loginctl shows Seat=), so
+    # obexd exits with "No transport driver registered" and the iPhone has no
+    # MNS to deliver incoming messages to. Run a patched obexd for the user
+    # unit only: overriding pkgs.bluez instead changes the hash of everything
+    # that links it (pipewire -> gtk4 -> chromium, qtwebengine, ...) and loses
+    # the binary cache for most of the desktop.
+    systemd.user.services.obex.serviceConfig.ExecStart = [
+      ""
+      "${obexd}/libexec/bluetooth/obexd"
+    ];
 
     systemd.services.bluetooth = lib.mkIf cfg.enableExperimentalBluez {
       # BlueFerry detects -E by reading /proc/<bluetoothd>/cmdline. The default

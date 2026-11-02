@@ -128,10 +128,18 @@ python3.pkgs.buildPythonApplication rec {
       > $out/share/blueferry/build-sha
   '';
 
-  preFixup = ''
+  preFixup = let
+    # Upstream's clients and daemon spawn helpers as `sys.executable -m
+    # blueferry.<module>` (setup_client, client_activation, notification_open,
+    # plugin_manager). buildPythonApplication entry points inject sys.path
+    # in-process only, so those children would not find the package or its
+    # transitive dependencies. Export the closed set for them.
+    dependencyPath = lib.makeSearchPath python3.sitePackages (lib.closePropagation dependencies);
+  in ''
     gappsWrapperArgs+=(
       --prefix PATH : ${lib.makeBinPath [bluez dbus systemd]}
       --prefix PATH : ${placeholder "out"}/bin
+      --prefix PYTHONPATH : "$out/${python3.sitePackages}:${dependencyPath}"
     )
   '';
 
