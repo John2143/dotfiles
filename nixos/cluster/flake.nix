@@ -1,5 +1,5 @@
 {
-  description = "Multi-Cloud k3s Platform — OpenTofu-provisioned clusters + Home Pi";
+  description = "Multi-Cloud k3s Platform — OpenTofu-provisioned clusters";
 # Note: this flake is in nixos/cluster/. Use ?dir=nixos/cluster when referencing from nixos-rebuild --flake.
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
@@ -22,7 +22,6 @@
     ...
   } @ inputs: let
     system = "x86_64-linux";
-    piSystem = "aarch64-linux";
     my-keys = [
       "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOktI2Vry/5fbhZiG35o5mf7w3dnaTEDqkRJVM07cu3a john@arch"
       "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFVckq0oXyXkxiLo39typ6PR039XrLwze/Cb0PZaTzmi john@office"
@@ -71,16 +70,6 @@
       hetzner-ashburn-k3s-agent   = mkAgent { compName = "hetzner-ashburn-k3s-agent"; };
       hetzner-hillsboro-k3s-agent = mkAgent { compName = "hetzner-hillsboro-k3s-agent"; };
       do-nyc-k3s-agent            = mkAgent { compName = "do-nyc-k3s-agent"; diskDevice = "/dev/vda"; useEFI = false; extraModules = [ ./modules/digitalocean.nix ]; };
-
-      # ── Home Pi (Headscale) ──
-      home-pi = nixpkgs.lib.nixosSystem {
-        system = piSystem;
-        specialArgs = { inherit inputs; compName = "home-pi"; sshKeys = my-keys; };
-        modules = [
-          agenix.nixosModules.default
-          ./hosts/home-pi.nix
-        ];
-      };
     };
   };
 }
