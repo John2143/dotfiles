@@ -212,6 +212,32 @@ faults.
 `FAILED (switch)` on any other host is a real error: read the last 40 lines of `run.log`
 before rerunning.
 
+## After a bare reboot: a pod stuck in ContainerCreating
+
+This is usually a corrupted ext4, not a scheduling problem. The journal recovers, but the CSI
+driver runs `fsck -p` (preen), which refuses anything it cannot fix safely, so `MountDevice`
+fails forever with:
+```
+'fsck' found errors on device /dev/longhorn/<pvc> but could not correct them
+/dev/longhorn/<pvc>: UNEXPECTED INCONSISTENCY; RUN fsck MANUALLY.
+```
+Repair it on the node the volume is attached to (`kubectl -n longhorn-system get
+volumes.longhorn.io <pvc> -o jsonpath='{.spec.nodeID}'`):
+```fish
+ssh john@<node> 'sudo e2fsck -fn /dev/longhorn/<pvc>'     # read-only: see the damage first
+ssh john@<node> 'sudo e2fsck -fy /dev/longhorn/<pvc>'     # repair
+ssh john@<node> 'sudo e2fsck -fn /dev/longhorn/<pvc>'     # exit 0 = clean
+```
+Two traps, both hit on 2026-11-02:
+- **Back up the block device first** if the data matters. A 50 GiB volume with 12 GiB used
+  compressed to 36 GiB, so do not assume it fits on the node — closet had exactly 50 GiB free.
+- **Do not delete the stuck pod between repairing and it starting.** Deleting it detaches the
+  volume, the next attach starts a fresh engine from the replicas, and the repair is gone. The
+  repair only sticks if you fix the engine that is already attached and then let the kubelet's
+  own retry (up to ~5 min of backoff) mount that same engine.
+- ArgoCD's `selfHeal` will undo a `kubectl scale --replicas=0` on a managed Deployment, so you
+  cannot buy a quiet window that way without changing git.
+
 ## Adding a host
 
 1. Add `name:max-jobs:address` to `HOSTS` in `scripts/fleet-patch.sh`, keeping control planes
