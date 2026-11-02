@@ -17,6 +17,7 @@
     # ./modules/frigate.nix  # migrated to k8s on big (2026-08-01); file kept for rollback
     ./modules/teamspeak.nix
     ./modules/nut-ups.nix
+    ./modules/blueferry.nix
 
     # inputs.home-manager.nixosModules.default
   ];
@@ -120,8 +121,12 @@
   nixpkgs.overlays = [
     (final: prev: {
       screen-control = inputs.screen-control.defaultPackage.${prev.stdenv.hostPlatform.system};
+      blueferry = final.callPackage ./packages/blueferry.nix {};
     })
   ];
+
+  # iPhone messages/contacts/notifications over Bluetooth (MAP/PBAP/ANCS).
+  services.blueferry.enable = true;
 
   systemd.services.screen-control = {
     description = "REST screen control server";
