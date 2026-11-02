@@ -171,6 +171,7 @@
           ./nixos/shared-configuration.nix
           ./nixos/shared-games-configuration.nix
           ./nixos/office-configuration.nix
+          ./nixos/modules/fleet-patching.nix
           ./nixos/firejail-desktop.nix
           ./nixos/modules/k3s-agent.nix
           ./nixos/modules/restic-backup.nix

@@ -94,30 +94,6 @@
     };
   };
 
-  # I use this computer to rebuild my NixOS configuration daily.
-  systemd.services.rebuild-nixos-boot = {
-    wantedBy = ["multi-user.target"];
-    description = "Update NixOS configuration fr";
-    script = ''${pkgs.fish}/bin/fish -c "update; sudo nixos-rebuild --flake ~/dotfiles boot && git add flake.lock && git commit -m 'Update auto: '(date +%Y-%m-%dT%H:%M:%S) && git push || true"'';
-    serviceConfig = {
-      Type = "oneshot";
-      User = "john";
-      Environment = "HOME=/home/john";
-      # Run from /home/john/dotfiles
-      WorkingDirectory = "/home/john/dotfiles";
-    };
-  };
-
-  systemd.timers."rebuild-nixos-boot" = {
-    wantedBy = ["timers.target"];
-    timerConfig = {
-      Unit = "rebuild-nixos-boot.service";
-      # At 2:00 PM every day
-      OnCalendar = "*-*-* 14:00:00";
-      #Persistent = true;
-    };
-  };
-
   # office's only uplink is wifi. These taints keep every network-storage pod and
   # every Longhorn component off it (Longhorn tolerates wifi=true, not this value);
   # storage-free pods get the toleration automatically from the argo app

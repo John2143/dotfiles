@@ -201,32 +201,5 @@ in {
     copytruncate = true;
   };
 
-  # Weekly pull-and-stage update: fetch the committed dotfiles lock from
-  # GitHub (office updates the lock daily), build on this VM with the 4 GiB
-  # swap, and stage the new generation. It does not reboot; reboot when
-  # convenient to apply it.
-  systemd.services.steam-update = {
-    after = [ "network-online.target" ];
-    wants = [ "network-online.target" ];
-    script = ''
-      exec ${config.system.build.nixos-rebuild}/bin/nixos-rebuild boot \
-        --flake github:John2143/dotfiles#steam --refresh --max-jobs 1
-    '';
-    serviceConfig = {
-      Type = "oneshot";
-      Nice = 19;
-      IOSchedulingClass = "idle";
-      TimeoutStartSec = "2h";
-    };
-  };
-
-  systemd.timers.steam-update = {
-    wantedBy = [ "timers.target" ];
-    timerConfig = {
-      OnCalendar = "Sun *-*-* 05:00:00";
-      Persistent = true;
-    };
-  };
-
   system.stateVersion = "25.11";
 }
