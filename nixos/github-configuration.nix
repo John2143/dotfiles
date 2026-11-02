@@ -54,6 +54,10 @@
       # bare `cachix use/push` calls fail with "Unable to locate executable".
       # Pre-installing it on PATH makes the action's install step a harmless no-op.
       pkgs.cachix
+      # attic — the `Push to Attic` CI steps and nix's post-build-hook (see
+      # modules/attic.nix). The runner user has home /var/empty, so the steps set
+      # XDG_CONFIG_HOME=/etc, where that module writes the shared client config.
+      pkgs.attic-client
     ];
     serviceOverrides = {
       # module defaults (ProtectSystem=strict, PrivateUsers, syscall filter) break podman/docker
@@ -77,6 +81,11 @@ in {
   # "This user doesn't have permissions to configure binary caches".
   # mkForce: avoid a dup "root" from nixpkgs' default definition.
   nix.settings.trusted-users = lib.mkForce [ "root" "github-runner" ];
+  # modules/attic.nix points /etc/attic/config.toml at this file. The CI user
+  # (github-runner, home /var/empty) must read it to push, and PR code already
+  # runs as that user on this dedicated VM. The token only grants write access to
+  # a cache the pod can already fetch from.
+  age.secrets.attic-admin-token.mode = lib.mkForce "0444";
   # 7 GB RAM is the VM max; bevy's rust-workspace-deps build OOMed at 4 GB (2026-10-27).
   swapDevices = [ { device = "/var/lib/swapfile"; size = 8192; } ];
   # disko provides boot.loader.grub.devices from the EF02 partition — do NOT set

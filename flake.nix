@@ -372,6 +372,8 @@
           {
             services.observability-agent.enable = true;
             services.nixos-metrics.enable = true;
+            # This host serves the cache; a push hook would feed it to itself.
+            attic.pushHook.enable = false;
           }
         ];
       })
@@ -383,6 +385,9 @@
           ./nixos/big-configuration.nix
           ./nixos/modules/disko_big.nix
           ./nixos/tailscale.nix
+          # big is the remote builder every desktop delegates to, so its
+          # builds are the ones that otherwise never reach the cache.
+          ./nixos/modules/attic.nix
 
           ./nixos/modules/big-post-install.nix
           ./nixos/modules/big-gpu-clocks.nix # optional: max P4 app clocks; comment out to disable
