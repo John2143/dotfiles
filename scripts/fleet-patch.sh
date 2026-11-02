@@ -19,6 +19,7 @@ ATTENTION=$STATE/ATTENTION
 DRY_RUN=${DRY_RUN:-0}
 BUMP=${BUMP:-1}
 ONLY=${ONLY:-}
+HOST_TIMEOUT=${HOST_TIMEOUT:-1800}   # per-host switch cap; aarch64 source builds can exceed it
 KUBE_HOST=192.168.5.36   # closet: john's kubeconfig there works
 SUDO=/run/wrappers/bin/sudo
 REBUILD=/run/current-system/sw/bin/nixos-rebuild
@@ -61,6 +62,7 @@ label()     { local b=${1##*/}; echo "${b#*-}"; }              # store path -> n
 kname()     { local d=${1%/*}; d=${d##*/}; echo "${d#*-}"; }   # …/<hash>-linux-6.18.59/bzImage -> linux-6.18.59
 count()     { local n=0 l; while IFS= read -r l; do [[ $l == *"$1"* ]] && n=$((n + 1)); done < "$REPORT"; echo "$n"; }
 on_host()   { if [ "$1" = local ]; then bash -c "$2"; else "${SSH[@]}" "john@$1" "$2"; fi; }
+on_host_t() { local t=$1; shift; if [ "$1" = local ]; then timeout "$t" bash -c "$2"; else timeout "$t" "${SSH[@]}" "john@$1" "$2"; fi; }
 reachable() { [ "$1" = local ] || timeout 6 bash -c "exec 3<>/dev/tcp/$1/22" 2>/dev/null; }
 
 notify() {
@@ -69,7 +71,7 @@ notify() {
   [ -r "$f" ] || { log "no $f; no notification sent"; return 0; }
   set -a; . "$f"; set +a
   [ -e "$ATTENTION" ] && { prio=high; tags=warning; }
-  title="fleet-patch: $(count '| ok |') ok, $(count 'REBOOT NEEDED') need reboot, $(count '| FAILED') failed, $(count '| STALE') stale"
+  title="fleet-patch: $(count '| ok |') ok, $(count 'REBOOT NEEDED') need reboot, $(count '| FAILED') failed, $(count '| TIMEOUT') timed out, $(count '| STALE') stale"
   curl -fsS -m 20 -H "Title: $title" -H "Priority: $prio" -H "Tags: $tags" \
     --data-binary @"$REPORT" "${NTFY_TOPIC_URL:?}" >/dev/null || log "ntfy post failed"
 }
@@ -155,7 +157,19 @@ for entry in "${HOSTS[@]}"; do
     continue
   fi
   log "$mode $name${nvnote:+ ($nvnote)}"
-  if ! on_host "$addr" "$SUDO -n $REBUILD $mode --flake '$FLAKE#$name' --max-jobs $jobs" >>"$LOG" 2>&1; then
+  # Bounded: an aarch64 source build on a Pi can run for hours (see
+  # docs/fleet-patching.md). Stop waiting, say so, and move on. The remote
+  # build keeps going, so a later `ONLY=<host>` usually finds it cached.
+  on_host_t "$HOST_TIMEOUT" "$addr" "$SUDO -n $REBUILD $mode --flake '$FLAKE#$name' --max-jobs $jobs" >>"$LOG" 2>&1
+  rc=$?
+  if [ "$rc" = 124 ]; then
+    row "$name" "TIMEOUT ($mode, ${HOST_TIMEOUT}s)" – –
+    : > "$ATTENTION"
+    log "$name still building after ${HOST_TIMEOUT}s; not failed, rerun ONLY=\"$name\" later"
+    is_cp "$name" && { cp_hold=1; fail "holding the remaining control planes"; }
+    continue
+  fi
+  if [ "$rc" != 0 ]; then
     row "$name" "FAILED ($mode)" – –; fail "$name $mode failed"
     [ "$name" = office ] && { log "canary failed; stopping"; exit 1; }
     is_cp "$name" && { cp_hold=1; fail "holding the remaining control planes"; }

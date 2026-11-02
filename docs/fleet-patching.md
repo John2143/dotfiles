@@ -165,12 +165,29 @@ A fresh `nixpkgs` bump usually substitutes from `nas:8280` and `cache.nixos.org`
 hosts finish in minutes. The three aarch64 hosts (`pite`, `vpin`, `mirror`) are rank-0 sinks in
 `nixos/modules/remote-builders.nix`: they delegate to nobody, and when Hydra's aarch64 builds
 lag behind a bump they compile from source at `--max-jobs 1`. Seeing `rustc` and `cc1` under
-`nixbld1` on a Pi, with load above 10 for half an hour, is that — not a hang.
+`nixbld1` on a Pi, with load above 10 and gigabytes of swap in use, is that — not a hang. On
+2026-11-02 one such build ran past six hours and was still going.
 
-The unit has `TimeoutStartSec = 6h`. If a run is still on an ARM host near that, the unit is
-killed mid-fleet: the hosts after it have no rows, and every individual switch that already
-finished stays finished. Finish the remainder by hand with `ONLY="<hosts missing from the
-table>" BUMP=0`. Do not lower `--max-jobs 1` on those hosts to speed it up; they OOM.
+So each host's switch is capped by `HOST_TIMEOUT` (default 1800 s = 30 min). A host that is
+still building when the cap expires gets a `TIMEOUT (switch, 1800s)` row and the run moves on;
+it is **not** a failure, but the run counts the day as needing attention. The remote build is
+not cancelled — it keeps compiling after the script has stopped waiting, so the next
+`ONLY="<host>"` run usually finds the work already in that host's store and finishes in
+minutes. Give a genuinely slow host more room with
+`HOST_TIMEOUT=14400 ONLY=pite BUMP=0 bash ~/dotfiles/scripts/fleet-patch.sh`.
+
+The unit's own `TimeoutStartSec = 8h` is the outer backstop, sized above 13 hosts at the
+per-host cap. If a run is killed by *it*, the hosts after that point have no rows and every
+switch that already finished stays finished; finish the remainder with
+`ONLY="<hosts missing from the table>" BUMP=0`. Do not lower `--max-jobs 1` on those hosts to
+speed it up; they OOM.
+
+If ARM builds keep timing out week after week, the real fix is to let `pite`/`vpin` delegate
+aarch64 builds to `office` (which has `boot.binfmt.emulatedSystems = ["aarch64-linux"]` and is
+already an `aarch64-linux` builder). That means changing their `rank` from 0 to 2 in
+`nixos/modules/remote-builders.nix`. It cannot bootstrap itself — the host needs its old
+builderless config to build the new one — so the first switch after the change has to be given
+`HOST_TIMEOUT` room, or built on office and substituted.
 
 ## When a host fails
 

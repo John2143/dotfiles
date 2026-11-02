@@ -36,7 +36,7 @@ in {
       # ExecStart, not `script`: NixOS wraps `script` in `set -e`, which would abort
       # mid-fleet on the first failed command substitution with no report.
       ExecStart = "${pkgs.bash}/bin/bash ${../../scripts/fleet-patch.sh}";
-      TimeoutStartSec = "6h";
+      TimeoutStartSec = "8h";
       Nice = 10;
     };
   };
