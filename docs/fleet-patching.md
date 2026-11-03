@@ -46,6 +46,9 @@ ssh john@192.168.5.36 'kubectl delete job -n ddns ddns-verify'
   - `REBOOT NEEDED`
   - `STAGED (nvidia …): REBOOT NEEDED`
   - `STALE` — the switch reported success but the host is not on the evaluated generation
+  - `LOCKED (deadman: …)` — the host failed its own boot/switch health check, returned itself
+    to the last generation that passed, and locked itself; the run skipped it
+  - `ROLLED BACK (deadman: …)` — this run's switch failed that same check and was rolled back
   - `FAILED`
   - `HELD` — a control plane stopped the run
   - `OFFLINE`
@@ -102,9 +105,17 @@ Revert the merged Renovate PR on `main`; ArgoCD self-heals it. Never re-pin an i
 
 ## Rebooting a k3s node
 
-Not needed for the weekly job (it never reboots), but this is the only safe way to pick up a
-staged kernel on `arch`, `closet` or `nas`. The full procedure is
-`~/repos/argo/docs/node-maintenance.md`; the deviations that matter:
+Not needed for the weekly job (it never reboots). Since 2026-11-03 `kured` reboots `arch`,
+`closet` and `nas` one at a time, Wednesdays 12:00–17:00 America/New_York, and only when that
+node's own `deadman needs-reboot` gate says the cluster can absorb the loss (all nodes Ready,
+no degraded Longhorn volume, every openbao and CNPG instance Ready). Its cordon is what makes
+CNPG move each primary, so a kured reboot needs no promotion step. Expect the
+`lh-volume-degraded` alert for up to ~1 h afterwards while replicas rebuild.
+
+This procedure remains the way to reboot **big** or **pite** (kured does not manage them, and
+they hold no cluster-wide kubeconfig to gate on) and to reboot a control plane outside the
+window. The full procedure is `~/repos/argo/docs/node-maintenance.md`; the deviations that
+matter:
 
 **1. Gate.** Every row must show `READY` = `INST`. If any row is short, stop: the promote
 target may not be ready.
@@ -211,6 +222,42 @@ faults.
 
 `FAILED (switch)` on any other host is a real error: read the last 40 lines of `run.log`
 before rerunning.
+
+## A LOCKED host (deadman)
+
+Every k3s node except office runs `nixos/modules/deadman.nix`. After each boot and each live
+switch it proves itself: `k3s` and `sshd` running, the API reporting the node `Ready`, and —
+for a switch — a node lease renewed after the switch started. If it cannot within 15 min
+(boot) or 10 min (switch), it points the profile at the last generation that passed, switches
+to it, writes `/var/lib/deadman/locked`, and publishes the node condition `DeadmanLocked`.
+
+A lock is a **freeze, not a cordon**: the node keeps serving, fleet-patch skips it, and kured
+holds every reboot cluster-wide. Grafana's `deadman-locked` alert fires.
+
+```fish
+ssh john@<host> 'deadman status'                   # state, why, last good, last result
+ssh john@<host> 'deadman needs-reboot; echo $status'   # 0 = kured may reboot it
+```
+
+Fix the cause in `~/dotfiles`, deploy to that host with `ONLY=<host>`, then clear the lock:
+
+```fish
+ssh john@<host> 'sudo deadman unlock'
+```
+
+`unlock` moves the lock file aside, records `unlocked by john`, and republishes
+`DeadmanLocked=False`. It does **not** deploy anything, so a host can be unlocked and still be
+on the older generation — check `deadman status` (`current` versus `default`).
+
+Deadman is also kured's reboot sentinel on the control planes:
+
+- `deadman needs-reboot` answers "reboot" only when the booted kernel differs from the
+  profile's **and** the whole cluster passes its gate (all nodes Ready, no degraded or faulted
+  Longhorn volume, three openbao instances and every `-db-N` instance Ready).
+- Any error — a locked node, a switch in flight, an unreachable API, a missing cluster
+  kubeconfig — answers "do not reboot". That is why kured only runs on arch, closet and nas:
+  only those three can read `/etc/rancher/k3s/k3s.yaml`. `sudo deadman gate` prints the same
+  verdict by hand.
 
 ## After a bare reboot: a pod stuck in ContainerCreating
 
