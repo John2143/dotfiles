@@ -76,13 +76,25 @@ cluster_ok() {
     END { exit (bad > 0 || ob != 3 || seen < 6) }'
 }
 
+# The node's own credential may not GET nodes/status (kubectl's subresource patch
+# does that first, and the node authorizer refuses), but it may server-side apply
+# the status subresource. SSA merges conditions by their `type` key, so the other
+# conditions are untouched.
 publish() {
-  local t
+  local t f lt cur prev prevt
   t=$(now)
-  if ! kc patch node "$NODE" --subresource=status --type=strategic -p \
-      "{\"status\":{\"conditions\":[{\"type\":\"DeadmanLocked\",\"status\":\"$1\",\"reason\":\"$2\",\"message\":\"$3\",\"lastHeartbeatTime\":\"$t\",\"lastTransitionTime\":\"$t\"}]}}" >/dev/null 2>&1; then
+  cur=$(kc get node "$NODE" -o 'jsonpath={range .status.conditions[?(@.type=="DeadmanLocked")]}{.status}:{.lastTransitionTime}{end}' 2>/dev/null) || cur=
+  prev=${cur%%:*}
+  prevt=${cur#*:}
+  lt=$t
+  if [ "$prev" = "$1" ] && [ -n "$prevt" ]; then lt=$prevt; fi
+  f=$(mktemp)
+  printf '{"apiVersion":"v1","kind":"Node","metadata":{"name":"%s"},"status":{"conditions":[{"type":"DeadmanLocked","status":"%s","reason":"%s","message":"%s","lastHeartbeatTime":"%s","lastTransitionTime":"%s"}]}}\n' \
+    "$NODE" "$1" "$2" "$3" "$t" "$lt" >"$f"
+  if ! kc apply --server-side --force-conflicts --subresource=status -f "$f" >/dev/null 2>&1; then
     echo "deadman: could not publish DeadmanLocked=$1; deadman-publish.timer retries every 15 min" >&2
   fi
+  rm -f "$f"
 }
 
 publish_state() {
