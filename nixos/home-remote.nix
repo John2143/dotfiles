@@ -276,8 +276,11 @@
     };
   };
 
+  # Not on ARM (pite, mirror, vpin, aman): cache.nixos.org often lacks the aarch64
+  # build, and compiling atuin plus its test suite on a Pi took pite for hours
+  # during the 2026-11-02 fleet patch. With auto_sync off it is only local history.
   programs.atuin = {
-    enable = true;
+    enable = !pkgs.stdenv.hostPlatform.isAarch64;
     enableFishIntegration = true;
     settings = {
       auto_sync = false;
