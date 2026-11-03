@@ -106,6 +106,9 @@
     "wifi-overflow=true:PreferNoSchedule"
   ];
   custom.backup.enable = true;
+  # the desktop: kured never reboots it (wifi taint), and a guard on its own
+  # switches would fight interactive work
+  custom.deadman.enable = false;
 
   environment.systemPackages = with pkgs; [
     rocmPackages.rocm-smi

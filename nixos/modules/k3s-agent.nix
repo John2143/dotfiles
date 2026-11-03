@@ -4,7 +4,7 @@
   pkgs,
   ...
 }: {
-  imports = [./longhorn-host.nix ./k3s-net.nix ./k3s-gcroots.nix];
+  imports = [./longhorn-host.nix ./k3s-net.nix ./k3s-gcroots.nix ./deadman.nix];
 
   options.custom.k3sNodeTaints = lib.mkOption {
     type = lib.types.listOf lib.types.str;

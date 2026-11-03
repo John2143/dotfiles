@@ -5,6 +5,8 @@
 #   DRY_RUN=1   bump + evaluate + probe only: no commit, push, switch or ntfy
 #   BUMP=0      skip the nixpkgs bump; deploy origin/master as-is
 #   ONLY="a b"  only these hosts (ring order kept; leaving out office skips the canary)
+# Hosts with nixos/modules/deadman.nix: LOCKED hosts are skipped; a switch is judged
+# only after the host's own guard confirms it or rolls it back.
 # Uses only bash builtins + git/nix/ssh/curl/flock/timeout: an interactive PATH may
 # put ripgrep first as `grep`, so the script never calls grep/sed locally.
 set -uo pipefail
@@ -71,7 +73,7 @@ notify() {
   [ -r "$f" ] || { log "no $f; no notification sent"; return 0; }
   set -a; . "$f"; set +a
   [ -e "$ATTENTION" ] && { prio=high; tags=warning; }
-  title="fleet-patch: $(count '| ok |') ok, $(count 'REBOOT NEEDED') need reboot, $(count '| FAILED') failed, $(count '| TIMEOUT') timed out, $(count '| STALE') stale"
+  title="fleet-patch: $(count '| ok |') ok, $(count 'REBOOT NEEDED') need reboot, $(count '| FAILED') failed, $(count '| TIMEOUT') timed out, $(count '| STALE') stale, $(count '| LOCKED') locked, $(count '| ROLLED BACK') rolled back"
   curl -fsS -m 20 -H "Title: $title" -H "Priority: $prio" -H "Tags: $tags" \
     --data-binary @"$REPORT" "${NTFY_TOPIC_URL:?}" >/dev/null || log "ntfy post failed"
 }
@@ -135,6 +137,12 @@ for entry in "${HOSTS[@]}"; do
     continue
   fi
   if ! reachable "$addr"; then row "$name" OFFLINE – –; log "$name offline"; continue; fi
+  # deadman (nixos/modules/deadman.nix): a locked host returned itself to an older
+  # generation after a failed boot or switch. Never move it until an operator
+  # runs `sudo deadman unlock` on it.
+  lockmsg=$(on_host "$addr" "cat /var/lib/deadman/locked" 2>/dev/null); rc=$?
+  if [ "$rc" = 255 ]; then row "$name" "FAILED (ssh)" – –; fail "$name: ssh failed"; continue; fi
+  if [ "$rc" = 0 ]; then row "$name" "LOCKED (deadman: ${lockmsg%%$'\n'*})" – –; fail "$name is deadman-locked; skipped"; continue; fi
   # GPU hosts: if the loaded nvidia module differs from the target driver, stage with
   # `boot` instead of `switch` (new NVIDIA userspace on an old module breaks NVML).
   # ssh exits 255 on connection failure; `cat` exits 1 when no nvidia module is loaded.
@@ -174,6 +182,20 @@ for entry in "${HOSTS[@]}"; do
     [ "$name" = office ] && { log "canary failed; stopping"; exit 1; }
     is_cp "$name" && { cp_hold=1; fail "holding the remaining control planes"; }
     continue
+  fi
+  # The host's deadman guard confirms or rolls back this switch by itself; judge
+  # the host only after its verdict. Hosts without the module return at once.
+  if [ "$mode" = switch ]; then
+    for ((i = 0; i < 80; i++)); do
+      on_host "$addr" "systemctl is-active --quiet deadman-switch-confirm.service" 2>/dev/null || break
+      sleep 15
+    done
+    if lockmsg=$(on_host "$addr" "cat /var/lib/deadman/locked" 2>/dev/null); then
+      row "$name" "ROLLED BACK (deadman: ${lockmsg%%$'\n'*})" – –
+      fail "$name failed its post-switch health check; rolled back and locked"
+      is_cp "$name" && { cp_hold=1; fail "holding the remaining control planes"; }
+      continue
+    fi
   fi
   sys=/run/current-system; [ "$mode" = boot ] && sys=/nix/var/nix/profiles/system
   mapfile -t p < <(on_host "$addr" "readlink -f $sys $sys/kernel /run/booted-system/kernel" 2>>"$LOG")
