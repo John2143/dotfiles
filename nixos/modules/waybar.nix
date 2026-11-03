@@ -611,7 +611,9 @@ in {
             format = "";
             tooltip = true;
             tooltip-format = "New temporary workspace";
-            on-click = "fish -c 'set NAME (date +%s | tail -c 5); hyprctl dispatch \"hl.dsp.focus({ workspace = \\\"name:$NAME\\\" })\"'";
+            # Numbered id in 1000-9999, clear of the fixed workspaces 1-15 (home.nix). Hyprland
+            # 0.57 rejects a numeric "name:" selector, and Waybar drops named workspaces.
+            on-click = "fish -c 'set ID (math (date +%s) % 9000 + 1000); hyprctl dispatch \"hl.dsp.focus({ workspace = \\\"$ID\\\" })\"'";
           };
 
           # ---- Clock Group (drawer reveals date on hover) ----
