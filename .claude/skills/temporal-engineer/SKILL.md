@@ -14,7 +14,7 @@ tool-hints: |
 # Temporal
 
 Self-hosted Temporal (Helm chart 1.7.0) in the home k3s cluster, Kubernetes namespace `default`.
-Six workloads depend on one frontend, so a Temporal fault almost never looks like a Temporal
+Five apps depend on one frontend, so a Temporal fault almost never looks like a Temporal
 fault — it looks like somebody else's `503`.
 
 Consumers: `frigate-genai` (4 WorkerDeployments via temporal-worker-controller), `rots-web` prod +

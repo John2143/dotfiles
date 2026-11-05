@@ -121,7 +121,6 @@
   nixpkgs.overlays = [
     (final: prev: {
       screen-control = inputs.screen-control.defaultPackage.${prev.stdenv.hostPlatform.system};
-      blueferry = final.callPackage ./packages/blueferry.nix {};
     })
   ];
 

@@ -17,10 +17,14 @@
     #./waybar.nix
     ./modules/esrgan-upscaler.nix
     ./modules/nut-ups.nix
+    ./modules/blueferry.nix
 
     # inputs.home-manager.nixosModules.default
   ];
   home-manager.users."john" = import ./home.nix;
+
+  # iPhone messages/contacts/notifications over Bluetooth (MAP/PBAP/ANCS).
+  services.blueferry.enable = true;
 
   # Use the systemd-boot EFI boot loader.
   #boot.loader.systemd-boot.enable = true;

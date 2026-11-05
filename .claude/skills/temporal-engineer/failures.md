@@ -14,6 +14,7 @@ consumer side or in the database.
 | Prometheus/Mimir series limit or "too many series" | metrics cardinality | `invariants.md` §2 |
 | `temporal-db-rw` does not resolve, pods `Pending`/`CrashLoop` | CNPG cluster | `db.md` |
 | `twc-manager` crashing, webhook `x509` errors | controller TLS | `workers.md` |
+| A `temporal-*` pod shows `RESTARTS`, is `Running` now | startup crash that resolved | §restarts |
 
 ## §wedge — the schema-Job loop
 
@@ -77,6 +78,21 @@ database), and every namespace Job to re-run on the next sync of its app.
 `temporal-db-rw` unresolved, `temporal` pods `CrashLoopBackOff` with SQL connection errors, or
 `Cluster temporal-db` not `Cluster in healthy state`. Diagnosis in `db.md`. Serving pods will
 restart-loop until the primary is back; that is expected and is not a Temporal fault.
+
+## §restarts — a component restarted and recovered
+
+`RESTARTS` on a `temporal-*` pod that is `Running` now is usually a startup crash that resolved
+itself, not an ongoing fault. The previous container says why:
+
+```bash
+ssh closet.local 'kubectl -n default describe pod <pod> | grep -A6 "Last State"'
+ssh closet.local 'kubectl -n default logs <pod> --previous --tail=40'
+```
+
+`sql schema version compatibility check failed … no usable database connection` means the server
+came up while the primary was unavailable — a CNPG switchover or a node event. If the DB is healthy
+now (`db.md`), the restart *was* the recovery: touch nothing. Escalate only when restarts continue
+after the database is verified healthy, or when the current state is not `Running`.
 
 ## §cardinality — series explosion
 

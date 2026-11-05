@@ -355,6 +355,11 @@ in {
     (final: prev: {
       autoclicker = inputs.autoclicker.packages.${prev.stdenv.hostPlatform.system}.default;
     })
+    # iPhone Bluetooth bridge, packaged locally (not in nixpkgs). Hosts opt in
+    # with services.blueferry.enable; see modules/blueferry.nix.
+    (final: prev: {
+      blueferry = final.callPackage ./packages/blueferry.nix { };
+    })
     (final: prev: {
       waybar = prev.waybar.overrideAttrs (old: {
         patches =

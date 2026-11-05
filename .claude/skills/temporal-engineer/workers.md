@@ -73,11 +73,12 @@ symptom of a worker that will not poll, not of the promotion. Old versions are r
 
 1. Is the task queue receiving tasks? `temporal task-queue describe` — a growing
    `ApproximateBacklogCount` with zero pollers means no worker is polling.
-2. Are there polls at all? Same output, `Pollers` section — empty pollers with pods `Running` means
-   a namespace/task-queue typo or an unversioned worker.
-3. Pods at zero? `kubectl -n default get scaledobject` and `get hpa` — min 0 is intentional; the
-   scaler activates on queue size, so a queue name that does not match the worker's keeps replicas
-   at 0 forever.
+2. Are there polls at all? Same output, `Pollers` section — only meaningful if the deployment has
+   replicas: with `minReplicaCount: 0` an idle queue legitimately has zero pollers and shows one
+   all-zero `UNVERSIONED` statistics row. Compare with
+   `kubectl -n default get deploy | grep <worker>-<build>`.
+3. Pods stuck at 0 while the backlog grows? `get scaledobject` and `get hpa` — the scaler activates
+   on queue size, so a queue name that does not match the worker's keeps replicas at 0 forever.
 4. WorkerDeployment `CURRENT` empty after a rollout? No promotion yet.
 5. `twc-manager` logs / webhook `x509` errors: the controller's cert-manager certificate is the
    problem, not the workers.
