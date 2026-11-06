@@ -1,4 +1,4 @@
-# GitHub runner VM — Proxmox VM (2 cores, 7 GB RAM, SeaBIOS, virtio)
+# GitHub runner VM — Proxmox VM 101 (2×20 vCPU, 40 GB RAM, SeaBIOS, virtio)
 #
 # === INSTALL FROM LIVE CD ===
 #   On bigp: qm create 101 --name github-nixos --machine q35 --cpu host \
@@ -69,6 +69,20 @@
       SystemCallFilter = lib.mkForce [];
     };
   };
+
+  # Extra 2143-Labs org runners on this VM. They share /nix/store, so rots4's publish job
+  # only links what its build jobs built. Each needs its own name, workDir (which is also its
+  # HOME, so its own ~/.cache/rots4-target cargo cache) and runtime dir.
+  orgRunner = n: {
+    enable = true;
+    url = "https://github.com/2143-Labs";
+    tokenFile = config.age.secrets.github-token.path;
+    name = "github-${toString n}";
+    replace = true;
+    extraLabels = ["nixos"];
+    workDir = "/var/lib/containers/work-2143-labs-${toString n}";
+    extraEnvironment = { XDG_RUNTIME_DIR = "/run/github-runner/2143-labs-${toString n}"; };
+  } // runnerCommon;
 in {
   imports = [
     (modulesPath + "/profiles/qemu-guest.nix") # Proxmox VM virtio drivers
@@ -81,12 +95,18 @@ in {
   # "This user doesn't have permissions to configure binary caches".
   # mkForce: avoid a dup "root" from nixpkgs' default definition.
   nix.settings.trusted-users = lib.mkForce [ "root" "github-runner" ];
+  # Four runners build at once on 40 vCPUs: cap each derivation's parallelism (cargo -j) so
+  # concurrent Bevy builds don't exhaust RAM. Auto-GC keeps the store from filling the root
+  # disk between the nightly GCs.
+  nix.settings.cores = 20;
+  nix.settings.min-free = 5 * 1024 * 1024 * 1024;
+  nix.settings.max-free = 20 * 1024 * 1024 * 1024;
   # modules/attic.nix points /etc/attic/config.toml at this file. The CI user
   # (github-runner, home /var/empty) must read it to push, and PR code already
   # runs as that user on this dedicated VM. The token only grants write access to
   # a cache the pod can already fetch from.
   age.secrets.attic-admin-token.mode = lib.mkForce "0444";
-  # 7 GB RAM is the VM max; bevy's rust-workspace-deps build OOMed at 4 GB (2026-10-27).
+  # 40 GB RAM (VM 101); swap guards bursts when several runners build at once.
   swapDevices = [ { device = "/var/lib/swapfile"; size = 8192; } ];
   # disko provides boot.loader.grub.devices from the EF02 partition — do NOT set
   # boot.loader.grub.device (big-configuration.nix gotcha: duplicate-device assertion).
@@ -287,6 +307,9 @@ in {
     "d /var/lib/github-runner-work-john2143-com 0755 github-runner github-runner -"
     "d /var/lib/github-runner-work-dotfiles 0755 github-runner github-runner -"
     "d /var/lib/github-runner-work-timestone-dev 0755 github-runner github-runner -"
+    "d /var/lib/containers/work-2143-labs-2 0755 github-runner github-runner -"
+    "d /var/lib/containers/work-2143-labs-3 0755 github-runner github-runner -"
+    "d /var/lib/containers/work-2143-labs-4 0755 github-runner github-runner -"
   ];
 
   # CI bulk storage — 100G ZFS disk (tank/vm-101-cache, ext4 "ci-cache")
@@ -333,6 +356,10 @@ in {
     # by github-runner, /run/containers is not.
     extraEnvironment = { XDG_RUNTIME_DIR = "/run/github-runner/2143-labs"; };
   } // runnerCommon;
+
+  services.github-runners."2143-labs-2" = orgRunner 2;
+  services.github-runners."2143-labs-3" = orgRunner 3;
+  services.github-runners."2143-labs-4" = orgRunner 4;
 
   # Personal-account repos are served by REPO-level runners — GitHub has no
   services.github-runners."john2143-com" = {
