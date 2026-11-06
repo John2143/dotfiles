@@ -57,16 +57,8 @@ Full inventory with ports: `kubectl get svc -A`.
 ## Traffic flow
 
 Traefik's access log is shipped to Loki by Alloy and is the only usable record of "who called
-what" — `kubectl logs` rotates in seconds. Query Loki directly on the LAN:
-
-```
-curl -sS -G 'http://192.168.6.24:3100/loki/api/v1/query_range' \
-  --data-urlencode 'query={namespace="kube-system"} |= "seafile.john2143.com" | json | DownstreamStatus >= 500' \
-  --data-urlencode "start=$(date -u -d '30 minutes ago' +%Y-%m-%dT%H:%M:%SZ)" \
-  --data-urlencode "end=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-```
-
-Fields that matter: `DownstreamStatus` (returned to client), `OriginStatus` (from backend),
-`ClientHost` (LAN clients show their real `192.168.5.x`; hairpin NAT was removed, so only external
-clients share the WAN IP), `RouterName` (maps back to the HTTPRoute). `RequestCount` is a
-cumulative counter, never sum it. `429` is rate limiting, `403` is CrowdSec.
+what" — `kubectl logs` rotates in seconds. It does not show a single client identity: household
+clients appear as their real `192.168.5.x` when they take the MetalLB path and as the WAN IP
+`108.56.153.222` when they hairpin through the public address, both measured live on 2026-11-05.
+Hairpin NAT has **not** been removed. Query recipes and the full field table live in the
+`observability-engineer` skill (`access-logs.md`).

@@ -92,8 +92,8 @@ Connection from a LAN host: `192.168.6.20:7233`, plaintext, no auth.
   labelled `app.kubernetes.io/name=temporal`, keeps `frontend|history|matching|worker`, and forces
   `<podIP>:9090` because the pods do not declare the container port. Mimir job label: `temporal`.
 - Logs: Loki. Query `{namespace="default"} |= "temporal"` for container stdout; Traefik access logs
-  answer "who called the UI". The query recipe (gateway host, time flags) is in the argo-engineer
-  skill — do not re-derive it here.
+  answer "who called the UI". The query recipe (gateway host, time flags, the field table) is in the
+  `observability-engineer` skill (`access-logs.md`) — do not re-derive it here.
 
 ## Credentials
 
