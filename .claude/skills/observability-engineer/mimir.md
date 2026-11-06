@@ -32,7 +32,10 @@ query above rather than trusting a count; the list itself is the stable part:
 | `kube-state-metrics` | 5 | | `temporal` | 4 |
 | | | | `traefik` | 6 |
 
-Which Alloy component produces each job is in `alloy.md` — this file is about the store.
+Most jobs are produced by the home Alloy DaemonSet — component detail is in `alloy.md`. **Two are
+not:** `home-nodes` and `smartctl` are scraped by a standalone Prometheus on `pite` that
+remote-writes here (`workloads/headscale/configmap.yaml:65-66`). That matters when one of their
+targets goes down: the fault is usually tailnet reachability from `pite`, not Alloy.
 
 ## The series cap is the sharp edge
 
@@ -42,17 +45,22 @@ A `cluster` label on home series doubled every series and hit Mimir's 500k per-t
 The rule: home is the series **without** a `cluster` label. DOKS is `cluster="doks"`, the status
 droplet is `cluster="do"`. Never add a cluster label to a home job.
 
-## History is ~13h, not 30d
+## History: the 13h bug is fixed
 
-Configured `compactor_blocks_retention_period: 720h`, but the ingester keeps 13 h and the
-store-gateway has never loaded a block — `cortex_bucket_store_blocks_loaded = 0`,
-`cortex_blocks_meta_synced{state="no-bucket-index"} = 1` — because the compactor never builds the
-bucket index (`cortex_compactor_tenants_discovered = 0`). Some 1,432 block dirs sit in S3
-unreadable (`argo/docs/2026-09-22-o11y-retention-and-health-audit.md:35-55`).
+The 2026-09-22 audit found the ingester keeping only 13 h while the store-gateway loaded zero blocks
+(`cortex_bucket_store_blocks_loaded = 0`, `cortex_blocks_meta_synced{state="no-bucket-index"} = 1`,
+compactor never building the index, 1,432 unreadable block dirs).
 
-So a query older than ~13 h returning `NO DATA` is the known bug, not missing samples. Say that
-instead of concluding the workload was idle. This is the opposite failure mode from Loki, where
-"empty" usually means "aged out".
+**That is no longer the state — verified 2026-11-05:** `cortex_bucket_store_blocks_loaded = 33`,
+`cortex_blocks_meta_synced` reports `33` in state `loaded`, and `up[1h] offset 30d` returns data.
+Queries 30 days back work.
+
+`cortex_compactor_tenants_discovered` still reports `0`, so how the blocks are being loaded is not
+obvious from that metric — do not reason about compaction from it alone; re-check
+`blocks_loaded` and `blocks_meta_synced` instead.
+
+If "NO DATA" comes back for a window that should have data, re-run the query with a shard of the
+range before concluding the workload was idle.
 
 ## Do not propose the fix here
 

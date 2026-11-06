@@ -23,9 +23,17 @@ Component detail for the long-standing jobs:
 | `metallb-frr`, `metallb-speaker` | HTTPS `:9140`/`:9120` with bearer token; targets are dropped when they answer 401 |
 | `observability` | static list: mimir, loki-read, loki-write, loki-backend, tempo, grafana, alloy `:12345` |
 
-The remaining jobs in `mimir.md` (blackbox, cilium, etcd, home-nodes, hubble, nginx-gateway,
-node-exporter, openbao, smartctl, longhorn, status-1) are defined in the same `configMap.content` —
-read it there rather than assuming a shape.
+The remaining jobs in `mimir.md` (blackbox, cilium, etcd, hubble, nginx-gateway, node-exporter,
+openbao, longhorn, status-1) are defined in the same `configMap.content` — read it there rather
+than assuming a shape.
+
+**Exception: `home-nodes` and `smartctl` are not Alloy jobs.** A standalone Prometheus on `pite`
+scrapes host `node_exporter:9100` and `smartctl-exporter:9633` over the tailnet and remote-writes to
+Mimir (`workloads/headscale/configmap.yaml:65-66`). `pite` is a tagged node, so its tailnet reach
+comes from an explicit ACL rule — a target that goes down is far more often an ACL or name-resolution
+problem than a dead exporter. Verified 2026-11-05: `big.local:9100` and `big.local:9633` were both
+down while `curl http://100.64.0.24:9100/metrics` from `pite` returned 200 — the exporters were
+healthy, the name did not resolve.
 
 ## Positions
 

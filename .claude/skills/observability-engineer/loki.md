@@ -41,13 +41,14 @@ Which hosts ship, and which do not, is owned by `local-logs.md`.
 ## Retention is not what the config says
 
 Configured 90d (`retention_period: 2160h` + `compactor.retention_enabled: true`,
-`argo/apps/loki.yaml:49-53`); **actually about 55d queryable**.
-`loki_compactor_apply_retention_operation_total{status="failure"} = 408` with **zero** success
-series ever, and `last_successful_run_timestamp_seconds = 0`
-(`argo/docs/2026-09-22-o11y-retention-and-health-audit.md:80-83`).
+`argo/apps/loki.yaml:49-53`); **measured 2026-11-05, the oldest queryable data is ~45 days back**
+for the journal stream and at least 62 days back for `kube-events` — the streams do not share a
+floor, so "how far back" depends on which stream you ask.
 
-So: a query older than ~55d returning nothing is the expected state today, not proof that the thing
-you are looking for never happened. Say which it is.
+Note also that `loki_compactor_apply_retention_operation_total` (cited in the 2026-09-22 audit) no
+longer exists on Loki 3.7.7 — the metric was renamed. Do not read retention health from a missing
+metric and conclude the compactor is dead; probe with `count_over_time` over increasing ranges
+instead, which is how the 45d/62d figures above were obtained.
 
 ## Hard limits, read from the running server
 
@@ -67,12 +68,12 @@ From `curl -sS http://192.168.6.24:3100/config` on Loki **3.7.7**, verified 2026
 The 30-day cap is the one that bites: any question spanning more than ~30 days must be answered in
 chunks of ≤30d, summed in the answer. It cannot be one query, regardless of how much retention
 exists. And because `enforce_retention_period` is false, the 90d figure in the config is not
-enforced by the read path either — the ~55d above is the real ceiling.
+enforced by the read path either — the measured depths above are the real ceiling.
 
 ## Household caveat
 
-Data older than roughly 55d is not queryable, so "last quarter" cannot be answered from Loki at
-all. Say so before querying, and never pad an answer with the 90d config value.
+Data older than roughly 45d is not queryable from the journal stream, so "last quarter" cannot be
+answered at all. Say so before querying, and never pad an answer with the 90d config value.
 
 ## Common queries
 

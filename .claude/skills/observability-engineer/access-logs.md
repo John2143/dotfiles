@@ -78,8 +78,8 @@ To tell which path a specific client used, look at `ClientAddr`, not the hostnam
 ## Limits
 
 Loki's `max_entries_limit_per_query` is **5000** — narrow the window or paginate instead of raising
-`limit`. Anything beyond ~55d is not queryable at all; see `loki.md` for the retention reality and
-the 30-day per-query cap.
+`limit`. Anything beyond ~45d is not queryable from the journal stream; see `loki.md` for the
+retention reality and the 30-day per-query cap.
 
 ## Never quote a line
 

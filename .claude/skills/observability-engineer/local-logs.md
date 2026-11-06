@@ -27,6 +27,12 @@ there (`argo/docs/2026-09-22-o11y-retention-and-health-audit.md:113-120`; re-che
 will be asked about and cannot find in Loki: `longhorn-manager`, `longhorn-csi-plugin`,
 `instance-manager`, `metallb-frr-k8s`, `metallb-speaker`, and the `nightly-backup` Job.
 
+Metrics are a different story, so do not over-generalize: `office.local:9100` is scraped normally by
+`pite`'s Prometheus, and `pite` scrapes **itself** as `localhost:9100` — that anonymous-looking
+target is `pite`, not a phantom duplicate (`node_uname_info{instance="localhost:9100"}` reports
+`nodename="pite"`). So these nodes have metrics and no logs. When a metric is missing for one of
+them, the fault is in the scrape path from `pite`; when a *log* is missing, it is expected.
+
 ## The 12-hour hole
 
 `loki.source.journal` reads with `max_age = "12h"`, so any Alloy outage longer than 12 h leaves a
