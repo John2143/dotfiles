@@ -1,7 +1,7 @@
 # pite — UPS-protected Raspberry Pi (3.7 GB RAM, 238 GB SD)
 #
 # Roles: k3s agent, Prometheus server (2d retention), Alertmanager,
-# Blackbox exporter, nginx status page.
+# Blackbox exporter, LAN status reports to status-origin.2143.me.
 #
 # Alerting: ntfy.sh only — ntfy + Home Assistant ruled out per user.
 {
@@ -55,12 +55,11 @@
     group = "root";
   };
 
-  # ── Firewall — Prometheus + Alertmanager + Blackbox + nginx ────
+  # ── Firewall — Prometheus + Alertmanager + Blackbox ────────────
   networking.firewall.allowedTCPPorts = [
     9090 # Prometheus
     9093 # Alertmanager (internal only — bound to 127.0.0.1)
     9115 # Blackbox exporter probes
-    3030 # nginx status page
     5580 # matter-server (hostNetwork pod)
   ];
   networking.firewall.allowedUDPPorts = [
@@ -287,17 +286,6 @@
     ];
   };
 
-  # Ensure runtime directories exist.
-  # NOTE: /run/alertmanager is deliberately NOT listed here — the alertmanager
-  # unit runs as a DynamicUser, so that directory must be created and owned by
-  # systemd via RuntimeDirectory (see the unit below). A root-owned tmpfiles
-  # entry made preStart unable to write config.yml, which stopped the service
-  # from ever starting (start-limit-hit) and silenced every ntfy alert.
-  systemd.tmpfiles.rules = [
-    "d /var/www/status 0755 root root -"
-    "d /var/lib/status-page 0755 root root -"
-  ];
-
   # ── Alertmanager — ntfy-only, config generated at runtime ──────
   systemd.services.alertmanager = {
     # ⚠ Do NOT use `sed -i` in this preStart. The nixpkgs prometheus-alertmanager
@@ -386,50 +374,10 @@
     '';
   };
 
-  # ── Status Page (nginx on :3030) ───────────────────────────────
-  services.nginx = {
-    enable = true;
-    virtualHosts."status" = {
-      listen = [
-        {
-          addr = "0.0.0.0";
-          port = 3030;
-        }
-      ];
-      root = "/var/www/status";
-      extraConfig = ''
-        # Auto-refresh every 30s
-        add_header Cache-Control "no-cache, must-revalidate";
-      '';
-    };
-  };
-  # Status page generator — Python script queries Prometheus + Mimir + kubectl
-  systemd.services.status-page = {
-    description = "Generate enhanced status page HTML";
-    serviceConfig = {
-      Type = "oneshot";
-      User = "root";
-      Group = "root";
-    };
-    path = [pkgs.python3 pkgs.kubectl];
-    script = ''
-      ${pkgs.python3}/bin/python3 ${./status-page/generate.py}
-    '';
-  };
-
-  systemd.timers.status-page = {
-    description = "Regenerate status page every 30s";
-    wantedBy = ["timers.target"];
-    timerConfig = {
-      OnCalendar = "*:*:0/30";  # every 30 s at :00 and :30 — wall-clock, survives rebuilds
-      Persistent = true;
-    };
-  };
-
   # ── Report LAN checks to the status droplet ────────────────────
   # statusd probes the websites from outside; these are the checks only pite can
-  # make. AccuracySec matters: the old status-page timer above inherits systemd's
-  # 1-minute accuracy, so :00/:30 runs coalesce. Same calendar, 1 s accuracy here.
+  # make. AccuracySec matters: with systemd's default 1-minute accuracy the :00
+  # and :30 runs coalesce, so this timer asks for 1 s.
   systemd.services.status-report = {
     description = "Report LAN checks to status-origin.2143.me";
     serviceConfig = {
