@@ -45,7 +45,7 @@ workstation).
 | Syslog sink | `192.168.6.25:514/udp` | svc `syslog-lb` → Alloy `:1514` |
 | Stack health check | `http://192.168.6.23:8080/prometheus/api/v1/query?query=count%20by%20(job)(up)` | Mimir; every scrape job with its current target count |
 
-Grafana is `https://grafana.john2143.com` with datasource uids `loki`, `mimir`, `tempo`. Loki and
+Grafana is `https://grafana.ts.2143.me` with datasource uids `loki`, `mimir`, `tempo`. Loki and
 Tempo are cross-linked, so a `TraceId` in a log line jumps straight to the trace.
 
 ## Which signal answers which question

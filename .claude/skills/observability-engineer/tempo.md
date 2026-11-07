@@ -15,7 +15,7 @@ Tempo is ClusterIP only. The MetalLB service `tempo-otlp-lb` (`192.168.6.27:4317
 **ingest-only**, gRPC-only, and exists for the nonprod cluster
 (`argo/workloads/observability/lb-services.yaml:59-72`). Do not try to query traces on it.
 
-Query traces through Grafana (`https://grafana.john2143.com`, datasource uid `tempo`), which is
+Query traces through Grafana (`https://grafana.ts.2143.me`, datasource uid `tempo`), which is
 also where the Loki↔Tempo datasource link is wired.
 
 ## Retention

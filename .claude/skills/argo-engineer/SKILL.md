@@ -383,7 +383,7 @@ ships logs to Loki, metrics to Mimir and traces to Tempo. Loki retention is 90d.
 Querying logs, metrics, traces — and the field semantics of Traefik's access log — are covered by
 the `observability-engineer` skill. Do not re-derive them here: the endpoint is
 `http://192.168.6.24:3100` (svc `loki-push-lb`, which selects the gateway), Mimir is
-`http://192.168.6.23:8080`, Grafana is `https://grafana.john2143.com`.
+`http://192.168.6.23:8080`, Grafana is `https://grafana.ts.2143.me`.
 
 Keeping a second copy of that material is how its client-identity claim drifted between skills.
 
