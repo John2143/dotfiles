@@ -469,8 +469,8 @@ in {
 
 
         # TeamSpeak mute: Prior mutes mic, Next mutes sound
-        { _args = ["Prior" (mkLua ''hl.dsp.exec_cmd("teamspeak-mute-status --toggle && pkill -RTMIN+10 waybar")'')]; }
-        { _args = ["Next" (mkLua ''hl.dsp.exec_cmd("teamspeak-mute-status --toggle-output && pkill -RTMIN+11 waybar")'')]; }
+        { _args = ["Prior" (mkLua ''hl.dsp.exec_cmd("teamspeak-mute-status --toggle")'')]; }
+        { _args = ["Next" (mkLua ''hl.dsp.exec_cmd("teamspeak-mute-status --toggle-output")'')]; }
         { _args = ["KP_Subtract" (mkLua ''hl.dsp.pass({ window = "class:^(discord)$" })'')]; }
         { _args = ["XF86AudioPrev" (mkLua ''hl.dsp.pass({ window = "class:^(discord)$" })'')]; }
 
@@ -535,8 +535,14 @@ in {
   };
 
   home.activation.flatpakOverrides = lib.hm.dag.entryAfter ["writeBoundary"] ''
+    ${pkgs.flatpak}/bin/flatpak remote-add --user --if-not-exists \
+      flathub https://dl.flathub.org/repo/flathub.flatpakrepo || true
+    ${pkgs.flatpak}/bin/flatpak install --user --noninteractive \
+      flathub com.teamspeak.TeamSpeak3 || true
+    # own-name: Qt's tray (StatusNotifierItem) must claim this bus name; PID is 5 inside the sandbox.
     ${pkgs.flatpak}/bin/flatpak override --user \
       --talk-name=org.kde.StatusNotifierWatcher \
+      --own-name=org.kde.StatusNotifierItem-5-1 \
       com.teamspeak.TeamSpeak3 || true
   '';
 

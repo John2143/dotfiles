@@ -216,8 +216,6 @@ window#waybar > box {
 #custom-mullvad,
 #custom-thermostat,
 #custom-weather,
-#custom-teamspeak-mic,
-#custom-teamspeak-sound,
 #custom-vast,
 #custom-updates,
 #custom-autoclicker,
@@ -233,17 +231,6 @@ window#waybar > box {
     margin: 4px 3px;
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
     transition: all 0.2s ease;
-}
-
-/* ---- Teamspeak adjacent pills ---- */
-#custom-teamspeak-sound {
-    margin-left: 0;
-    padding-left: 4px;
-    border-radius: 0 8px 8px 0;
-}
-#custom-teamspeak-mic {
-    padding-right: 4px;
-    border-radius: 8px 0 0 8px;
 }
 
 /* ---- Pulseaudio ---- */
@@ -308,29 +295,6 @@ window#waybar > box {
 }
 #custom-vast.vast-tunnel-down {
     color: @red;
-}
-
-#custom-teamspeak-mic.muted {
-    color: @pink;
-}
-#custom-teamspeak-sound.muted {
-    color: @red;
-}
-#custom-teamspeak-mic.unmuted {
-    color: @green;
-}
-#custom-teamspeak-sound.unmuted {
-    color: @overlay0;
-}
-
-#custom-teamspeak-mic.talking {
-    color: @blue;
-}
-#custom-teamspeak-mic.disconnected,
-#custom-teamspeak-sound.disconnected {
-    padding: 0;
-    margin: 0;
-    font-size: 0;
 }
 
 #custom-updates.pending-updates {

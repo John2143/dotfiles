@@ -313,6 +313,14 @@ in {
   security.pam.services.hyprlock = { };
   security.polkit.enable = true;
 
+  # Secret Service (org.freedesktop.secrets) for libsecret clients: Chromium's
+  # password store, and BlueFerry, which keys its encrypted contact cache and
+  # message history off it — without a provider every sync failed with "the
+  # desktop keyring is unavailable", as these machines had no keyring daemon at
+  # all. nixpkgs' lemurs module already sets enableGnomeKeyring from this
+  # option, so the login keyring is created and unlocked by the login password.
+  services.gnome.gnome-keyring.enable = true;
+
   # games
   services.flatpak.enable = true;
   programs.ydotool = {

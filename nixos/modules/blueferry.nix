@@ -91,6 +91,24 @@ in
       "${obexd}/libexec/bluetooth/obexd"
     ];
 
+    # pair-setup refuses to run unless the adapter advertises an audio profile
+    # (A2DP sink, HSP headset or HFP hands-free), and BlueZ only advertises one
+    # while a client holds a media endpoint. Those endpoints come from
+    # pipewire's BlueZ monitor, which WirePlumber gates on logind seat state —
+    # and lemurs + seatd sessions here have no seat at all. See the fragment.
+    services.pipewire.wireplumber.configPackages = [
+      (pkgs.writeTextDir "share/wireplumber/wireplumber.conf.d/49-bluez-seat-monitoring.conf" ''
+        # No seat on these sessions, so module-logind reports the user as
+        # "online" instead of "active" and the BlueZ monitor never starts.
+        # Single-user desktop: the seat check buys nothing.
+        wireplumber.profiles = {
+          main = {
+            monitor.bluez.seat-monitoring = disabled
+          }
+        }
+      '')
+    ];
+
     systemd.services.bluetooth = lib.mkIf cfg.enableExperimentalBluez {
       # BlueFerry detects -E by reading /proc/<bluetoothd>/cmdline. The default
       # ProtectProc=invisible makes that unreadable for a user session daemon,

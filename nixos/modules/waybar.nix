@@ -551,8 +551,6 @@ in {
               "custom/thermostat"
             ])
             ++ [
-              "custom/teamspeak-mic"
-              "custom/teamspeak-sound"
               "custom/vast"
               "custom/weather"
               "custom/eww-hello"
@@ -852,24 +850,6 @@ in {
           };
         })
         // {
-          "custom/teamspeak-mic" = {
-            exec = "teamspeak-mute-status --mic";
-            return-type = "json";
-            interval = 2;
-            signal = 10;
-            format = "{}";
-            tooltip = true;
-            on-click = "teamspeak-mute-status --toggle && pkill -RTMIN+10 waybar";
-          };
-          "custom/teamspeak-sound" = {
-            exec = "teamspeak-mute-status --sound";
-            return-type = "json";
-            interval = 2;
-            signal = 11;
-            format = "{}";
-            tooltip = true;
-            on-click = "teamspeak-mute-status --toggle-output && pkill -RTMIN+11 waybar";
-          };
           "custom/vast" = {
             exec = "vast-waybar-status";
             return-type = "json";
