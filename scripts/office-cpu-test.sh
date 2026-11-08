@@ -9,6 +9,9 @@
 #   SKIP_APICS  space-separated APIC IDs of cores to skip, e.g. "0 32 66"
 #   E_SERIAL=1  test E-cores one at a time (2 min each) instead of all at once; use after a
 #               crash during the parallel E-core stage, to find the E-core that caused it
+#   ALLCORE_SECS  seconds for the all-core stage (default 360). Real failures on this box
+#               happen during long compiles, so Phase B runs this far longer than Phase A.
+#   MEMORY_SECS   seconds for the RAM stage (default 360)
 # Exit 0 = everything passed, 1 = at least one failure (summary at the end of $LOG).
 set -u
 command -v stress-ng >/dev/null || exec nix shell nixpkgs#stress-ng -c bash "$0" "$@"
@@ -16,6 +19,8 @@ command -v stress-ng >/dev/null || exec nix shell nixpkgs#stress-ng -c bash "$0"
 LOG="${XDG_STATE_HOME:-$HOME/.local/state}/office-cpu-test.log"
 mkdir -p "$(dirname "$LOG")"
 skip=" ${SKIP_APICS:-} "
+allcore_secs="${ALLCORE_SECS:-360}"
+memory_secs="${MEMORY_SECS:-360}"
 failures=()
 start=$(date '+%Y-%m-%d %H:%M:%S')
 
@@ -81,7 +86,7 @@ eparallel() { # seconds cpulist: one pinned stress-ng per E-core, all at once
   note "END EPAR"
 }
 
-note "=== RUN phase=${PHASE:-unlabeled} bios=$(cat /sys/class/dmi/id/bios_version) online=$(cat /sys/devices/system/cpu/online) offline=$(cat /sys/devices/system/cpu/offline) cap_cpu0=$(cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_max_freq) skip=[${SKIP_APICS:-}]"
+note "=== RUN phase=${PHASE:-unlabeled} bios=$(cat /sys/class/dmi/id/bios_version) online=$(cat /sys/devices/system/cpu/online) offline=$(cat /sys/devices/system/cpu/offline) cap_cpu0=$(cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_max_freq) allcore=${allcore_secs}s mem=${memory_secs}s skip=[${SKIP_APICS:-}]"
 note "MAP $(awk '/^processor/{p=$3} /^apicid/{printf "%s:%s ", p, $3}' /proc/cpuinfo)"
 percore P 180 "$(cat /sys/devices/cpu_core/cpus)"
 if [ "${E_SERIAL:-0}" = 1 ]; then
@@ -89,8 +94,8 @@ if [ "${E_SERIAL:-0}" = 1 ]; then
 else
   eparallel 240 "$(cat /sys/devices/cpu_atom/cpus)"
 fi
-run ALLCORE 360 --cpu -1 --cpu-method all
-run MEMORY 360 --vm 4 --vm-bytes 60% --vm-method all
+run ALLCORE "$allcore_secs" --cpu -1 --cpu-method all
+run MEMORY "$memory_secs" --vm 4 --vm-bytes 60% --vm-method all
 
 kern=$(journalctl -k --since "$start" --no-pager | grep -E 'Hardware Error|Machine check|Oops|BUG:|stress-ng.*(segfault|invalid opcode|general protection)')
 if [ -n "$kern" ]; then
