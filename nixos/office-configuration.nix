@@ -83,6 +83,10 @@
   # resume; the next switch then runs the missed weekly patch at once (Persistent=true).
   systemd.timers.fleet-patch.enable = false;
 
+  # i9-14900K has Intel Vmin Shift degradation; RMA pending (2026-11). Cap boost
+  # below the 5.7 GHz top bins; lowered stepwise when scripts/office-cpu-test.sh fails.
+  powerManagement.cpufreq.max = 5400000;
+
   # office's only uplink is wifi. These taints keep every network-storage pod and
   # every Longhorn component off it (Longhorn tolerates wifi=true, not this value);
   # storage-free pods get the toleration automatically from the argo app
