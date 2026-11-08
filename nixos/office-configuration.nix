@@ -79,24 +79,9 @@
   # sound.enable = true;
   # hardware.pulseaudio.enable = true;
 
-  systemd.services.office-bad-cpu = {
-    wantedBy = ["multi-user.target"];
-    description = "CPU perf core 8 is bad on my office comp";
-    script = ''${pkgs.fish}/bin/fish /home/john/bin/office.fish'';
-    serviceConfig = {
-      Type = "oneshot";
-      User = "root";
-    };
-  };
-
-  systemd.timers."bad-cpu" = {
-    wantedBy = ["timers.target"];
-    timerConfig = {
-      OnBootSec = "5";
-      OnUnitActiveSec = "5";
-      Unit = "office-bad-cpu.service";
-    };
-  };
+  # Fleet patching paused while the CPU is stress-tested (2026-11). Delete this line to
+  # resume; the next switch then runs the missed weekly patch at once (Persistent=true).
+  systemd.timers.fleet-patch.enable = false;
 
   # office's only uplink is wifi. These taints keep every network-storage pod and
   # every Longhorn component off it (Longhorn tolerates wifi=true, not this value);

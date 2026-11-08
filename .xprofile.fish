@@ -18,9 +18,6 @@ if test "$HOST" = "office"
     #set right_mon "DP-2"
     #xrandr --output $left_mon --mode 2560x1440 --rate 239.97 --primary
     #xrandr --output $right_mon --mode 1920x1080 --rate 144.00 --right-of $left_mon
-
-    echo 0 | sudo tee /sys/devices/system/cpu/cpu8/online
-    echo 0 | sudo tee /sys/devices/system/cpu/cpu9/online
 end
 if test "$HOST" = "downstairs"
     # WAN
