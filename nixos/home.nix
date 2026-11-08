@@ -321,7 +321,10 @@ in {
           touchpad = {
             natural_scroll = false;
           };
-          sensitivity = -0.2;
+          # 1:1 on purpose. Firefox's Wayland pointer lock drops every motion event under 1 px
+          # (bugzilla 1739598), so a gain below 1 is a deadzone in browser games. Pointer speed
+          # comes from the mice's onboard DPI instead (office G502 X, arch G502 HERO). 2026-11-08
+          sensitivity = 0;
           accel_profile = "flat";
         };
         layerrule = [
