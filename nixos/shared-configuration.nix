@@ -368,6 +368,11 @@ in {
     (final: prev: {
       blueferry = final.callPackage ./packages/blueferry.nix { };
     })
+    # deSEC DNS API client (`desec`), packaged locally (not in nixpkgs). Installed
+    # per user from home.nix.
+    (final: prev: {
+      desec-dns = final.callPackage ./packages/desec-dns.nix { };
+    })
     (final: prev: {
       waybar = prev.waybar.overrideAttrs (old: {
         patches =

@@ -143,6 +143,7 @@
     pkgs-stable.mongodb-compass
     doctl # DigitalOcean CLI
     hcloud # Hetzner CLI
+    desec-dns # deSEC DNS API client: domains, rrsets, scoped tokens
     rclone # S3/B2/RustFS sync
     velero # K8s backup/migration
     e1s

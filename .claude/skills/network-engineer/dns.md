@@ -4,7 +4,7 @@ Three layers. Know which one you are debugging.
 
 | Layer | Server | Answers |
 |---|---|---|
-| Public | external provider | `john2143.com`, `net.2143.me` → home WAN IP |
+| Public | deSEC, six zones | `john2143.com`, `net.2143.me` → home WAN IP, or the DO floating IP for the names that serve from 2143-59s. Zone inventory, record ownership and the DDNS job: `skill://desec-engineer` |
 | Tailnet | headscale MagicDNS (`extra_records`) | `*.ts.2143.me` → traefik `.6.6` |
 | LAN | MikroTik `192.168.5.1` + `lan-dns` `.6.30` | split-horizon answers for the home zones |
 
