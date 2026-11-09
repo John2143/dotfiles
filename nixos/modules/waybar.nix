@@ -540,6 +540,7 @@ in {
           modules-right =
             [
               "custom/privacy"
+              "custom/screenrec"
               "custom/tailscale"
               "custom/temporal"
               "custom/voxtype"
@@ -784,6 +785,16 @@ in {
             interval = "once";
             signal = 13;
             format = "{}";
+          };
+
+          # ---- Screen recording ----
+          "custom/screenrec" = {
+            exec = "screenrec status --follow";
+            return-type = "json";
+            format = "{}";
+            tooltip = true;
+            on-click = "screenrec toggle";
+            on-click-right = "screenrec last";
           };
 
           # ---- Eww Hello World ----

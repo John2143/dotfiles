@@ -25,6 +25,30 @@
     '';
   };
 
+  # Screen capture: record a region with wf-recorder, upload the MKV, and let the
+  # site's Temporal pipeline build the web MP4 (H.264 sources are remuxed with
+  # `-c copy`, not re-encoded). The script body lives in .config/screenrec.sh so it
+  # stays readable and shellcheck-able; writeShellApplication adds the shebang,
+  # `set -o errexit/nounset/pipefail`, the PATH and the shellcheck run.
+  screenrec = pkgs.writeShellApplication {
+    name = "screenrec";
+    runtimeInputs = [
+      pkgs.coreutils
+      pkgs.util-linux # flock
+      pkgs.jq
+      pkgs.curl
+      pkgs.slurp
+      pkgs.dunst # dunstify
+      pkgs.fuzzel
+      pkgs.wl-clipboard
+      pkgs.trash-cli
+      pkgs.xdg-utils
+      pkgs.hyprland # hyprctl
+      pkgs-stable.wf-recorder
+    ];
+    text = builtins.readFile ../.config/screenrec.sh;
+  };
+
   primaryPackages = with pkgs; [
     # fonts
     # https://github.com/NixOS/nixpkgs/blob/master/pkgs/data/fonts/nerdfonts/shas.nix
@@ -62,6 +86,7 @@
 
     hyprlock # screen locker (manual only — see the hypridle note at the end of this file)
     hypr-blank # blank the monitors; refuses while the session is locked
+    screenrec # region capture -> upload; CTRL+SHIFT+9 / 6 / 0 / 8
 
     # desktop programs (programs you can open)
     firefox # browser
@@ -398,8 +423,13 @@ in {
         { _args = ["CTRL + SHIFT + ALT + 4" (mkLua ''hl.dsp.exec_cmd([[fish -c 'set loc (screenshot_location); grim -g (slurp) $loc; juush $loc']])'')]; }
         { _args = ["CTRL + SHIFT + 4" (mkLua ''hl.dsp.exec_cmd([[fish -c 'set loc (screenshot_location); grim -g (slurp) $loc; juush $loc']])'')]; }
         { _args = ["CTRL + SHIFT + 5" (mkLua ''hl.dsp.exec_cmd([[fish -c 'wl-paste > ~/screenshots/clipboard.txt; juush ~/screenshots/clipboard.txt']])'')]; }
-        { _args = ["CTRL + SHIFT + 9" (mkLua ''hl.dsp.exec_cmd([[fish -c 'set loc (string replace "png" "mkv" (screenshot_location)); notify-send "Starting recording "(loc); wf-recorder -g (slurp) -f $loc; set -Ux LAST_VID $loc']])'')]; }
-        { _args = ["CTRL + SHIFT + 6" (mkLua ''hl.dsp.exec_cmd([[fish -c 'killall -s SIGINT wf-recorder; notify-send "Finished Recording, starting transcode"; ffmpeg -i $LAST_VID -c:v libx264 $LAST_VID.mp4; notify-send "Finished Transcode, starting upload"; juush $LAST_VID.mp4']])'')]; }
+        # Screen recording: start (reusing the last region), reselect region, stop,
+        # one-key toggle, and the last-clip menu.
+        { _args = ["CTRL + SHIFT + 9" (mkLua ''hl.dsp.exec_cmd([[screenrec start]])'')]; }
+        { _args = ["CTRL + SHIFT + ALT + 9" (mkLua ''hl.dsp.exec_cmd([[screenrec start --reselect]])'')]; }
+        { _args = ["CTRL + SHIFT + 6" (mkLua ''hl.dsp.exec_cmd([[screenrec stop]])'')]; }
+        { _args = ["CTRL + SHIFT + 0" (mkLua ''hl.dsp.exec_cmd([[screenrec toggle]])'')]; }
+        { _args = ["CTRL + SHIFT + 8" (mkLua ''hl.dsp.exec_cmd([[screenrec last]])'')]; }
         { _args = ["CTRL + SHIFT + 7" (mkLua ''hl.dsp.exec_cmd([[fish -c 'hyprpicker | wl-copy']])'')]; }
 
         # Move focus (vim keys)
