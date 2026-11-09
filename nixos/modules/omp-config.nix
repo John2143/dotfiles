@@ -129,6 +129,11 @@ in
         # Claude Max subscription via LiteLLM. OMP owns and refreshes the
         # Anthropic OAuth token; the proxy key is a separate header so LiteLLM
         # forwards the OAuth Authorization header upstream.
+        #
+        # Claude's adaptive effort ladder is declared identity-mapped: OMP's
+        # level name is the exact `output_config.effort` wire value. Do not
+        # reintroduce the old one-tier shift (xhigh -> max); it silently made
+        # every xhigh request ask for max and left no way to request xhigh.
         anthropic:
           baseUrl: https://llm.2143.me
           api: anthropic-messages
@@ -150,13 +155,7 @@ in
               maxTokens: 64000
               thinking:
                 mode: anthropic-adaptive
-                efforts: [minimal, low, medium, high, xhigh]
-                effortMap:
-                  minimal: low
-                  low: medium
-                  medium: high
-                  high: xhigh
-                  xhigh: max
+                efforts: [low, medium, high, xhigh, max]
                 supportsDisplay: true
             - id: claude-haiku-5-5
               name: Claude Haiku 5.5 (Max subscription)
@@ -168,13 +167,7 @@ in
               maxTokens: 64000
               thinking:
                 mode: anthropic-adaptive
-                efforts: [minimal, low, medium, high, xhigh]
-                effortMap:
-                  minimal: low
-                  low: medium
-                  medium: high
-                  high: xhigh
-                  xhigh: max
+                efforts: [low, medium, high, xhigh, max]
                 supportsDisplay: true
             - id: claude-fable-5-1
               name: Claude Fable 5.1 (Max subscription)
@@ -186,13 +179,7 @@ in
               maxTokens: 64000
               thinking:
                 mode: anthropic-adaptive
-                efforts: [minimal, low, medium, high, xhigh]
-                effortMap:
-                  minimal: low
-                  low: medium
-                  medium: high
-                  high: xhigh
-                  xhigh: max
+                efforts: [low, medium, high, xhigh, max]
                 supportsDisplay: true
 
 
@@ -373,7 +360,10 @@ in
         # the model default; title generation asks for no reasoning, which OMP
         # sends as this same lowest tier.
         smol: litellm/deepseek/deepseek-v4-flash:low
-        slow: anthropic/claude-opus-5-5
+        # Pinned to Claude's `high` effort. Role suffixes outrank an agent's
+        # thinking-level, so agents that need another level (oracle: xhigh)
+        # pin their own model selector instead of routing through this role.
+        slow: anthropic/claude-opus-5-5:high
         advisor: litellm/deepseek/deepseek-v4-flash
         # Image questions (`read <path>?q=<question>`) resolve @vision ->
         # @default -> session model, so without this role image analysis
