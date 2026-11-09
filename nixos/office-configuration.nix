@@ -18,6 +18,7 @@
     ./modules/esrgan-upscaler.nix
     ./modules/nut-ups.nix
     ./modules/blueferry.nix
+    ./modules/crash-capture.nix
 
     # inputs.home-manager.nixosModules.default
   ];
@@ -102,6 +103,12 @@
   # the desktop: kured never reboots it (wifi taint), and a guard on its own
   # switches would fight interactive work
   custom.deadman.enable = false;
+
+  # Panic survival + crash evidence. The 2026-11-07 oops in the mm teardown path
+  # (cpu8/9 already offlined) panicked the kernel, and with kernel.panic = 0 the
+  # box hung until a manual power cycle; the oops itself never reached the
+  # journal. See modules/crash-capture.nix.
+  custom.crashCapture.enable = true;
 
   environment.systemPackages = with pkgs; [
     rocmPackages.rocm-smi
