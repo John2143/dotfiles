@@ -45,6 +45,11 @@
       (pkgs.writeShellScriptBin "docker" "exec ${pkgs.podman}/bin/podman --remote --url unix:///run/podman/podman.sock \"$@\"")
       pkgs.gawk
       pkgs.kubectl
+      # util-linux — `setsid`, `unshare`, `script`, `mount`. The oh-my-pi suites
+      # use them directly: packages/utils/test/ptree-timeout.test.ts launches its
+      # worker with `setsid`, and its mount-namespace tests probe with `unshare`.
+      # Hosted GitHub runners ship util-linux, so tests assume it is callable.
+      pkgs.util-linux
       # skopeo — nix-built container tarballs are pushed with `skopeo copy docker-archive://…`
       # (brickBreaker-reimagined, bevy2025, openfrontpro, openfrontAPIDiscordBots, rots-authserver);
       # the workflows' `sudo apt-get install skopeo` steps can't run here (no sudo).
