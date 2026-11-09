@@ -357,16 +357,22 @@ in
       composer:
         shape: rail
       modelRoles:
-        default: litellm/deepseek/deepseek-v4-flash
+        # Explicit `:high` pins the session's startup effort. The global
+        # `defaultThinkingLevel` is also "high" today, but the role suffix
+        # outranks it, so a later global change or `auto` cannot move it.
+        # Fresh sessions only: a resumed session keeps its recorded level.
+        default: litellm/deepseek/deepseek-v4-flash:high
         # `task` pins subagent dispatch (default `pi/task` inherits whatever
         # the parent session runs, so /model switching would drag subagents
         # along). Keep subagents on the cheap DeepSeek route.
         task: litellm/deepseek/deepseek-v4-flash
-        # `ollama_chat/` (not `ollama/`): litellm's `ollama/` prefix is the
-        # completion provider and hits Ollama's /api/generate, which drops
-        # `tools` and sends no chat framing. Gemma 4's renderer/tool channel
-        # only exists on /api/chat — see argo workloads/llm-proxy/configmap.yaml.
-        smol: litellm/ollama_chat/gemma4:e4b
+        # Same cheap DeepSeek route as `default`, at the lowest tier its
+        # reviewed ladder offers (low/high/max — classes/deepseek.kdl), so
+        # `:low` is wire-exact and needs no effort remap. Workloads that take
+        # only the role's model (memories, extract, auto-repair) still run at
+        # the model default; title generation asks for no reasoning, which OMP
+        # sends as this same lowest tier.
+        smol: litellm/deepseek/deepseek-v4-flash:low
         slow: anthropic/claude-opus-5-5
         advisor: litellm/deepseek/deepseek-v4-flash
         # Image questions (`read <path>?q=<question>`) resolve @vision ->
