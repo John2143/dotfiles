@@ -220,6 +220,7 @@ window#waybar > box {
 #custom-updates,
 #custom-autoclicker,
 #custom-privacy,
+#custom-screenrec,
 #custom-tailscale,
 #custom-temporal,
 #custom-eww-hello,
@@ -306,6 +307,24 @@ window#waybar > box {
 
 #custom-privacy.recording {
     color: @yellow;
+}
+
+#custom-screenrec.recording {
+    color: @red;
+    animation: pulse-voxtype 1s infinite;
+}
+
+#custom-screenrec.uploading,
+#custom-screenrec.processing {
+    color: @yellow;
+}
+
+#custom-screenrec.done {
+    color: @green;
+}
+
+#custom-screenrec.error {
+    color: @red;
 }
 
 #custom-mullvad.connected {
