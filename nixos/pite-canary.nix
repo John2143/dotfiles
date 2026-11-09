@@ -310,6 +310,12 @@
               ;;
           esac
 
+          # ntfy renders Alertmanager's webhook JSON into a readable push.
+          case "$NTFY_URL" in
+            *\?*) NTFY_URL="$NTFY_URL&template=alertmanager" ;;
+            *) NTFY_URL="$NTFY_URL?template=alertmanager" ;;
+          esac
+
           cat > /run/alertmanager/config.yml <<CONFIGEOF
       global:
         resolve_timeout: 5m
