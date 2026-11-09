@@ -383,9 +383,11 @@ in {
       });
     })
     (final: prev: {
-      #voxtype = inputs.voxtype.packages.${prev.stdenv.hostPlatform.system}.vulkan.overrideAttrs (old: {
-        #CARGO_HTTP_USER_AGENT = "Mozilla/5.0 (X11; Linux x86_64; rv:137.0) Gecko/20100101 Firefox/137.0";
-      #});
+      # Vulkan whisper: GPU acceleration on both desktops (arch: NVIDIA legacy_580/Pascal,
+      # office: amdgpu/RADV). Uses the release-tagged nixpkgs package, not the flake input's
+      # dev branch. nixpkgs defaults vulkanSupport/onnxSupport/hipSupport to false, which is
+      # why every transcription ran on the CPU.
+      voxtype = prev.voxtype.override {vulkanSupport = true;};
       voxtype-osd-native = inputs.voxtype.packages.${prev.stdenv.hostPlatform.system}.osd-native.overrideAttrs (old: {
         CARGO_HTTP_USER_AGENT = "Mozilla/5.0 (X11; Linux x86_64; rv:137.0) Gecko/20100101 Firefox/137.0";
       });

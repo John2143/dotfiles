@@ -345,7 +345,11 @@ in
       # setupVersion never advances. Pin it; bump when omp raises
       # CURRENT_SETUP_VERSION (pi-tui/src/setup/setup-version.ts), and make
       # appearance changes here instead of re-running `omp setup`.
-      setupVersion: 2
+      # v3 (18.15+) added the `updates` scene. Its `update.auto` option is
+      # skipped wherever omp cannot replace its own binary (canSelfUpdate is
+      # false for anything under /nix/store), so the pin only gates the wizard;
+      # real updates arrive through the dotfiles flake input.
+      setupVersion: 3
       # Appearance, from the setup wizard. Only these two differed from the
       # defaults (theme.dark=titanium, theme.light=light, colorBlindMode=false
       # already matched). `nerd` needs a Nerd Font in the terminal.
@@ -371,6 +375,12 @@ in
         # that advertises input: [text, image] (see models.yml anthropic
         # provider).
         vision: anthropic/claude-opus-5-5
+        # Web search became a model-kind role in 18.15; the old
+        # `providers.webSearch: brave` key is retired and auto-migrated into
+        # this role, then deleted. `web/brave` needs BRAVE_API_KEY from
+        # /run/agenix/llm-runtime-keys. Swap to `web/deepseek` (DEEPSEEK_API_KEY,
+        # POST /v1/tools/search) to use DeepSeek's search API instead.
+        web: web/brave
 
       modelProviderOrder:
         - vast-vllm
@@ -408,21 +418,16 @@ in
       # Names must be nested mappings; dotted keys are silently ignored.
       checkpoint:
         enabled: true
-      # Dropped as dead keys (no such setting in omp 18.14.0):
+      # Dropped as dead keys (no such setting in omp 18.18.2):
       #   calc.enabled           — no calc tool or setting exists.
       #   render_mermaid.enabled — real knob is tui.renderMermaid, on by default.
       #   inspect_image.enabled  — the tool was retired upstream; image analysis
       #                            is built into `read` as `?q=<question>`, driven
       #                            by modelRoles.vision. omp migrates the old key
       #                            away, so leaving it here only adds noise.
-      # DeepSeek Search API (POST /v1/tools/search). Uses DEEPSEEK_API_KEY
-      # from /run/agenix/llm-runtime-keys. As of omp 18.14.0 the `deepseek`
-      # search provider ships upstream, so uncommenting webSearch below needs
-      # no fork patch. Must be a nested mapping: omp does not expand dotted
-      # keys, so `providers.webSearch: x` is ignored.
-      providers:
-        webSearch: brave
-        #webSearch: deepseek
+      # Search backends are model-kind roles now: `providers.webSearch` (and its
+      # webSearchOrder/webSearchExclude siblings) is retired, translated into
+      # `modelRoles.web` on load, then removed from the file. See modelRoles.web.
     '';
 
     ".omp/agent/keybindings.json".text = ''
@@ -431,18 +436,12 @@ in
       }
     '';
 
-    # File ignore patterns — gitignore-style globs that OMP silently
-    # skips during tab completion, @-file pickers, and tool operations.
-    # Does NOT filter bash commands; the system prompt reminds the model
-    # to scope find/grep away from these paths instead.
-    ".omp/agent/settings.json".text = ''
-      {
-        "ignorePatterns": [
-          "**/.direnv/**",
-          "**/ai_research/**"
-        ]
-      }
-    '';
+    # `.omp/agent/settings.json` is no longer configured on purpose: since the
+    # config.yml migration it is read only as a *legacy* source that omp folds
+    # into config.yml and then tries to rewrite (EROFS on a store symlink, logged
+    # every launch). Its single key, `ignorePatterns`, is not a setting in
+    # 18.18.2 — `grep -r ignorePatterns packages/` finds nothing — so the file
+    # only produced migration noise.
 
     # Tool-call approval hook. Loaded only when `--hook=<path>` is
     # passed -- intentionally NOT in `.omp/agent/extensions/` so default

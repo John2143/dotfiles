@@ -25,6 +25,12 @@
     '';
   };
 
+  # voxtype: GPU whisper, multilingual. office is 8 P-cores + 16 E-cores and measured best
+  # at 16 threads (2.01 s/short clip; 24 was 4% faster, 32 thrashed on E-cores). arch is
+  # 8C/16T, where 8 physical threads is the right count.
+  voxtypeThreads = if compName == "office" then 16 else 8;
+  voxtypeModel = "large-v3-turbo";
+
   primaryPackages = with pkgs; [
     # fonts
     # https://github.com/NixOS/nixpkgs/blob/master/pkgs/data/fonts/nerdfonts/shas.nix
@@ -570,6 +576,73 @@ in {
         rev = "c268b0269617c5109585044ef6eac8623090891f";
       }
       + "/hpfva.sh";
+
+    # Voxtype dictation: whisper on the GPU (vulkanSupport in shared-configuration.nix),
+    # large-v3-turbo with auto-detect constrained to the four languages actually dictated.
+    # gpu_wait_secs is raised from the default 5 because the daemon is started from the
+    # Hyprland hook and would otherwise load the model on CPU if it wins the render-node race.
+    "voxtype/config.toml".text = ''
+      # Managed by dotfiles/nixos/home.nix — edit the repo, not this file.
+      state_file = "auto"
+      engine = "whisper"
+
+      [hotkey]
+      key = "SCROLLLOCK"
+      modifiers = []
+      mode = "push_to_talk"
+      enabled = false
+
+      [audio]
+      device = "default"
+      sample_rate = 16000
+      max_duration_secs = 60
+
+      [whisper]
+      model = "${voxtypeModel}"
+      language = "en,es,fr,zh"
+      threads = ${toString voxtypeThreads}
+      gpu_wait_secs = 20
+      translate = false
+      on_demand_loading = false
+      gpu_isolation = false
+
+      [output]
+      mode = "type"
+      fallback_to_clipboard = true
+      type_delay_ms = 0
+      pre_type_delay_ms = 0
+
+      [output.notification]
+      on_recording_start = false
+      on_recording_stop = false
+      on_transcription = true
+
+      [osd]
+      enabled = true
+      frontend = "native"
+      position = "bottom-center"
+      width_px = 400
+      height_px = 48
+      margin_px = 24
+      top_margin = 0.85
+      opacity = 0.95
+      waveform_window_secs = 3.0
+      peak_decay_db_per_sec = 6.0
+      waveform_gain = 10.0
+
+      [text]
+      spoken_punctuation = false
+      smart_auto_submit = false
+
+      [vad]
+      enabled = false
+
+      [meeting]
+      enabled = false
+
+      [status]
+      icon_theme = "emoji"
+    '';
   };
 
   # hypridle intentionally NOT enabled (2026-09-18): locking is manual-only, so there is no

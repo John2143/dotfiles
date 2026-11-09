@@ -384,6 +384,21 @@ in {
     extraEnvironment = { XDG_RUNTIME_DIR = "/run/github-runner/dotfiles"; };
   } // runnerCommon;
 
+  # oh-my-pi fork — .github/workflows/fork-sync.yml rebases `john` onto
+  # upstream/main daily and gates the push on the full bun test suite. The
+  # workflow runs inside `nix develop`, which resolves the fork's own flake, so
+  # this runner needs the shared store (already the case on this host).
+  services.github-runners."oh-my-pi" = {
+    enable = true;
+    url = "https://github.com/John2143/oh-my-pi"; # repo URL — two segments = repos/ endpoint
+    tokenFile = config.age.secrets.github-personal-token.path;
+    name = "github-oh-my-pi"; # unique within the repo; service unit: github-runner-oh-my-pi
+    replace = true;
+    extraLabels = ["nixos"];
+    workDir = "/var/lib/github-runner-work-oh-my-pi";
+    extraEnvironment = { XDG_RUNTIME_DIR = "/run/github-runner/oh-my-pi"; };
+  } // runnerCommon;
+
   # Timestone-dev runner — UMVC3 rollback builds
   services.github-runners."timestone-dev" = {
     enable = true;
