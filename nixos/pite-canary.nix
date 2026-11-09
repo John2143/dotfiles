@@ -1,7 +1,7 @@
 # pite — UPS-protected Raspberry Pi (3.7 GB RAM, 238 GB SD)
 #
 # Roles: k3s agent, Prometheus server (2d retention), Alertmanager,
-# Blackbox exporter, LAN status reports to status-origin.2143.me.
+# Blackbox exporter, LAN status reports to status.2143.me.
 #
 # Alerting: ntfy.sh only — ntfy + Home Assistant ruled out per user.
 {
@@ -146,7 +146,7 @@
               "https://2143.me"
               "https://i.2143.me"
               "https://files.john2143.com"
-              "https://status-origin.2143.me/healthz" # the droplet itself — pages via BlackboxProbeFailed
+              "https://status.2143.me/healthz" # the droplet itself — pages via BlackboxProbeFailed
             ];
           }
         ];
@@ -379,7 +379,7 @@
   # make. AccuracySec matters: with systemd's default 1-minute accuracy the :00
   # and :30 runs coalesce, so this timer asks for 1 s.
   systemd.services.status-report = {
-    description = "Report LAN checks to status-origin.2143.me";
+    description = "Report LAN checks to status.2143.me";
     serviceConfig = {
       Type = "oneshot";
       User = "root";
@@ -428,7 +428,7 @@
       TOKEN=$(cat ${config.age.secrets.status-report-token.path})
       DEST=/var/lib/status-snapshots/history-$(date -u +%Y%m%d).db
       curl -fsS --max-time 120 -H "Authorization: Bearer $TOKEN" \
-        https://status-origin.2143.me/v1/snapshot -o "$DEST.tmp"
+        https://status.2143.me/v1/snapshot -o "$DEST.tmp"
       test "$(sqlite3 "$DEST.tmp" 'pragma quick_check')" = ok
       mv "$DEST.tmp" "$DEST"
       find /var/lib/status-snapshots -name 'history-*.db' -mtime +30 -delete

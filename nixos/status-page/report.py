@@ -28,7 +28,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
-URL = "https://status-origin.2143.me"
+URL = "https://status.2143.me"
 PROM = "http://localhost:9090"
 MIMIR = "http://192.168.6.23:8080/prometheus"
 
@@ -44,7 +44,7 @@ LAN = {
     "192.168.6.24:3100": "logs",
 }
 
-# Instances of job="blackbox-http". status-origin.2143.me/healthz is also probed
+# Instances of job="blackbox-http". status.2143.me/healthz is also probed
 # by pite — for alerting on the droplet — but is not a page component.
 WEB = {
     "https://john2143.com": "john2143-com",
