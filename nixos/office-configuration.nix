@@ -109,6 +109,7 @@
   # box hung until a manual power cycle; the oops itself never reached the
   # journal. See modules/crash-capture.nix.
   custom.crashCapture.enable = true;
+  custom.crashCapture.ramoops.enable = true;
 
   environment.systemPackages = with pkgs; [
     rocmPackages.rocm-smi
