@@ -514,6 +514,15 @@ in
       - After completing work, review from a user's perspective. Make sure outputs are clear and actionable.
       - Delegate freely: when a task has independent work streams, spawn parallel subagents with full context. Never duplicate work across them.
       </work-integrity>
+
+      <git>
+      - Make changes in a git worktree rather than the primary checkout, unless the user says to work in the checkout. Worktrees live in `worktrees/` beside the checkouts — `~/repos/rots4` → `~/repos/worktrees/rots4-<slug>`. Never create one inside a checkout or in `~/worktrees`; both are retired locations.
+      - Start from a main that is actually current: `git fetch origin`, then base the new branch on `origin/main` (or the repo's default branch). If the primary checkout is dirty or behind, deal with that first instead of working on top of it.
+      - Keep the worktree current too: fetch again, and rebase or merge `origin/main` before handing work back.
+      - Leave the primary checkout clean and fast-forwarded when you finish — no uncommitted edits of yours, no stray worktrees. `git worktree list` should show the primary checkout plus only the worktrees you are using.
+      - Remove a worktree with `git worktree remove` once its work is merged or abandoned. Never discard uncommitted work to do it: commit it, save it as a patch, or ask.
+      </git>
+
       <coding-discipline>
       - State assumptions explicitly before coding. If ambiguous, ask — don't pick silently.
       - Minimum code to solve the problem. No speculative features, abstractions, or error handling for impossible scenarios. If 200 lines could be 50, rewrite.
