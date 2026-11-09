@@ -634,5 +634,13 @@ in
         notify-send -u critical "Title" "Body" -h string:image-path:/tmp/dunstimg-{desc}.png -A "key=Label"
       </user-notification>
     '';
+
+    # User-defined task agents. Nix owns the file: edit the copy under
+    # `.omp/agent/agents/` and rebuild. `force` replaces the hand-written
+    # file that predates this entry (home-manager backs it up on activation).
+    ".omp/agent/agents/oracle.md" = {
+      source = ../../.omp/agent/agents/oracle.md;
+      force = true;
+    };
   };
 }
