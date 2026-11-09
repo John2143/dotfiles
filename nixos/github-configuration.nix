@@ -317,7 +317,12 @@ in {
     # The runner treats workDir as HOME and only wipes its contents
     # (find -mindepth 1 -delete), so tmpfiles creating it is enough for the
     # unit's BindPaths to resolve at boot.
-    "d /var/lib/containers/work-oh-my-pi 0755 github-runner github-runner -"
+    #
+    # Keep the basename short: HOME ends up inside rendered tool arguments, and
+    # packages/tui/test/task-progress-render.test.ts asserts that
+    # `$HOME/private/file` survives a 40-column previewLine, so HOME must stay
+    # at 27 characters or less.
+    "d /var/lib/containers/omp 0755 github-runner github-runner -"
     "d /var/lib/containers/work-2143-labs-2 0755 github-runner github-runner -"
     "d /var/lib/containers/work-2143-labs-3 0755 github-runner github-runner -"
     "d /var/lib/containers/work-2143-labs-4 0755 github-runner github-runner -"
@@ -406,7 +411,7 @@ in {
     name = "github-oh-my-pi"; # unique within the repo; service unit: github-runner-oh-my-pi
     replace = true;
     extraLabels = ["nixos"];
-    workDir = "/var/lib/containers/work-oh-my-pi";
+    workDir = "/var/lib/containers/omp";
     extraEnvironment = { XDG_RUNTIME_DIR = "/run/github-runner/oh-my-pi"; };
   } // runnerCommon;
 
