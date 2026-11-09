@@ -54,6 +54,15 @@
   # 8C/16T, where 8 physical threads is the right count.
   voxtypeThreads = if compName == "office" then 16 else 8;
   voxtypeModel = "large-v3-turbo";
+  # arch (Pascal, fp16: 0) is encoder-bound: constrained 4-language detection costs a second full
+  # encoder pass (~1.4 s) and the full 30 s window another ~1 s. Measured on arch, same 5.4 s
+  # clip: 4 langs/no cwo 3.0 s, 4 langs/cwo 1.9 s, en/no cwo 1.55 s, en+cwo 0.51 s.
+  # office is 0.25 s either way on the 7900 XTX (fp16 + coopmat), so it keeps all four languages.
+  voxtypeLanguage =
+    if compName == "office"
+    then ''["en", "es", "fr", "zh"]''
+    else ''"en"'';
+  voxtypeContextWindow = compName != "office";
 
   primaryPackages = with pkgs; [
     # fonts
@@ -629,8 +638,9 @@ in {
 
       [whisper]
       model = "${voxtypeModel}"
-      language = ["en", "es", "fr", "zh"]
+      language = ${voxtypeLanguage}
       threads = ${toString voxtypeThreads}
+      context_window_optimization = ${if voxtypeContextWindow then "true" else "false"}
       gpu_wait_secs = 20
       translate = false
       on_demand_loading = false
