@@ -629,7 +629,7 @@ in {
 
       [whisper]
       model = "${voxtypeModel}"
-      language = "en,es,fr,zh"
+      language = ["en", "es", "fr", "zh"]
       threads = ${toString voxtypeThreads}
       gpu_wait_secs = 20
       translate = false
