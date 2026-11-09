@@ -429,10 +429,10 @@ in {
         { _args = ["CTRL + SHIFT + ALT + 4" (mkLua ''hl.dsp.exec_cmd([[fish -c 'set loc (screenshot_location); grim -g (slurp) $loc; juush $loc']])'')]; }
         { _args = ["CTRL + SHIFT + 4" (mkLua ''hl.dsp.exec_cmd([[fish -c 'set loc (screenshot_location); grim -g (slurp) $loc; juush $loc']])'')]; }
         { _args = ["CTRL + SHIFT + 5" (mkLua ''hl.dsp.exec_cmd([[fish -c 'wl-paste > ~/screenshots/clipboard.txt; juush ~/screenshots/clipboard.txt']])'')]; }
-        # Screen recording: start (reusing the last region), reselect region, stop,
-        # one-key toggle, and the last-clip menu.
+        # Screen recording: start (asks for a region), start reusing the last region,
+        # stop, one-key toggle, and the last-clip menu.
         { _args = ["CTRL + SHIFT + 9" (mkLua ''hl.dsp.exec_cmd([[screenrec start]])'')]; }
-        { _args = ["CTRL + SHIFT + ALT + 9" (mkLua ''hl.dsp.exec_cmd([[screenrec start --reselect]])'')]; }
+        { _args = ["CTRL + SHIFT + ALT + 9" (mkLua ''hl.dsp.exec_cmd([[screenrec start --reuse]])'')]; }
         { _args = ["CTRL + SHIFT + 6" (mkLua ''hl.dsp.exec_cmd([[screenrec stop]])'')]; }
         { _args = ["CTRL + SHIFT + 0" (mkLua ''hl.dsp.exec_cmd([[screenrec toggle]])'')]; }
         { _args = ["CTRL + SHIFT + 8" (mkLua ''hl.dsp.exec_cmd([[screenrec last]])'')]; }
