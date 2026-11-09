@@ -307,6 +307,12 @@ in {
     "d /var/lib/github-runner-work-john2143-com 0755 github-runner github-runner -"
     "d /var/lib/github-runner-work-dotfiles 0755 github-runner github-runner -"
     "d /var/lib/github-runner-work-timestone-dev 0755 github-runner github-runner -"
+    # oh-my-pi's runner skips the bind-mount pattern below: it has no legacy
+    # /var/lib path to preserve, so it points workDir straight at the CI disk.
+    # The runner treats workDir as HOME and only wipes its contents
+    # (find -mindepth 1 -delete), so tmpfiles creating it is enough for the
+    # unit's BindPaths to resolve at boot.
+    "d /var/lib/containers/work-oh-my-pi 0755 github-runner github-runner -"
     "d /var/lib/containers/work-2143-labs-2 0755 github-runner github-runner -"
     "d /var/lib/containers/work-2143-labs-3 0755 github-runner github-runner -"
     "d /var/lib/containers/work-2143-labs-4 0755 github-runner github-runner -"
@@ -395,7 +401,7 @@ in {
     name = "github-oh-my-pi"; # unique within the repo; service unit: github-runner-oh-my-pi
     replace = true;
     extraLabels = ["nixos"];
-    workDir = "/var/lib/github-runner-work-oh-my-pi";
+    workDir = "/var/lib/containers/work-oh-my-pi";
     extraEnvironment = { XDG_RUNTIME_DIR = "/run/github-runner/oh-my-pi"; };
   } // runnerCommon;
 
