@@ -42,6 +42,11 @@
     "iscsi_target_mod"
   ];
 
+  # Panic dumps in reserved RAM: efivarfs is 192K with ~136K free here, too
+  # small for a 112-180K dump.
+  custom.crashCapture.enable = true;
+  custom.crashCapture.ramoops.enable = true;
+
   services.displayManager.lemurs = {
     enable = true;
   };

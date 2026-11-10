@@ -18,7 +18,6 @@
     ./modules/esrgan-upscaler.nix
     ./modules/nut-ups.nix
     ./modules/blueferry.nix
-    ./modules/crash-capture.nix
 
     # inputs.home-manager.nixosModules.default
   ];

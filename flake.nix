@@ -120,6 +120,7 @@
           [
             inputs.home-manager.nixosModules.default
             agenix.nixosModules.default
+            ./nixos/modules/crash-capture.nix
             {
               system.configurationRevision = inputs.self.rev or inputs.self.dirtyRev or null;
             }

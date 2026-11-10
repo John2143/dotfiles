@@ -61,7 +61,7 @@ in {
     archiveDir = lib.mkOption {
       type = lib.types.str;
       default = "/var/lib/crash-archive";
-      description = "Where EFI pstore records are copied after a crash.";
+      description = "Where pstore records are copied after a crash.";
     };
 
     ramoops = {
@@ -80,11 +80,13 @@ in {
 
   config = lib.mkIf cfg.enable {
     # --- self-recovery ---------------------------------------------------
-    # EFI pstore cannot hold a dump on this board (efivarfs is 77% full, 45K free,
-    # dumps are 112-180K). A reserved RAM region has no such limit and survives
-    # the warm reset that panic= performs. 0x10000000 sits inside
-    # [mem 0x100000-0x5dd2afff] usable, clear of the first reserved block at
-    # 0x5dd2b000. ecc=1 protects against a reset that leaves RAM partly corrupt.
+    # EFI pstore cannot hold a dump on these boards (efivarfs is 128-192K with
+    # 45-136K free; dumps are 112-180K). A reserved RAM region has no such limit
+    # and survives the warm reset that panic= performs. The default 0x10000000
+    # (256 MiB, 4 MiB long) lies inside the first large usable range on office,
+    # arch, closet and nas (checked against /proc/iomem on each); override
+    # ramoops.memAddress for a board whose map differs. ecc=1 protects against
+    # a reset that leaves RAM partly corrupt.
     boot.kernelParams =
       ["panic=${toString cfg.panicTimeout}"]
       ++ lib.optionals cfg.ramoops.enable [
@@ -113,9 +115,10 @@ in {
     systemd.tmpfiles.rules = ["d ${cfg.archiveDir} 0755 root root -"];
 
     systemd.services.pstore-archive = {
-      description = "Archive new EFI pstore crash records and announce them";
+      description = "Archive new pstore crash records and announce them";
       wantedBy = ["multi-user.target"];
       after = ["systemd-pstore.service" "network-online.target"];
+      wants = ["network-online.target"];
       serviceConfig = {
         Type = "oneshot";
         ExecStart = "${pstore-archive}/bin/pstore-archive";

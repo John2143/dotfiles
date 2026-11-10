@@ -1,4 +1,4 @@
-# Archive every new EFI pstore crash record and announce it.
+# Archive every new pstore crash record and announce it.
 # ARCHIVE_DIR, NOTIFY and PSTOREDIR are injected by crash-capture.nix.
 set -eu
 

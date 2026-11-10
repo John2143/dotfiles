@@ -21,8 +21,12 @@ in {
       environment.systemPackages = [deadman];
       systemd.tmpfiles.rules = ["d /var/lib/deadman 0755 root root -"];
       system.preSwitchChecks.deadman = ''${deadman}/bin/deadman pre-switch "$1" "$2"'';
-      # Hardware watchdog: a hung kernel or PID 1 resets the box (nas keeps its 30s).
-      systemd.settings.Manager.RuntimeWatchdogSec = lib.mkDefault "60s";
+      # Hardware watchdog: a hung kernel or PID 1 resets the box. crash-capture
+      # owns this setting when it is on (nas keeps its 30s); this is the fallback
+      # for a k3s node running without it. Two mkDefault definitions of the same
+      # key are a conflict, hence the condition.
+      systemd.settings.Manager.RuntimeWatchdogSec =
+        lib.mkIf (!config.custom.crashCapture.enable) (lib.mkDefault "60s");
 
       systemd.services.deadman-boot-check = {
         description = "deadman: prove this boot healthy, else return to the last good generation";

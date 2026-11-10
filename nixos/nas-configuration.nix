@@ -137,19 +137,22 @@ nixpkgs.overlays = [
     efi.canTouchEfiVariables = true;
   };
   boot.kernel.sysctl = {
-    "kernel.hardlockup_panic" = "1";
     "kernel.softlockup_panic" = "1";
     "kernel.panic_on_rcu_stall" = "1";
-    "kernel.panic" = "10";
     "vm.swappiness" = "100";
   };
-  systemd.watchdog.runtimeTime = "30s";
+  # Panic dumps in reserved RAM: efivarfs here is 128K with ~98K free, too small
+  # for a 112-180K dump.
+  custom.crashCapture.enable = true;
+  custom.crashCapture.notify = false; # no ntfy-topic-url secret on this host
+  custom.crashCapture.ramoops.enable = true;
+  # Keeps this box's pre-existing 30s runtime watchdog (module default is 60s).
+  custom.crashCapture.watchdogSec = "30s";
   boot.kernelParams = [
     # zswap disabled (was: enabled=1, zstd, zsmalloc, 30% pool). Compressed
     # swap interacted with the memory-path crashes on this box (swap_cgroup /
     # page-alloc NULL derefs in pstore captures); the 16 GiB dm-crypt swap
     # partition remains as the only swap device.
-    "panic=10"
     "zfs.zfs_arc_max=6442450944"
   ];
   boot.kernelModules = [

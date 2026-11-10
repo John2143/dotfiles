@@ -46,10 +46,11 @@
     dockerCompat = true;
   };
 
-  # Reboot 10s after a kernel panic instead of hanging; panic console text is
-  # captured to efi pstore and survives the reboot in /var/lib/systemd/pstore.
-  boot.kernel.sysctl."kernel.panic" = 10;
-  boot.kernelParams = [ "panic=10" ];
+  # Panic dumps in reserved RAM. efivarfs here is 128K total (85K free) while a
+  # dump is 112-180K, so the archived records were truncated fragments.
+  custom.crashCapture.enable = true;
+  custom.crashCapture.notify = false; # no ntfy-topic-url secret on this host
+  custom.crashCapture.ramoops.enable = true;
 
   # (cam04 restream moved to Frigate's ffmpeg with NVR sub-stream — no separate service needed)
 
