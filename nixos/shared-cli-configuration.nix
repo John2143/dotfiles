@@ -216,9 +216,6 @@
       (pkgs.writeShellScriptBin "juush" ''
         exec fish -c 'juush $argv' -- "$@"
       '')
-      (pkgs.writeShellScriptBin "bigjuush" ''
-        exec fish -c 'bigjuush $argv' -- "$@"
-      '')
     ];
 
   programs.gnupg.agent = {
@@ -264,7 +261,7 @@
     };
   };
 
-  # RustFS credentials for juush/bigjuush file sharing
+  # SeaweedFS S3 credentials for juush file sharing
   age.identityPaths = ["/home/john/.ssh/age"];
   age.secrets.rustfs-credentials =
     lib.mkIf
