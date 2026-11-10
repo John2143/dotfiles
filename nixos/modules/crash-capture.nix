@@ -87,15 +87,23 @@ in {
     # arch, closet and nas (checked against /proc/iomem on each); override
     # ramoops.memAddress for a board whose map differs. ecc=1 protects against
     # a reset that leaves RAM partly corrupt.
+    #
+    # Only one pstore backend may register. efi_pstore is built in and probes at
+    # 0.6s, so it wins by default and ramoops then fails with -EBUSY ("backend
+    # 'efi_pstore' already in use: ignoring 'ramoops'"); disabling the EFI
+    # backend is what makes the reserved region usable. Records then land in
+    # /sys/fs/pstore as dmesg-ramoops-N. There is no /dev/pmsg0: this kernel is
+    # built without CONFIG_PSTORE_PMSG (nor CONFIG_PSTORE_CONSOLE), so nothing
+    # can write a record except a real panic.
     boot.kernelParams =
       ["panic=${toString cfg.panicTimeout}"]
       ++ lib.optionals cfg.ramoops.enable [
         ("memmap=4096K" + "$" + cfg.ramoops.memAddress)
+        "efi_pstore.pstore_disable=1"
         "ramoops.mem_address=${cfg.ramoops.memAddress}"
         "ramoops.mem_size=0x400000"
         "ramoops.record_size=0x100000"
         "ramoops.console_size=0x100000"
-        "ramoops.pmsg_size=0x2000"
         "ramoops.ecc=1"
       ];
     boot.kernelModules = lib.optionals cfg.ramoops.enable ["ramoops"];
