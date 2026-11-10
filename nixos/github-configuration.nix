@@ -421,6 +421,12 @@ in {
     extraEnvironment = { XDG_RUNTIME_DIR = "/run/github-runner/oh-my-pi"; };
   } // runnerCommon;
 
+  # envfs serves /bin/* and /usr/bin/* from the PATH of the requesting process,
+  # so FHS shebangs in test fixtures (`#!/bin/bash` in oh-my-pi's upstream
+  # tests) resolve on this NixOS runner. Mounts over /bin and /usr/bin: apply
+  # with `nixos-rebuild boot` + reboot, not a live switch.
+  services.envfs.enable = true;
+
   # Timestone-dev runner — UMVC3 rollback builds
   services.github-runners."timestone-dev" = {
     enable = true;

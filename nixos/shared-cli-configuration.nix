@@ -63,8 +63,9 @@
       pkgs.attic-client
       # omp wrapper: consumes the fork's own flake (John2143/oh-my-pi#omp).
       # `john` is rebased onto upstream/main daily by the fork's fork-sync
-      # workflow; fleet-patch bumps this input weekly (`nix flake update
-      # oh-my-pi`). All build hashes (cargoHash, bun.nix) live in the fork.
+      # workflow; dotfiles' .github/workflows/bump-omp.yml moves this input daily
+      # after pushing the build to attic. All build hashes (cargoHash, bun.nix)
+      # live in the fork.
       (
         let
           omp-unwrapped = inputs.oh-my-pi.packages.${pkgs.stdenv.hostPlatform.system}.omp;
