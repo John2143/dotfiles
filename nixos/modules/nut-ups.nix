@@ -165,9 +165,13 @@ in
           type = "master";
         };
       };
-
-
-
     };
+
+    # The usbhid driver acknowledges SIGTERM ("Signal 15: exiting") but does
+    # not reap, so stopping upsdrv used to burn its full 30s TimeoutStopSec on
+    # every shutdown — 30 of closet's 51 seconds on 2026-11-02, with the rest
+    # of the shutdown queue waiting behind it. Nothing here holds state worth
+    # flushing, so cap the wait at 3s and let systemd SIGKILL the driver.
+    systemd.services.upsdrv.serviceConfig.TimeoutStopSec = "3s";
   };
 }
