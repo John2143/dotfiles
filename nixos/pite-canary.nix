@@ -55,6 +55,16 @@
     group = "root";
   };
 
+  # SNMPv3 credentials for the router (ROUTER_SNMP_USER/_AUTH/_PRIV), read by the
+  # snmp exporter as its EnvironmentFile. Source of truth: OpenBao
+  # consumers/john2143-com/observability/router-snmp.
+  age.secrets.router-snmp = {
+    file = ../secrets/router-snmp.age;
+    mode = "0400";
+    owner = "root";
+    group = "root";
+  };
+
   # ── Firewall — Prometheus + Alertmanager + Blackbox ────────────
   networking.firewall.allowedTCPPorts = [
     9090 # Prometheus
@@ -200,6 +210,57 @@
           }
         ];
       }
+      # Internet reachability: TCP 53 to the router's own upstream resolvers
+      # (router.rsc `/ip dns set servers=1.1.1.1,1.0.0.1`). Feeds only
+      # InternetDownRecently; BlackboxProbeFailed skips this job.
+      {
+        job_name = "blackbox-internet";
+        metrics_path = "/probe";
+        params.module = ["tcp_connect"];
+        static_configs = [
+          {
+            targets = [
+              "1.1.1.1:53"
+              "1.0.0.1:53"
+            ];
+          }
+        ];
+        relabel_configs = [
+          {
+            source_labels = ["__address__"];
+            target_label = "__param_target";
+          }
+          {
+            source_labels = ["__param_target"];
+            target_label = "instance";
+          }
+          {
+            target_label = "__address__";
+            replacement = "127.0.0.1:9115";
+          }
+        ];
+      }
+      # Router (RB5009, 192.168.5.1) over SNMPv3 through the loopback snmp
+      # exporter: interfaces, system, CPU load, RAM/flash usage. No address
+      # or neighbour tables (so no MIKROTIK-MIB). One walk a minute; the
+      # router writes nothing to flash for it.
+      {
+        job_name = "router-snmp";
+        scrape_interval = "60s";
+        scrape_timeout = "30s";
+        metrics_path = "/snmp";
+        params = {
+          target = ["192.168.5.1"];
+          auth = ["router_v3"];
+          module = ["if_mib" "system" "hrDevice" "hrStorage"];
+        };
+        static_configs = [
+          {
+            targets = ["127.0.0.1:9116"];
+            labels.instance = "router";
+          }
+        ];
+      }
     ];
     # Remote write to home-cluster Mimir for long-term storage.
     # Uses the MetalLB service IP (192.168.6.23 is mimir-lb).
@@ -229,7 +290,7 @@
           - name: infrastructure
             rules:
               - alert: NodeDown
-                expr: up == 0
+                expr: 'up{job!="router-snmp"} == 0'
                 for: 5m
                 labels: { severity: critical }
                 annotations: { summary: "Node {{ $labels.instance }} is down" }
@@ -239,7 +300,7 @@
                 labels: { severity: critical }
                 annotations: { summary: "Disk on {{ $labels.instance }} is >90% full" }
               - alert: BlackboxProbeFailed
-                expr: probe_success == 0
+                expr: 'probe_success{job!="blackbox-internet"} == 0'
                 for: 2m
                 labels: { severity: warning }
                 annotations: { summary: "Probe {{ $labels.instance }} failed" }
@@ -277,6 +338,26 @@
                 for: 5m
                 labels: { severity: critical }
                 annotations: { summary: "LoadBalancer {{ $labels.namespace }}/{{ $labels.service }} has no ready endpoints: MetalLB withdrew its VIP" }
+          - name: router
+            rules:
+              - alert: RouterSnmpMissing
+                expr: 'absent(ifHCInOctets{job="router-snmp",ifName="2GWAN"})'
+                for: 10m
+                labels: { severity: critical }
+                annotations: { summary: "pite has had no SNMP counters for the router's 2GWAN for 10m: router down, SNMP disabled, credentials changed, interface renamed, or pite's snmp exporter down" }
+              - alert: WanLinkDownRecently
+                expr: 'max_over_time(ifOperStatus{job="router-snmp",ifName="2GWAN"}[1h]) > 1'
+                labels: { severity: critical }
+                annotations: { summary: "The router's 2GWAN link to the Verizon router was down in the last hour (stays firing 1h so ntfy can deliver it after the WAN is back)" }
+              - alert: InternetDownRecently
+                expr: 'count_over_time((max(probe_success{job="blackbox-internet"}) == 0)[1h:30s]) * 30 >= 120'
+                labels: { severity: critical }
+                annotations: { summary: "pite reached neither 1.1.1.1 nor 1.0.0.1 for {{ $value }}s in the last hour (stays firing 1h so ntfy can deliver it after the WAN is back)" }
+              - alert: WanErrors
+                expr: 'increase(ifInErrors{job="router-snmp",ifName="2GWAN"}[15m]) + increase(ifOutErrors{job="router-snmp",ifName="2GWAN"}[15m]) > 0'
+                for: 15m
+                labels: { severity: warning }
+                annotations: { summary: "Router WAN 2GWAN has counted interface errors for 15m" }
       '';
     in [alertRules];
     alertmanagers = [
@@ -378,6 +459,37 @@
           prober: tcp
           timeout: 5s
     '';
+  };
+
+  # ── SNMP exporter — router counters ────────────────────────────
+  # Walks the router only when Prometheus scrapes job router-snmp. Loopback
+  # only: it holds the router's SNMPv3 credentials and proxies any target.
+  services.prometheus.exporters.snmp = {
+    enable = true;
+    listenAddress = "127.0.0.1";
+    # Upstream's module set (if_mib, system, hrDevice, hrStorage, ...); the
+    # NixOS module dry-runs this file at build time.
+    configurationPath = pkgs.runCommand "snmp-exporter-modules.yml" {} ''
+      cp ${pkgs.prometheus-snmp-exporter.src}/snmp.yml $out
+    '';
+    # Auth only, as placeholders: environmentFile implies
+    # --config.expand-environment-variables, which fills them at start.
+    extraFlags = [
+      "--config.file=${pkgs.writeText "router-snmp-auth.yml" (builtins.toJSON {
+        auths.router_v3 = {
+          version = 3;
+          security_level = "authPriv";
+          username = "\${ROUTER_SNMP_USER}";
+          password = "\${ROUTER_SNMP_AUTH}";
+          # RouterOS 7.24.5 offers only MD5/SHA1 for SNMPv3 auth, so SHA1 is
+          # the firmware's best. AES privacy keeps the payload encrypted.
+          auth_protocol = "SHA";
+          priv_protocol = "AES";
+          priv_password = "\${ROUTER_SNMP_PRIV}";
+        };
+      })}"
+    ];
+    environmentFile = config.age.secrets.router-snmp.path;
   };
 
   # ── Report LAN checks to the status droplet ────────────────────
