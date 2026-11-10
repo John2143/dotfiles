@@ -51,8 +51,9 @@ in {
   # gocryptfs passphrase for encrypted vault on NAS scratch share.
   # Only workstations that mount the vault need this — the NAS never sees the key.
   "gocryptfs-passphrase.age".publicKeys = [arch office closet];
-  # RustFS (minio) credentials for bigjuush/juush.
+  # SeaweedFS S3 credentials for juush.
   # Format: RUSTFS_USER=...\nRUSTFS_PASSWORD=...\nJUUSH_KEY=...
+  #   (variable names predate the move off RustFS; juush.bash reads them as-is)
   "rustfs-credentials.age".publicKeys = [office arch nas closet];
   # LEGACY combined LLM keys file. Kept during transition; new code uses the
   # split files below (llm-runtime-keys, llm-admin-keys). Remove once all hosts
