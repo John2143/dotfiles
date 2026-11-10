@@ -1,7 +1,7 @@
 ---
 description: This skill make sure we don't have any left open context in this chat.
 argument-hint: ''
-allowed-tools: read, write, edit, bash, grep, find, glob, lsp, astgrep, task, ask, todo_write, websearch, webfetch, browser, eval, mcp__ai_tasks_find_action, mcp__ai_tasks_do_action, mcp__ai_tasks_tasks_list, mcp__ai_tasks_tasks_read, mcp__ai_tasks_tasks_create, mcp__ai_tasks_tasks_update, mcp__ai_tasks_tasks_delete, mcp__ai_tasks_task_comments_list, mcp__ai_tasks_task_comments_create, mcp__ai_tasks_task_comments_update, mcp__ai_tasks_labels_list, mcp__ai_tasks_projects_list, mcp__ai_tasks_projects_read, mcp__ai_tasks_users_search
+allowed-tools: read, write, edit, bash, grep, find, glob, lsp, astgrep, task, ask, todo, websearch, webfetch, browser, eval, mcp__ai_tasks_find_action, mcp__ai_tasks_do_action, mcp__ai_tasks_tasks_list, mcp__ai_tasks_tasks_read, mcp__ai_tasks_tasks_create, mcp__ai_tasks_tasks_update, mcp__ai_tasks_tasks_delete, mcp__ai_tasks_task_comments_list, mcp__ai_tasks_task_comments_create, mcp__ai_tasks_task_comments_update, mcp__ai_tasks_labels_list, mcp__ai_tasks_projects_list, mcp__ai_tasks_projects_read, mcp__ai_tasks_users_search
 ---
 Sweep before answering — answer what you can yourself instead of asking. Nothing is off limits here: arbitrary bash, any file, any board action — verify rather than speculating.
 

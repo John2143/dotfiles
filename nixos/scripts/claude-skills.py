@@ -39,6 +39,7 @@ TOOL_ALIASES = {
     "websearch": "WebSearch",
     "ask": "AskUserQuestion",
     "task": "Task",
+    "todo": "TodoWrite",
     "todowrite": "TodoWrite",
     "todo_write": "TodoWrite",
     "notebookedit": "NotebookEdit",
@@ -53,6 +54,8 @@ DROPPED_TOOLS = {"debug", "exit_loop_mode", "exitloopmode"}
 
 # Claude Code names MCP tools mcp__<server>__<tool>; OMP joins them with a
 # single underscore. Longest server name first so prefixes can't shadow.
+# Wildcards do not survive this rewrite — mcp__ai_tasks__* comes out as
+# mcp__ai_tasks___* — so enumerate the tools the skill actually needs.
 MCP_SERVERS = ("personal_diary_admin", "ai_tasks")
 
 # A tool name, optionally carrying a permission rule: Bash(git add *)
