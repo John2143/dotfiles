@@ -72,6 +72,12 @@
       RestrictAddressFamilies = lib.mkForce ["AF_INET" "AF_INET6" "AF_UNIX" "AF_NETLINK" "AF_PACKET"];
       RestrictNamespaces = lib.mkForce false;
       SystemCallFilter = lib.mkForce [];
+      # RestrictSUIDSGID makes the kernel reject chmod with S_ISUID/S_ISGID
+      # (EPERM) in the runner's seccomp filter. oh-my-pi's edit-tool suite chmods
+      # a fixture to 04750 and asserts the bit survives a move, which fails on
+      # the hosted-parity assumption that a runner can set suid bits. Inert for
+      # privilege gain here: NoNewPrivileges=yes and CapabilityBoundingSet="".
+      RestrictSUIDSGID = lib.mkForce false;
     };
   };
 
