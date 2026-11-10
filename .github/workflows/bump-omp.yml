@@ -49,7 +49,7 @@ jobs:
 
       - name: Build omp as office/arch evaluate it
         if: steps.update.outputs.changed == 'yes'
-        run: nix build --impure --out-link result-omp --expr '(builtins.getFlake (toString ./.)).inputs.oh-my-pi.packages.x86_64-linux.omp'
+        run: nix build --no-eval-cache --impure --out-link result-omp --expr '(builtins.getFlake (toString ./.)).inputs.oh-my-pi.packages.x86_64-linux.omp'
 
       - name: Push omp to attic
         if: steps.update.outputs.changed == 'yes'
