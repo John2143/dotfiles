@@ -89,14 +89,17 @@ if ! { git fetch -q origin master && git checkout -q -f -B master origin/master 
   fail "could not reset the job clone to origin/master"; exit 1
 fi
 
-# --- 2. bump nixpkgs; a failed bump never blocks deploying master ------------
+# --- 2. bump inputs; a failed bump never blocks deploying master -------------
+# nixpkgs plus oh-my-pi, whose `john` branch is rebased onto upstream/main and
+# gated by the full bun test suite in John2143/oh-my-pi's fork-sync workflow
+# (daily). This is the weekly step that actually moves omp on office/arch.
 bumped=no
 if [ "$BUMP" = 1 ]; then
-  if ! nix flake update nixpkgs nixpkgs-stable >>"$LOG" 2>&1; then
+  if ! nix flake update nixpkgs nixpkgs-stable oh-my-pi >>"$LOG" 2>&1; then
     git checkout -q -- flake.lock
     fail "nix flake update failed; deploying origin/master unbumped"
   elif git diff --quiet -- flake.lock; then
-    log "nixpkgs already current"
+    log "inputs already current"
   else
     gate=ok
     for entry in "${HOSTS[@]}"; do
@@ -109,7 +112,7 @@ if [ "$BUMP" = 1 ]; then
     elif [ "$DRY_RUN" = 1 ]; then
       bumped="would bump (dry run)"
       git checkout -q -- flake.lock
-    elif git commit -q -m "chore(fleet): weekly nixpkgs bump $(date +%Y-%m-%d)" -- flake.lock >>"$LOG" 2>&1 \
+    elif git commit -q -m "chore(fleet): weekly input bump $(date +%Y-%m-%d)" -- flake.lock >>"$LOG" 2>&1 \
          && { git push -q origin master >>"$LOG" 2>&1 \
               || { git pull -q --rebase origin master >>"$LOG" 2>&1 && git push -q origin master >>"$LOG" 2>&1; }; }; then
       bumped=yes
