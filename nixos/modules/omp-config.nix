@@ -360,6 +360,15 @@ in
         # the model default; title generation asks for no reasoning, which OMP
         # sends as this same lowest tier.
         smol: litellm/deepseek/deepseek-v4-flash:low
+        # Local tier for titles, skill descriptions, and other background
+        # text. gemma4:e4b is a 7.5B model (131K ctx, tools + vision) served by
+        # the office Ollama; `:low` keeps the cheap tier from thinking through
+        # a one-line title. Only set on hosts that enable services.ollama —
+        # elsewhere the role stays unset and resolves through `smol`, so a
+        # laptop without Ollama keeps the DeepSeek route. The model comes from
+        # OMP's implicit `ollama` provider (127.0.0.1:11434), so models.yml
+        # needs no provider block.
+        ${lib.optionalString (osConfig.services.ollama.enable or false) "tiny: ollama/gemma4:e4b:low"}
         # Pinned to Claude's `high` effort. Role suffixes outrank an agent's
         # thinking-level, so agents that need another level (oracle: xhigh)
         # pin their own model selector instead of routing through this role.
