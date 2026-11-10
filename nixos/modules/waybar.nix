@@ -6,13 +6,58 @@
 }: let
   media-player-status = pkgs.writeShellApplication {
     name = "media-player-status";
-    runtimeInputs = with pkgs; [playerctl jq];
+    runtimeInputs = with pkgs; [playerctl jq pulseaudio gnused];
     text = ''
-      # Icons: ▶ (playing), ⏸ (paused), ♫ (stopped), ■ (stopped in tooltip)
-      # Get all active players
-      players=$(playerctl --list-all 2>/dev/null)
+      # Icons: ▶ (playing), ⏸ (paused), ♫ (no player), ■ (stopped in tooltip)
+      players=$(playerctl --list-all 2>/dev/null || true)
+
+      # Short player name for display: drop the ".instance<pid>"/".tab<id>"
+      # suffix playerctl uses, then capitalise the first letter.
+      pretty() {
+        printf '%s' "$1" | sed -E 's/\.(instance|tab)[0-9]+$//' | sed -E 's/^./\U&/'
+      }
+
+      # Firefox publishes one MPRIS player for the whole browser, but every tab
+      # that is producing sound owns its own audio stream, named after the page's
+      # document title (HTMLMediaElement::UpdateStreamName). Listing those
+      # streams is the only way to see the tabs behind that rolled-up player.
+      # Generic names are what Firefox falls back to when it cannot speak to
+      # PulseAudio directly; showing them would list noise instead of tabs.
+      tabs=$(pactl --format=json list sink-inputs 2>/dev/null | jq -r '
+        [ .[]
+          | . as $si
+          | ($si.properties["media.name"] // "") as $n
+          | select((((($si.properties["application.name"] // "") + " "
+                      + ($si.properties["application.process.binary"] // "") + " "
+                      + ($si.properties["application.icon_name"] // ""))
+                     | ascii_downcase | test("firefox|librewolf|zen|floorp")))
+                   and (($n | length) > 0)
+                   and (($n | test("^(alsa playback|audio ?stream|playback ?stream|playback)$"; "i")) | not))
+          | "\($n)\t"
+            + "\(((.volume // {})
+                  | [ .[].value_percent | sub("%"; "") | tonumber ]
+                  | if length > 0 then (add / length | floor) else 0 end))"
+        ] | .[]' 2>/dev/null || true)
+
+      tab_count=0
+      tab_list=""
+      if [ -n "$tabs" ]; then
+        while IFS=$'\t' read -r tab_title tab_vol; do
+          [ -n "$tab_title" ] || continue
+          tab_count=$((tab_count + 1))
+          tab_list="$tab_list\n  ▶ $tab_title ($tab_vol%)"
+        done <<< "$tabs"
+      fi
+
       if [ -z "$players" ]; then
-        echo '{"text": "♫", "class": "stopped", "tooltip": "No media playing"}'
+        if [ "$tab_count" -eq 0 ]; then
+          echo '{"text": "♫", "class": "stopped", "tooltip": "No media playing"}'
+          exit 0
+        fi
+        first_title=$(printf '%s\n' "$tabs" | head -n 1 | cut -f 1 || true)
+        tooltip=$(printf '%b' "Firefox tabs:$tab_list" | head -c 1200 || true)
+        jq -nc --arg text "▶  Firefox: $first_title" --arg class playing \
+          --arg tooltip "$tooltip" '{text: $text, class: $class, tooltip: $tooltip}'
         exit 0
       fi
 
@@ -20,22 +65,27 @@
       selected=""
       if [ -f /tmp/media-player-selected ]; then
         sel=$(cat /tmp/media-player-selected)
-        if echo "$players" | grep -qx "$sel"; then
+        if printf '%s\n' "$players" | grep -qxF -- "$sel"; then
           selected="$sel"
+        else
+          # The player was closed since it was picked: drop the dead override,
+          # otherwise scrolls and clicks keep targeting a player that is gone.
+          rm -f /tmp/media-player-selected
         fi
       fi
 
       if [ -n "$selected" ]; then
         best="$selected"
-        best_status=$(playerctl --player="$best" status 2>/dev/null)
+        best_status=$(playerctl --player="$best" status 2>/dev/null || true)
       else
         # Find best player: prefer Playing (non-browser first), then Paused
         best=""
         best_status=""
+        browser_playing=""
         for p in $players; do
-          s=$(playerctl --player="$p" status 2>/dev/null)
+          s=$(playerctl --player="$p" status 2>/dev/null || true)
           case "$p" in
-            firefox*|chromium*|chrome*|Floorp*)
+            firefox*|chromium*|chrome*|Floorp*|librewolf*|zen*)
               [ "$s" = "Playing" ] && browser_playing="$p"
               continue
               ;;
@@ -52,31 +102,50 @@
         fi
 
         if [ -z "$best" ]; then
-          best=$(echo "$players" | head -1)
-          best_status=$(playerctl --player="$best" status 2>/dev/null)
+          best=$(printf '%s\n' "$players" | head -n 1 || true)
+          best_status=$(playerctl --player="$best" status 2>/dev/null || true)
         fi
       fi
 
       # Write active player for scroll/volume commands
-      echo "$best" > /tmp/media-player-active
+      printf '%s\n' "$best" > /tmp/media-player-active
 
-      artist=$(playerctl --player="$best" metadata artist 2>/dev/null | head -c 30)
-      title=$(playerctl --player="$best" metadata title 2>/dev/null | head -c 50)
-      player_name="$best"
+      player_name=$(pretty "$best")
+      artist=$(playerctl --player="$best" metadata artist 2>/dev/null | head -c 30 || true)
+      title=$(playerctl --player="$best" metadata title 2>/dev/null | head -c 50 || true)
+
+      tooltip=""
+      for p in $players; do
+        s=$(playerctl --player="$p" status 2>/dev/null || true)
+        a=$(playerctl --player="$p" metadata artist 2>/dev/null || true)
+        t=$(playerctl --player="$p" metadata title 2>/dev/null || true)
+        case "$s" in
+          Playing) icon_t="▶" ;;
+          Paused)  icon_t="⏸" ;;
+          *)       icon_t="■" ;;
+        esac
+        if [ -n "$t" ]; then
+          tooltip="$tooltip$icon_t $(pretty "$p"): $a - $t\n"
+        fi
+      done
+      if [ "$tab_count" -gt 0 ]; then
+        tooltip="$tooltip""Firefox tabs:$tab_list"
+      fi
+      tooltip=$(printf '%b' "$tooltip" | head -c 1200 || true)
 
       case "$best_status" in
-        Playing)  class="playing"; icon="▶" ;;
-        Paused)   class="paused";  icon="⏸" ;;
+        Playing) class="playing"; icon="▶" ;;
+        Paused)  class="paused";  icon="⏸" ;;
         *)
-          player_display=$(playerctl --player="$best" metadata --format '{{ playerName }}' 2>/dev/null || echo "$player_name")
-          echo "{\"text\": \"♫ $player_name\", \"class\": \"stopped\", \"tooltip\": \"$player_display: state unknown\"}"
+          jq -nc --arg text "♫  $player_name" --arg class stopped \
+            --arg tooltip "$tooltip" '{text: $text, class: $class, tooltip: $tooltip}'
           exit 0 ;;
       esac
 
-      vol=$(playerctl --player="$best" volume 2>/dev/null)
+      vol=$(playerctl --player="$best" volume 2>/dev/null || true)
       vol_text=""
       if [ -n "$vol" ]; then
-        vol_pct=$(echo "$vol" | awk '{printf "%.0f", $1 * 100}')
+        vol_pct=$(printf '%s' "$vol" | awk '{printf "%.0f", $1 * 100}')
         vol_text=" $vol_pct%"
       fi
 
@@ -91,22 +160,6 @@
       fi
       text="$text$vol_text"
 
-      tooltip=""
-      for p in $players; do
-        s=$(playerctl --player="$p" status 2>/dev/null)
-        a=$(playerctl --player="$p" metadata artist 2>/dev/null)
-        t=$(playerctl --player="$p" metadata title 2>/dev/null)
-        icon_t=""
-        case "$s" in
-          Playing) icon_t="▶" ;;
-          Paused)  icon_t="⏸" ;;
-          *)       icon_t="■" ;;
-        esac
-        if [ -n "$t" ]; then
-          tooltip="$tooltip$icon_t $p: $a - $t\n"
-        fi
-      done
-      tooltip=$(echo -e "$tooltip" | head -c 500)
       jq -nc --arg text "$text" --arg class "$class" --arg tooltip "$tooltip" \
         '{text: $text, class: $class, tooltip: $tooltip}'
     '';
@@ -124,7 +177,7 @@
       # Respect user-selected player first
       if [ -f /tmp/media-player-selected ]; then
         sel=$(cat /tmp/media-player-selected)
-        if echo "$players" | grep -qx "$sel"; then
+        if printf '%s\n' "$players" | grep -qxF -- "$sel"; then
           playerctl --player="$sel" play-pause
           pidof -x waybar 2>/dev/null | xargs -r kill -46 2>/dev/null || true
           exit 0
@@ -134,7 +187,7 @@
       # Fall back to active player
       if [ -f /tmp/media-player-active ]; then
         active=$(cat /tmp/media-player-active)
-        if echo "$players" | grep -qx "$active"; then
+        if printf '%s\n' "$players" | grep -qxF -- "$active"; then
           playerctl --player="$active" play-pause
           pidof -x waybar 2>/dev/null | xargs -r kill -46 2>/dev/null || true
           exit 0
@@ -216,7 +269,7 @@
 
   media-player-cycle = pkgs.writeShellApplication {
     name = "media-player-cycle";
-    runtimeInputs = with pkgs; [coreutils procps];
+    runtimeInputs = with pkgs; [coreutils playerctl procps];
     text = ''
       players=$(playerctl --list-all 2>/dev/null)
       if [ -z "$players" ]; then
@@ -246,21 +299,32 @@
 
   media-player-volume = pkgs.writeShellApplication {
     name = "media-player-volume";
-    runtimeInputs = with pkgs; [coreutils procps];
+    runtimeInputs = with pkgs; [coreutils playerctl procps];
     text = ''
-      # Read selected/active player, then adjust volume
+      players=$(playerctl --list-all 2>/dev/null || true)
+      if [ -z "$players" ]; then
+        exit 0
+      fi
+
+      # A selection that outlived its player (closed since it was picked) must
+      # not swallow the event: drop it and fall back to what the bar shows.
       player=""
       if [ -f /tmp/media-player-selected ]; then
-        player=$(cat /tmp/media-player-selected)
+        sel=$(cat /tmp/media-player-selected)
+        if printf '%s\n' "$players" | grep -qxF -- "$sel"; then
+          player="$sel"
+        else
+          rm -f /tmp/media-player-selected
+        fi
       fi
       if [ -z "$player" ] && [ -f /tmp/media-player-active ]; then
-        player=$(cat /tmp/media-player-active)
+        active=$(cat /tmp/media-player-active)
+        if printf '%s\n' "$players" | grep -qxF -- "$active"; then
+          player="$active"
+        fi
       fi
       if [ -z "$player" ]; then
-        player=$(playerctl --list-all 2>/dev/null | head -1)
-      fi
-      if [ -z "$player" ]; then
-        exit 0
+        player=$(printf '%s\n' "$players" | head -n 1 || true)
       fi
 
       playerctl --player="$player" volume "$1"
