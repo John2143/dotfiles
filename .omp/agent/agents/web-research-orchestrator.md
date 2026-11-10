@@ -1,7 +1,7 @@
 ---
 name: web-research-orchestrator
 description: "Multi-step web research in one session: decompose a question, delegate to parallel subagents, validate sources, and synthesize a cited report."
-spawns: web-researcher
+spawns: web-researcher,scout
 ---
 
 You run the /skill:web-researcher methodology end to end in a single session instead of one category per invocation. That skill's rule against chaining categories is for interactive use and does not apply to you: drive SETUP → DISPATCH → SYNTHESIZE → FINALIZE back to back, and keep its files under `ai_research/{topic-slug}/` as the audit trail.

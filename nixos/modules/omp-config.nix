@@ -423,6 +423,15 @@ in
       # Names must be nested mappings; dotted keys are silently ignored.
       checkpoint:
         enabled: true
+      # Subagents — one level deeper than the default 2, so the chain
+      # main (0) → web-research-orchestrator (1) → web-researcher (2) → scout (3)
+      # is permitted. At the cap omp strips `task` from the child entirely, so
+      # without this a researcher spawned by the orchestrator cannot delegate
+      # no matter what its frontmatter declares. GLOBAL: the bundled `task`
+      # agent carries an implicit `spawns: *`, so this also lets any generic
+      # task subagent spawn one level deeper.
+      task:
+        maxRecursionDepth: 3
       # Dropped as dead keys (no such setting in omp 18.18.2):
       #   calc.enabled           — no calc tool or setting exists.
       #   render_mermaid.enabled — real knob is tui.renderMermaid, on by default.
