@@ -427,6 +427,14 @@ in {
   # with `nixos-rebuild boot` + reboot, not a live switch.
   services.envfs.enable = true;
 
+  # A process with no PATH at all (oh-my-pi's Rust suite spawns
+  # `/bin/sh -c '/bin/sleep 30'` under an empty environment) gets these from the
+  # fallback directory instead: `path` if the requester has no PATH at all,
+  # which otherwise carries only env and sh. Test fixtures assume the FHS set.
+  services.envfs.extraFallbackPathCommands = ''
+    ln -sf ${pkgs.coreutils}/bin/* ${pkgs.procps}/bin/* ${pkgs.bash}/bin/bash $out/
+  '';
+
   # Timestone-dev runner — UMVC3 rollback builds
   services.github-runners."timestone-dev" = {
     enable = true;
