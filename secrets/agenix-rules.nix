@@ -191,6 +191,8 @@ in {
 
   "idrac-aiuser.age".publicKeys = [office arch];
 
+  "router-snmp.age".publicKeys = [office arch pite];
+
   # Read-only Home Assistant account for the home-assistant-engineer skill.
   "ha-aiuser.age".publicKeys = [office arch];
 }
