@@ -651,5 +651,13 @@ in
       source = ../../.omp/agent/agents/oracle.md;
       force = true;
     };
+    ".omp/agent/agents/web-research-orchestrator.md" = {
+      source = ../../.omp/agent/agents/web-research-orchestrator.md;
+      force = true;
+    };
+    ".omp/agent/agents/web-researcher.md" = {
+      source = ../../.omp/agent/agents/web-researcher.md;
+      force = true;
+    };
   };
 }

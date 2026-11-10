@@ -387,7 +387,12 @@ in {
       # office: amdgpu/RADV). Uses the release-tagged nixpkgs package, not the flake input's
       # dev branch. nixpkgs defaults vulkanSupport/onnxSupport/hipSupport to false, which is
       # why every transcription ran on the CPU.
-      voxtype = prev.voxtype.override {vulkanSupport = true;};
+      voxtype = (prev.voxtype.override {vulkanSupport = true;}).overrideAttrs (old: {
+        # voxtype 1.1.1 links -lsqlite3 (libsqlite3-sys) but this nixpkgs carries
+        # only alsa-lib/openssl, so the final link dies with "cannot find
+        # -lsqlite3". nixpkgs 6dadaf4 (pinned 2026-11-07) still lacks it.
+        buildInputs = (old.buildInputs or []) ++ [prev.sqlite];
+      });
       voxtype-osd-native = inputs.voxtype.packages.${prev.stdenv.hostPlatform.system}.osd-native.overrideAttrs (old: {
         CARGO_HTTP_USER_AGENT = "Mozilla/5.0 (X11; Linux x86_64; rv:137.0) Gecko/20100101 Firefox/137.0";
       });

@@ -6,8 +6,8 @@ tool-hints: |
   Use web_search for search engine queries returning structured results.
   Use read with URLs to fetch and extract full page content from specific links.
   Use browser for interactive research requiring navigation, JS execution, or login flows.
-  Use Task(explore) to scout unfamiliar domains before committing to sub-topics.
-  Use Task(task) for parallel research on independent sub-topics — each writes its own report file.
+  Use Task(scout) to recon unfamiliar domains before committing to sub-topics.
+  Use Task(web-researcher) for parallel research on independent sub-topics — each writes its own report file.
   Use write for all report and state files — never heredocs or shell redirection.
   Research files live inside ai_research/{topic-slug}/ — never write research content outside this directory.
   This skill may be invoked in loop mode (via /loop harness). When running in loop mode, call `exit_loop_mode(summary)` after producing results to terminate the harness. When not in loop mode, just stop normally.
@@ -26,7 +26,7 @@ The primary research question must be quoted. Everything after the closing quote
 Parse `$ARGUMENTS` by running the deterministic parser script — do NOT manually reason about quote positions:
 
 ```bash
-eval "$(dotfiles/.claude/skills/web-researcher/parse-args.py << 'ARGSEOF'
+eval "$("$HOME/.omp/agent/skills/web-researcher/parse-args.py" << 'ARGSEOF'
 <paste the raw $ARGUMENTS string here exactly as you received it>
 ARGSEOF
 )"
@@ -147,7 +147,7 @@ The `web-research-orchestrator` agent is exempt: it runs all four categories bac
 2. If no sub-topics are pending and `Done:` is not empty: update `phase_status` to `synthesizing` in `research_state.md`. **STOP.** Do not proceed to synthesis in this session.
 3. Select up to 5 pending sub-topics to dispatch this session (or up to 10 if the user explicitly authorized more in `$CONTEXT`). If more than 5 remain pending, dispatch 5 now; the rest will be dispatched in future sessions.
 4. Rewrite `research_state.md` in one `write` call: move each selected slug from `Pending:` to `In progress:`, increment its `Retries:` count, and set `phase_status: synthesizing`.
-5. Dispatch all selected sub-agents simultaneously using `Task(task)`. Each sub-agent receives a self-contained research brief. Construct the brief as follows (substitute `{placeholders}` with values from `research_plan.md`):
+5. Dispatch all selected sub-agents simultaneously using `Task(web-researcher)`. Each sub-agent receives a self-contained research brief. Construct the brief as follows (substitute `{placeholders}` with values from `research_plan.md`):
 
 ```
 # Research Brief: {sub-topic title}
@@ -177,10 +177,7 @@ A clear summary of your research findings (2–4 paragraphs).
 1–2 sentences explaining how your sub-topic findings bear on the primary research question.
 
 ### 3. Source Evaluation
-For each source you relied on, state:
-- The source URL and title.
-- A credibility assessment: primary vs. secondary, official data vs. opinion, verified author vs. anonymous, recency.
-- Why you weighted this source the way you did.
+For each source your conclusions actually rest on — at most 12, and fewer when the question is narrow — state: the URL and title, a credibility assessment (primary vs. secondary, official data vs. opinion, verified author vs. anonymous, recency), and why you weighted it that way. A source you read but did not rely on belongs in the bibliography only.
 
 ### 4. Conclusions
 Actionable conclusions drawn from your research. If your perspective assignment revealed non-obvious angles, call them out explicitly.
@@ -196,7 +193,7 @@ All sources in APA format. Each entry must include the full URL.
 
 ## Constraints
 - You may write only to the specified output file path.
-- You may use web_search, read (with URLs), and browser for research.
+- You may use web_search, read (with URLs), and bash for research.
 - You may not write outside ai_research/{topic-slug}/.
 - You may not ask questions — work with the brief you have.
 - Your report must be self-contained so a reviewer can audit it without your context window.
@@ -258,7 +255,7 @@ All sources in APA format. Each entry must include the full URL.
 **Purpose**: Produce the final answer and report to the user.
 
 1. Read all `phase_*_summary.md` files.
-2. Optionally, dispatch a fresh `Task(task)` sub-agent to write `final_report.md` from all phase summaries. This provides an unbiased synthesis with a clean context window. Use this brief:
+2. Optionally, dispatch a fresh `Task(web-researcher)` sub-agent to write `final_report.md` from all phase summaries. This provides an unbiased synthesis with a clean context window. Use this brief:
 
 ```
 # Final Report Brief
