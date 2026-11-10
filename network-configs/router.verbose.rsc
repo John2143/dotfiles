@@ -1,4 +1,4 @@
-# 2026-10-30 09:37:56 by RouterOS 7.24.5
+# 2026-11-10 03:19:28 by RouterOS 7.24.5
 # software id = 7RHC-3MMG
 #
 # model = RB5009UPr+S+
@@ -242,9 +242,12 @@ add as=65001 name=bgp-instance-1 router-id=192.168.5.1 vrf=main
 /routing bgp template
 set default afi=ip,ipv6 as=65001 name=default
 /snmp community
-set [ find default=yes ] addresses=::/0 authentication-protocol=MD5 disabled=\
-    no encryption-protocol=DES name=public read-access=yes security=none \
-    write-access=no
+set [ find default=yes ] addresses=127.0.0.1/32 authentication-protocol=MD5 \
+    disabled=no encryption-protocol=DES name=public read-access=no security=\
+    none write-access=no
+add addresses=192.168.5.9/32,192.168.5.209/32 authentication-protocol=SHA1 \
+    disabled=no encryption-protocol=AES name=pite read-access=yes security=\
+    private write-access=no
 /system logging action
 set 0 memory-lines=1000 memory-stop-on-full=no name=memory target=memory
 set 1 disk-file-count=2 disk-file-name=log disk-lines-per-file=1000 \
@@ -587,6 +590,18 @@ add address=192.168.5.68 address-lists="" agent-circuit-id="" \
     comment="big k3s node (static)" dhcp-option="" disabled=no \
     !insert-queue-before mac-address=BC:24:11:19:22:F9 !parent-queue \
     !queue-type server=dchp1
+add address=192.168.5.40 address-lists="" agent-circuit-id="" \
+    agent-remote-id="" !allow-dual-stack-queue comment=np1 dhcp-option="" \
+    disabled=no !insert-queue-before mac-address=BC:24:11:00:00:40 \
+    !parent-queue !queue-type server=dchp1
+add address=192.168.5.41 address-lists="" agent-circuit-id="" \
+    agent-remote-id="" !allow-dual-stack-queue comment=np2 dhcp-option="" \
+    disabled=no !insert-queue-before mac-address=BC:24:11:00:00:41 \
+    !parent-queue !queue-type server=dchp1
+add address=192.168.5.42 address-lists="" agent-circuit-id="" \
+    agent-remote-id="" !allow-dual-stack-queue comment=np3 dhcp-option="" \
+    disabled=no !insert-queue-before mac-address=BC:24:11:00:00:42 \
+    !parent-queue !queue-type server=dchp1
 /ip dhcp-server network
 add address=192.168.1.0/24 caps-manager="" dhcp-option="" dns-server=\
     192.168.5.1 gateway=192.168.1.1 !next-server ntp-server="" wins-server=""
@@ -624,6 +639,9 @@ add address=192.168.5.68 comment=big disabled=no dynamic=no list=k8s-nodes
 add address=192.168.5.9 comment=pite disabled=no dynamic=no list=k8s-nodes
 add address=192.168.5.209 comment=office disabled=no dynamic=no list=\
     k8s-nodes
+add address=192.168.5.40 comment=np1 disabled=no dynamic=no list=k8s-nodes
+add address=192.168.5.41 comment=np2 disabled=no dynamic=no list=k8s-nodes
+add address=192.168.5.42 comment=np3 disabled=no dynamic=no list=k8s-nodes
 /ip firewall filter
 add action=accept chain=forward comment="allow inter-subnet routing" \
     dst-address=192.168.0.0/16 src-address=192.168.0.0/16
@@ -695,7 +713,7 @@ add action=dst-nat chain=dstnat comment="teamspeak voice (udp/9987) -> .6.15" \
     !src-mac-address !src-port !tcp-mss !time to-addresses=192.168.6.15 \
     to-ports=9987 !ttl
 add action=dst-nat chain=dstnat comment=\
-    "teamspeak file transfer (tcp/30033) -> .6.16" !connection-bytes \
+    "teamspeak file transfer (tcp/30033) -> .6.15" !connection-bytes \
     !connection-limit !connection-mark !connection-rate !connection-type \
     !content disabled=no !dscp !dst-address !dst-address-list \
     !dst-address-type !dst-limit dst-port=30033 !fragment !icmp-options \
@@ -705,7 +723,7 @@ add action=dst-nat chain=dstnat comment=\
     !out-interface !out-interface-list !packet-mark !packet-size \
     !per-connection-classifier !port !priority protocol=tcp !psd !random \
     !routing-mark !src-address !src-address-list !src-address-type \
-    !src-mac-address !src-port !tcp-mss !time to-addresses=192.168.6.16 \
+    !src-mac-address !src-port !tcp-mss !time to-addresses=192.168.6.15 \
     to-ports=30033 !ttl
 add action=dst-nat chain=dstnat comment=\
     "ingress http (tcp/80) -> traefik VIP (ingress-follow)" !connection-bytes \
@@ -789,6 +807,13 @@ add action=dst-nat chain=dstnat comment="minecraft (tcp/25565) -> .6.29" \
 add action=dst-nat chain=dstnat comment="headscale stun (udp/3479) -> .6.18" \
     dst-port=3479 in-interface-list=WAN protocol=udp to-addresses=\
     192.168.6.18 to-ports=3479
+add action=dst-nat chain=dstnat comment=\
+    "rots prod gameservers (udp/36000-36003) -> .6.32" dst-port=36000-36003 \
+    in-interface-list=WAN protocol=udp to-addresses=192.168.6.32 !to-ports
+add action=dst-nat chain=dstnat comment=\
+    "rots previews gameservers (udp/30000-33999) -> .6.33" dst-port=\
+    31000-34999 in-interface-list=WAN protocol=udp to-addresses=192.168.6.33 \
+    !to-ports
 /ip firewall service-port
 set ftp disabled=no ports=21
 set tftp disabled=no ports=69
@@ -999,6 +1024,12 @@ add chain=metallb-in comment="k3s API VIP" rule=\
     "if (dst == 192.168.5.10/32) { accept }"
 add chain=metallb-in comment="metallb service /128s" rule=\
     "if (dst in fd00:6::/64 && dst-len == 128) { accept }"
+add chain=metallb-in comment="nonprod service /32s" rule=\
+    "if (dst in 192.168.7.0/24 && dst-len == 32) { accept }"
+add chain=metallb-in comment="nonprod k3s API VIP" rule=\
+    "if (dst == 192.168.7.2/32) { accept }"
+add chain=metallb-in comment="nonprod service /128s" rule=\
+    "if (dst in fd00:7::/64 && dst-len == 128) { accept }"
 /routing igmp-proxy
 set query-interval=2m5s query-response-interval=10s quick-leave=no
 /routing settings
@@ -1006,7 +1037,7 @@ set check-gateway-ping-count=2 check-gateway-ping-interval=10s \
     check-gateway-ping-timeout=1s policy-rules=\
     mangle,vrf-lookup,vrf-unreach,local,user,main single-process=no
 /snmp
-set contact="" enabled=no engine-id-suffix="" location="" src-address=:: \
+set contact="" enabled=yes engine-id-suffix="" location="" src-address=:: \
     trap-community=public trap-generators=temp-exception trap-target="" \
     trap-version=1 vrf=main
 /system clock

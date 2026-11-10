@@ -1,4 +1,4 @@
-# 2026-10-30 09:37:55 by RouterOS 7.24.5
+# 2026-11-10 03:19:27 by RouterOS 7.24.5
 # software id = 7RHC-3MMG
 #
 # model = RB5009UPr+S+
@@ -44,6 +44,10 @@ add name=ula-addr-pool prefix=fd00:1::/64 prefix-length=128
 add as=65001 name=bgp-instance-1 router-id=192.168.5.1 vrf=main
 /routing bgp template
 set default afi=ip,ipv6 as=65001
+/snmp community
+set [ find default=yes ] addresses=127.0.0.1/32 read-access=no
+add addresses=192.168.5.9/32,192.168.5.209/32 authentication-protocol=SHA1 \
+    encryption-protocol=AES name=pite security=private
 /system logging action
 add name=loki remote=192.168.6.25 remote-log-format=syslog src-address=\
     192.168.5.1 syslog-facility=local0 target=remote
@@ -187,6 +191,12 @@ add address=192.168.5.209 client-id=1:c4:3d:1a:f3:e:76 comment=\
     "office k3s node (static)" mac-address=C4:3D:1A:F3:0E:76 server=dchp1
 add address=192.168.5.68 client-id=1:bc:24:11:19:22:f9 comment=\
     "big k3s node (static)" mac-address=BC:24:11:19:22:F9 server=dchp1
+add address=192.168.5.40 comment=np1 mac-address=BC:24:11:00:00:40 server=\
+    dchp1
+add address=192.168.5.41 comment=np2 mac-address=BC:24:11:00:00:41 server=\
+    dchp1
+add address=192.168.5.42 comment=np3 mac-address=BC:24:11:00:00:42 server=\
+    dchp1
 /ip dhcp-server network
 add address=192.168.1.0/24 dns-server=192.168.5.1 gateway=192.168.1.1
 add address=192.168.5.0/24 dns-server=192.168.5.1 gateway=192.168.5.1 \
@@ -215,6 +225,9 @@ add address=192.168.5.175 comment=nas list=k8s-nodes
 add address=192.168.5.68 comment=big list=k8s-nodes
 add address=192.168.5.9 comment=pite list=k8s-nodes
 add address=192.168.5.209 comment=office list=k8s-nodes
+add address=192.168.5.40 comment=np1 list=k8s-nodes
+add address=192.168.5.41 comment=np2 list=k8s-nodes
+add address=192.168.5.42 comment=np3 list=k8s-nodes
 /ip firewall filter
 add action=accept chain=forward comment="allow inter-subnet routing" \
     dst-address=192.168.0.0/16 src-address=192.168.0.0/16
@@ -277,8 +290,8 @@ add action=dst-nat chain=dstnat comment="teamspeak voice (udp/9987) -> .6.15" \
     dst-port=9987 in-interface-list=WAN protocol=udp to-addresses=\
     192.168.6.15 to-ports=9987
 add action=dst-nat chain=dstnat comment=\
-    "teamspeak file transfer (tcp/30033) -> .6.16" dst-port=30033 \
-    in-interface-list=WAN protocol=tcp to-addresses=192.168.6.16 to-ports=\
+    "teamspeak file transfer (tcp/30033) -> .6.15" dst-port=30033 \
+    in-interface-list=WAN protocol=tcp to-addresses=192.168.6.15 to-ports=\
     30033
 add action=dst-nat chain=dstnat comment=\
     "ingress http (tcp/80) -> traefik VIP (ingress-follow)" dst-port=80 \
@@ -324,6 +337,12 @@ add action=dst-nat chain=dstnat comment="minecraft (tcp/25565) -> .6.29" \
 add action=dst-nat chain=dstnat comment="headscale stun (udp/3479) -> .6.18" \
     dst-port=3479 in-interface-list=WAN protocol=udp to-addresses=\
     192.168.6.18 to-ports=3479
+add action=dst-nat chain=dstnat comment=\
+    "rots prod gameservers (udp/36000-36003) -> .6.32" dst-port=36000-36003 \
+    in-interface-list=WAN protocol=udp to-addresses=192.168.6.32
+add action=dst-nat chain=dstnat comment=\
+    "rots previews gameservers (udp/30000-33999) -> .6.33" dst-port=\
+    31000-34999 in-interface-list=WAN protocol=udp to-addresses=192.168.6.33
 /ip route
 add disabled=no dst-address=192.168.1.0/24 gateway=bridge routing-table=main
 add blackhole comment="fail-closed: MetalLB v4 pool (unannounced VIPs drop)" \
@@ -435,6 +454,14 @@ add chain=metallb-in comment="k3s API VIP" rule=\
     "if (dst == 192.168.5.10/32) { accept }"
 add chain=metallb-in comment="metallb service /128s" rule=\
     "if (dst in fd00:6::/64 && dst-len == 128) { accept }"
+add chain=metallb-in comment="nonprod service /32s" rule=\
+    "if (dst in 192.168.7.0/24 && dst-len == 32) { accept }"
+add chain=metallb-in comment="nonprod k3s API VIP" rule=\
+    "if (dst == 192.168.7.2/32) { accept }"
+add chain=metallb-in comment="nonprod service /128s" rule=\
+    "if (dst in fd00:7::/64 && dst-len == 128) { accept }"
+/snmp
+set enabled=yes
 /system clock
 set time-zone-name=America/New_York
 /system identity
