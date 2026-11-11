@@ -212,19 +212,9 @@ Present the proposed design to the user as a structured outline, then STOP and w
 
 ### Phase 3 — Research
 
-First, save the current skill draft — based on the Phase 2 design and all clarifications so far — to a temporary file.
+No draft file: the dotfiles repo is under git, so Phase 4 writes `SKILL.md` directly and review happens on the diff.
 
-1. Ensure the directory exists:
-   ```bash
-   mkdir -p "$SKILLS_DIR/<skill-name>/"
-   ```
-2. Write the draft to `$SKILLS_DIR/<skill-name>/SKILL.draft.md` using `write`. Include:
-   - Complete frontmatter (as designed in Phase 2).
-   - Argument parsing section.
-   - Mode structure outline with section headings and brief content notes.
-   - This draft will evolve into the final SKILL.md in Phase 4 — write real content, not placeholders.
-3. Verify the draft was saved: use `read` to check the first 10 lines of `$SKILLS_DIR/<skill-name>/SKILL.draft.md`. If the file is missing, empty, or truncated, STOP and report: "Draft save failed: \<reason\>." Do not continue to research until the draft is confirmed saved.
-Then research the following using your tools:
+Research the following using your tools:
 
 - Read 2-3 existing skills from `$SKILLS_DIR/*/SKILL.md` to match conventions, argument patterns, and frontmatter style.
 - If the skill targets a specific tool or runtime (e.g., `nix`, `docker`, `kubectl`), check whether it's available in the environment.
