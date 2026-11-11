@@ -143,7 +143,7 @@
   :geometry (geometry
               :x "0px"
               :y "50px"
-              :width "420px"
+              :width "504px"
               :anchor "top center")
   :stacking "overlay"
   :focusable "none"
