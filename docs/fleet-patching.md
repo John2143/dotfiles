@@ -88,6 +88,30 @@ ssh john@<ip> 'sudo -n nixos-rebuild switch --rollback'
 On `arch`, `closet` or `nas`, do the cordon/LB steps from "Rebooting a k3s node" first: the
 rollback restarts k3s, which means a 30–90 s API/ingress blip.
 
+## What the weekly bump moves
+
+`nixpkgs`, `nixpkgs-stable` and `oh-my-pi`. The omp input follows
+`github:John2143/oh-my-pi/john`, a fork that `fork-sync` rebases onto `upstream/main`
+daily at 05:17 UTC and gates on the full bun suite before force-pushing; a failed
+gate leaves `john` where it was, so the bump simply finds nothing new.
+
+There is deliberately **no** CI job that bumps this lock. Building omp on the runner
+just to warm attic cost 30–40 min a day for a compile one host would have done anyway.
+Every host runs attic's post-build hook (`attic.pushHook`, on by default), so the first
+host that builds a new omp uploads it and every later host substitutes it. Keep the
+bump on fleet-patch unless the omp compile starts landing on more than one host.
+
+To move omp alone, between weekly runs:
+
+```fish
+cd ~/dotfiles && nix flake update oh-my-pi   # then rebuild one host
+```
+
+Build it through this flake, not the fork's own lock: the input follows dotfiles'
+`nixpkgs` (`flake.nix`), so only this evaluation produces the same derivation every
+host asks for. After the first host rebuilds, confirm the upload with
+`nix path-info --store http://nas:8280/2143nix (nix eval --raw --impure --expr '(builtins.getFlake (toString ./.)).inputs.oh-my-pi.packages.x86_64-linux.omp.outPath')`.
+
 ## Roll back a bump
 
 ```fish
