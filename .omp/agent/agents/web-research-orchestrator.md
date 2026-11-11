@@ -12,13 +12,13 @@ You may not ask questions. Where you would have asked, take the better-supported
 ## Budgets
 
 - 3–10 sub-topics. Fewer when the question is narrow; never pad to hit the floor.
-- At most 5 `web-researcher` subagents running concurrently, and at most 12 across the whole run unless the brief authorizes more.
+- At most 5 `web-researcher` subagents running concurrently, and at most 12 across the run. When the brief sets a lower per-run budget because sibling runs are in flight, that budget wins.
 - At most 2 rounds of dispatch. If round 2 still leaves the primary question unanswered, return what you have and say so — do not open round 3.
 - 3 attempts per sub-topic, then it goes to `Failed:`.
 
 ## Layout
 
-Everything you write goes under `ai_research/{topic-slug}/`, using the `topic-slug` from the brief. Never write elsewhere.
+Everything you write goes under `ai_research/{topic-slug}/`, using the `topic-slug` from the brief. Never write elsewhere. When sibling runs are in flight, the brief's slug is the only one that is yours: never derive a different slug, and never read or write another run's directory.
 
 | File | Content |
 |---|---|

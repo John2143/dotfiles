@@ -2,9 +2,14 @@
 #!nix-shell -i python3 -p python3
 """Deterministic argument parser for web-researcher skill.
 
-Parses $ARGUMENTS into RESEARCH_QUESTION, CONTEXT, and TOPIC_SLUG following
-the exact rules from SKILL.md. Outputs shell-safe variable assignments
-for `eval`.
+Parses $ARGUMENTS into a list of research questions, their topic slugs, the
+shared context, and an emptiness flag. Outputs shell-safe assignments for
+`eval`, so the caller never reasons about quote positions.
+
+Rule: every double-quoted span is one research question. Text outside the
+spans is shared context, appended to every question's brief. With no quoted
+span, the whole argument string is a single question. Slugs are deduplicated
+within one invocation so two questions can never share a research directory.
 
 Usage:
   # Via environment variable (preferred — bypasses all shell quoting issues):
@@ -15,60 +20,82 @@ Usage:
 
   # Via argv:
   python3 parse-args.py '...'
+
+Emits:
+  QUESTIONS=('first question' 'second question')
+  SLUGS=('first-question' 'second-question')
+  COUNT=2
+  CONTEXT='shared context or empty'
+  EMPTY=false
 """
 import os
 import re
 import shlex
 import sys
 
+QUESTION_RE = re.compile(r'"([^"]*)"')
+SLUG_MAX = 64
+
 
 def slugify(s: str) -> str:
-    """Lowercase, replace non-alnum with hyphens, collapse, trim, truncate to 64."""
+    """Lowercase, replace non-alnum with hyphens, collapse, trim, truncate."""
     s = s.lower()
-    s = re.sub(r'[^a-z0-9]', '-', s)
-    s = re.sub(r'-+', '-', s)
-    s = s.strip('-')
-    return s[:64] if s else "EMPTY_SLUG"
+    s = re.sub(r"[^a-z0-9]", "-", s)
+    s = re.sub(r"-+", "-", s)
+    s = s.strip("-")
+    return s[:SLUG_MAX] if s else "untitled"
+
+
+def dedupe(slugs: list[str]) -> list[str]:
+    """Suffix repeats (-2, -3, …) so sibling runs never share a directory."""
+    seen: dict[str, int] = {}
+    out: list[str] = []
+    for slug in slugs:
+        n = seen.get(slug, 0) + 1
+        seen[slug] = n
+        if n == 1:
+            out.append(slug)
+            continue
+        suffix = f"-{n}"
+        out.append(slug[: SLUG_MAX - len(suffix)].rstrip("-") + suffix)
+    return out
 
 
 def parse(raw: str) -> dict:
-    stripped = raw
+    stripped = raw.strip()
 
-    # Step 1: Strip outer quotes — only when the string BOTH starts AND ends
-    # with the same quote character.
-    if len(raw) >= 2 and raw[0] == raw[-1] and raw[0] in ('"', "'"):
-        stripped = raw[1:-1]
+    # Strip one matching outer quote pair, but only when it wraps the whole
+    # argument rather than delimiting the first of several questions.
+    if (
+        len(stripped) >= 2
+        and stripped[0] == stripped[-1]
+        and stripped[0] in ('"', "'")
+        and '"' not in stripped[1:-1]
+    ):
+        stripped = stripped[1:-1]
 
-    # Step 2: Extract RESEARCH_QUESTION from the first pair of double-quotes
-    # inside the stripped string.
-    first_dq = stripped.find('"')
-    if first_dq != -1:
-        second_dq = stripped.find('"', first_dq + 1)
-        if second_dq != -1:
-            research_question = stripped[first_dq + 1 : second_dq]
-            context = stripped[second_dq + 1 :].strip()
-        else:
-            # Unclosed quote — take everything after it as the question.
-            research_question = stripped[first_dq + 1 :]
-            context = ""
+    matches = list(QUESTION_RE.finditer(stripped))
+    if matches:
+        questions = [m.group(1).strip() for m in matches]
+        remainder = QUESTION_RE.sub(" ", stripped)
     else:
-        # Step 2 alt: No double-quotes found — entire stripped string is
-        # the research question.
-        research_question = stripped
-        context = ""
+        questions = [stripped]
+        remainder = ""
 
-    # Step 3: Emptiness check.
-    empty = not research_question.strip()
+    questions = [q for q in questions if q]
+    context = re.sub(r"[\s,;]+", " ", remainder).strip(" ,;")
 
-    # Step 4: Derive TOPIC_SLUG.
-    topic_slug = slugify(research_question) if not empty else "EMPTY_SLUG"
-
+    slugs = dedupe([slugify(q) for q in questions])
     return {
-        "RESEARCH_QUESTION": research_question,
+        "QUESTIONS": questions,
+        "SLUGS": slugs,
         "CONTEXT": context,
-        "TOPIC_SLUG": topic_slug,
-        "EMPTY": "true" if empty else "false",
+        "EMPTY": "true" if not questions else "false",
     }
+
+
+def shell_array(name: str, values: list[str]) -> str:
+    return f"{name}=({' '.join(shlex.quote(v) for v in values)})"
 
 
 def main() -> None:
@@ -81,8 +108,11 @@ def main() -> None:
         raw = sys.stdin.read().strip()
 
     result = parse(raw)
-    for key, value in result.items():
-        print(f"{key}={shlex.quote(value)}")
+    print(shell_array("QUESTIONS", result["QUESTIONS"]))
+    print(shell_array("SLUGS", result["SLUGS"]))
+    print(f"COUNT={len(result['QUESTIONS'])}")
+    print(f"CONTEXT={shlex.quote(result['CONTEXT'])}")
+    print(f"EMPTY={result['EMPTY']}")
 
 
 if __name__ == "__main__":
