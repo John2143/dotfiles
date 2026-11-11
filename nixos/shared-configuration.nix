@@ -395,6 +395,10 @@ in {
       });
       voxtype-osd-native = inputs.voxtype.packages.${prev.stdenv.hostPlatform.system}.osd-native.overrideAttrs (old: {
         CARGO_HTTP_USER_AGENT = "Mozilla/5.0 (X11; Linux x86_64; rv:137.0) Gecko/20100101 Firefox/137.0";
+        # Same "-lsqlite3 not found" link failure as voxtype above: this package
+        # builds the same crate tree with --features=osd-native, so it pulls
+        # libsqlite3-sys too and needs the same buildInput.
+        buildInputs = (old.buildInputs or []) ++ [prev.sqlite];
       });
     })
   ];
