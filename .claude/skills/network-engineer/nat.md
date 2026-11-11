@@ -26,8 +26,15 @@ other fails silently, with no conntrack entry at the MikroTik.
 | IPv6 | DHCPv6-PD; delegated prefix and LAN prefix change on renumber — re-read the admin panel |
 
 Verizon forwards (all to `192.168.0.2` unless noted): 80, 443, 25, 587, 993, 3478, 3479, 7881,
-9987, 11753, 18080, 25565, 30033, 34197, 45000-45063, 51820, 8280 → home-pi (192.168.0.154).
+9987, 11753, 18080, 25565, 30033, 34197, 45000-45063, 51820, 8280 → home-pi (192.168.0.154),
+and the two gameserver ranges `31000-34999` (ROTS previews) and `36000-37999` (ROTS prod).
 Anything not in that list never arrives, no matter what the MikroTik says.
+
+Both gameserver entries forward "Both" protocols and preserve the port
+(`36000-37999` → `36000-37999`); the MikroTik then dst-nats UDP only, so the
+TCP half is forwarded and dropped. The prod range was widened from
+`36000-36400` on 2026-11-11 (Verizon) and 2026-11-10 (MikroTik) for the
+1,000-slot fleet.
 
 ## dst-nat table
 
@@ -44,6 +51,8 @@ Anything not in that list never arrives, no matter what the MikroTik says.
 | 11753 | TCP | `.6.17` | OpenRCT2 |
 | 25565 | TCP | `.6.29` | Minecraft |
 | 34197 | UDP | `.6.28` | Factorio |
+| 31000-34999 | UDP | `.6.33` | ROTS previews; every `rots-pr-<N>` shares the VIP (`allow-shared-ip: rots-preview`), slot port `31000 + 4*(N%1000)` — 4 consecutive ports per PR, and PR numbers equal mod 1000 collide (accepted) |
+| 36000-37999 | UDP | `.6.32` | ROTS prod; slot `k` is `36000 + k`, one `rots-gs-<k>-udp` Service per slot sharing the VIP (`allow-shared-ip: rots-prod`). 1,000 slots are configured, so `36000-36999` is in use and the rest is headroom the WAN already covers. Raising slots is a re-shard, see rots4 `docs/game-server-scaling.md` |
 | 18080 | TCP | `.5.76` | Monero P2P (bare metal) |
 
 `51820/UDP` is **not** dst-nat — WireGuard terminates on the router itself (`wireguard.md`).
@@ -63,6 +72,18 @@ temporal `.6.20:7233`, lan-dns `.6.30:53`, k8s API `.5.10:6443`.
   cannot be part of a selector identity.
 - Removing a rule does not remove a Verizon forward, and vice versa. Clean up both.
 - Known dead Verizon forwards (no matching MikroTik rule): 25555 → 32565. Remove on sight.
+- Known stale rule *comment*: the previews rule's comment says `udp/30000-33999` while its
+  `dst-port` is `31000-34999`. The range is authoritative (`/ip firewall nat print detail`);
+  fix the comment with `set [find comment="rots previews gameservers (udp/30000-33999) -> .6.33"]
+  comment="rots previews gameservers (udp/31000-34999) -> .6.33"` after checking the find
+  returns exactly one rule.
+- **A UDP probe that times out proves nothing.** Dropped at the Verizon forward and dropped by
+  the far end look identical from outside. The only trustworthy signal that a range is open is
+  the MikroTik rule's own packet counter moving while the probe runs:
+  `/ip firewall nat print stats` (bytes/packets per rule, by index). Cross-check with a port you
+  know is alive: a *reply* means the whole path, and ICMP `unreachable` from a cluster VIP means
+  the packet reached k8s and found no endpoint. This is how the `36000-37999` widening was
+  proven after check-host showed both silence and refusal in the same range.
 
 ## Outbound
 
