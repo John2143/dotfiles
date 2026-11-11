@@ -8,6 +8,15 @@
 # "could not resolve address for nas.ts.2143.me", and switch-to-configuration
 # counts that as a hard failure (exit 4). Ordering on tailscaled.service instead,
 # plus `nofail`, makes a transient failure a warning rather than a failed switch.
+#
+# The mirror-image hazard is unmount, not mount. `x-systemd.idle-timeout=60`
+# makes the automount stop the CIFS mount after 60 s idle; if any process still
+# holds a file open there, umount fails "target is busy" (status 32) and the
+# unit is left failed. The next switch-to-configuration then tries to stop that
+# failed unit, waits out the 90 s stop timeout, and exits 4 — an activation
+# failure caused by workload, not by configuration. Seen 2026-11-10 (odoo test
+# runs with a cwd inside the shares): `nos` aborted after activating. If it
+# recurs, drop or lengthen the idle timeout, or unmount before long runs.
 {
   config,
   pkgs,

@@ -388,9 +388,12 @@ in {
       # dev branch. nixpkgs defaults vulkanSupport/onnxSupport/hipSupport to false, which is
       # why every transcription ran on the CPU.
       voxtype = (prev.voxtype.override {vulkanSupport = true;}).overrideAttrs (old: {
-        # voxtype 1.1.1 links -lsqlite3 (libsqlite3-sys) but this nixpkgs carries
-        # only alsa-lib/openssl, so the final link dies with "cannot find
-        # -lsqlite3". nixpkgs 6dadaf4 (pinned 2026-11-07) still lacks it.
+        # voxtype 1.1.1 links -lsqlite3 (libsqlite3-sys) but the nixpkgs
+        # package carries only alsa-lib/openssl and friends, so the final link
+        # dies with "cannot find -lsqlite3". Still true at nixpkgs f4a03c0
+        # (2026-11-07). The same buildInputs line is needed in the osd-native
+        # override below, since that package builds the same crate tree.
+        # Both copies are harmless once upstream supplies sqlite; drop them then.
         buildInputs = (old.buildInputs or []) ++ [prev.sqlite];
       });
       voxtype-osd-native = inputs.voxtype.packages.${prev.stdenv.hostPlatform.system}.osd-native.overrideAttrs (old: {
