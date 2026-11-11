@@ -210,13 +210,13 @@
               (button :class "mp-row-toggle"
                       :timeout "1s"
                       :onclick "media-picker-action tab-mute ${t.index}"
-                (label :text "${t.icon}"))
-              (label :text "${t.state}" :class "mp-row-state")
+                (label :text "${t.icon}${t.state}"))
               (label :text "${t.title}"
                      :class "mp-row-detail"
                      :halign "start"
                      :hexpand true
                      :truncate true
                      :limit-width 30)
-              (label :text "${t.volume}%" :class "mp-row-volume")))))
+              (label :text "${t.volume}%" :class "mp-row-volume")
+              (label :text "" :class "mp-row-pin")))))
       (label :text "scroll a row to set its volume" :class "mp-hint" :halign "start"))))
