@@ -15,6 +15,7 @@ You may not ask questions. Where you would have asked, take the better-supported
 - At most 5 `web-researcher` subagents running concurrently, and at most 12 across the run. When the brief sets a lower per-run budget because sibling runs are in flight, that budget wins.
 - At most 2 rounds of dispatch. If round 2 still leaves the primary question unanswered, return what you have and say so — do not open round 3.
 - 3 attempts per sub-topic, then it goes to `Failed:`.
+- At most 1 grounding `scout` per run (SETUP step 4). It does not count toward the researcher budget.
 
 ## Layout
 
@@ -22,7 +23,7 @@ Everything you write goes under `ai_research/{topic-slug}/`, using the `topic-sl
 
 | File | Content |
 |---|---|
-| `research_plan.md` | Primary question, brief context verbatim, assumptions, sub-topics with slugs and perspectives |
+| `research_plan.md` | Primary question, brief context verbatim, assumptions, grounding facts, sub-topics with slugs and perspectives |
 | `research_state.md` | Phase number, phase status, and per-sub-topic slug lists |
 | `reports/{subtopic-slug}_report.md` | One researcher deliverable per sub-topic |
 | `phase_{N}_summary.md` | Synthesis after each round, with the sufficiency decision |
@@ -37,9 +38,10 @@ Everything you write goes under `ai_research/{topic-slug}/`, using the `topic-sl
    - Empty or absent → fresh project.
 2. `mkdir -p ai_research/{topic-slug}/reports`.
 3. Formalize the question into a crisp, answerable one. If the brief's phrasing is vague or unanswerable as stated, pick the strongest defensible reading and write the assumption down. Never stall waiting for the caller.
-4. Decompose into 3–10 sub-topics, each independently researchable (one researcher completes it without another's output), specific enough to be unambiguous, and directly relevant to the primary question.
-5. Give a sub-topic a **perspective trait** only where it surfaces an angle consensus or censorship hides — political leanings for policy, national viewpoint for geopolitics, school-of-thought for academic disputes. Record `none` for factual sub-topics.
-6. Write `research_plan.md`:
+4. **Ground the plan when the question depends on current facts** — a recent or ongoing event, "latest" or "current" anything, who holds or won something, prices, releases, schedules. Your own knowledge of these is stale, and a plan built from it sends researchers after a premise that may no longer hold: a candidate who lost the primary, a product that was renamed, a deal that fell through. Spawn one `scout` before decomposing, and ask it for a compressed list, with a URL and publication date per item, of: whether the event has happened yet, the actual participants or entities as of today, and whether authoritative results or data are available yet. Keep its brief to that; it is reconnaissance, not research. Record what it returns under `## Grounding` in `research_plan.md`. If the scout fails or finds nothing usable, note that under `## Grounding` and plan from the question alone — never stall on it. Skip this step, and write `none — not time-sensitive`, for questions whose answer does not move week to week ("how do four-day work weeks perform", "how does Raft elect a leader").
+5. Decompose into 3–10 sub-topics, each independently researchable (one researcher completes it without another's output), specific enough to be unambiguous, and directly relevant to the primary question. Build them from the grounding facts where you have them, not from memory. A grounding fact a sub-topic depends on goes into its description as a premise for the researcher to confirm, not as a settled finding: the scout skimmed, it did not verify.
+6. Give a sub-topic a **perspective trait** only where it surfaces an angle consensus or censorship hides — political leanings for policy, national viewpoint for geopolitics, school-of-thought for academic disputes. Record `none` for factual sub-topics.
+7. Write `research_plan.md`:
 
 ```markdown
 # Research Plan: {topic-slug}
@@ -53,6 +55,9 @@ Everything you write goes under `ai_research/{topic-slug}/`, using the `topic-sl
 ## Assumptions
 {interpretations you took where the brief was ambiguous, or "none"}
 
+## Grounding
+{facts from the grounding scout, each with URL and date — or "none — not time-sensitive", or why the scout came back empty}
+
 ## Sub-Topics
 
 ### Sub-Topic 1: {title}
@@ -61,7 +66,7 @@ Everything you write goes under `ai_research/{topic-slug}/`, using the `topic-sl
 - **Report path**: reports/{subtopic-slug}_report.md
 ```
 
-7. Write `research_state.md` with `phase: 1`, `phase_status: dispatching`, all slugs under `Pending:`, empty `In progress:` / `Done:` / `Failed:`, and `Retries: {}`.
+8. Write `research_state.md` with `phase: 1`, `phase_status: dispatching`, all slugs under `Pending:`, empty `In progress:` / `Done:` / `Failed:`, and `Retries: {}`.
 
 ## Phase 2 — DISPATCH
 
