@@ -15,7 +15,7 @@
 
       # ---------- Model + serving config ----------
       VAST_MODEL=deepseek-ai/DeepSeek-V4-Flash
-      VAST_SERVED_MODEL_NAME=deepseek-v4-flash
+      VAST_SERVED_MODEL_NAME=deepseek-flash
       # For the large 1.6T MoE variant, switch to:
       #   VAST_MODEL=deepseek-ai/DeepSeek-V4-Pro
       #   VAST_SERVED_MODEL_NAME=deepseek-v4-pro

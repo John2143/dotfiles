@@ -54,13 +54,13 @@ in
         # The contextWindow/served-model name reflect a typical DeepSeek V4
         # Flash rental; if you serve a different model from the same secret,
         # vLLM still answers requests for the id below as long as it's set
-        # via VAST_SERVED_MODEL_NAME.
+        # via VAST_SERVED_MODEL_NAME (vast-profile.nix).
         vast-vllm:
           baseUrl: http://localhost:8001/v1
           api: openai-completions
           auth: none
           models:
-            - id: deepseek-v4-flash
+            - id: deepseek-flash
               name: DeepSeek V4 Flash (Vast.ai)
               reasoning: true
               input: [text]
@@ -69,15 +69,18 @@ in
               maxTokens: 384000
 
         # DeepSeek's official API. Cheaper than self-hosting on Vast for
-        # 1-2 user agentic load (break-even is ~600 req/hr at promo
-        # pricing) AND avoids vllm#41985 — DeepSeek runs their own
-        # tilelang stack, no vLLM MLA FP8 precision bug, no CJK token
-        # injection or repetition collapse. Pricing per 1M tokens
-        # (current 2026-05-08; promo on V4-Pro expires 2026-05-31 and
-        # prices 4x to $1.74 / $3.48):
-        #   v4-flash: $0.14 / $0.28      (no promo, stable)
-        #   v4-pro:   $0.435 / $0.87     (75% promo)
-        # Cache hits are ~50× cheaper on input.
+        # 1-2 user agentic load (break-even is ~600 req/hr) AND avoids
+        # vllm#41985 — DeepSeek runs their own tilelang stack, no vLLM MLA FP8
+        # precision bug, no CJK token injection or repetition collapse.
+        # Model names are DeepSeek's: `deepseek-flash` (V4.1-Flash-1017) and
+        # `deepseek-v4-pro`. The retired `deepseek-v4-flash` id is still
+        # accepted and served by the same V4.1-Flash weights, but the pricing
+        # page lists it as legacy and only doc'd as `deepseek-flash`.
+        # USD per 1M tokens, PEAK hours (01:00-04:00 and 06:00-10:00 UTC,
+        # Mon-Fri); every other hour is half price:
+        #   deepseek-flash: $0.30 / $1.20 output   cache hit $0.006
+        #   deepseek-v4-pro: $1.32 / $3.96 output  cache hit $0.044
+        # Source: https://api-docs.deepseek.com/quick_start/pricing
         # Requires DEEPSEEK_API_KEY in /run/agenix/llm-runtime-keys.
         # Get one: https://platform.deepseek.com/api_keys
         deepseek:
@@ -85,11 +88,11 @@ in
           api: openai-completions
           apiKey: DEEPSEEK_API_KEY
           models:
-            - id: deepseek-v4-flash
-              name: DeepSeek V4 Flash (Direct API)
+            - id: deepseek-flash
+              name: DeepSeek Flash (Direct API)
               reasoning: true
               input: [text]
-              cost: { input: 0.14, output: 0.28, cacheRead: 0.0028, cacheWrite: 0 }
+              cost: { input: 0.3, output: 1.2, cacheRead: 0.006, cacheWrite: 0 }
               contextWindow: 1000000
               maxTokens: 65536
               compat:
@@ -109,7 +112,7 @@ in
               name: DeepSeek V4 Pro (Direct API)
               reasoning: true
               input: [text]
-              cost: { input: 0.435, output: 0.87, cacheRead: 0.003625, cacheWrite: 0 }
+              cost: { input: 1.32, output: 3.96, cacheRead: 0.044, cacheWrite: 0 }
               contextWindow: 1000000
               maxTokens: 65536
               compat:
@@ -198,7 +201,7 @@ in
           discovery:
             type: litellm
           modelOverrides:
-            deepseek/deepseek-v4-flash:
+            deepseek/deepseek-flash:
               reasoning: true
               compat:
                 requiresReasoningContentForToolCalls: true
@@ -216,15 +219,21 @@ in
                 extraBody:
                   thinking:
                     type: enabled
-          # ChatGPT subscription (codex backend) + OpenAI API-key routes —
-          # MUST use the Responses transport. The proxy's /v1/chat/completions
-          # is Cloudflare-blocked for chatgpt/* (upstream #27175), and OpenAI
-          # rejects tools+reasoning_effort there. All eight slugs verified
-          # against the proxy's /v1/responses (2026-09-09).
-          # Model capacities: https://developers.openai.com/api/docs/models/gpt-6-astra.md
-          # All four: 1,050,000 total / 922,000 input / 128,000 output tokens.
-          # Codex subscription-side caps are not verified by these API specs.
           models:
+            # DeepSeek's current Flash id, pinned for the same reason as the
+            # OpenRouter entry below: /model/info expands the proxy's
+            # `deepseek/*` wildcard from litellm's own model map, and a pin
+            # keeps the rename to `deepseek-flash` independent of that map's
+            # contents. Costs match the direct-API block (peak hours).
+            - id: deepseek/deepseek-flash
+              name: DeepSeek Flash (LiteLLM proxy)
+              api: openai-completions
+              reasoning: true
+              supportsTools: true
+              input: [text]
+              cost: { input: 0.3, output: 1.2, cacheRead: 0.006, cacheWrite: 0 }
+              contextWindow: 1000000
+              maxTokens: 384000
             # DeepSeek V4.1 Flash via OpenRouter — released 2026-09-10, the
             # designated V4 Pro successor. Not yet in litellm's /model/info,
             # so pinned explicitly rather than relying on discovery.
@@ -236,6 +245,47 @@ in
               input: [text]
               contextWindow: 1048576
               maxTokens: 384000
+            # Anthropic on the API key instead of the Max subscription — the
+            # `litellm/anthropic/*` fallback rung below. The proxy answers
+            # `anthropic/<id>` from its ANTHROPIC_API_KEY lane
+            # (workloads/llm-proxy/configmap.yaml, `anthropic/*`), and its
+            # /model/info publishes no per-model entries for that wildcard, so
+            # the ids are pinned here or the rung would resolve to nothing.
+            # Costs are left unset on purpose: the numbers belong to the
+            # Anthropic price list, not to this file, and omp falls back to the
+            # catalog's anthropic entry which already carries them.
+            - id: anthropic/claude-opus-5-5
+              name: Claude Opus 5.5 (Anthropic API key)
+              api: openai-completions
+              reasoning: true
+              supportsTools: true
+              input: [text, image]
+              contextWindow: 1000000
+              maxTokens: 128000
+            - id: anthropic/claude-haiku-5-5
+              name: Claude Haiku 5.5 (Anthropic API key)
+              api: openai-completions
+              reasoning: true
+              supportsTools: true
+              input: [text, image]
+              contextWindow: 1000000
+              maxTokens: 128000
+            - id: anthropic/claude-fable-5-1
+              name: Claude Fable 5.1 (Anthropic API key)
+              api: openai-completions
+              reasoning: true
+              supportsTools: true
+              input: [text, image]
+              contextWindow: 1000000
+              maxTokens: 128000
+            # ChatGPT subscription (codex backend) + OpenAI API-key routes —
+            # MUST use the Responses transport. The proxy's /v1/chat/completions
+            # is Cloudflare-blocked for chatgpt/* (upstream #27175), and OpenAI
+            # rejects tools+reasoning_effort there. All eight slugs verified
+            # against the proxy's /v1/responses (2026-09-09).
+            # Model capacities: https://developers.openai.com/api/docs/models/gpt-6-astra.md
+            # All four: 1,050,000 total / 922,000 input / 128,000 output tokens.
+            # Codex subscription-side caps are not verified by these API specs.
             - id: chatgpt/gpt-6-astra
               name: ChatGPT GPT-6 Astra (Pro/Max subscription)
               api: openai-responses
@@ -348,18 +398,18 @@ in
         # `defaultThinkingLevel` is also "high" today, but the role suffix
         # outranks it, so a later global change or `auto` cannot move it.
         # Fresh sessions only: a resumed session keeps its recorded level.
-        default: litellm/deepseek/deepseek-v4-flash:high
+        default: litellm/deepseek/deepseek-flash:high
         # `task` pins subagent dispatch (default `pi/task` inherits whatever
         # the parent session runs, so /model switching would drag subagents
         # along). Keep subagents on the cheap DeepSeek route.
-        task: litellm/deepseek/deepseek-v4-flash
+        task: litellm/deepseek/deepseek-flash
         # Same cheap DeepSeek route as `default`, at the lowest tier its
         # reviewed ladder offers (low/high/max — classes/deepseek.kdl), so
         # `:low` is wire-exact and needs no effort remap. Workloads that take
         # only the role's model (memories, extract, auto-repair) still run at
         # the model default; title generation asks for no reasoning, which OMP
         # sends as this same lowest tier.
-        smol: litellm/deepseek/deepseek-v4-flash:low
+        smol: litellm/deepseek/deepseek-flash:low
         # Local tier for titles, skill descriptions, and other background
         # text. gemma4:e4b is a 7.5B model (131K ctx, tools + vision) served by
         # the office Ollama; `:low` keeps the cheap tier from thinking through
@@ -373,7 +423,7 @@ in
         # thinking-level, so agents that need another level (oracle: xhigh)
         # pin their own model selector instead of routing through this role.
         slow: anthropic/claude-opus-5-5:high
-        advisor: litellm/deepseek/deepseek-v4-flash
+        advisor: litellm/deepseek/deepseek-flash
         # Image questions (`read <path>?q=<question>`) resolve @vision ->
         # @default -> session model, so without this role image analysis
         # silently runs on the DeepSeek text model. Pin it to a Claude model
@@ -404,20 +454,29 @@ in
         baseDelayMs: 2000
         fallbackChains:
           smol:
-            - "litellm/deepseek/deepseek-v4-flash"
+            - "litellm/deepseek/deepseek-flash"
             - "anthropic/claude-haiku-5-5"
           default:
-            - "litellm/deepseek/deepseek-v4-flash"
+            - "litellm/deepseek/deepseek-flash"
             - "anthropic/claude-opus-5-5"
             - "litellm/openrouter/deepseek/deepseek-v4.1-flash"
             - "litellm/openrouter/openrouter/auto"
           slow:
             - "anthropic/claude-opus-5-5"
-            - "litellm/openai/gpt-6-sol"
-            - "litellm/deepseek/deepseek-v4-flash"
-            - "litellm/openrouter/openai/gpt-5.6-sol"
-            - "litellm/openrouter/deepseek/deepseek-v4.1-flash"
-            - "litellm/openrouter/openrouter/auto"
+            - "litellm/anthropic/*"
+            - "litellm/deepseek/deepseek-flash:high"
+          # Every model on the `anthropic` provider — Opus at any effort,
+          # Haiku, Fable. Max subscription first (the live model is the chain
+          # head), then the same model on the proxy's API-key lane, then the
+          # cheap DeepSeek tier. A provider wildcard outranks role keys
+          # (retry-fallback-chains.ts, step 2 before step 3), so this — not
+          # `slow` — is what an `anthropic/*` session actually walks, including
+          # oracle/subagents on Opus at xhigh. `litellm/anthropic/*` keeps the
+          # failing id and swaps the provider, i.e. `anthropic/claude-opus-5-5`
+          # -> `litellm/anthropic/claude-opus-5-5`.
+          "anthropic/*":
+            - "litellm/anthropic/*"
+            - "litellm/deepseek/deepseek-flash:high"
 
       # Tools — enable setting-gated tools that ship disabled by default.
       # Names must be nested mappings; dotted keys are silently ignored.

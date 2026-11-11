@@ -144,7 +144,7 @@
       # 4) Defaults for anything still empty.
       test -n "$VAST_LABEL"; or set -gx VAST_LABEL "vllm-deepseek-v4"
       test -n "$VAST_MODEL"; or set -gx VAST_MODEL "deepseek-ai/DeepSeek-V4-Flash"
-      test -n "$VAST_SERVED_MODEL_NAME"; or set -gx VAST_SERVED_MODEL_NAME "deepseek-v4-flash"
+      test -n "$VAST_SERVED_MODEL_NAME"; or set -gx VAST_SERVED_MODEL_NAME "deepseek-flash"
       test -n "$VAST_MAX_MODEL_LEN"; or set -gx VAST_MAX_MODEL_LEN "auto"
       test -n "$VAST_GPU_MEM_UTIL"; or set -gx VAST_GPU_MEM_UTIL "auto"
       test -n "$VAST_MAX_NUM_SEQS"; or set -gx VAST_MAX_NUM_SEQS "auto"

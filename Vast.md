@@ -186,7 +186,7 @@ after.
 ## Using
 
 In `omp` (or any OpenAI-compatible client), pick the
-**`vast-vllm/deepseek-v4-flash`** model. Traffic routes via the local tunnel.
+**`vast-vllm/deepseek-flash`** model. Traffic routes via the local tunnel.
 
 DeepSeek V4 launches with `--reasoning-parser deepseek_v4`, so chat
 completions return `choices[].message.reasoning_content` (the chain of
@@ -205,7 +205,7 @@ Direct test:
 curl http://localhost:8001/v1/models
 curl http://localhost:8001/v1/chat/completions \
   -H 'Content-Type: application/json' \
-  -d '{"model":"deepseek-v4-flash","messages":[{"role":"user","content":"Hello"}]}'
+  -d '{"model":"deepseek-flash","messages":[{"role":"user","content":"Hello"}]}'
 ```
 
 Live remote logs:

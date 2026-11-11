@@ -70,10 +70,10 @@ if set -q DEEPSEEK_API_KEY
 
     echo ""
     set_color brblack
-    echo "Pricing (per 1M tokens):"
-    echo "  deepseek-v4-flash  input $0.14  (cache hit $0.0028)  output $0.28"
-    echo "  deepseek-v4-pro    input $0.435 (cache hit $0.003625) output $0.87"
-    echo "  (v4-pro is 75% off until 2026-05-31; see platform.deepseek.com/usage for history)"
+    echo 'Pricing (per 1M tokens, peak hours; off-peak is half):'
+    echo '  deepseek-flash    input $0.30  (cache hit $0.006)  output $1.20'
+    echo '  deepseek-v4-pro   input $1.32  (cache hit $0.044)  output $3.96'
+    echo '  Peak: 01:00-04:00 and 06:00-10:00 UTC, Mon-Fri. See api-docs.deepseek.com/quick_start/pricing'
     set_color normal
   end
 else

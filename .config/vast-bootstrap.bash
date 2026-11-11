@@ -8,7 +8,7 @@
 #                        injection) fixed in v0.21.0+ (PR #42287, 2026-05-11).
 #                        SGLang kept as fallback for A/B comparison and non-DS models.
 #   MODEL              HF model id (required)
-#   SERVED             served-model-name exposed on the OpenAI API (default deepseek-v4-flash)
+#   SERVED             served-model-name exposed on the OpenAI API (default deepseek-flash)
 #   SERVE_PORT         listen port inside the rental (default 8000)
 #                        Replaces VLLM_PORT (still accepted for backward compat).
 #   MAX_LEN            context length ("auto" → tuned per GPU count, see below)
@@ -79,7 +79,7 @@ set -euo pipefail
 
 : "${ENGINE:=vllm}"
 : "${MODEL:?missing MODEL}"
-: "${SERVED:=deepseek-v4-flash}"
+: "${SERVED:=deepseek-flash}"
 # SERVE_PORT is the canonical name; VLLM_PORT still accepted for backward compat.
 : "${SERVE_PORT:=${VLLM_PORT:-8000}}"
 : "${MAX_LEN:=auto}"

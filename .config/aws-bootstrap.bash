@@ -8,7 +8,7 @@
 #
 #   ENGINE             inference engine: "vllm" (default) or "sglang"
 #   MODEL              HF model id (required)
-#   SERVED             served-model-name (default deepseek-v4-flash)
+#   SERVED             served-model-name (default deepseek-flash)
 #   SERVE_PORT         listen port inside the instance (default 8000)
 #   MAX_LEN            context length ("auto" → tuned per GPU count, see below)
 #   MEM_UTIL           GPU memory fraction ("auto" → tuned per GPU count)
@@ -66,7 +66,7 @@ set -euo pipefail
 
 : "${ENGINE:=vllm}"
 : "${MODEL:?missing MODEL}"
-: "${SERVED:=deepseek-v4-flash}"
+: "${SERVED:=deepseek-flash}"
 : "${SERVE_PORT:=${VLLM_PORT:-8000}}"
 : "${MAX_LEN:=auto}"
 : "${MEM_UTIL:=auto}"
