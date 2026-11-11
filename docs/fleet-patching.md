@@ -97,9 +97,12 @@ gate leaves `john` where it was, so the bump simply finds nothing new.
 
 There is deliberately **no** CI job that bumps this lock. Building omp on the runner
 just to warm attic cost 30–40 min a day for a compile one host would have done anyway.
-Every host runs attic's post-build hook (`attic.pushHook`, on by default), so the first
-host that builds a new omp uploads it and every later host substitutes it. Keep the
-bump on fleet-patch unless the omp compile starts landing on more than one host.
+Attic's post-build hook (`nix.settings.post-build-hook`) is on for every host that
+imports the attic module — office, arch, big, closet, pite, vpin, secu, term, github and
+the `vm-*` clones — but not for `nas` (the cache server itself), `steam`, `mirror` or
+`installer`. So the first *hooked* host that builds a new omp uploads it and every later
+host substitutes it. Keep the bump on fleet-patch unless the omp compile starts landing
+on more than one host.
 
 To move omp alone, between weekly runs:
 
