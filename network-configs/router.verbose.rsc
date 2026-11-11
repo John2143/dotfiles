@@ -1,4 +1,4 @@
-# 2026-11-10 03:19:28 by RouterOS 7.24.5
+# 2026-11-10 21:53:04 by RouterOS 7.24.5
 # software id = 7RHC-3MMG
 #
 # model = RB5009UPr+S+
@@ -808,7 +808,7 @@ add action=dst-nat chain=dstnat comment="headscale stun (udp/3479) -> .6.18" \
     dst-port=3479 in-interface-list=WAN protocol=udp to-addresses=\
     192.168.6.18 to-ports=3479
 add action=dst-nat chain=dstnat comment=\
-    "rots prod gameservers (udp/36000-36003) -> .6.32" dst-port=36000-36003 \
+    "rots prod gameservers (udp/36000-37999) -> .6.32" dst-port=36000-37999 \
     in-interface-list=WAN protocol=udp to-addresses=192.168.6.32 !to-ports
 add action=dst-nat chain=dstnat comment=\
     "rots previews gameservers (udp/30000-33999) -> .6.33" dst-port=\
