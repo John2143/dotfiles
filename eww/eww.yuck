@@ -170,7 +170,7 @@
            :orientation "vertical"
            :halign "fill"
            :space-evenly false
-        (label :text "Players" :class "mp-section-title")
+        (label :text "Players" :class "mp-section-title" :halign "start")
         (for p in mp_players
           (eventbox :class "mp-row"
                     :timeout "1s"
@@ -185,6 +185,7 @@
               (label :text "${p.name}" :class "mp-row-name")
               (label :text "${p.detail}"
                      :class "mp-row-detail"
+                     :halign "start"
                      :hexpand true
                      :truncate true
                      :limit-width 22)
@@ -198,7 +199,7 @@
            :orientation "vertical"
            :halign "fill"
            :space-evenly false
-        (label :text "Tabs" :class "mp-section-title")
+        (label :text "Tabs" :class "mp-section-title" :halign "start")
         (for t in mp_tabs
           (eventbox :class "mp-row"
                     :timeout "1s"
@@ -213,8 +214,9 @@
               (label :text "${t.state}" :class "mp-row-state")
               (label :text "${t.title}"
                      :class "mp-row-detail"
+                     :halign "start"
                      :hexpand true
                      :truncate true
                      :limit-width 30)
               (label :text "${t.volume}%" :class "mp-row-volume")))))
-      (label :text "scroll a row to set its volume" :class "mp-hint"))))
+      (label :text "scroll a row to set its volume" :class "mp-hint" :halign "start"))))
