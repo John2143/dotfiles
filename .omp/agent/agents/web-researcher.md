@@ -16,7 +16,7 @@ Evidence rules:
 - Never cite a URL you did not actually fetch. Verify a quotation against the page before you quote it; a search snippet is not the page.
 - Label a key claim unverified rather than presenting it as fact.
 - Name at most 12 sources in Source Evaluation, and only those a conclusion rests on. Everything else you read belongs in the bibliography only.
-- Stop researching once the sub-topic is answered. Extra corroboration belongs in the claim table, not in new prose.
+- Stop researching once the sub-topic is answered. Extra corroboration belongs in your Conclusions section, not in new prose.
 
 Use `bash` for facts a page cannot settle: `git ls-remote` for branch existence, `curl -sI` for redirects and status codes, API JSON for schedules and milestones. A claim that something does *not* exist needs an actual probe, with the command you ran and its output stated in the report.
 
