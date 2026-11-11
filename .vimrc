@@ -703,6 +703,44 @@ set bs=2
 set nobackup
 set noswapfile
 
+" recovery: undo trees survive across sessions, and buffers with unsaved changes
+" are copied out on quit (`:q!` deletes the swap file and keeps nothing)
+if exists('*stdpath')
+  let s:statedir = stdpath('state')
+else
+  let s:statedir = (empty($XDG_STATE_HOME) ? $HOME . '/.local/state' : $XDG_STATE_HOME) . '/vim'
+endif
+
+if has('persistent_undo')
+  let &undodir = s:statedir . '/undo//'
+  silent! call mkdir(expand(&undodir), 'p', 0700)
+  set undofile
+endif
+
+let g:rescue_dir = s:statedir . '/rescue'
+let g:rescue_keep_days = 14
+
+function! RescueUnsavedBuffers()
+  call mkdir(g:rescue_dir, 'p', 0700)
+  for l:old in glob(g:rescue_dir . '/*', 0, 1)
+    if localtime() - getftime(l:old) > g:rescue_keep_days * 86400
+      call delete(l:old)
+    endif
+  endfor
+  for l:buf in getbufinfo({'buflisted': 1})
+    if get(l:buf, 'changed', 0) && empty(getbufvar(l:buf.bufnr, '&buftype'))
+      let l:name = l:buf.name ==# '' ? 'unnamed' : fnamemodify(l:buf.name, ':t')
+      let l:out = g:rescue_dir . '/' . strftime('%Y%m%d-%H%M%S') . '-' . l:name
+      call writefile(getbufline(l:buf.bufnr, 1, '$'), l:out)
+    endif
+  endfor
+endfunction
+
+augroup RescueUnsavedBuffers
+  autocmd!
+  autocmd VimLeavePre * call RescueUnsavedBuffers()
+augroup END
+
 " clear highlights with C-l and add "cd to current file" when vim-rooter doesn't
 nnoremap <c-m> :noh<cr>:sign unplace *<cr><c-l>
 nnoremap <leader>cd :cd %:p:h<cr>:pwd<cr>
