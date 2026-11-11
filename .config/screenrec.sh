@@ -75,10 +75,10 @@ status_follow() {
 }
 
 cmd_start() {
-    local reselect=0 audio=0 cap=120
+    local reselect=1 audio=0 cap=120
     while [ $# -gt 0 ]; do
         case "$1" in
-            --reselect) reselect=1 ;;
+            --reuse) reselect=0 ;;
             --audio) audio=1 ;;
             --cap) shift; cap="$1" ;;
             *) printf 'screenrec: unknown option %s\n' "$1" >&2; exit 2 ;;
@@ -306,7 +306,7 @@ case "${1:-}" in
     status) shift; if [ "${1:-}" = "--follow" ]; then status_follow; else render; fi ;;
     last) cmd_last ;;
     *)
-        printf 'usage: screenrec {start [--reselect] [--audio] [--cap N]|stop|toggle|status [--follow]|last}\n' >&2
+        printf 'usage: screenrec {start [--reuse] [--audio] [--cap N]|stop|toggle|status [--follow]|last}\n' >&2
         exit 2
         ;;
 esac
