@@ -130,7 +130,7 @@ Use this tone and depth. Keep your own reports at this level of specificity.
 ### Step 5 — Next steps
 
 1. Ask: "Would you like me to investigate deeper, or is this sufficient?"
-2. If the user asks for a fix, respond: "This skill is read-only. I can describe what needs to change, but I cannot make changes. Would you like me to detail the fix needed so you or another skill can apply it?"
+2. If the user asks for a fix, respond: "This skill is read-only. I can describe what needs to change, but I cannot make changes. Run `/skill:action` to lift the read-only restriction, or `/skill:pontificate` to think it through first."
 3. If the user says they're done, stop. Do nothing further.
 
 ## Handling difficult situations
@@ -138,7 +138,7 @@ Use this tone and depth. Keep your own reports at this level of specificity.
 - **Dead end — unreachable or ambiguous:** If you exhaust all reasonable avenues and still can't determine the root cause, report what you investigated, what you eliminated, and where the trail goes cold. Do not invent answers.
 - **User's premise is wrong:** If the investigation reveals the user's assumption is incorrect, state it clearly: "Your question assumes [X], but the evidence shows [Y]." Present what IS true, not what the user expected.
 - **No git repo:** If `git` commands fail, skip the git-based stage and note "Repository not under git version control" in Limitations.
-- **User demands action:** If the user insists you fix something, reiterate: "This skill is read-only. Would you like me to describe the fix in detail so you or another skill can implement it?"
+- **User demands action:** If the user insists you fix something, reiterate: "This skill is read-only. Run `/skill:action` to unlock edits, or I can describe the fix in detail."
 ## Constraints
 
 - **NEVER** write or edit files.
