@@ -139,6 +139,9 @@ let
               })' 2>/dev/null || echo '[]'
           ;;
         tabs)
+          # Firefox-family predicate kept in step with media-player-status in
+          # nixos/modules/waybar.nix, which reports the same tabs for the bar.
+          # Change both or the picker and the bar disagree.
           raw=$(pactl --format=json list sink-inputs 2>/dev/null || true)
           [ -n "$raw" ] || raw='[]'
           printf '%s' "$raw" | jq -c '

@@ -1,8 +1,14 @@
 /* Catppuccin Mocha palette.
-   Two things void the whole stylesheet when eww loads it: `@define-color` +
-   `@name` references (they arrive at GTK unresolved, so every declaration is
-   discarded) and any non-ASCII byte, including box-drawing characters in
-   comments. Hence plain SCSS variables and ASCII-only banners. */
+   GTK discards the ENTIRE stylesheet when eww hands it one it cannot parse, so
+   any single mistake here makes every eww window render with the bare GTK
+   theme. Three things do it:
+     - `@define-color` + `@name` references: they reach GTK unresolved.
+     - Any non-ASCII byte, box-drawing characters in comments included.
+     - Properties and values GTK3 does not have: `text-transform`,
+       `letter-spacing`, `line-height`, `margin: auto`. These are hard errors,
+       not warnings.
+   Hence plain SCSS variables, ASCII-only banners and no such properties.
+   Verify an edit with ./check-css.py (headless, no compositor, no windows). */
 $base: #1e1e2e;
 $surface0: #313244;
 $overlay0: #6c7086;

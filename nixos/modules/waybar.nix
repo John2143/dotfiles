@@ -23,6 +23,8 @@
       # streams is the only way to see the tabs behind that rolled-up player.
       # Generic names are what Firefox falls back to when it cannot speak to
       # PulseAudio directly; showing them would list noise instead of tabs.
+      # The same Firefox-family predicate selects rows in the eww media picker
+      # (media-picker-data in nixos/modules/eww.nix) - change both together.
       tabs=$(pactl --format=json list sink-inputs 2>/dev/null | jq -r '
         [ .[]
           | . as $si
