@@ -81,8 +81,8 @@ come from pite's Prometheus. Before writing a drop rule, check which path the se
 
 Tempo's span metrics (`traces_spanmetrics_*`, ~33.5k series) are load-bearing: the games-alerts
 join-rejection alert and two games-fleet panels read them. They were removed and restored on
-2026-11-11 (#101, #103); the Tempo crash-loop seen then was **not** caused by that — a fresh Tempo pod
-could not get its compactor past `Starting` with either config while SeaweedFS was degraded.
+2026-11-11 (#101, #103); the Tempo crash-loop seen then was **not** caused by that. It was caused by
+block metas pointing at missing SeaweedFS chunks, and it fails with either config (see `tempo.md`).
 
 ## History: the 13h bug is fixed
 
