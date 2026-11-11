@@ -106,6 +106,132 @@ let
       tailscale-eww-update
     '';
   };
+
+  media-picker-data = pkgs.writeShellApplication {
+    name = "media-picker-data";
+    runtimeInputs = with pkgs; [playerctl pulseaudio jq coreutils];
+    text = ''
+      case "''${1:-}" in
+        players)
+          selected=""
+          if [ -f /tmp/media-player-selected ]; then
+            selected=$(cat /tmp/media-player-selected || true)
+          fi
+          if [ -z "$selected" ] && [ -f /tmp/media-player-active ]; then
+            selected=$(cat /tmp/media-player-active || true)
+          fi
+          # Tab-separated: song titles legitimately contain "|", which would
+          # otherwise split into extra fields and break the volume column.
+          sep=$'\t'
+          raw=$(playerctl --all-players metadata \
+            --format "{{playerName}}''${sep}{{status}}''${sep}{{artist}}''${sep}{{title}}''${sep}{{volume}}" 2>/dev/null || true)
+          printf '%s\n' "$raw" | jq -c -R -s --arg sel "$selected" '
+            split("\n")
+            | map(select(length > 0) | split("\t"))
+            | map({
+                id: .[0],
+                status: (.[1] // ""),
+                name: ((.[0] | split(".") | .[0]) | ((.[0:1] | ascii_upcase) + .[1:])),
+                detail: ([.[2], .[3]] | map(select(. != null and . != "")) | join(" — ")),
+                volume: (((((.[4] // "0") | (if . == "" then 0 else tonumber end)) * 100) | floor) | tostring),
+                icon: (if (.[1] // "") == "Playing" then "▶" else "⏸" end),
+                pin: (if .[0] == $sel then "◉" else "◎" end)
+              })' 2>/dev/null || echo '[]'
+          ;;
+        tabs)
+          raw=$(pactl --format=json list sink-inputs 2>/dev/null || true)
+          [ -n "$raw" ] || raw='[]'
+          printf '%s' "$raw" | jq -c '
+            [ .[]
+              | . as $si
+              | ($si.properties["media.name"] // "") as $n
+              | select(
+                  (($n | length) > 0)
+                  and (($n | test("^(alsa playback|audio ?stream|playback ?stream|playback)$"; "i")) | not)
+                  and (((($si.properties["application.name"] // "") + " "
+                          + ($si.properties["application.process.binary"] // "") + " "
+                          + ($si.properties["application.icon_name"] // ""))
+                        | ascii_downcase | test("firefox|librewolf|zen|floorp")))
+                )
+              | {
+                  index: ($si.index | tostring),
+                  title: $n,
+                  volume: (($si.volume // {})
+                           | [ .[].value_percent | sub("%"; "") | tonumber ]
+                           | if length > 0 then ((add / length | floor) | tostring) else "0" end),
+                  muted: ($si.mute // false),
+                  corked: ($si.corked // false),
+                  state: (if ($si.corked // false) then "⏸" else "▶" end),
+                  icon: (if ($si.mute // false) then "󰖁" else "󰕾" end)
+                }
+            ]' 2>/dev/null || echo '[]'
+          ;;
+        *)
+          echo '[]'
+          ;;
+      esac
+    '';
+  };
+
+  media-picker-action = pkgs.writeShellApplication {
+    name = "media-picker-action";
+    runtimeInputs = with pkgs; [playerctl pulseaudio coreutils procps];
+    text = ''
+      verb="''${1:-}"
+      case "$verb" in
+        toggle)
+          playerctl --player="''${2:-}" play-pause
+          ;;
+        pin)
+          if [ -f /tmp/media-player-selected ] && [ "$(cat /tmp/media-player-selected)" = "''${2:-}" ]; then
+            rm -f /tmp/media-player-selected
+          else
+            printf '%s\n' "''${2:-}" > /tmp/media-player-selected
+          fi
+          pidof -x waybar 2>/dev/null | xargs -r kill -46 2>/dev/null || true
+          ;;
+        player-volume)
+          case "''${3:-}" in
+            up) playerctl --player="''${2:-}" volume 0.05+ ;;
+            down) playerctl --player="''${2:-}" volume 0.05- ;;
+          esac
+          ;;
+        tab-volume)
+          case "''${3:-}" in
+            up) pactl set-sink-input-volume "''${2:-}" +5% ;;
+            down) pactl set-sink-input-volume "''${2:-}" -5% ;;
+          esac
+          ;;
+        tab-mute)
+          pactl set-sink-input-mute "''${2:-}" toggle
+          ;;
+        *)
+          echo "usage: media-picker-action {toggle|pin|player-volume|tab-volume|tab-mute} <id> [up|down]" >&2
+          exit 2
+          ;;
+      esac
+      eww poll mp_players mp_tabs >/dev/null 2>&1 || true
+    '';
+  };
+
+  media-picker-toggle = pkgs.writeShellApplication {
+    name = "media-picker-toggle";
+    runtimeInputs = with pkgs; [jq coreutils];
+    text = ''
+      cursor=$(hyprctl cursorpos -j 2>/dev/null || true)
+      screen=$(hyprctl monitors -j 2>/dev/null | jq -r --arg c "$cursor" '
+        ($c | fromjson? // {x: -1, y: -1}) as $cur
+        | map(select(.x <= $cur.x and $cur.x < (.x + .width) and .y <= $cur.y and $cur.y < (.y + .height)))
+        | if length > 0 then .[0].name else "" end' 2>/dev/null || true)
+
+      if [ -n "$screen" ]; then
+        eww open media-picker --toggle --screen "$screen"
+      else
+        eww open media-picker --toggle
+      fi
+      eww poll mp_players mp_tabs >/dev/null 2>&1 || true
+    '';
+  };
 in {
   programs.eww = {
     enable = true;
@@ -114,5 +240,12 @@ in {
     systemd.enable = true;
   };
 
-  home.packages = [ tailscale-eww-update tailscale-eww-toggle tailscale-eww-exitnode ];
+  home.packages = [
+    tailscale-eww-update
+    tailscale-eww-toggle
+    tailscale-eww-exitnode
+    media-picker-data
+    media-picker-action
+    media-picker-toggle
+  ];
 }

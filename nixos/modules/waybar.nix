@@ -14,7 +14,7 @@
       # Short player name for display: drop the ".instance<pid>"/".tab<id>"
       # suffix playerctl uses, then capitalise the first letter.
       pretty() {
-        printf '%s' "$1" | sed -E 's/\.(instance|tab)[0-9]+$//' | sed -E 's/^./\U&/'
+        printf '%s' "$1" | sed -E 's/\.(instance|tab)[^.]*$//' | sed -E 's/^./\U&/'
       }
 
       # Firefox publishes one MPRIS player for the whole browser, but every tab
@@ -267,36 +267,6 @@
     '';
   };
 
-  media-player-cycle = pkgs.writeShellApplication {
-    name = "media-player-cycle";
-    runtimeInputs = with pkgs; [coreutils playerctl procps];
-    text = ''
-      players=$(playerctl --list-all 2>/dev/null)
-      if [ -z "$players" ]; then
-        exit 0
-      fi
-
-      current=""
-      if [ -f /tmp/media-player-selected ]; then
-        current=$(cat /tmp/media-player-selected)
-      fi
-
-      # Find current index, pick next (wrap around)
-      next=""
-      found=false
-      first=""
-      for p in $players; do
-        [ -z "$first" ] && first="$p"
-        if $found; then next="$p"; break; fi
-        [ "$p" = "$current" ] && found=true
-      done
-      [ -z "$next" ] && next="$first"
-
-      echo "$next" > /tmp/media-player-selected
-      pidof -x waybar 2>/dev/null | xargs -r kill -46 2>/dev/null || true
-    '';
-  };
-
   media-player-volume = pkgs.writeShellApplication {
     name = "media-player-volume";
     runtimeInputs = with pkgs; [coreutils playerctl procps];
@@ -328,52 +298,6 @@
       fi
 
       playerctl --player="$player" volume "$1"
-      pidof -x waybar 2>/dev/null | xargs -r kill -46 2>/dev/null || true
-    '';
-  };
-
-  media-player-menu = pkgs.writeShellApplication {
-    name = "media-player-menu";
-    runtimeInputs = with pkgs; [playerctl wofi coreutils procps];
-    text = ''
-      # Icons: ▶ (playing), ⏸ (paused)
-      players=$(playerctl --list-all 2>/dev/null)
-      menu="Pause All\nResume Spotify"
-
-      if [ -n "$players" ]; then
-        for p in $players; do
-          s=$(playerctl --player="$p" status 2>/dev/null)
-          icon="▶"
-          [ "$s" = "Paused" ] && icon="⏸"
-          menu="$menu\n$icon $p"
-        done
-      fi
-      menu="$menu\nNext Track\nPrevious Track"
-
-      choice=$(printf "%b" "$menu" | wofi --dmenu -p "Media Player" -i 2>/dev/null)
-      case "$choice" in
-        "Pause All")
-          playerctl --all-players pause
-          ;;
-        "Resume Spotify")
-          playerctl --player=spotify play
-          ;;
-        "Next Track")
-          playerctl --all-players next
-          ;;
-        "Previous Track")
-          playerctl --all-players previous
-          ;;
-        *)
-          player=""
-          if [ -n "$choice" ]; then
-            player="${choice:2}"
-          fi
-          if [ -n "$player" ]; then
-            playerctl --player="$player" play-pause
-          fi
-          ;;
-      esac
       pidof -x waybar 2>/dev/null | xargs -r kill -46 2>/dev/null || true
     '';
   };
@@ -725,7 +649,7 @@ in {
             signal = 12;
             format = "{}";
             on-click = "${media-player-toggle}/bin/media-player-toggle";
-            on-click-right = "${media-player-cycle}/bin/media-player-cycle";
+            on-click-right = "media-picker-toggle";
             on-click-backward = "playerctl --all-players previous; pidof -x waybar 2>/dev/null | xargs -r kill -46 2>/dev/null || true";
             on-click-forward = "playerctl --all-players next; pidof -x waybar 2>/dev/null | xargs -r kill -46 2>/dev/null || true";
             on-click-middle = "${media-player-focus}/bin/media-player-focus";

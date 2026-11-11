@@ -132,3 +132,89 @@
         (label :text "Peers (${ts_peers_online}/${ts_peers_total})" :class "ts-section-title")
         (label :text "${ts_peers_exit_count} exit nodes" :class "ts-section-subtitle"))
       (label :text ts_peers_text :class "ts-peers-text" :wrap true))))
+;; ── Media Picker ──────────────────────────────────────────
+;; Two polls instead of one combined object: `for` iterates a JSON array
+;; held directly in a variable, so each list gets its own variable.
+(defpoll mp_players :interval "2s" "media-picker-data players")
+(defpoll mp_tabs :interval "2s" "media-picker-data tabs")
+
+(defwindow media-picker
+  :monitor 0
+  :geometry (geometry
+              :x "0px"
+              :y "50px"
+              :width "420px"
+              :anchor "top center")
+  :stacking "overlay"
+  :focusable "none"
+  ;; Mouse-out closes it; the window stays unfocusable so opening the
+  ;; picker never takes keyboard focus from the focused application.
+  (eventbox :onhoverlost "eww close media-picker"
+    (box :class "mp-window"
+         :orientation "vertical"
+         :halign "fill"
+         :space-evenly false
+      ;; Header
+      (box :class "mp-header"
+           :orientation "horizontal"
+           :halign "fill"
+           :space-evenly false
+        (label :text "󰎆" :class "mp-header-icon")
+        (label :text "Media" :class "mp-header-title" :hexpand true)
+        (button :onclick "eww close media-picker"
+                :timeout "1s"
+                :class "mp-header-close"
+          (label :text "×")))
+      ;; Players
+      (box :class "mp-section"
+           :orientation "vertical"
+           :halign "fill"
+           :space-evenly false
+        (label :text "Players" :class "mp-section-title")
+        (for p in mp_players
+          (eventbox :class "mp-row"
+                    :timeout "1s"
+                    :onscroll "media-picker-action player-volume ${p.id} {}"
+            (box :orientation "horizontal"
+                 :halign "fill"
+                 :space-evenly false
+              (button :class "mp-row-toggle"
+                      :timeout "1s"
+                      :onclick "media-picker-action toggle ${p.id}"
+                (label :text "${p.icon}"))
+              (label :text "${p.name}" :class "mp-row-name")
+              (label :text "${p.detail}"
+                     :class "mp-row-detail"
+                     :hexpand true
+                     :truncate true
+                     :limit-width 22)
+              (label :text "${p.volume}%" :class "mp-row-volume")
+              (button :class "mp-row-pin"
+                      :timeout "1s"
+                      :onclick "media-picker-action pin ${p.id}"
+                (label :text "${p.pin}"))))))
+      ;; Browser tabs (one row per audio-producing tab)
+      (box :class "mp-section"
+           :orientation "vertical"
+           :halign "fill"
+           :space-evenly false
+        (label :text "Tabs" :class "mp-section-title")
+        (for t in mp_tabs
+          (eventbox :class "mp-row"
+                    :timeout "1s"
+                    :onscroll "media-picker-action tab-volume ${t.index} {}"
+            (box :orientation "horizontal"
+                 :halign "fill"
+                 :space-evenly false
+              (button :class "mp-row-toggle"
+                      :timeout "1s"
+                      :onclick "media-picker-action tab-mute ${t.index}"
+                (label :text "${t.icon}"))
+              (label :text "${t.state}" :class "mp-row-state")
+              (label :text "${t.title}"
+                     :class "mp-row-detail"
+                     :hexpand true
+                     :truncate true
+                     :limit-width 30)
+              (label :text "${t.volume}%" :class "mp-row-volume")))))
+      (label :text "scroll a row to set its volume" :class "mp-hint"))))
