@@ -187,8 +187,7 @@
                      :class "mp-row-detail"
                      :halign "start"
                      :hexpand true
-                     :truncate true
-                     :limit-width 22)
+                     :truncate true)
               (label :text "${p.volume}%" :class "mp-row-volume")
               (button :class "mp-row-pin"
                       :timeout "1s"
@@ -215,8 +214,7 @@
                      :class "mp-row-detail"
                      :halign "start"
                      :hexpand true
-                     :truncate true
-                     :limit-width 30)
+                     :truncate true)
               (label :text "${t.volume}%" :class "mp-row-volume")
               (label :text "" :class "mp-row-pin")))))
       (label :text "scroll a row to set its volume" :class "mp-hint" :halign "start"))))
