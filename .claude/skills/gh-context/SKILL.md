@@ -112,7 +112,7 @@ Generated AGENTS.md with:
 - 3 gotchas documented (Godot y-down coordinates, normalized() returns Zero for zero vectors, sign(0) returns 0)
 - 2 non-goals (export/ directory, .import files)
 
-Agents using do-gh-issue or gh-implement-step will read this file for project conventions.
+Agents working in this repo will read this file for project conventions.
 ```
 
 ### Constraints

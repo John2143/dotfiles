@@ -19,7 +19,7 @@ tool-hints: |
 - `--scope <area>` — Optional context narrowing (e.g., `"backend only"`, `"NixOS configs"`, `"auth subsystem"`).
 
 **Examples:**
-- `/skill:plan-breakdown ./ai-plan-myrepo-aB3x9/Index.md` — Decomposes a big-plan index into phased work items.
+- `/skill:plan-breakdown ./ai-plan-myrepo-aB3x9/Index.md` — Decomposes a plan index into phased work items.
 - `/skill:plan-breakdown --text "Add a backup health-check endpoint" --scope "backend only"` — Decomposes an inline plan, scoped to the backend.
 - `/skill:plan-breakdown plan.md --output local://MYPLAN.md --scope "auth subsystem"` — Reads `plan.md`, scopes to auth, writes to `MYPLAN.md`.
 
