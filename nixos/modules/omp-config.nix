@@ -165,19 +165,19 @@ in
               reasoning: true
               supportsTools: true
               input: [text, image]
-              cost: { input: 4, output: 20, cacheRead: 0.2, cacheWrite: 5 }
+              cost: { input: 0.1, output: 0.5, cacheRead: 0.01, cacheWrite: 0.125 }
               contextWindow: 1000000
               maxTokens: 64000
               thinking:
                 mode: anthropic-adaptive
                 efforts: [low, medium, high, xhigh, max]
                 supportsDisplay: true
-            - id: claude-fable-5-1
-              name: Claude Fable 5.1 (Max subscription)
+            - id: claude-fable-5-2
+              name: Claude Fable 5.2 (Max subscription)
               reasoning: true
               supportsTools: true
               input: [text, image]
-              cost: { input: 4, output: 20, cacheRead: 0.2, cacheWrite: 5 }
+              cost: { input: 8, output: 40, cacheRead: 0.2, cacheWrite: 10 }
               contextWindow: 1000000
               maxTokens: 64000
               thinking:
@@ -246,7 +246,7 @@ in
               contextWindow: 1048576
               maxTokens: 384000
             # Anthropic on the API key instead of the Max subscription — the
-            # `litellm/anthropic/*` fallback rung below. The proxy answers
+            # API-key rungs in retry.fallbackChains below. The proxy answers
             # `anthropic/<id>` from its ANTHROPIC_API_KEY lane
             # (workloads/llm-proxy/configmap.yaml, `anthropic/*`), and its
             # /model/info publishes no per-model entries for that wildcard, so
@@ -270,8 +270,8 @@ in
               input: [text, image]
               contextWindow: 1000000
               maxTokens: 128000
-            - id: anthropic/claude-fable-5-1
-              name: Claude Fable 5.1 (Anthropic API key)
+            - id: anthropic/claude-fable-5-2
+              name: Claude Fable 5.2 (Anthropic API key)
               api: openai-completions
               reasoning: true
               supportsTools: true
@@ -463,19 +463,26 @@ in
             - "litellm/openrouter/openrouter/auto"
           slow:
             - "anthropic/claude-opus-5-5"
-            - "litellm/anthropic/*"
+            - "litellm/anthropic/claude-opus-5-5"
             - "litellm/deepseek/deepseek-flash:high"
-          # Every model on the `anthropic` provider — Opus at any effort,
-          # Haiku, Fable. Max subscription first (the live model is the chain
-          # head), then the same model on the proxy's API-key lane, then the
-          # cheap DeepSeek tier. A provider wildcard outranks role keys
-          # (retry-fallback-chains.ts, step 2 before step 3), so this — not
-          # `slow` — is what an `anthropic/*` session actually walks, including
-          # oracle/subagents on Opus at xhigh. `litellm/anthropic/*` keeps the
-          # failing id and swaps the provider, i.e. `anthropic/claude-opus-5-5`
-          # -> `litellm/anthropic/claude-opus-5-5`.
-          "anthropic/*":
-            - "litellm/anthropic/*"
+          # Per-model keys, one Twin per Claude model: Max subscription first
+          # (the live model is the chain head), then the same model on the
+          # proxy's API-key lane, then the cheap DeepSeek tier. Model-selector
+          # keys outrank role keys (retry-fallback-chains.ts, step 1 before
+          # step 3) and a suffixless key matches any effort, so these — not
+          # `slow` — are what a Claude session actually walks, including
+          # oracle/subagents on Opus at xhigh. Spelled out per id rather than
+          # `litellm/anthropic/*`: the wildcard form rebuilds the candidate
+          # from the failing model's bare id, and a concrete id is both
+          # obvious to read and independent of that suffixing.
+          "anthropic/claude-opus-5-5":
+            - "litellm/anthropic/claude-opus-5-5"
+            - "litellm/deepseek/deepseek-flash:high"
+          "anthropic/claude-haiku-5-5":
+            - "litellm/anthropic/claude-haiku-5-5"
+            - "litellm/deepseek/deepseek-flash:high"
+          "anthropic/claude-fable-5-2":
+            - "litellm/anthropic/claude-fable-5-2"
             - "litellm/deepseek/deepseek-flash:high"
 
       # Tools — enable setting-gated tools that ship disabled by default.
