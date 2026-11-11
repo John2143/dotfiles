@@ -53,13 +53,25 @@ droplet is `cluster="do"`. Never add a cluster label to a home job.
 ingesters that was 250k each; on 2026-11-11 the cluster held 414k series with one ingester pinned at
 250k, and `cortex_discarded_samples_total{reason="per_user_series_limit"}` rose 15.4M in 24 h.
 Adding ingesters without raising the limit lowers every ceiling — always change both together.
-`cortex_ingester_memory_series` is scraped through the Service, so it shows one pod at a time; the
-per-instance truth is `curl -s http://192.168.6.23:8080/ingester/ring`.
+`cortex_ingester_memory_series` is scraped through the Service, so it shows one pod at a time. The
+ring page (`/ingester/ring`) lists the instances but has no series counts. To read each pod's count:
+`kubectl --context closet-as-admin get --raw /api/v1/namespaces/observability/pods/mimir-0:8080/proxy/metrics | grep -E '^cortex_ingester_(memory|active)_series'`
+(repeat for `mimir-1`).
 
-State after argo #101–#103 (2026-11-11): **2 ingesters, 750k limit (375k each), ~302k series in
-use (260k home).** A third ingester was tried and reverted: `office` carries
-`wifi=no-network-storage:NoSchedule`, so with `arch` and `nas` excluded only `big` and `closet` can
-host a Longhorn-backed Mimir pod.
+State after argo #101–#103 (2026-11-11): **2 ingesters, 750k limit (375k each).** A third ingester
+was tried and reverted: `office` carries `wifi=no-network-storage:NoSchedule`, so with `arch` and
+`nas` excluded only `big` and `closet` can host a Longhorn-backed Mimir pod.
+
+Measured with `count({__name__=~".+"})` (verified 2026-11-11):
+
+- **424k at 04:00Z**, before #101.
+- **335k at 22:44Z**, which works out to about **186k memory series per ingester, half its ceiling**.
+
+The trims account for about 64k of the drop: `temporal` −31k, `cadvisor` −14k, `kubelet` −9.5k,
+`longhorn` −8.5k. The rest came from churn, and the biggest part of that is Beyla's
+`longhorn-system/instance-manager-*` series, which can swing ±27k within an hour (see below).
+Queries older than about 12h reach the store-gateway: one instant `count` at that age takes ~110 s,
+range queries time out, and parallel ones get the connection dropped. Run them one at a time.
 
 Trims in place:
 
