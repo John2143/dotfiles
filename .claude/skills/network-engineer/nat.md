@@ -72,11 +72,13 @@ temporal `.6.20:7233`, lan-dns `.6.30:53`, k8s API `.5.10:6443`.
   cannot be part of a selector identity.
 - Removing a rule does not remove a Verizon forward, and vice versa. Clean up both.
 - Known dead Verizon forwards (no matching MikroTik rule): 25555 → 32565. Remove on sight.
-- Known stale rule *comment*: the previews rule's comment says `udp/30000-33999` while its
-  `dst-port` is `31000-34999`. The range is authoritative (`/ip firewall nat print detail`);
-  fix the comment with `set [find comment="rots previews gameservers (udp/30000-33999) -> .6.33"]
-  comment="rots previews gameservers (udp/31000-34999) -> .6.33"` after checking the find
-  returns exactly one rule.
+- Known dead WAN paths (2026-11-11). The MikroTik still dst-nats these and nothing arrives, and
+  the rule's own packet counter stays flat under a probe from outside, so the packet dies before
+  it reaches the router: `3478/tcp` and `45000-45063/udp` (coturn), `7881/tcp` (livekit),
+  `11753/tcp` (openrct2), `18080/tcp` (monero). All were verified working from check-host on
+  2026-10-16. Either the Verizon forwards were trimmed deliberately or they were lost - confirm
+  intent before restoring any of them. `34197/udp` (factorio) still arrives, so this is not a
+  blanket firewall change.
 - **A UDP probe that times out proves nothing.** Dropped at the Verizon forward and dropped by
   the far end look identical from outside. The only trustworthy signal that a range is open is
   the MikroTik rule's own packet counter moving while the probe runs:
