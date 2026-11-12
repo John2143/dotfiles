@@ -5,8 +5,9 @@
      - `@define-color` + `@name` references: they reach GTK unresolved.
      - Any non-ASCII byte, box-drawing characters in comments included.
      - Properties and values GTK3 does not have: `text-transform`,
-       `letter-spacing`, `line-height`, `margin: auto`. These are hard errors,
-       not warnings.
+       `line-height`, `margin: auto`. These are hard errors, not warnings.
+       (`letter-spacing` and `font-feature-settings` ARE supported - verified
+       against GtkCssProvider 3.24.52 - so the ban is not on tracking itself.)
    Hence plain SCSS variables, ASCII-only banners and no such properties.
    Verify an edit with ./check-css.py (headless, no compositor, no windows). */
 $base: #1e1e2e;

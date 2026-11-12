@@ -158,6 +158,7 @@ let
                 )
               | {
                   index: ($si.index | tostring),
+                  pid: ($si.properties["application.process.id"] // ""),
                   title: $n,
                   volume: (($si.volume // {})
                            | [ .[].value_percent | sub("%"; "") | tonumber ]
@@ -178,7 +179,7 @@ let
 
   media-picker-action = pkgs.writeShellApplication {
     name = "media-picker-action";
-    runtimeInputs = with pkgs; [playerctl pulseaudio coreutils procps];
+    runtimeInputs = with pkgs; [playerctl pulseaudio jq coreutils procps];
     text = ''
       verb="''${1:-}"
       case "$verb" in
@@ -208,8 +209,37 @@ let
         tab-mute)
           pactl set-sink-input-mute "''${2:-}" toggle
           ;;
+        tab-focus)
+          # The page title is attacker-controlled - it comes from a web page - so
+          # it never travels through the shell command line. The row passes only
+          # the numeric sink-input index and the title is looked up here.
+          index="''${2:-}"
+          meta=$(pactl --format=json list sink-inputs 2>/dev/null | jq -r --arg i "$index" '
+            [ .[] | select((.index | tostring) == $i)
+              | [ (.properties["media.name"] // ""), (.properties["application.process.id"] // "") ]
+              | @tsv ] | first // ""' 2>/dev/null || true)
+          title="''${meta%%$'\t'*}"
+          browser_pid="''${meta##*$'\t'}"
+          # A Hyprland window advertises only its active tab, so a background
+          # tab has no window of its own to focus.
+          addr=""
+          if [ -n "$title" ]; then
+            # Window titles are "<active tab title> <dash> Mozilla Firefox", so
+            # compare only the prefix to stay clear of the separator.
+            addr=$(hyprctl -j clients 2>/dev/null | jq -r --arg t "$title" '
+              [ .[] | select(.class == "firefox" and (.title[0:($t | length)] == $t)) | .address ]
+              | first // ""' 2>/dev/null || true)
+          fi
+          if [ -n "$addr" ]; then
+            hyprctl dispatch focuswindow "address:$addr" >/dev/null 2>&1 || true
+          elif [ -n "$browser_pid" ]; then
+            # Nothing advertises that tab, so raise the browser window instead
+            # of pretending the tab can be selected.
+            hyprctl dispatch focuswindow "pid:$browser_pid" >/dev/null 2>&1 || true
+          fi
+          ;;
         *)
-          echo "usage: media-picker-action {toggle|pin|player-volume|tab-volume|tab-mute} <id> [up|down]" >&2
+          echo "usage: media-picker-action {toggle|pin|player-volume|tab-volume|tab-mute|tab-focus} <id> [up|down]" >&2
           exit 2
           ;;
       esac
