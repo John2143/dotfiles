@@ -230,12 +230,18 @@ let
               [ .[] | select(.class == "firefox" and (.title[0:($t | length)] == $t)) | .address ]
               | first // ""' 2>/dev/null || true)
           fi
-          if [ -n "$addr" ]; then
-            hyprctl dispatch focuswindow "address:$addr" >/dev/null 2>&1 || true
-          elif [ -n "$browser_pid" ]; then
+          # Hyprland 0.57 dropped hyprlang, so "hyprctl dispatch focuswindow X"
+          # is a Lua syntax error; focusing goes through hl.dsp.focus and the
+          # snippet is evaluated with "hyprctl repl". Address and pid are
+          # validated first so nothing else can be spliced into the Lua.
+          if [[ "$addr" =~ ^0x[0-9a-fA-F]+$ ]]; then
+            focus_lua="for _,w in ipairs(hl.get_windows()) do if w.address == '$addr' then hl.dispatch(hl.dsp.focus({window=w})) return 'ok' end end"
+            hyprctl repl "$focus_lua" >/dev/null 2>&1 || true
+          elif [[ "$browser_pid" =~ ^[0-9]+$ ]]; then
             # Nothing advertises that tab, so raise the browser window instead
             # of pretending the tab can be selected.
-            hyprctl dispatch focuswindow "pid:$browser_pid" >/dev/null 2>&1 || true
+            focus_lua="for _,w in ipairs(hl.get_windows()) do if w.class == 'firefox' and w.pid == $browser_pid then hl.dispatch(hl.dsp.focus({window=w})) return 'ok' end end"
+            hyprctl repl "$focus_lua" >/dev/null 2>&1 || true
           fi
           ;;
         *)
