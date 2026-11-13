@@ -1,4 +1,4 @@
-# 2026-11-10 22:42:06 by RouterOS 7.24.5
+# 2026-11-13 01:29:41 by RouterOS 7.24.5
 # software id = 7RHC-3MMG
 #
 # model = RB5009UPr+S+
@@ -283,9 +283,6 @@ add action=drop chain=forward comment=\
     "wg: deny tunnel traffic not allowed above" in-interface=wg-remote log=\
     yes log-prefix=wg-drop
 /ip firewall nat
-add action=dst-nat chain=dstnat comment="monero p2p (tcp/18080) -> .5.76" \
-    dst-port=18080 in-interface-list=WAN protocol=tcp to-addresses=\
-    192.168.5.76 to-ports=18080
 add action=dst-nat chain=dstnat comment="teamspeak voice (udp/9987) -> .6.15" \
     dst-port=9987 in-interface-list=WAN protocol=udp to-addresses=\
     192.168.6.15 to-ports=9987
@@ -301,9 +298,6 @@ add action=dst-nat chain=dstnat comment=\
     in-interface-list=WAN protocol=tcp to-addresses=192.168.6.6 to-ports=443
 add action=masquerade chain=srcnat dst-address=!192.168.0.0/24 out-interface=\
     2GWAN
-add action=dst-nat chain=dstnat comment="openrct2 (tcp/11753) -> .6.17" \
-    dst-port=11753 in-interface-list=WAN protocol=tcp to-addresses=\
-    192.168.6.17 to-ports=11753
 add action=dst-nat chain=dstnat comment="mail-smtp (tcp/25) -> .6.13" \
     dst-port=25 in-interface-list=WAN protocol=tcp to-addresses=192.168.6.13 \
     to-ports=25
@@ -316,18 +310,6 @@ add action=dst-nat chain=dstnat comment="mail-imaps (tcp/993) -> .6.13" \
 add action=dst-nat chain=dstnat comment=\
     "livekit webrtc tcp (tcp/7881) -> .6.22" dst-port=7881 in-interface-list=\
     WAN protocol=tcp to-addresses=192.168.6.22 to-ports=7881
-add action=dst-nat chain=dstnat comment=\
-    "steam-lobby coturn TURN (tcp/3478) -> .6.14" dst-port=3478 \
-    in-interface-list=WAN protocol=tcp to-addresses=192.168.6.14 to-ports=\
-    3478
-add action=dst-nat chain=dstnat comment=\
-    "steam-lobby coturn TURN (udp/3478) -> .6.14" dst-port=3478 \
-    in-interface-list=WAN protocol=udp to-addresses=192.168.6.14 to-ports=\
-    3478
-add action=dst-nat chain=dstnat comment=\
-    "steam-lobby coturn relay (udp/45000-45063) -> .6.14" dst-port=\
-    45000-45063 in-interface-list=WAN protocol=udp to-addresses=192.168.6.14 \
-    to-ports=45000-45063
 add action=dst-nat chain=dstnat comment="factorio (udp/34197) -> .6.28" \
     dst-port=34197 in-interface-list=WAN protocol=udp to-addresses=\
     192.168.6.28 to-ports=34197
