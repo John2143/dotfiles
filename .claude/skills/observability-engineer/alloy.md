@@ -17,6 +17,7 @@ Component detail for the long-standing jobs:
 |---|---|
 | `kubelet`, `cadvisor` | `role=node` discovery; kubelet `:10250` with `bearer_token_file` (SA token) and `tls_config.insecure_skip_verify`; cadvisor via `/metrics/cadvisor` |
 | `kube-state-metrics` | chart app in the `kube-state-metrics` ns, `:8080` |
+| `longhorn` | **one target per `app=longhorn-manager` pod** on `:9500`, `instance` = node name. Each manager reports only the volumes it owns and the replicas, engines and disks on its own node, so the old `longhorn-backend` Service target returned one node's slice (32 of 263 volumes on 2026-11-13). Five managers now report every volume. `prometheus.relabel "longhorn_metrics"` drops the per-backup families (cluster-wide — without the drop, five managers report each backup five times), `snapshot_actual_size`, `workqueue_*` and `rest_client_*` |
 | `traefik` | `:9100` |
 | `temporal` | relabel forces `<podIP>:9090` — the pods declare no container port |
 | `keda` | `keda-operator-metrics-apiserver.keda.svc:8080` |
@@ -34,6 +35,40 @@ comes from an explicit ACL rule — a target that goes down is far more often an
 problem than a dead exporter. Verified 2026-11-05: `big.local:9100` and `big.local:9633` were both
 down while `curl http://100.64.0.24:9100/metrics` from `pite` returned 200 — the exporters were
 healthy, the name did not resolve.
+
+## The OTLP metric filter
+
+`otelcol.receiver.otlp "traces"` hands its metrics output to `otelcol.processor.filter "beyla_metrics"`
+before the batch processor and the Mimir exporter. It drops two things, both of which restate what
+other signals already carry:
+
+- the four HTTP body-size families (`http.{server,client}.{request,response}.body.size`), for every
+  service — nothing reads them and the buckets alone were ~26k home series;
+- `http.client.*` for services whose `service.name` ends in `-db`, which is the CNPG instance manager
+  inside every database pod calling the Kubernetes API (most of those services' series). `db.*`,
+  `http.server.*` and `rpc.*` stay, and `http_server_request_duration_count` is load-bearing for the
+  status page.
+
+Two rules that bite:
+
+- **OTTL string literals take Go-style escapes.** A regex written `"^http\.client\."` fails to load
+  ("invalid quoted string"); write `"^http[.]client[.]"`.
+- **`alloy validate` does not parse OTTL** — a bogus function name passes it. Load the filter for
+  real, or a bad condition reaches production and the pod keeps running the previous config:
+  `docker run --rm -i --entrypoint sh grafana/alloy:v1.19.2 -c 'cat > /tmp/c.alloy; alloy run --stability.level=experimental --storage.path=/tmp/d /tmp/c.alloy'`
+  and check for `Failed to build component`.
+
+Whether a filter actually fires is visible per pod:
+`kubectl --context closet-as-admin get --raw /api/v1/namespaces/observability/pods/<pod>:12345/proxy/metrics | grep otelcol_processor_filter_datapoints_filtered_total`
+
+**Beyla does not always roll cleanly.** Changing `apps/beyla.yaml` restarts the three Beyla pods
+(arch, big, nas) through the DaemonSet's `checksum/config` annotation. On 2026-11-13 two of them sat
+in `Terminating` for minutes with `FailedKillPod: context deadline exceeded` on the eBPF container,
+which blocks the rollout at `maxUnavailable: 1` and leaves ArgoCD `Progressing`. Force-delete the
+stuck pod (`kubectl -n observability delete pod <name> --force --grace-period=0`); the DaemonSet
+recreates it with the new checksum. The new config file reaches the *existing* pods through the
+mounted ConfigMap within a minute, so telemetry changes before the pods are replaced — do not read a
+still-old checksum as "the change is not live".
 
 ## Positions
 

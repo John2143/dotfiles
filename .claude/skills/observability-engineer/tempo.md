@@ -49,6 +49,45 @@ Tempo finds blocks by their meta object, so it skips them. Moving the folders ou
 ("can not move across collection"), and moving them to another top-level prefix makes Tempo treat
 that prefix as a tenant. Then delete `tempo-0` and confirm every module is `Running`.
 
+## Span metrics
+
+`traces_spanmetrics_{calls,latency,duration,size}_*` come from the `metrics-generator`'s
+`span_metrics` processor and are remote-written to Mimir. They are load-bearing: the games-alerts
+join-rejection alert (`games-alerts.yaml`) and two games-fleet panels read them, so removing the
+processor "because the series count is high" breaks pages.
+
+Since argo #129 (2026-11-13) they cover **app SDK spans only**. `apps/tempo.yaml` carries two
+`exclude` policies under `metricsGenerator.processor.span_metrics.filter_policies`:
+`resource.telemetry.sdk.name` `strict` `beyla`, and `span.code.module.name` `regex`
+`^(h2|temporalio_sdk)`. Beyla restated every request it sees as a second copy of the `http_*`/`rpc_*`
+metrics it already exports, and it was 97% of these series; `h2` and `temporalio_sdk` are
+rots-authserver's library-internal spans, and only `rots_authserver::api` carries business spans
+(`http.request`, `k8s.provision`). Measured effect: `tempo_metrics_generator_registry_active_series`
+fell from ~27k to ~200.
+
+Read that gauge on the pod rather than inferring from a series count in Mimir, because the remote-write
+flush lags the registry and stale series linger in instant queries for about five minutes:
+`kubectl --context closet-as-admin get --raw '/api/v1/namespaces/observability/pods/tempo-0:3200/proxy/metrics' | grep registry_active_series`
+
+Tempo 2.10 accepts only `include` and `exclude` in a policy, parses the config strictly, and the
+docs describe multiple policies as ANDed — ambiguous enough that you must measure the result rather
+than trust the shape. A wrong key stops Tempo from starting
+(`field include_any not found in type config.PolicyMatch`), and `exclude_services` is ignored once
+`instrument` is set. Verify a candidate config with the deployed binary before merging:
+
+```
+helm template tempo tempo --repo https://grafana-community.github.io/helm-charts --version 2.4.0 \
+  -n observability -f <(yq -r '.spec.source.helm.values' apps/tempo.yaml) \
+  | yq -r 'select(.kind == "ConfigMap" and .metadata.name == "tempo") | .data["tempo.yaml"]' > /tmp/tempo.yaml
+docker run --rm -v /tmp/tempo.yaml:/conf/tempo.yaml:ro -e S3_ACCESS_KEY=x -e S3_SECRET_KEY=x \
+  grafana/tempo:2.10.8 -config.file=/conf/tempo.yaml -config.expand-env=true -config.verify=true
+```
+
+`-config.verify=true` exits 0 on a good file and non-zero with the offending line on a bad one — worth
+running because this change restarts `tempo-0`, and a restart is exactly when the compactor crash
+loop surfaces (next section). The helm template's first two lines are the dev-shell banner; strip them
+before feeding the file to Tempo.
+
 ## Correlation
 
 `TraceId` on a Traefik access-log line opens the corresponding trace in Grafana — that is the
