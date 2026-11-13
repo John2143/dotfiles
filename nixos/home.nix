@@ -601,7 +601,6 @@ in {
     # started from there with -c ~/.local/state/theme/current/hyprpaper.conf).
     # "waybar".source = config.lib.file.mkOutOfStoreSymlink ../.config/waybar;
 
-    #"get_sunset.fish".source = config.lib.file.mkOutOfStoreSymlink ../.config/get_sunset.fish;
     #"get_mullvad.fish".source = config.lib.file.mkOutOfStoreSymlink ../.config/get_mullvad.fish;
 
     "focussed-vol-adjust.sh".source =

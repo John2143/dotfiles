@@ -188,7 +188,6 @@ window#waybar > box {
 #temperature,
 #memory,
 #cpu,
-#custom-mullvad,
 #custom-thermostat,
 #custom-weather,
 #custom-vast,
@@ -301,13 +300,6 @@ window#waybar > box {
 
 #custom-screenrec.error {
     color: @red;
-}
-
-#custom-mullvad.connected {
-    color: @green;
-}
-#custom-mullvad.disconnected {
-    color: @overlay0;
 }
 
 /* ---- Tray ---- */
