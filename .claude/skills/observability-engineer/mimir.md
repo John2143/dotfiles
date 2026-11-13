@@ -73,13 +73,14 @@ The trims account for about 64k of the drop: `temporal` −31k, `cadvisor` −14
 Queries older than about 12h reach the store-gateway: one instant `count` at that age takes ~110 s,
 range queries time out, and parallel ones get the connection dropped. Run them one at a time.
 
-**State after argo #126/#128/#129 (2026-11-13).** The same query read 369k at 05:20Z and **194k at
-07:00Z**, of which 146k is home — about 97k memory series per ingester against a 375k ceiling. The
+**State after argo #126/#128/#129 (2026-11-13).** The same query read 369k at 05:20Z, **194k at
+07:00Z** once the three argo PRs had synced, and **184k (136k home)** after pite was rebuilt with the
+`write_relabel_configs` trim — about 92k memory series per ingester against a 375k ceiling. The
 contributors: Beyla 90.9k → 8.0k, span metrics 53.5k → 216, kube-state-metrics 42.7k → 19.6k,
-cadvisor 40.2k → 28.5k, kubelet 5.2k → 3.2k, and Longhorn 6.9k → 7.8k (more series, but every volume
-now reports instead of one node's slice). Series that stop being written stay visible to instant
-queries for about five minutes, so a check run straight after a merge overstates the count — wait out
-the lookback before quoting a number.
+cadvisor 40.2k → 28.5k, kubelet 5.2k → 3.2k, `home-nodes` 25.5k → 12.1k, `etcd` 5.8k → 5.0k, and
+Longhorn 6.9k → 7.8k (more series, but every volume now reports instead of one node's slice). Series
+that stop being written stay visible to instant queries for about five minutes, so a check run
+straight after a merge overstates the count — wait out the lookback before quoting a number.
 
 Trims in place:
 
