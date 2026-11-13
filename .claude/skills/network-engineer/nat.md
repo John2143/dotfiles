@@ -38,6 +38,15 @@ a public path. Monero (`18080`) and OpenRCT2 (`11753`) were retired at the same 
 monero because an unpatched P2P daemon on the public internet is a 0-day liability, openrct2
 because the service is parked at 0 replicas.
 
+| Edge | Provider | Address | Answers |
+|---|---|---|---|
+| `s1.edge.2143.me` | Linode | `69.164.221.149` | `tcp/3478`, STUN |
+| `s2.edge.2143.me` | Hetzner | `91.99.2.153` | `tcp/3478`, STUN |
+
+Both were probed from check-host on 2026-11-13 (3/3 and 2/3 nodes on `tcp/3478`, one timeout) while
+the home forwards were retired. The names are in deSEC, not on the router, so nothing here needs
+changing when an edge is replaced — which is the point of the fungible-edge design.
+
 Both gameserver entries forward "Both" protocols and preserve the port
 (`36000-37999` → `36000-37999`); the MikroTik then dst-nats UDP only, so the
 TCP half is forwarded and dropped. The prod range was widened from
