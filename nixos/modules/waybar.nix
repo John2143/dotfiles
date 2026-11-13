@@ -1,6 +1,7 @@
 {
   pkgs,
   compName,
+  config,
   lib,
   ...
 }: let
@@ -502,7 +503,11 @@
 in {
   programs.waybar = {
     enable = true;
-    style = ../../.config/waybar/style.css;
+    # The palette lives in ~/.local/state/theme/current/waybar.css (written by
+    # theme-switch); style.css keeps the layout rules only.
+    style =
+      "@import url(\"file://${config.xdg.stateHome}/theme/current/waybar.css\");\n"
+      + builtins.readFile ../../.config/waybar/style.css;
     settings = {
       mainBar =
         {
@@ -544,6 +549,7 @@ in {
             ++ [
               "custom/vast"
               "custom/weather"
+              "custom/theme"
               "custom/eww-hello"
               "battery"
               "custom/autoclicker"
@@ -785,6 +791,16 @@ in {
             tooltip = true;
             on-click = "screenrec toggle";
             on-click-right = "screenrec last";
+          };
+
+          # ---- Theme toggle ----
+          "custom/theme" = {
+            exec = "theme-switch status";
+            return-type = "json";
+            interval = "once";
+            format = "{}";
+            on-click = "theme-switch toggle";
+            tooltip = true;
           };
 
           # ---- Eww Hello World ----

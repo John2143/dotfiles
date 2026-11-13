@@ -227,7 +227,7 @@ in {
     { _args = ["F20" (mkLua ''hl.dsp.dpms({ action = "enable" })'')]; }
     { _args = ["CTRL + F20" (mkLua ''hl.dsp.exec_cmd([[hypr-blank]])'')]; }
     # locked = true so it also works while the session is locked (stale-lock recovery)
-    { _args = ["SUPER + F20" (mkLua ''hl.dsp.exec_cmd([[hyprlock]])'') { locked = true; }]; }
+    { _args = ["SUPER + F20" (mkLua ''hl.dsp.exec_cmd([[hyprlock-theme]])'') { locked = true; }]; }
 
     # Macro pad F21 group — Home Assistant toggles
     { _args = ["F21" (mkLua ''hl.dsp.exec_cmd("hass-macro dyson-fan")'')]; }

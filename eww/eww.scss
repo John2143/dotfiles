@@ -1,4 +1,7 @@
-/* Catppuccin Mocha palette.
+/* Palette: $XDG_CONFIG_HOME/eww/theme.scss, written by theme-switch from
+   nixos/modules/theme.nix. Never inline hex here - the palette must change
+   without a rebuild.
+
    GTK discards the ENTIRE stylesheet when eww hands it one it cannot parse, so
    any single mistake here makes every eww window render with the bare GTK
    theme. Three things do it:
@@ -10,22 +13,7 @@
        against GtkCssProvider 3.24.52 - so the ban is not on tracking itself.)
    Hence plain SCSS variables, ASCII-only banners and no such properties.
    Verify an edit with ./check-css.py (headless, no compositor, no windows). */
-$base: #1e1e2e;
-$surface0: #313244;
-$overlay0: #6c7086;
-$text: #cdd6f4;
-$subtext0: #a6adc8;
-$blue: #89b4fa;
-$mauve: #cba6f7;
-$green: #a6e3a1;
-$red: #f38ba8;
-$yellow: #f9e2af;
-$teal: #94e2d5;
-$pink: #f5c2e7;
-$surface1: #45475a;
-$surface2: #585b70;
-
-/* Catppuccin Mocha palette */
+@import "theme";
 
 * {
   all: unset;
@@ -226,12 +214,12 @@ $surface2: #585b70;
   margin-left: 8px;
   padding: 2px 8px;
   border-radius: 6px;
-  background-color: rgba(137, 180, 250, 0.1);
+  background-color: rgba($blue, 0.1);
 }
 
 .ts-exit-btn:hover {
-  background-color: rgba(137, 180, 250, 0.25);
-  color: #b4d0fb;
+  background-color: rgba($blue, 0.25);
+  color: $lavender;
 }
 
 /* -- Quick Actions Bar ----------------------- */

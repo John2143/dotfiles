@@ -208,15 +208,21 @@
         frame_color = "#@peach@"
   '';
 
-  # Read by hyprlock via `source`, and by the compositor through extraConfig.
-  hyprlockConf = ''
-    $lock_bg = rgb(@base@)
-    $lock_outer = rgb(@mauve@)
-    $lock_inner = rgb(@surface0@)
-    $lock_font = rgb(@text@)
-    $lock_check = rgb(@peach@)
-    $lock_fail = rgb(@red@)
-  '';
+  # hyprlock has no `source` directive (hyprlang 0.6.8 has no such keyword), so
+  # the whole file is rendered here and selected with `-c` by hyprlock-theme.
+  hyprlockTemplate = builtins.readFile ../../.config/hypr/hyprlock.conf;
+
+  # Picks the themed lock config, and falls back to the dark asset (always present
+  # in the store) if the state file is missing: a lock screen must never fail open.
+  hyprlock-theme = pkgs.writeShellApplication {
+    name = "hyprlock-theme";
+    runtimeInputs = [pkgs.hyprlock];
+    text = ''
+      conf="${stateDir}/current/hyprlock.conf"
+      [ -r "$conf" ] || conf="${assets}/dark/hyprlock.conf"
+      exec hyprlock --config "$conf" "$@"
+    '';
+  };
 
   hyprlandLua = ''
     -- Written by theme-switch from nixos/modules/theme.nix; dofile'd by hyprland.lua.
@@ -237,7 +243,7 @@
     "wofi.css" = subst p wofiCss;
     "fuzzel.ini" = subst p fuzzelIni;
     "dunst.conf" = subst p dunstConf;
-    "hyprlock.conf" = subst p hyprlockConf;
+    "hyprlock.conf" = subst p hyprlockTemplate;
     "hyprland.lua" = subst p hyprlandLua;
     "waybar.css" = lib.concatMapStrings (n: "@define-color ${n} #${p.${n}};\n") (lib.attrNames p);
     "eww.scss" = lib.concatMapStrings (n: "\$${n}: #${p.${n}};\n") (lib.attrNames p);
@@ -296,6 +302,7 @@
 in {
   home.packages = [
     theme-switch
+    hyprlock-theme
     # GTK3 theme pair written to gtk-3.0/settings.ini by theme-switch.
     pkgs.adw-gtk3
     # BreezeLight/BreezeDark .colors schemes, picked up through the portal hint.
@@ -313,6 +320,9 @@ in {
   '';
 
   xdg.configFile = {
+    # Only for a manual `hyprlock`; the binds run hyprlock-theme, which prefers
+    # the state file.
+    "hypr/hyprlock.conf".source = config.lib.file.mkOutOfStoreSymlink "${assets}/dark/hyprlock.conf";
     "wofi/style.css".source = config.lib.file.mkOutOfStoreSymlink "${stateDir}/current/wofi.css";
     "fuzzel/fuzzel.ini".source = config.lib.file.mkOutOfStoreSymlink "${stateDir}/current/fuzzel.ini";
     "eww/theme.scss".source = config.lib.file.mkOutOfStoreSymlink "${stateDir}/current/eww.scss";
