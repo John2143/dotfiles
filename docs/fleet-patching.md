@@ -163,7 +163,9 @@ Revert the merged Renovate PR on `main`; ArgoCD self-heals it. Never re-pin an i
 Not needed for the weekly job (it never reboots). Since 2026-11-03 `kured` reboots `arch`,
 `closet` and `nas` one at a time, Wednesdays 12:00–17:00 America/New_York, and only when that
 node's own `deadman needs-reboot` gate says the cluster can absorb the loss (all nodes Ready,
-no degraded Longhorn volume, every openbao and CNPG instance Ready). Its cordon is what makes
+no degraded Longhorn volume, and every *existing* `openbao-N` / `*-db-N` pod Running and Ready —
+a hibernated or scaled-to-zero CNPG cluster has no pod, so it is neither inspected nor an
+obstacle). Its cordon is what makes
 CNPG move each primary, so a kured reboot needs no promotion step. Expect the
 `lh-volume-degraded` alert for up to ~1 h afterwards while replicas rebuild.
 
@@ -308,7 +310,9 @@ Deadman is also kured's reboot sentinel on the control planes:
 
 - `deadman needs-reboot` answers "reboot" only when the booted kernel differs from the
   profile's **and** the whole cluster passes its gate (all nodes Ready, no degraded or faulted
-  Longhorn volume, three openbao instances and every `-db-N` instance Ready).
+  Longhorn volume, exactly three `openbao-N` pods, and every `*-db-N` pod that exists Running and
+  Ready). The check reads pods, so a cluster scaled to zero — CNPG hibernation leaves the CR but no
+  pods — is invisible to it and can never hold a reboot.
 - Any error — a locked node, a switch in flight, an unreachable API, a missing cluster
   kubeconfig — answers "do not reboot". That is why kured only runs on arch, closet and nas:
   only those three can read `/etc/rancher/k3s/k3s.yaml`. `sudo deadman gate` prints the same
