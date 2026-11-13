@@ -73,8 +73,35 @@ The trims account for about 64k of the drop: `temporal` −31k, `cadvisor` −14
 Queries older than about 12h reach the store-gateway: one instant `count` at that age takes ~110 s,
 range queries time out, and parallel ones get the connection dropped. Run them one at a time.
 
+**State after argo #126/#128/#129 (2026-11-13).** The same query read 369k at 05:20Z and **194k at
+07:00Z**, of which 146k is home — about 97k memory series per ingester against a 375k ceiling. The
+contributors: Beyla 90.9k → 8.0k, span metrics 53.5k → 216, kube-state-metrics 42.7k → 19.6k,
+cadvisor 40.2k → 28.5k, kubelet 5.2k → 3.2k, and Longhorn 6.9k → 7.8k (more series, but every volume
+now reports instead of one node's slice). Series that stop being written stay visible to instant
+queries for about five minutes, so a check run straight after a merge overstates the count — wait out
+the lookback before quoting a number.
+
 Trims in place:
 
+- Round 2, argo #126/#128/#129 (2026-11-13), all in `values-prod.yaml` unless noted:
+  - `prometheus.relabel "ksm_slow"` drops the families nothing reads — Service and EndpointSlice
+    info/created/ports, ReplicaSets, pod tolerations and IPs, persistent volumes (not claims),
+    secrets, configmaps, leases, webhooks, NetworkPolicies, attachment metadata and `kube_.*_created`.
+    Home KSM went 42.7k → 19.1k. rots-prod alone had 2,013 Services and 3,013 EndpointSlices.
+  - `prometheus.relabel "cadvisor_metrics"` now drops `container_fs_.*` as a family; it carries no
+    `pod` or `container` label here, so it cannot be joined to a workload. Home cadvisor 40.2k → 27.6k.
+  - `prometheus.relabel "kubelet_metrics"` adds `apiextensions_*`, `watch_cache_*`, `kubeproxy_*`,
+    `k3s_*` and friends — k3s serves apiserver/controller-manager/kube-proxy metrics on the same
+    endpoint. `aggregator_unavailable_apiservice` is deliberately kept.
+  - `otelcol.processor.filter "beyla_metrics"` drops the four HTTP body-size families and
+    `http.client.*` on `*-db` services (see `alloy.md`).
+  - `apps/beyla.yaml` stops instrumenting ten infra namespaces (`longhorn-system`, `argocd`,
+    `observability`, `cnpg-system`, `keda*`, `kured`, `kube-state-metrics*`, `metallb-system`).
+  - `apps/tempo.yaml` generates span metrics from SDK spans only (see `tempo.md`).
+  - pite's `nixos/pite-canary.nix` remote write drops `veth*` `node_network_*`, six unread
+    node_exporter families, and the kubelet/controller-manager families that the `job="etcd"` endpoint
+    repeats. `write_relabel_configs` only affects the push, so pite's local alert rules still see
+    everything.
 - The home `prometheus.remote_write "mimir"` endpoint drops classic `_bucket` series for `kubelet`,
   `cadvisor`, `temporal*`, `longhorn*`, `metallb*`, `argocd*`, `memberlist*`, `keda*` and
   `cnpg-system*` (`values-prod.yaml:68`). Application histograms keep theirs — gameserver
@@ -85,16 +112,20 @@ Trims in place:
   it collides ~900 label sets.
 
 **A remote-write rule only sees remote-written series.** Beyla's OTLP metrics take a separate path
-(`otelcol.exporter.otlphttp "mimir"`, `values-prod.yaml:488`) and Mimir derives their `job` from
+(`otelcol.exporter.otlphttp "mimir"`) and Mimir derives their `job` from
 `service.namespace/service.name` — so `longhorn-system/instance-manager-*`, `memberlist/loki`,
-`metallb-system/metallb` etc. look like scrape jobs but are not. ~47k such infra buckets survive the
-rule above (select them with `service_name!=""`). Likewise `job="etcd"` and the blackbox/SNMP jobs
-come from pite's Prometheus. Before writing a drop rule, check which path the series arrives on.
+`metallb-system/metallb` etc. look like scrape jobs but are not. That is why Beyla's series were never
+touched by the `_bucket` rule above, and why the fix for them was to stop instrumenting those
+namespaces (argo #129), not to filter them downstream. Likewise `job="etcd"` and the
+blackbox/SNMP jobs come from pite's Prometheus. Before writing a drop rule, check which path the
+series arrives on.
 
-Tempo's span metrics (`traces_spanmetrics_*`, ~33.5k series) are load-bearing: the games-alerts
-join-rejection alert and two games-fleet panels read them. They were removed and restored on
-2026-11-11 (#101, #103); the Tempo crash-loop seen then was **not** caused by that. It was caused by
-block metas pointing at missing SeaweedFS chunks, and it fails with either config (see `tempo.md`).
+Tempo's span metrics (`traces_spanmetrics_*`) are load-bearing: the games-alerts join-rejection alert
+and two games-fleet panels read them. They were removed and restored on 2026-11-11 (#101, #103), and
+since #129 they cover app SDK spans only — the generator holds ~200 active series instead of ~27k, so
+they are no longer a series-cap concern. The Tempo crash loop seen on 2026-11-11 was **not** caused by
+either config: block metas pointed at missing SeaweedFS chunks and it fails with any config (see
+`tempo.md`).
 
 ## History: the 13h bug is fixed
 
