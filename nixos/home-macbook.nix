@@ -58,15 +58,13 @@
 in {
   imports = [./home-cli.nix];
 
-  # `open -a <Name>` / Spotlight only index ~/Applications itself, not the
-  # default "Home Manager Apps" subdirectory.
-  targets.darwin.linkApps.directory = "Applications";
+  # Home Manager links apps as one directory symlink into the store, which
+  # Spotlight and Launchpad do not index. GUI apps come from Homebrew casks
+  # instead, so they land as real bundles in /Applications.
+  targets.darwin.linkApps.enable = false;
 
   home.packages =
     (with pkgs; [
-      alacritty
-      firefox
-      discord
       imagemagick
       kind
       doctl
@@ -74,10 +72,8 @@ in {
       rclone
       velero
       e1s
-      openrct2
       gdtoolkit_4
       temurin-jre-bin-21
-      (prismlauncher.override {jdks = [temurin-bin-17];})
       python3
       uv
       desec-dns
