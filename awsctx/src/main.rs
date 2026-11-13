@@ -4,7 +4,7 @@ use nom::{
     bytes::complete::{tag, take_until},
     character::complete::space0,
     sequence::delimited,
-    Finish,
+    Finish, Parser as _,
 };
 
 /// Simple program change environment varables for AWS
@@ -220,8 +220,8 @@ async fn main() -> Result<(), String> {
 }
 
 fn drop_tags(input: &str) -> nom::IResult<&str, ()> {
-    let (input, _) = delimited(tag("["), take_until("]"), tag("]"))(input)?;
-    let (input, _) = space0(input)?;
+    let (input, _) = delimited(tag("["), take_until("]"), tag("]")).parse(input)?;
+    let (input, _) = space0.parse(input)?;
     Ok((input, ()))
 }
 
@@ -238,7 +238,10 @@ fn run_drop_tags(input: &str) -> anyhow::Result<&str> {
 
 #[cfg(test)]
 mod test {
+    use super::*;
 
     #[test]
-    fn try_tag() {}
+    fn drop_tags_strips_the_bracket_prefix() {
+        assert_eq!(run_drop_tags("[1h2m] dev/foo\n").unwrap(), "dev/foo\n");
+    }
 }
