@@ -69,3 +69,19 @@ Launchpad never index that volume — no nix GUI app is findable by name.
   writable before replacing anything.
 - If a moved bundle is not found by `open -a`, register it with
   `/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -f <path>`.
+
+## GitHub auth on macbook
+
+- `gh auth login` with the SSH protocol; its "upload your SSH key" prompt did
+  not actually land the key, so it was added explicitly:
+  `gh ssh-key add ~/.ssh/id_ed25519.pub --title "Macbook personal ssh id"`.
+- Signing keys need a different scope than auth keys. Fetch it with
+  `gh auth refresh -h github.com -s admin:ssh_signing_key`, then
+  `gh ssh-key add ~/.ssh/id_github_sign.pub --type signing --title "Macbook personal signing key"`.
+- `~/.config/gh/config.yml` is Home Manager-managed (read-only store symlink),
+  so `gh config set ...` fails with "permission denied" — harmless, since
+  `programs.gh.settings` already sets `git_protocol = ssh` and `editor = nvim`.
+  `hosts.yml` is user-writable and is where the token lives.
+- The dotfiles remote is SSH (`git@github.com:John2143/dotfiles.git`).
+- Verified once with a signed empty commit on a scratch branch: GitHub reports
+  `commit.verification.verified: true`.
