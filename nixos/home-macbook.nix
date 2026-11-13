@@ -60,6 +60,7 @@ in {
 
   home.packages =
     (with pkgs; [
+      alacritty
       firefox
       discord
       imagemagick
@@ -80,9 +81,32 @@ in {
     ])
     ++ [omp claude];
 
-  # Read at the top of .config/fish/config.fish before any platform block.
-  xdg.configFile."fish/host-profile.fish".text = ''
-    set -gx DOTFILES_PROFILE personal
-    set -gx DOTFILES_DARWIN_FLAKE "$HOME/dotfiles#${compName}"
-  '';
+  xdg.configFile = {
+    # Read at the top of .config/fish/config.fish before any platform block.
+    "fish/host-profile.fish".text = ''
+      set -gx DOTFILES_PROFILE personal
+      set -gx DOTFILES_DARWIN_FLAKE "$HOME/dotfiles#${compName}"
+    '';
+
+    # Standalone config: the repo config imports the Linux theme-switch palette,
+    # which this host does not run.
+    "alacritty/alacritty.toml".text = ''
+      [general]
+      live_config_reload = true
+
+      [font]
+      size = 14
+
+        [font.normal]
+        family = "JetBrainsMono Nerd Font"
+
+        [font.offset]
+        x = 0
+        y = -3
+
+      [window.padding]
+      x = 5
+      y = 5
+    '';
+  };
 }
