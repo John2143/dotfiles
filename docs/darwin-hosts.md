@@ -25,9 +25,12 @@ The Darwin block in `.config/fish/config.fish` runs work-only setup
 
 ## Keys and secrets
 
-- Login key: `my-keys` in `flake.nix` (consumed by
-  `users.users.<name>.openssh.authorizedKeys.keys`). A new host must also be
-  rebuilt into arch/office before it can SSH *out* with that key.
+- Login keys: `my-keys` in `flake.nix`, assigned to
+  `users.users.<name>.openssh.authorizedKeys.keys` by every NixOS host and by
+  `darwin-macbook.nix`; sshd serves it from `/etc/ssh/authorized_keys.d/<user>`.
+  sshd *also* honours each host's hand-written `~/.ssh/authorized_keys`, so a
+  key can log in if it is in `my-keys` **or** pasted into that file — and a
+  rebuild never removes what was pasted. Add client keys to `my-keys`.
 - agenix: per-host age public keys live in `secrets/agenix-rules.nix`
   (`~/.ssh/age` on each host). macbook is granted only
   `llm-runtime-keys` and `llm-admin-keys`; it is not in `allKeys`.

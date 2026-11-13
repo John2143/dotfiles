@@ -7,6 +7,7 @@
   pkgs,
   pkgs-stable,
   inputs,
+  sshKeys,
   ...
 }: {
   imports = [
@@ -22,6 +23,13 @@
     # inputs.home-manager.nixosModules.default
   ];
   home-manager.users."john" = import ./home.nix;
+
+  # Login keys for the admin account. shared-cli-configuration.nix enables sshd
+  # but no module declared keys for it, so access depended on a hand-edited
+  # ~/.ssh/authorized_keys: adding a client key to `my-keys` and rebuilding
+  # changed nothing. Doing it here makes flake.nix the single source of truth.
+  # sshd still accepts ~/.ssh/authorized_keys too, so nothing is revoked.
+  users.users."john".openssh.authorizedKeys.keys = sshKeys;
 
   # iPhone messages/contacts/notifications over Bluetooth (MAP/PBAP/ANCS).
   services.blueferry.enable = true;
