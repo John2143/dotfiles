@@ -268,6 +268,33 @@
       {
         url = "http://192.168.6.23:8080/api/v1/push";
         headers = {"X-Scope-OrgID" = "anonymous";};
+        # Series nothing reads (no dashboard, alert or status-page query). They are
+        # dropped only on the way to Mimir, so the local rules below still see them.
+        # veth interfaces alone were 7.8k of 25.5k home-nodes series (2026-11-12).
+        write_relabel_configs = [
+          {
+            source_labels = ["__name__" "device"];
+            separator = ";";
+            regex = "node_network_.*;veth.*";
+            action = "drop";
+          }
+          {
+            source_labels = ["__name__"];
+            regex = "node_filesystem_(readonly|device_error)|node_softnet_.*|node_schedstat_.*|node_nfs_.*|node_cooling_device_.*|node_cpu_guest_seconds_total|node_cpu_scaling_governor|node_scrape_collector_duration_seconds";
+            action = "drop";
+          }
+          # The etcd job (192.168.5.36/.76/.175:2381) exposes the k3s apiserver as
+          # well as etcd, so it repeats kubelet and controller-manager families. Its
+          # own histogram buckets are kept: etcd disk and peer latencies are the
+          # signals an etcd alert would use, and the alert rules under
+          # workloads/secrets/ cannot be inspected from the repo.
+          {
+            source_labels = ["__name__" "job"];
+            separator = ";";
+            regex = "(kubelet_.*|volume_manager_.*|pv_collector_.*|plugin_manager_.*|containerd_.*|storage_operation_.*|csi_operations_.*|volume_operation_.*);etcd";
+            action = "drop";
+          }
+        ];
       }
     ];
     # Read kube-state-metrics series back from Mimir for the "loadbalancers"
