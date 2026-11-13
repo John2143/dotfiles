@@ -91,7 +91,12 @@ in
             - id: deepseek-flash
               name: DeepSeek Flash (Direct API)
               reasoning: true
-              input: [text]
+              # Vision: `deepseek-flash` (V4.1-Flash-1017) accepts images since the
+              # 2026-09-10 GA; the retired `v4-flash-vision-exp` id is served by
+              # the same weights (api-docs.deepseek.com/guides/vision). snapcompact
+              # renders the transcript to PNGs and refuses a text-only session
+              # model, so omitting `image` here breaks /compact.
+              input: [text, image]
               cost: { input: 0.3, output: 1.2, cacheRead: 0.006, cacheWrite: 0 }
               contextWindow: 1000000
               maxTokens: 65536
@@ -230,7 +235,8 @@ in
               api: openai-completions
               reasoning: true
               supportsTools: true
-              input: [text]
+              # Same model as the direct-API entry above, images included.
+              input: [text, image]
               cost: { input: 0.3, output: 1.2, cacheRead: 0.006, cacheWrite: 0 }
               contextWindow: 1000000
               maxTokens: 384000
@@ -242,7 +248,8 @@ in
               api: openai-completions
               reasoning: true
               supportsTools: true
-              input: [text]
+              # V4.1-Flash is the same multimodal build the DeepSeek API serves.
+              input: [text, image]
               contextWindow: 1048576
               maxTokens: 384000
             # Anthropic on the API key instead of the Max subscription — the

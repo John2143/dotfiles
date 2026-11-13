@@ -84,6 +84,24 @@ in {
     ])
     ++ [omp claude];
 
+  # Ollama runs as a per-user launchd agent on 127.0.0.1:11434; models live in
+  # ~/.ollama, so they are outside the nix store and survive garbage collection.
+  services.ollama = {
+    enable = true;
+    # 16 GiB unified memory: keep a single model resident, quantize the KV cache
+    # and use flash attention (the same tuning Homebrew's service unit applies).
+    environmentVariables = {
+      OLLAMA_FLASH_ATTENTION = "1";
+      OLLAMA_KV_CACHE_TYPE = "q8_0";
+      OLLAMA_MAX_LOADED_MODELS = "1";
+    };
+  };
+
+  # Home Manager's ollama module sets ProcessType = "Background", so launchd
+  # throttles CPU and I/O: measured 18 tok/s that way versus 43 at Standard on
+  # this machine. Standard is the launchd default and applies no such limits.
+  launchd.agents.ollama.config.ProcessType = lib.mkForce "Standard";
+
   xdg.configFile = {
     # Read at the top of .config/fish/config.fish before any platform block.
     "fish/host-profile.fish".text = ''
