@@ -1,2 +1,1 @@
 0 0 * * * fish /home/john/Personal/scripts/make_daily.fish
-5 0 * * * fish /home/john/ts/dotfiles/.config/get_sunset.fish

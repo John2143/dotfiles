@@ -139,7 +139,7 @@ alias launchdla="rally asset -e UAT --anon launch --job-name 'DLA Context Creato
 
 alias efish="fish -c 'cd ~/dotfiles/.config/fish/; vim config.fish; rfish'"
 alias ehypr="fish -c 'cd ~/dotfiles/.config/hypr/; vim hyprland.conf'; hyprctl reload"
-alias eprompt="vim ~/dotfiles/.config/starship.toml"
+alias eprompt="vim ~/dotfiles/nixos/home-cli.nix"
 alias exprofile="vim ~/dotfiles/.xprofile.fish"
 alias etmux="vim ~/dotfiles/.tmux.conf"
 alias rfish="source ~/dotfiles/.config/fish/config.fish"
@@ -183,7 +183,7 @@ fish_add_path "$HOME/go/bin/"
 fish_add_path "$HOME/.local/bin/"
 
 set -x HOMEBREW_NO_AUTO_UPDATE 1
-set BAT_THEME "Solarized (dark)"
+set -x BAT_THEME ansi # 16-colour: follows the terminal palette (was unexported, so ignored)
 
 # git config --global user.email $EMAIL > /dev/null
 
