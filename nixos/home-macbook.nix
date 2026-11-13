@@ -118,6 +118,9 @@ in {
   # real apps in ~/Applications.
   home.activation.installAppBundles = lib.hm.dag.entryAfter ["writeBoundary"] ''
     run mkdir -p "$HOME/Applications"
+    # Earlier copies inherit read-only store permissions; make them writable
+    # before replacing them.
+    run chmod -R u+w "$HOME/Applications" || true
     run rm -rf "$HOME/Applications/Alacritty.app" "$HOME/Applications/OpenRCT2.app"
     run /usr/bin/ditto --noqtn ${pkgs.alacritty}/Applications/Alacritty.app "$HOME/Applications/Alacritty.app"
     # The store bundle points Contents/MacOS at a relative ../../../bin, which
