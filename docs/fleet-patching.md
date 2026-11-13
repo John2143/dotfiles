@@ -115,6 +115,34 @@ Build it through this flake, not the fork's own lock: the input follows dotfiles
 host asks for. After the first host rebuilds, confirm the upload with
 `nix path-info --store http://nas:8280/2143nix (nix eval --raw --impure --expr '(builtins.getFlake (toString ./.)).inputs.oh-my-pi.packages.x86_64-linux.omp.outPath')`.
 
+## What a bump actually costs
+
+Measured on office, 2026-11-13: a single `nix flake update` that moved `nixpkgs`
+(2026-11-07 → 2026-11-11) *and* `oh-my-pi` (18.18.6 → 18.20.0) asked for **570
+derivations, 453 of them `bun-pkg-*`**.
+
+The reason omp always seems to rebuild from scratch: the nixpkgs bump rebuilds
+`bun` itself (`r46nbq0d…-bun-1.4.4` → `0gk371kg…-bun-1.4.4`), and bun2nix keys
+every package derivation off that runtime and its stdenv. One `bun` change
+invalidates omp's whole JS closure — the npm versions are irrelevant. Bumping
+nixpkgs *without* touching omp therefore costs the same 453 derivations.
+
+Three kinds of package can never be substituted and always build on the first
+host after a nixpkgs bump:
+
+- **unfree** — `steam`, `discord`: cache.nixos.org never builds them, so attic
+  only has what a host already built under the *current* hash;
+- **locally overridden** — `voxtype` (`vulkanSupport = true` plus the `sqlite`
+  buildInput in `nixos/shared-configuration.nix`): an override is in no binary
+  cache, by construction;
+- **module wrappers** — `firejail-wrapped-binaries`, the fhs/bwrap wrappers,
+  waybar's unit and fish completions: local-only artifacts.
+
+Consequence: after a bump, rebuild **one** host and let it upload, then let the
+rest substitute. Do not fan a fresh bump across the fleet in parallel — every
+host would build the same 500-odd derivations. If the first host is short on
+cores, `--max-jobs 0` hands the work to `big` instead of building locally.
+
 ## Roll back a bump
 
 ```fish
