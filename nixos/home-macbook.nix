@@ -1,4 +1,5 @@
 {
+  lib,
   pkgs,
   pkgs-stable,
   inputs,
@@ -65,6 +66,8 @@ in {
 
   home.packages =
     (with pkgs; [
+      alacritty
+      openrct2
       imagemagick
       kind
       doctl
@@ -109,4 +112,14 @@ in {
       y = 5
     '';
   };
+
+  # Homebrew's alacritty/openrct2 casks are disabled (Gatekeeper) and a store
+  # symlink is invisible to Spotlight/Launchpad. Copy the bundles so they are
+  # real apps in ~/Applications.
+  home.activation.installAppBundles = lib.hm.dag.entryAfter ["writeBoundary"] ''
+    run mkdir -p "$HOME/Applications"
+    run rm -rf "$HOME/Applications/Alacritty.app" "$HOME/Applications/OpenRCT2.app"
+    run /usr/bin/ditto --noqtn ${pkgs.alacritty}/Applications/Alacritty.app "$HOME/Applications/Alacritty.app"
+    run /usr/bin/ditto --noqtn ${pkgs.openrct2}/Applications/OpenRCT2.app "$HOME/Applications/OpenRCT2.app"
+  '';
 }

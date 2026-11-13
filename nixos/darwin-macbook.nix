@@ -107,10 +107,8 @@
       "mongodb-compass"
       "maccy"
       "voxtype"
-      "alacritty"
       "firefox"
       "discord"
-      "openrct2"
       "prismlauncher"
     ];
     brews = [];
