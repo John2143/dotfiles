@@ -100,6 +100,7 @@
       "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOktI2Vry/5fbhZiG35o5mf7w3dnaTEDqkRJVM07cu3a john@arch"
       "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFVckq0oXyXkxiLo39typ6PR039XrLwze/Cb0PZaTzmi john@office"
       "ecdsa-sha2-nistp256 AAAAE2VjZHNhLXNoYTItbmlzdHAyNTYAAAAIbmlzdHAyNTYAAABBBHjc0NNrHCwjrBUvUByFoFPW9vKGVFsWVD6LoKp1FLtNaIjyigMTYXoCKZSNNguKdNwUiyqKIZfCExZmgc3Cccw= phone"
+      "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIPqCbYtG3irr037WTxZ563wWcRE+atjKjBshU7Opf1oU john@macbook-id_ed25519"
     ];
 
     # mkHost name modules → { name = <config>; "vm-<name>" = <vm-config>; }
@@ -581,6 +582,20 @@
         inputs.home-manager.darwinModules.default
         agenix.darwinModules.default
         ./nixos/darwin-configuration.nix
+      ];
+    };
+
+    darwinConfigurations.macbook = inputs.nix-darwin.lib.darwinSystem {
+      system = "aarch64-darwin";
+      specialArgs = {
+        inherit inputs;
+        compName = "macbook";
+        sshKeys = my-keys;
+      };
+      modules = [
+        inputs.home-manager.darwinModules.default
+        agenix.darwinModules.default
+        ./nixos/darwin-macbook.nix
       ];
     };
   };

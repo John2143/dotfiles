@@ -24,6 +24,8 @@ let
   # (LLM API keys, admin tools). Do NOT grant: hass-credentials, ntfy-topic-url,
   # restic passwords, smb credentials, gocryptfs, NAS, or personal secrets.
   mac = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDOnQAO6xyPOM67ut324LHAm07OQ67bKJ0R9c0aTWA1o jschmidt@DCIL-L562P1Q5NQ-M";
+  # macbook is the personal Mac; it receives only the two LLM key files below.
+  macbook = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAZ+dJLBD+o5mDZm+YrLZPPdafCXh3g9HNg/rMlPmGmq john@macbook-age";
   # generate with `ssh-keygen -f ~/.ssh/age; cat ~/.ssh/age.pub -p` on each host, then paste here
 
   # Collect all keys that should be able to re-encrypt / manage secrets.
@@ -69,7 +71,7 @@ in {
   #   GEMINI_API_KEY=...            (https://aistudio.google.com/apikey)
   # pite is included so the canary host can decrypt a same-named bait file
   # (overridden via mkForce in nixos/pite-canary.nix to point at the bait .age).
-  "llm-runtime-keys.age".publicKeys = [office arch pite mac];
+  "llm-runtime-keys.age".publicKeys = [office arch pite mac macbook];
 
   # Admin LLM keys — only consumed by `llm-unsafe-load-admin-keys` (interactive shell helper),
   # never by a wrapped third-party process. Kept off pite/canary entirely.
@@ -77,7 +79,7 @@ in {
   #   ANTHROPIC_ADMIN_KEY=sk-ant-admin-...  (console.anthropic.com/settings/admin-keys)
   #   OPENAI_ADMIN_KEY=sk-admin-...
   #   OPENROUTER_ADMIN_KEY=sk-or-mgmt-...  (https://openrouter.ai/settings/management-keys)
-  "llm-admin-keys.age".publicKeys = [office arch mac];
+  "llm-admin-keys.age".publicKeys = [office arch mac macbook];
 
   # Bait runtime keys for the pite canary. Same env-var names as the real
   # runtime file but with canarytokens.org-issued AWS-shaped tokens that ping

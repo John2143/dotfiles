@@ -38,16 +38,6 @@ in {
     inherit (config.nixpkgs) config;
   };
 
-  home.username =
-    if pkgs.stdenv.hostPlatform.isDarwin
-    then "jschmidt"
-    else "john";
-  home.homeDirectory =
-    if pkgs.stdenv.hostPlatform.isDarwin
-    then "/Users/jschmidt"
-    else "/home/john";
-
-
   # This value determines the Home Manager release that your configuration is
   # compatible with. This helps avoid breakage when a new Home Manager release
   # introduces backwards incompatible changes.
@@ -376,10 +366,7 @@ in {
       user = {
         email = "john@john2143.com";
         name = "John Schmidt";
-        signingkey =
-          if pkgs.stdenv.hostPlatform.isDarwin
-          then "/Users/jschmidt/.ssh/id_github_sign.pub"
-          else "/home/john/.ssh/id_github_sign.pub";
+        signingkey = "${config.home.homeDirectory}/.ssh/id_github_sign.pub";
       };
       gpg = {
         format = "ssh";
@@ -434,7 +421,6 @@ in {
         };
       };
       core = {
-        #excludesfile = "/Users/jschmidt/.gitignore";
       };
       pull = {
         ff = "only";

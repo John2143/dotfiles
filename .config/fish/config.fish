@@ -1,3 +1,7 @@
+if test -f ~/.config/fish/host-profile.fish
+    source ~/.config/fish/host-profile.fish
+end
+
 set -x EMAIL_NAME "john"
 set -x EMAIL_DOMAIN "john2143.com"
 set HOST (hostname -s)
@@ -65,25 +69,30 @@ if [ (uname) = "Linux" ]
 end
 
 if [ (uname) = "Darwin" ]
-    source ~/scripts/disco.fish
     fish_add_path /opt/homebrew/bin/
     fish_add_path /opt/homebrew/sbin/
     fish_add_path /opt/homebrew/opt/openjdk/bin
-    fish_add_path /Users/jschmidt/Downloads/jdt-language-server-1.20.0-202302161915/bin/
     fish_add_path ~/.docker/bin/
-    source /Users/jschmidt/.docker/init-fish.sh || true # Added by Docker Desktop
-    set -x EMAIL_NAME "john_schmidt"
-    set -x EMAIL_DOMAIN "discovery.com"
     alias ea="fish -c \"cd ~/dotfiles/.config/; vim .\""
-    alias lll="~/scripts/launch.fish; exit"
-    alias ptt="pytest -m quick -n 5"
     alias ls=eza
 
-    # flake attr is "mac", not the hostname, so nh needs it spelled out
-    set -x NH_DARWIN_FLAKE "$HOME/dotfiles#mac"
+    if test "$DOTFILES_PROFILE" != "personal"
+        source ~/scripts/disco.fish
+        fish_add_path /Users/jschmidt/Downloads/jdt-language-server-1.20.0-202302161915/bin/
+        source /Users/jschmidt/.docker/init-fish.sh || true
+        set -x EMAIL_NAME "john_schmidt"
+        set -x EMAIL_DOMAIN "discovery.com"
+        alias lll="~/scripts/launch.fish; exit"
+        alias ptt="pytest -m quick -n 5"
+    end
+
+    if test -n "$DOTFILES_DARWIN_FLAKE"
+        set -gx NH_DARWIN_FLAKE "$DOTFILES_DARWIN_FLAKE"
+    else
+        set -gx NH_DARWIN_FLAKE "$HOME/dotfiles#mac"
+    end
     alias nos="fish -c 'nh darwin switch'"
     alias noss="fish -c 'nh darwin switch --fallback'"
-    # darwin has no boot generation; build without activating instead
     alias nob="fish -c 'nh darwin build'"
     alias nobs="fish -c 'nh darwin build --fallback'"
 end
