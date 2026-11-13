@@ -120,6 +120,13 @@ in {
     run mkdir -p "$HOME/Applications"
     run rm -rf "$HOME/Applications/Alacritty.app" "$HOME/Applications/OpenRCT2.app"
     run /usr/bin/ditto --noqtn ${pkgs.alacritty}/Applications/Alacritty.app "$HOME/Applications/Alacritty.app"
+    # The store bundle points Contents/MacOS at a relative ../../../bin, which
+    # dangles once copied; put a real executable in its place.
+    run chmod -R u+w "$HOME/Applications/Alacritty.app"
+    run rm -f "$HOME/Applications/Alacritty.app/Contents/MacOS"
+    run mkdir -p "$HOME/Applications/Alacritty.app/Contents/MacOS"
+    run cp ${pkgs.alacritty}/bin/alacritty "$HOME/Applications/Alacritty.app/Contents/MacOS/alacritty"
+    run chmod u+w "$HOME/Applications/Alacritty.app/Contents/MacOS/alacritty"
     run /usr/bin/ditto --noqtn ${pkgs.openrct2}/Applications/OpenRCT2.app "$HOME/Applications/OpenRCT2.app"
   '';
 }
