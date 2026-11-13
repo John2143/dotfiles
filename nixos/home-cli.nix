@@ -175,9 +175,17 @@ in {
     extraConfig = builtins.readFile ../.tmux.conf;
     plugins = with pkgs.tmuxPlugins; [
       sensible
-      tmux-colors-solarized
       # tokyo-night-tmux
-      catppuccin
+      # The flavour is set from ~/.local/state/theme/current/tmux.conf, which
+      # theme-switch writes; the plugin reads @catppuccin_flavor when it loads.
+      {
+        plugin = catppuccin;
+        extraConfig = ''
+          set -g @catppuccin_window_text "#W"
+          set -g @catppuccin_window_current_text "#W"
+          source-file -q ~/.local/state/theme/current/tmux.conf
+        '';
+      }
       # tmux-battery
       vim-tmux-navigator
       #resurrect
@@ -603,7 +611,7 @@ in {
       };
       hostname = {
         ssh_only = false;
-        format = "[@](fg:#666666)[$hostname](bold white) ";
+        format = "[@](bright-black)[$hostname](bold) ";
         trim_at = "";
       };
       status = {
@@ -611,7 +619,7 @@ in {
         disabled = false;
       };
       username = {
-        style_user = "bold white";
+        style_user = "bold";
         format = "[$user]($style)";
         show_always = true;
       };
@@ -633,7 +641,7 @@ in {
       };
       time = {
         disabled = false;
-        style = "fg:#777777";
+        style = "bright-black";
         format = "[$time]($style) ";
       };
       nix_shell = {
@@ -674,7 +682,8 @@ in {
     enable = true;
     enableFishIntegration = true;
     defaultCommand = "fd --type f --hidden --follow --exclude .git";
-    defaultOptions = ["--height 40%" "--border"];
+    # 16 = the terminal palette (alacritty normal/bright), so fzf follows the mode.
+    defaultOptions = ["--height 40%" "--border" "--color=16"];
     fileWidget = {
       command = "fd --type f --hidden --follow --exclude .git";
       options = ["--preview 'bat --color=always --style=numbers --line-range=:500 {}'"];

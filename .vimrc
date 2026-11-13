@@ -36,7 +36,13 @@ let g:mapleader = ","
 " overrides in my .vimrc
 
 syntax on
-set background=dark
+" Background follows `theme-switch` (~/.local/state/theme/mode); dark when unset.
+let s:theme_mode_file = expand('~/.local/state/theme/mode')
+if filereadable(s:theme_mode_file) && get(readfile(s:theme_mode_file, '', 1), 0, '') ==# 'light'
+  set background=light
+else
+  set background=dark
+endif
 set mouse=a
 
 if has("mac")
@@ -494,7 +500,7 @@ lua << END
     --]]
 
     require("catppuccin").setup({
-        flavour = "mocha", -- latte, frappe, macchiato, mocha
+        flavour = "auto", -- latte, frappe, macchiato, mocha; auto follows `background`
         background = { -- :h background
             light = "latte",
             dark = "mocha",

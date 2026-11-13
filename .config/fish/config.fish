@@ -183,7 +183,7 @@ fish_add_path "$HOME/go/bin/"
 fish_add_path "$HOME/.local/bin/"
 
 set -x HOMEBREW_NO_AUTO_UPDATE 1
-set BAT_THEME "Solarized (dark)"
+set -x BAT_THEME ansi # 16-colour: follows the terminal palette (was unexported, so ignored)
 
 # git config --global user.email $EMAIL > /dev/null
 
