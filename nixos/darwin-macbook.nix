@@ -128,7 +128,7 @@
       minimize-to-application = true;
     };
     finder = {
-      AppleShowAllExtensions = true;
+      AppleShowAllExtensions = false;
       AppleShowAllFiles = true;
       ShowPathbar = true;
       ShowStatusBar = true;
@@ -139,7 +139,7 @@
       QuitMenuItem = true;
     };
     NSGlobalDomain = {
-      AppleShowAllExtensions = true;
+      AppleShowAllExtensions = false;
       InitialKeyRepeat = 15;
       KeyRepeat = 2;
       NSAutomaticCapitalizationEnabled = false;
