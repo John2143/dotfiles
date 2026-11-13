@@ -399,10 +399,14 @@ in
         # outranks it, so a later global change or `auto` cannot move it.
         # Fresh sessions only: a resumed session keeps its recorded level.
         default: litellm/deepseek/deepseek-flash:high
-        # `task` pins subagent dispatch (default `pi/task` inherits whatever
-        # the parent session runs, so /model switching would drag subagents
-        # along). Keep subagents on the cheap DeepSeek route.
-        task: litellm/deepseek/deepseek-flash
+        # Baseline tier for the bundled generic `task` agent and for any agent
+        # whose frontmatter pins `@task`. It does NOT cover agents that pin no
+        # model at all — those inherit the parent session's live model, so a
+        # /model switch drags them along (pin them explicitly instead).
+        # `:high` is wire-exact on DeepSeek's low/high/max ladder and outranks
+        # the bundled agent's `thinkingLevel: auto`, which would otherwise spend
+        # a judge classification on every spawn's turn.
+        task: litellm/deepseek/deepseek-flash:high
         # Same cheap DeepSeek route as `default`, at the lowest tier its
         # reviewed ladder offers (low/high/max — classes/deepseek.kdl), so
         # `:low` is wire-exact and needs no effort remap. Workloads that take

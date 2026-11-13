@@ -3,6 +3,7 @@ name: web-researcher
 description: "Researches one sub-question and writes a single cited markdown report. Spawned by web-research-orchestrator; also usable directly for one self-contained research task."
 tools: bash, read, web_search, write
 spawns: scout
+model: "@smol"
 readSummarize: false
 ---
 
