@@ -58,6 +58,10 @@
 in {
   imports = [./home-cli.nix];
 
+  # `open -a <Name>` / Spotlight only index ~/Applications itself, not the
+  # default "Home Manager Apps" subdirectory.
+  targets.darwin.linkApps.directory = "Applications";
+
   home.packages =
     (with pkgs; [
       alacritty
