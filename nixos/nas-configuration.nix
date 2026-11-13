@@ -441,9 +441,12 @@ nixpkgs.overlays = [
   custom.k3sNet = {
     ipv4 = "192.168.5.175";
     ipv6 = "fd00:1::175";
-    # Reserve 2 CPU + 3 GiB RAM for OS functions (ZFS, Samba, Immich run
-    # natively on NAS; k3s must not starve them — 2026-07-31 OOM panic).
-    systemReserved = "cpu=2,memory=3Gi";
+    # Reserve 2 CPU + 5 GiB RAM for OS functions (ZFS ARC, Samba, Immich, NFS
+    # run natively on NAS; k3s must not starve them — 2026-07-31 OOM panic).
+    # 5 GiB is affordable because the database replicas moved off nas: kube
+    # requests are 9772Mi against a 10752Mi allocatable, ~1 GiB of slack, and
+    # the 6 GiB ARC cap now has room to fill past its old ~2.9 GiB ceiling.
+    systemReserved = "cpu=2,memory=5Gi";
     # Registration-time only: k3s applies --node-label when the node first joins.
     nodeLabels = ["node.longhorn.io/create-default-disk=true"];
   };
