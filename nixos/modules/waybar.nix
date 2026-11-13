@@ -337,105 +337,6 @@
 
   autoclicker = "${pkgs.autoclicker}/bin/autoclicker";
 
-  autoclicker-menu = pkgs.writeShellApplication {
-    name = "autoclicker-menu";
-    runtimeInputs = with pkgs; [wofi coreutils autoclicker];
-    text = ''
-      PID_FILE="/tmp/autoclicker.pid"
-      CONF_FILE="/tmp/autoclicker.conf"
-
-      # Determine current state
-      RUNNING=false
-      if [ -f "$PID_FILE" ] && kill -0 "$(cat "$PID_FILE")" 2>/dev/null; then
-        RUNNING=true
-      else
-        rm -f "$PID_FILE"
-      fi
-
-      # Load current config
-      INTERVAL="500"
-      BUTTON="left"
-      if [ -f "$CONF_FILE" ]; then
-        # shellcheck source=/dev/null
-        . "$CONF_FILE"
-      fi
-
-      # Build menu
-      if $RUNNING; then
-        MENU=$(printf "■  Stop\\n⏱  Interval: %sms\\n󰊴  Button: %s" "$INTERVAL" "$BUTTON")
-      else
-        MENU=$(printf "▶  Start\\n⏱  Interval: %sms\\n󰊴  Button: %s" "$INTERVAL" "$BUTTON")
-      fi
-
-      CHOICE=$(printf "%b" "$MENU" | wofi --dmenu -p "Autoclicker" -i 2>/dev/null)
-
-      case "$CHOICE" in
-        "▶  Start")
-          # Save config and launch daemon
-          printf 'INTERVAL=%s\nBUTTON=%s\n' "$INTERVAL" "$BUTTON" > "$CONF_FILE"
-          autoclicker daemon &
-          pkill -RTMIN+15 waybar 2>/dev/null
-          ;;
-        "■  Stop")
-          if [ -f "$PID_FILE" ]; then
-            kill "$(cat "$PID_FILE")" 2>/dev/null
-            rm -f "$PID_FILE"
-          fi
-          rm -f /tmp/autoclicker.sock
-          pkill -RTMIN+15 waybar 2>/dev/null
-          ;;
-        "⏱  Interval: "*)
-          # Show interval submenu
-          NEW_INT=$(printf "100\n250\n500\n1000\n2000\n5000" | wofi --dmenu -p "Interval (ms)" -i 2>/dev/null)
-          if [ -n "$NEW_INT" ]; then
-            INTERVAL="$NEW_INT"
-            printf 'INTERVAL=%s\nBUTTON=%s\n' "$INTERVAL" "$BUTTON" > "$CONF_FILE"
-            # Restart daemon if running
-            if $RUNNING; then
-              if [ -f "$PID_FILE" ]; then
-                kill "$(cat "$PID_FILE")" 2>/dev/null
-                rm -f "$PID_FILE"
-              fi
-              rm -f /tmp/autoclicker.sock
-              autoclicker daemon &
-            fi
-          fi
-          pkill -RTMIN+15 waybar 2>/dev/null
-          ;;
-        "󰊴  Button: "*)
-          # Show button submenu
-          NEW_BTN=$(printf "left\nmiddle\nright" | wofi --dmenu -p "Mouse button" -i 2>/dev/null)
-          if [ -n "$NEW_BTN" ]; then
-            BUTTON="$NEW_BTN"
-            printf 'INTERVAL=%s\nBUTTON=%s\n' "$INTERVAL" "$BUTTON" > "$CONF_FILE"
-            # Restart daemon if running
-            if $RUNNING; then
-              if [ -f "$PID_FILE" ]; then
-                kill "$(cat "$PID_FILE")" 2>/dev/null
-                rm -f "$PID_FILE"
-              fi
-              rm -f /tmp/autoclicker.sock
-              autoclicker daemon &
-            fi
-          fi
-          pkill -RTMIN+15 waybar 2>/dev/null
-          ;;
-      esac
-    '';
-  };
-  stop-autoclicker = pkgs.writeShellApplication {
-    name = "stop-autoclicker";
-    runtimeInputs = with pkgs; [coreutils];
-    text = ''
-      PID_FILE="/tmp/autoclicker.pid"
-      if [ -f "$PID_FILE" ]; then
-        kill "$(cat "$PID_FILE")" 2>/dev/null
-        rm -f "$PID_FILE"
-      fi
-      rm -f /tmp/autoclicker.sock
-      pkill -RTMIN+15 waybar 2>/dev/null
-    '';
-  };
   tailscale-status = pkgs.writeShellApplication {
     name = "tailscale-status";
     runtimeInputs = with pkgs; [tailscale jq coreutils];
@@ -860,13 +761,18 @@ in {
             tooltip = true;
             on-click = "rm -f /tmp/vast-waybar-status.json && pkill -RTMIN+9 waybar";
           };
+          # `signal` + no `interval` makes Waybar run the command once and wait for it to
+          # exit; `autoclicker watch` never exits, so the module never rendered. A long-lived
+          # exec must instead be declared with `restart-interval` only.
           "custom/autoclicker" = {
             exec = "${autoclicker} watch";
             return-type = "json";
-            signal = 15;
+            restart-interval = 2;
             format = "{}";
             tooltip = true;
-            on-click = "${autoclicker-menu}/bin/autoclicker-menu";
+            on-click = "autoclicker toggle";
+            on-click-middle = "autoclicker cycle";
+            on-click-right = "autoclicker-menu-toggle";
           };
         };
     };

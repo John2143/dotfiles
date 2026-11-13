@@ -1,29 +1,52 @@
+//! Scroll-to-click autoclicker.
+//!
+//! While a scroll mode is active the allowlisted mice are `EVIOCGRAB`ed and every event is
+//! re-emitted through a uinput `autoclicker-scroll` mouse that carries everything except the
+//! four wheel codes; each wheel notch is replaced by a click. Grabbing is required because
+//! Wayland offers no per-device event interception, and the passthrough is required so
+//! pointer motion and buttons keep working. The keyboard is never grabbed — that is the
+//! escape hatch when the mode misbehaves (the mode itself is never turned off by the daemon).
+//!
+//! There is no dead-man switch, no maximum duration and no Escape listener: the user turns
+//! the mode off, and nothing else does.
+
 use clap::{Parser, Subcommand};
-use nix::sys::signal::{kill, Signal};
-use nix::unistd::Pid;
+use evdev::uinput::VirtualDevice;
+use evdev::{AttributeSet, Device, EventType, InputEvent, KeyCode, RelativeAxisCode};
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::io::{self, BufRead, BufReader, Write};
 use std::os::unix::net::{UnixListener, UnixStream};
 use std::path::PathBuf;
-use std::process::Command;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender};
 use std::sync::{Arc, Mutex};
 use std::thread;
-use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+use std::time::{Duration, Instant};
 
-// ─── File paths ──────────────────────────────────────────────
+// ─── Paths ───────────────────────────────────────────────────
+// Everything lives in $XDG_RUNTIME_DIR/autoclicker (no /tmp state, no PID file).
 
-const PID_FILE: &str = "/tmp/autoclicker.pid";
-const CONF_FILE: &str = "/tmp/autoclicker.conf";
-const START_FILE: &str = "/tmp/autoclicker.start";
-const SOCK_FILE: &str = "/tmp/autoclicker.sock";
+fn runtime_dir() -> Option<PathBuf> {
+    std::env::var("XDG_RUNTIME_DIR")
+        .ok()
+        .filter(|d| !d.is_empty())
+        .map(|d| PathBuf::from(d).join("autoclicker"))
+}
+
+fn sock_path() -> Option<PathBuf> {
+    runtime_dir().map(|d| d.join("sock"))
+}
+
+fn state_path() -> Option<PathBuf> {
+    runtime_dir().map(|d| d.join("state"))
+}
 
 // ─── CLI ─────────────────────────────────────────────────────
 
 #[derive(Parser)]
-#[command(name = "autoclicker", about = "Wayland autoclicker with safety features")]
+#[command(name = "autoclicker", about = "Scroll-to-click autoclicker")]
 struct Cli {
     #[command(subcommand)]
     command: Commands,
@@ -31,612 +54,1471 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
-    /// Run the click daemon
+    /// Run the daemon (normally started by systemd, not by hand)
     Daemon {
-        /// Interval between clicks in milliseconds (min 20ms)
-        #[arg(short, long, default_value = "500")]
+        /// Remap this mouse, as VID:PID hex. Repeatable.
+        #[arg(long = "device")]
+        devices: Vec<String>,
+        /// Initial timer interval in milliseconds (min 20)
+        #[arg(long, default_value = "500")]
         interval: u64,
-        /// Mouse button: left, middle, or right
-        #[arg(short, long, default_value = "left")]
+        /// Initial timer button: left, middle or right
+        #[arg(long, default_value = "left")]
         button: String,
-        /// Enable dead-man switch (pause on mouse movement)
-        #[arg(short = 'd', long, default_value_t = true)]
-        deadman: bool,
-        /// Dead-man threshold in pixels
-        #[arg(long, default_value = "10")]
-        deadman_threshold: u32,
-        /// Maximum duration in seconds (0 = unlimited)
-        #[arg(short = 't', long, default_value = "300")]
-        max_duration: u64,
-        /// Maximum click count (0 = unlimited)
-        #[arg(short = 'n', long, default_value = "0")]
-        max_clicks: u64,
     },
-    /// Output one-shot JSON status
+    /// Print one JSON status line for Waybar
     Status,
-    /// Output continuous JSON status for Waybar
+    /// Stream JSON status lines for Waybar, reconnecting forever
     Watch,
-    /// Stop the running daemon
-    Stop,
-    /// Show the wofi control menu
-    Menu,
+    /// Enable scroll-to-left-click
+    On,
+    /// Turn the autoclicker off
+    Off,
+    /// Toggle between off and scroll-to-left-click
+    Toggle,
+    /// Cycle off -> scroll-left -> scroll-right -> scroll-left
+    Cycle,
+    /// Set the mode: off, scroll-left, scroll-right, timer
+    Mode { mode: String },
+    /// Change timer settings
+    Set {
+        #[command(subcommand)]
+        what: SetCmd,
+    },
+    /// Print one setting: mode, button, interval, target
+    Get { field: String },
+    /// Restrict scroll-to-click to a window
+    Target {
+        #[command(subcommand)]
+        target: TargetCmd,
+    },
+    /// Run the pure-function assertions (no hardware, no daemon)
+    Selftest,
 }
 
-// ─── IPC types ────────────────────────────────────────────────
+#[derive(Subcommand)]
+enum SetCmd {
+    Interval { ms: u64 },
+    Button { button: String },
+}
 
-#[derive(Serialize, Deserialize)]
-struct IpcRequest {
-    cmd: String,
+#[derive(Subcommand)]
+enum TargetCmd {
+    /// Click regardless of the focused window
+    Any,
+    /// Clear the target window
+    None,
+    /// Target one window by Hyprland address (0x prefix allowed)
+    Set {
+        addr: String,
+        #[arg(num_args = 0..)]
+        label: Vec<String>,
+    },
+}
+
+// ─── Modes ───────────────────────────────────────────────────
+
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum Mode {
+    Off,
+    ScrollLeft,
+    ScrollRight,
+    Timer,
+}
+
+impl Mode {
+    fn as_str(self) -> &'static str {
+        match self {
+            Mode::Off => "off",
+            Mode::ScrollLeft => "scroll-left",
+            Mode::ScrollRight => "scroll-right",
+            Mode::Timer => "timer",
+        }
+    }
+
+    fn label(self) -> &'static str {
+        match self {
+            Mode::Off => "Off",
+            Mode::ScrollLeft | Mode::ScrollRight => "Scroll mode",
+            Mode::Timer => "Timer (auto-click)",
+        }
+    }
+
+    fn parse(s: &str) -> Option<Mode> {
+        match s.trim() {
+            "off" => Some(Mode::Off),
+            "scroll-left" => Some(Mode::ScrollLeft),
+            "scroll-right" => Some(Mode::ScrollRight),
+            "timer" => Some(Mode::Timer),
+            _ => None,
+        }
+    }
+
+    fn is_scroll(self) -> bool {
+        matches!(self, Mode::ScrollLeft | Mode::ScrollRight)
+    }
+
+    fn inject_key(self) -> Option<KeyCode> {
+        match self {
+            Mode::ScrollLeft => Some(KeyCode::BTN_LEFT),
+            Mode::ScrollRight => Some(KeyCode::BTN_RIGHT),
+            _ => None,
+        }
+    }
+}
+
+// ─── State ───────────────────────────────────────────────────
+
+struct State {
+    mode: Mode,
+    interval_ms: u64,
+    button: String,
+    target_addr: Option<String>,
+    target_label: Option<String>,
+    active_addr: Option<String>,
+    clicks: u64,
+    grab_error: Option<String>,
+    notches: u64,
+    dropped: u64,
+    matched: usize,
+}
+
+impl State {
+    fn new(interval_ms: u64, button: String, target_addr: Option<String>, target_label: Option<String>) -> Self {
+        State {
+            mode: Mode::Off, // mode is never persisted: the daemon always starts off
+            interval_ms: interval_ms.max(20),
+            button,
+            target_addr,
+            target_label,
+            active_addr: None,
+            clicks: 0,
+            grab_error: None,
+            notches: 0,
+            dropped: 0,
+            matched: 0,
+        }
+    }
 }
 
 #[derive(Serialize, Clone)]
 struct WaybarStatus {
     text: String,
     class: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    percentage: Option<u64>,
     tooltip: String,
 }
 
-struct DaemonState {
-    interval: u64,
-    button: String,
-    deadman: bool,
-    deadman_threshold: u32,
-    max_duration: u64,
-    max_clicks: u64,
-    running: bool,
-    elapsed: u64,
-    click_count: u64,
+#[derive(Serialize, Deserialize)]
+struct IpcRequest {
+    cmd: String,
 }
 
-// ─── Config ──────────────────────────────────────────────────
+fn build_status(st: &State) -> WaybarStatus {
+    let (text, mut class) = match st.mode {
+        Mode::Off => ("󰍺", "autoclicker-off"),
+        Mode::ScrollLeft => ("󰁍", "autoclicker-scroll-left"),
+        Mode::ScrollRight => ("󰁔", "autoclicker-scroll-right"),
+        Mode::Timer => ("󰕰", "autoclicker-timer"),
+    };
+    if st.mode.is_scroll() && st.grab_error.is_some() {
+        class = "autoclicker-error";
+    }
 
-fn read_conf() -> HashMap<String, String> {
+    let mut lines = vec![st.mode.label().to_string()];
+    match st.mode {
+        Mode::ScrollLeft | Mode::ScrollRight => {
+            let button = if st.mode == Mode::ScrollLeft { "left" } else { "right" };
+            lines.push(format!("Scroll -> {button} click"));
+            lines.push(format!("Notches: {}", st.notches));
+        }
+        Mode::Timer => {
+            lines.push(format!("Interval: {}ms", st.interval_ms));
+            lines.push(format!("Button: {}", st.button));
+            lines.push(format!("Clicks: {}", st.clicks));
+        }
+        Mode::Off => {}
+    }
+    if st.dropped > 0 {
+        lines.push(format!("Dropped: {}", st.dropped));
+    }
+    lines.push(match (&st.target_addr, &st.target_label) {
+        (None, _) => "Target: any".to_string(),
+        (Some(_), Some(label)) => format!("Target: {label}"),
+        (Some(addr), None) => format!("Target: {addr}"),
+    });
+    if st.mode.is_scroll() && st.matched == 0 && st.grab_error.is_none() {
+        lines.push("No mouse device matched".to_string());
+    }
+    if let Some(err) = &st.grab_error {
+        lines.push(err.clone());
+    }
+
+    WaybarStatus {
+        text: text.to_string(),
+        class: class.to_string(),
+        tooltip: lines.join("\n"),
+    }
+}
+
+fn off_state_json() -> String {
+    serde_json::to_string(&WaybarStatus {
+        text: "󰍺".to_string(),
+        class: "autoclicker-off".to_string(),
+        tooltip: "Off\nTarget: any".to_string(),
+    })
+    .unwrap_or_else(|_| "{\"text\":\"\",\"class\":\"autoclicker-off\",\"tooltip\":\"\"}".to_string())
+}
+
+// ─── Persisted settings ──────────────────────────────────────
+
+fn load_state() -> HashMap<String, String> {
     let mut map = HashMap::new();
-    if let Ok(file) = fs::File::open(CONF_FILE) {
-        for line in BufReader::new(file).lines().flatten() {
-            let line = line.trim().to_string();
-            if line.is_empty() || line.starts_with('#') {
-                continue;
-            }
-            if let Some(eq) = line.find('=') {
-                let key = line[..eq].trim().to_string().to_uppercase();
-                let val = line[eq + 1..].trim().to_string();
-                map.insert(key, val);
-            }
+    let Some(path) = state_path() else { return map };
+    let Ok(file) = fs::File::open(path) else { return map };
+    for line in BufReader::new(file).lines().map_while(Result::ok) {
+        let line = line.trim().to_string();
+        if line.is_empty() || line.starts_with('#') {
+            continue;
+        }
+        if let Some(eq) = line.find('=') {
+            map.insert(
+                line[..eq].trim().to_uppercase(),
+                line[eq + 1..].trim().to_string(),
+            );
         }
     }
     map
 }
 
-fn conf_get(map: &HashMap<String, String>, key: &str, default: &str) -> String {
-    map.get(&key.to_uppercase())
-        .cloned()
-        .unwrap_or_else(|| default.to_string())
+fn save_state(st: &State) {
+    let Some(path) = state_path() else { return };
+    if let Some(dir) = path.parent() {
+        let _ = fs::create_dir_all(dir);
+    }
+    let mut out = String::new();
+    out.push_str(&format!("INTERVAL={}\n", st.interval_ms));
+    out.push_str(&format!("BUTTON={}\n", st.button));
+    if let Some(addr) = &st.target_addr {
+        out.push_str(&format!("TARGET_ADDR={addr}\n"));
+    }
+    if let Some(label) = &st.target_label {
+        out.push_str(&format!("TARGET_LABEL={}\n", label.replace('\n', " ")));
+    }
+    let _ = fs::write(path, out);
 }
 
-fn conf_get_u64(map: &HashMap<String, String>, key: &str, default: u64) -> u64 {
-    map.get(&key.to_uppercase())
-        .and_then(|v| v.parse().ok())
-        .unwrap_or(default)
-}
+// ─── Buttons and addresses ───────────────────────────────────
 
-fn conf_get_bool(map: &HashMap<String, String>, key: &str, default: bool) -> bool {
-    map.get(&key.to_uppercase())
-        .map(|v| v.to_lowercase() == "true")
-        .unwrap_or(default)
-}
-
-// ─── Button mapping ──────────────────────────────────────────
-
-fn button_to_evdev(button: &str) -> evdev::KeyCode {
+fn button_to_key(button: &str) -> KeyCode {
     match button {
-        "right" => evdev::KeyCode::BTN_RIGHT,
-        "middle" => evdev::KeyCode::BTN_MIDDLE,
-        _ => evdev::KeyCode::BTN_LEFT,
+        "right" => KeyCode::BTN_RIGHT,
+        "middle" => KeyCode::BTN_MIDDLE,
+        _ => KeyCode::BTN_LEFT,
     }
 }
 
-// ─── Cursor position (dead-man switch) ──────────────────────
-
-fn get_cursor_pos() -> Option<(i32, i32)> {
-    let output = Command::new("hyprctl")
-        .args(["cursorpos"])
-        .output()
-        .ok()?;
-    let s = String::from_utf8(output.stdout).ok()?;
-    let s = s.trim();
-    let mut parts = s.split(',');
-    let x: i32 = parts.next()?.trim().parse().ok()?;
-    let y: i32 = parts.next()?.trim().parse().ok()?;
-    Some((x, y))
+fn valid_button(button: &str) -> String {
+    match button {
+        "right" | "middle" | "left" => button.to_string(),
+        _ => "left".to_string(),
+    }
 }
 
-// ─── Click injection ────────────────────────────────────────
+fn normalize_addr(s: &str) -> String {
+    let t = s.trim();
+    let t = t
+        .strip_prefix("0x")
+        .or_else(|| t.strip_prefix("0X"))
+        .unwrap_or(t);
+    t.to_ascii_lowercase()
+}
+
+fn target_matches(st: &State) -> bool {
+    match (&st.target_addr, &st.active_addr) {
+        (None, _) => true,
+        (Some(target), Some(active)) => target == active,
+        (Some(_), None) => false,
+    }
+}
+
+// ─── Frame rewriting (pure) ──────────────────────────────────
+
+fn is_wheel_axis(axis: RelativeAxisCode) -> bool {
+    is_wheel_code(axis.0)
+}
+
+fn is_wheel_code(code: u16) -> bool {
+    code == RelativeAxisCode::REL_WHEEL.0
+        || code == RelativeAxisCode::REL_WHEEL_HI_RES.0
+        || code == RelativeAxisCode::REL_HWHEEL.0
+        || code == RelativeAxisCode::REL_HWHEEL_HI_RES.0
+}
+
+/// Token bucket: at most 30 clicks per second, burst 30, so a device that emits a storm of
+/// notches cannot flood clicks. Excess notches are dropped, never queued.
+struct ClickBudget {
+    tokens: f64,
+    last: Instant,
+}
+
+impl ClickBudget {
+    const CAPACITY: f64 = 30.0;
+    const RATE: f64 = 30.0;
+
+    fn new() -> Self {
+        ClickBudget {
+            tokens: Self::CAPACITY,
+            last: Instant::now(),
+        }
+    }
+
+    fn allow(&mut self) -> bool {
+        let now = Instant::now();
+        let elapsed = now.duration_since(self.last).as_secs_f64();
+        self.last = now;
+        self.tokens = (self.tokens + elapsed * Self::RATE).min(Self::CAPACITY);
+        if self.tokens >= 1.0 {
+            self.tokens -= 1.0;
+            true
+        } else {
+            false
+        }
+    }
+}
+
+/// Notches (REL_WHEEL only; the HI_RES twin is the same physical notch) in one frame.
+/// Counting is suppressed when no click can be injected, so the tooltip never reports
+/// notches that were only passed through.
+fn wheel_notches(frame: &[InputEvent], counting: bool) -> u32 {
+    if !counting {
+        return 0;
+    }
+    frame
+        .iter()
+        .filter(|ev| ev.event_type() == EventType::RELATIVE && ev.code() == RelativeAxisCode::REL_WHEEL.0)
+        .map(|ev| ev.value().unsigned_abs())
+        .sum()
+}
+
+/// Rewrite one `SYN_REPORT`-delimited frame: drop the wheel codes, forward everything else,
+/// and inject `clicks` press/release pairs of `inject` before the forwarded events.
+/// `inject == None` means the target window is not focused: the wheel is still swallowed
+/// (a scroll mode must not scroll) but nothing is clicked.
+fn rewrite_frame(
+    frame: &[InputEvent],
+    inject: Option<KeyCode>,
+    cap: &mut ClickBudget,
+) -> (Vec<InputEvent>, u32) {
+    let mut clicks: Vec<InputEvent> = Vec::new();
+    let mut forwarded: Vec<InputEvent> = Vec::with_capacity(frame.len());
+    let mut click_count = 0u32;
+
+    for ev in frame {
+        let event_type = ev.event_type();
+        if event_type == EventType::RELATIVE {
+            if is_wheel_code(ev.code()) {
+                continue;
+            }
+            forwarded.push(*ev);
+        } else if event_type == EventType::KEY {
+            forwarded.push(*ev);
+        }
+        // Everything else is dropped: SYN frames are re-added by the kernel for each emit(),
+        // and EV_MSC carries hardware scan metadata a virtual device cannot reproduce.
+    }
+
+    if let Some(key) = inject {
+        for _ in 0..wheel_notches(frame, true) {
+            if cap.allow() {
+                clicks.push(InputEvent::new(EventType::KEY.0, key.code(), 1));
+                clicks.push(InputEvent::new(EventType::KEY.0, key.code(), 0));
+                click_count += 1;
+            }
+        }
+    }
+
+    clicks.extend(forwarded);
+    (clicks, click_count)
+}
+
+// ─── Device matching (pure) ──────────────────────────────────
+
+/// A VID:PID is not enough: the same Logitech receiver also exposes a keyboard node and the
+/// G502 HERO exposes a second node. Grabbing a keyboard node would break typing, so a device
+/// must advertise BTN_LEFT *and* REL_WHEEL.
+fn matches_device(
+    vendor: u16,
+    product: u16,
+    wanted: &[(u16, u16)],
+    has_btn_left: bool,
+    has_wheel: bool,
+    name: &str,
+) -> bool {
+    wanted.contains(&(vendor, product))
+        && has_btn_left
+        && has_wheel
+        && !name.starts_with("autoclicker")
+}
+
+fn parse_device_arg(s: &str) -> Option<(u16, u16)> {
+    let (v, p) = s.trim().split_once(':')?;
+    Some((
+        u16::from_str_radix(v.trim(), 16).ok()?,
+        u16::from_str_radix(p.trim(), 16).ok()?,
+    ))
+}
+
+fn device_matches(dev: &Device, wanted: &[(u16, u16)]) -> bool {
+    let id = dev.input_id();
+    let has_btn_left = dev
+        .supported_keys()
+        .map(|keys| keys.contains(KeyCode::BTN_LEFT))
+        .unwrap_or(false);
+    let has_wheel = dev
+        .supported_relative_axes()
+        .map(|axes| axes.contains(RelativeAxisCode::REL_WHEEL))
+        .unwrap_or(false);
+    matches_device(
+        id.vendor(),
+        id.product(),
+        wanted,
+        has_btn_left,
+        has_wheel,
+        dev.name().unwrap_or(""),
+    )
+}
+
+fn enumerate_event_paths() -> Vec<PathBuf> {
+    let mut paths = Vec::new();
+    if let Ok(entries) = fs::read_dir("/dev/input") {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            let is_event = path
+                .file_name()
+                .and_then(|n| n.to_str())
+                .map(|n| n.starts_with("event"))
+                .unwrap_or(false);
+            if is_event {
+                paths.push(path);
+            }
+        }
+    }
+    paths.sort();
+    paths
+}
+
+// ─── Timer clicker ───────────────────────────────────────────
 
 struct Clicker {
-    dev: evdev::uinput::VirtualDevice,
+    dev: VirtualDevice,
 }
 
 impl Clicker {
-    fn new() -> Self {
-        let dev = Self::create_uinput()
-            .expect("Failed to create uinput device — is the user in the 'uinput' group?");
-        eprintln!("Autoclicker: uinput device ready");
-        Clicker { dev }
-    }
-
-    fn create_uinput() -> Result<evdev::uinput::VirtualDevice, Box<dyn std::error::Error>> {
-        use evdev::uinput::VirtualDevice;
-        use evdev::{AttributeSet, KeyCode};
-
+    fn new() -> Option<Self> {
         let mut keys = AttributeSet::<KeyCode>::new();
         keys.insert(KeyCode::BTN_LEFT);
         keys.insert(KeyCode::BTN_RIGHT);
         keys.insert(KeyCode::BTN_MIDDLE);
-
-        let dev = VirtualDevice::builder()?
+        match VirtualDevice::builder()
+            .ok()?
             .name("autoclicker")
-            .with_keys(&keys)?
-            .build()?;
-
-        Ok(dev)
+            .with_keys(&keys)
+            .ok()?
+            .build()
+            .ok()
+        {
+            Some(dev) => Some(Clicker { dev }),
+            None => None,
+        }
     }
 
     fn click(&mut self, button: &str) {
-        use evdev::KeyEvent;
-        let key = button_to_evdev(button);
-        let code = key.code();
-        let down = *KeyEvent::new(evdev::KeyCode::new(code), 1);
-        let up = *KeyEvent::new(evdev::KeyCode::new(code), 0);
+        let code = button_to_key(button).code();
+        let down = InputEvent::new(EventType::KEY.0, code, 1);
+        let up = InputEvent::new(EventType::KEY.0, code, 0);
         let _ = self.dev.emit(&[down]);
         let _ = self.dev.emit(&[up]);
     }
 }
 
-// ─── Hotkey listener thread ─────────────────────────────────
+// ─── Passthrough device ──────────────────────────────────────
 
-fn hotkey_listener(stop_flag: Arc<AtomicBool>) {
-    use evdev::{Device, EventSummary, KeyCode};
+fn build_passthrough(devices: &[&Device]) -> io::Result<VirtualDevice> {
+    let mut keys = AttributeSet::<KeyCode>::new();
+    keys.insert(KeyCode::BTN_LEFT);
+    keys.insert(KeyCode::BTN_RIGHT);
+    keys.insert(KeyCode::BTN_MIDDLE);
 
-    let event_dir = match fs::read_dir("/dev/input") {
-        Ok(d) => d,
-        Err(_) => return,
-    };
+    let mut axes = AttributeSet::<RelativeAxisCode>::new();
+    axes.insert(RelativeAxisCode::REL_X);
+    axes.insert(RelativeAxisCode::REL_Y);
 
-    for entry in event_dir.flatten() {
-        let path = entry.path();
-        let path_str = path.to_string_lossy();
-        if !path_str.contains("event") {
-            continue;
-        }
-
-        match Device::open(&path) {
-            Ok(device) => {
-                let supported = device
-                    .supported_keys()
-                    .map_or(false, |keys| keys.contains(KeyCode::KEY_ESC));
-                if !supported {
-                    continue;
-                }
-
-                let stop = stop_flag.clone();
-                let name = device.name().unwrap_or("unknown").to_string();
-                eprintln!("Autoclicker: listening for Escape on {}", name);
-
-                thread::spawn(move || {
-                    let mut dev = device;
-                    loop {
-                        match dev.fetch_events() {
-                            Ok(events) => {
-                                for ev in events {
-                                    if let EventSummary::Key(_, KeyCode::KEY_ESC, 1) =
-                                        ev.destructure()
-                                    {
-                                        eprintln!("Autoclicker: Escape pressed — stopping");
-                                        stop.store(true, Ordering::SeqCst);
-                                        return;
-                                    }
-                                }
-                            }
-                            Err(_) => return,
-                        }
-                        if stop.load(Ordering::Relaxed) {
-                            return;
-                        }
-                        thread::sleep(Duration::from_millis(50));
-                    }
-                });
+    for dev in devices {
+        if let Some(supported) = dev.supported_keys() {
+            for code in supported.iter() {
+                keys.insert(code);
             }
-            Err(_) => {}
+        }
+        if let Some(supported) = dev.supported_relative_axes() {
+            for code in supported.iter() {
+                if !is_wheel_axis(code) {
+                    axes.insert(code);
+                }
+            }
         }
     }
+
+    VirtualDevice::builder()?
+        .name("autoclicker-scroll")
+        .with_keys(&keys)?
+        .with_relative_axes(&axes)?
+        .build()
 }
 
-// ─── Unix socket handler thread ─────────────────────────────
+enum SinkMsg {
+    Events(Vec<InputEvent>),
+    Shutdown,
+}
 
-fn socket_listener(
-    sock_path: PathBuf,
-    stop_flag: Arc<AtomicBool>,
-    state: Arc<Mutex<DaemonState>>,
-    start_time: Instant,
+// ─── Scroll session ──────────────────────────────────────────
+
+struct Session {
+    sink: Sender<SinkMsg>,
+    sink_handle: Option<thread::JoinHandle<()>>,
+    readers: Vec<(PathBuf, Arc<AtomicBool>, thread::JoinHandle<()>)>,
+    closed_rx: Receiver<PathBuf>,
+    pressed: Arc<Mutex<HashSet<u16>>>,
+}
+
+fn process_frame(
+    frame: &[InputEvent],
+    inject: KeyCode,
+    cap: &mut ClickBudget,
+    sink: &Sender<SinkMsg>,
+    state: &Arc<Mutex<State>>,
+    pressed: &Arc<Mutex<HashSet<u16>>>,
 ) {
-    let _ = fs::remove_file(&sock_path);
+    // The gate is re-read per frame so a focused-window change takes effect immediately.
+    let gated = {
+        let st = state.lock().unwrap();
+        target_matches(&st)
+    };
+    let inject = if gated { Some(inject) } else { None };
 
-    let listener = match UnixListener::bind(&sock_path) {
-        Ok(l) => l,
-        Err(e) => {
-            eprintln!("Autoclicker: cannot bind socket: {}", e);
+    let notches = wheel_notches(frame, inject.is_some());
+    let (out, clicks) = rewrite_frame(frame, inject, cap);
+
+    if notches > 0 || clicks > 0 {
+        let mut st = state.lock().unwrap();
+        st.notches += u64::from(notches);
+        st.dropped += u64::from(notches.saturating_sub(clicks));
+    }
+    if out.is_empty() {
+        return;
+    }
+
+    {
+        let mut held = pressed.lock().unwrap();
+        for ev in &out {
+            if ev.event_type() == EventType::KEY {
+                if ev.value() == 0 {
+                    held.remove(&ev.code());
+                } else {
+                    held.insert(ev.code());
+                }
+            }
+        }
+    }
+
+    let _ = sink.send(SinkMsg::Events(out));
+}
+
+#[allow(clippy::too_many_arguments)]
+fn read_loop(
+    mut dev: Device,
+    path: PathBuf,
+    sink: Sender<SinkMsg>,
+    state: Arc<Mutex<State>>,
+    stop: Arc<AtomicBool>,
+    inject: KeyCode,
+    pressed: Arc<Mutex<HashSet<u16>>>,
+    closed: Sender<PathBuf>,
+) {
+    let mut cap = ClickBudget::new();
+    let mut frame: Vec<InputEvent> = Vec::with_capacity(32);
+
+    while !stop.load(Ordering::Relaxed) {
+        match dev.fetch_events() {
+            Ok(events) => {
+                for ev in events {
+                    frame.push(ev);
+                    if ev.event_type() == EventType::SYNCHRONIZATION {
+                        process_frame(&frame, inject, &mut cap, &sink, &state, &pressed);
+                        frame.clear();
+                    }
+                }
+            }
+            // Non-blocking reads are used so leaving the mode does not have to wait for the
+            // user to move the mouse: a blocked read on a grabbed device has no wakeup.
+            Err(err) if err.kind() == io::ErrorKind::WouldBlock => {
+                thread::sleep(Duration::from_millis(2));
+            }
+            Err(err) => {
+                eprintln!("autoclicker: read error on {}: {err}", path.display());
+                break;
+            }
+        }
+    }
+
+    let _ = dev.ungrab();
+    let _ = closed.send(path);
+}
+
+// ─── Control loop ────────────────────────────────────────────
+
+enum Cmd {
+    Mode(Mode, Option<Sender<()>>),
+    Interval(u64, Option<Sender<()>>),
+    Button(String, Option<Sender<()>>),
+    Target(Option<String>, Option<String>, Option<Sender<()>>),
+}
+
+struct Ctl {
+    state: Arc<Mutex<State>>,
+    rx: Receiver<Cmd>,
+    wanted: Vec<(u16, u16)>,
+    session: Option<Session>,
+    clicker: Option<Clicker>,
+    next_click: Instant,
+    last_rescan: Instant,
+}
+
+impl Ctl {
+    fn start_scroll(&mut self, mode: Mode) {
+        let Some(inject) = mode.inject_key() else { return };
+
+        let mut opened: Vec<(PathBuf, Device)> = Vec::new();
+        let mut first_error: Option<String> = None;
+        for path in enumerate_event_paths() {
+            match Device::open(&path) {
+                Ok(dev) => {
+                    if device_matches(&dev, &self.wanted) {
+                        opened.push((path, dev));
+                    }
+                }
+                Err(err) => {
+                    if err.kind() == io::ErrorKind::PermissionDenied && first_error.is_none() {
+                        first_error = Some(format!("{}: {err}", path.display()));
+                    }
+                }
+            }
+        }
+
+        if opened.is_empty() {
+            let mut st = self.state.lock().unwrap();
+            st.matched = 0;
+            if let Some(err) = first_error {
+                if st.grab_error.as_deref() != Some(err.as_str()) {
+                    eprintln!("autoclicker: no device matched ({err})");
+                }
+                st.grab_error = Some(err);
+            } else {
+                // No permission problem: the device is simply absent (or was unplugged).
+                st.grab_error = None;
+            }
             return;
         }
-    };
 
-    listener
-        .set_nonblocking(true)
-        .expect("Failed to set nonblocking");
+        let refs: Vec<&Device> = opened.iter().map(|(_, dev)| dev).collect();
+        let sink_dev = match build_passthrough(&refs) {
+            Ok(dev) => dev,
+            Err(err) => {
+                self.state.lock().unwrap().grab_error = Some(format!("uinput: {err}"));
+                return;
+            }
+        };
+        drop(refs);
 
-    loop {
-        if stop_flag.load(Ordering::Relaxed) {
-            break;
+        let (sink_tx, sink_rx) = mpsc::channel::<SinkMsg>();
+        let sink_handle = thread::spawn(move || {
+            let mut dev = sink_dev;
+            while let Ok(msg) = sink_rx.recv() {
+                match msg {
+                    SinkMsg::Events(events) => {
+                        if let Err(err) = dev.emit(&events) {
+                            eprintln!("autoclicker: emit failed: {err}");
+                        }
+                    }
+                    SinkMsg::Shutdown => break,
+                }
+            }
+        });
+
+        let (closed_tx, closed_rx) = mpsc::channel::<PathBuf>();
+        let pressed = Arc::new(Mutex::new(HashSet::new()));
+        let mut readers = Vec::new();
+        let mut last_err: Option<String> = None;
+
+        for (path, mut dev) in opened {
+            if let Err(err) = dev.grab() {
+                last_err = Some(format!("{}: {err}", path.display()));
+                eprintln!("autoclicker: grab failed on {}: {err}", path.display());
+                continue;
+            }
+            if let Err(err) = dev.set_nonblocking(true) {
+                eprintln!("autoclicker: set_nonblocking failed on {}: {err}", path.display());
+            }
+            let stop = Arc::new(AtomicBool::new(false));
+            let handle = {
+                let path = path.clone();
+                let sink = sink_tx.clone();
+                let state = self.state.clone();
+                let stop = stop.clone();
+                let pressed = pressed.clone();
+                let closed = closed_tx.clone();
+                thread::spawn(move || {
+                    read_loop(dev, path, sink, state, stop, inject, pressed, closed);
+                })
+            };
+            readers.push((path, stop, handle));
         }
 
-        match listener.accept() {
-            Ok((stream, _addr)) => {
-                let s = stop_flag.clone();
-                let st = state.clone();
-                thread::spawn(move || handle_client(stream, s, st, start_time));
-            }
-            Err(ref e) if e.kind() == io::ErrorKind::WouldBlock => {
-                thread::sleep(Duration::from_millis(100));
-            }
-            Err(_) => break,
+        if readers.is_empty() {
+            let _ = sink_tx.send(SinkMsg::Shutdown);
+            let _ = sink_handle.join();
+            let mut st = self.state.lock().unwrap();
+            st.matched = 0;
+            st.grab_error = last_err.or(first_error);
+            return;
+        }
+
+        {
+            let mut st = self.state.lock().unwrap();
+            st.matched = readers.len();
+            st.grab_error = None;
+        }
+
+        self.session = Some(Session {
+            sink: sink_tx,
+            sink_handle: Some(sink_handle),
+            readers,
+            closed_rx,
+            pressed,
+        });
+    }
+
+    fn stop_scroll(&mut self) {
+        let Some(session) = self.session.take() else { return };
+
+        // 1. Stop the readers (each ungrabs its own device on the way out).
+        for (_, stop, _) in &session.readers {
+            stop.store(true, Ordering::SeqCst);
+        }
+        for (_, _, handle) in session.readers {
+            let _ = handle.join();
+        }
+
+        // 2. Release buttons the passthrough may still hold: a physical button held while
+        //    the mode switched would otherwise stay logically pressed in the compositor.
+        let held: Vec<u16> = {
+            let mut pressed = session.pressed.lock().unwrap();
+            pressed.drain().collect()
+        };
+        if !held.is_empty() {
+            let releases: Vec<InputEvent> = held
+                .iter()
+                .map(|code| InputEvent::new(EventType::KEY.0, *code, 0))
+                .collect();
+            let _ = session.sink.send(SinkMsg::Events(releases));
+        }
+
+        // 3. Drop the passthrough device.
+        let _ = session.sink.send(SinkMsg::Shutdown);
+        if let Some(handle) = session.sink_handle {
+            let _ = handle.join();
+        }
+
+        self.state.lock().unwrap().matched = 0;
+    }
+
+    fn apply_mode(&mut self, mode: Mode) {
+        if self.state.lock().unwrap().mode == mode {
+            return;
+        }
+        self.stop_scroll();
+        {
+            let mut st = self.state.lock().unwrap();
+            st.mode = mode;
+            st.notches = 0;
+            st.dropped = 0;
+            st.clicks = 0;
+        }
+        if mode == Mode::Timer {
+            self.clicker = None;
+            self.next_click = Instant::now();
+        }
+        if mode.is_scroll() {
+            self.start_scroll(mode);
         }
     }
 
-    let _ = fs::remove_file(&sock_path);
+    fn tick(&mut self) {
+        let (mode, interval_ms, button) = {
+            let st = self.state.lock().unwrap();
+            (st.mode, st.interval_ms, st.button.clone())
+        };
+
+        if mode == Mode::Timer {
+            if self.clicker.is_none() {
+                self.clicker = Clicker::new();
+                if self.clicker.is_none() {
+                    self.state.lock().unwrap().grab_error =
+                        Some("uinput unavailable for timer mode".to_string());
+                    self.next_click = Instant::now() + Duration::from_millis(500);
+                    return;
+                }
+            }
+            self.state.lock().unwrap().grab_error = None;
+            if Instant::now() >= self.next_click {
+                if let Some(clicker) = self.clicker.as_mut() {
+                    clicker.click(&button);
+                }
+                self.state.lock().unwrap().clicks += 1;
+                self.next_click = Instant::now() + Duration::from_millis(interval_ms);
+            }
+        } else {
+            self.clicker = None;
+        }
+
+        if !mode.is_scroll() {
+            return;
+        }
+
+        // A reader that exits (device unplugged, read error) tears the session down; the
+        // rescan below re-opens it, which is how receiver reconnects are picked up.
+        if let Some(session) = &self.session {
+            if session.closed_rx.try_recv().is_ok() {
+                self.stop_scroll();
+                self.last_rescan = Instant::now();
+                self.start_scroll(mode);
+                return;
+            }
+        }
+
+        if self.session.is_none() && self.last_rescan.elapsed() >= Duration::from_secs(2) {
+            self.last_rescan = Instant::now();
+            self.start_scroll(mode);
+        }
+    }
 }
 
-fn handle_client(
-    stream: UnixStream,
-    stop_flag: Arc<AtomicBool>,
-    state: Arc<Mutex<DaemonState>>,
-    start_time: Instant,
-) {
-    let mut reader = BufReader::new(stream.try_clone().unwrap());
-    let mut writer = stream;
+fn control_loop(mut ctl: Ctl) {
+    loop {
+        let timeout = {
+            let st = ctl.state.lock().unwrap();
+            if st.mode == Mode::Timer {
+                Duration::from_millis(st.interval_ms.min(20).max(1))
+            } else {
+                Duration::from_millis(50)
+            }
+        };
 
+        match ctl.rx.recv_timeout(timeout) {
+            Ok(Cmd::Mode(mode, ack)) => {
+                ctl.apply_mode(mode);
+                if let Some(ack) = ack {
+                    let _ = ack.send(());
+                }
+            }
+            Ok(Cmd::Interval(ms, ack)) => {
+                {
+                    let mut st = ctl.state.lock().unwrap();
+                    st.interval_ms = ms.max(20);
+                    save_state(&st);
+                }
+                if let Some(ack) = ack {
+                    let _ = ack.send(());
+                }
+            }
+            Ok(Cmd::Button(button, ack)) => {
+                {
+                    let mut st = ctl.state.lock().unwrap();
+                    st.button = valid_button(&button);
+                    save_state(&st);
+                }
+                if let Some(ack) = ack {
+                    let _ = ack.send(());
+                }
+            }
+            Ok(Cmd::Target(addr, label, ack)) => {
+                {
+                    let mut st = ctl.state.lock().unwrap();
+                    st.target_addr = addr;
+                    st.target_label = label;
+                    save_state(&st);
+                }
+                if let Some(ack) = ack {
+                    let _ = ack.send(());
+                }
+            }
+            Err(RecvTimeoutError::Timeout) => {}
+            Err(RecvTimeoutError::Disconnected) => return,
+        }
+
+        ctl.tick();
+    }
+}
+
+// ─── IPC ─────────────────────────────────────────────────────
+
+fn json_ok() -> String {
+    "{\"ok\":true}".to_string()
+}
+
+fn json_error(message: &str) -> String {
+    serde_json::json!({ "ok": false, "error": message }).to_string()
+}
+
+fn json_value(value: &str) -> String {
+    serde_json::json!({ "ok": true, "value": value }).to_string()
+}
+
+fn send_cmd(tx: &Sender<Cmd>, cmd: Cmd) -> bool {
+    if tx.send(cmd).is_err() {
+        return false;
+    }
+    true
+}
+
+fn wait_ack(ack: Receiver<()>) -> bool {
+    ack.recv_timeout(Duration::from_secs(2)).is_ok()
+}
+
+fn dispatch(cmd: &str, state: &Arc<Mutex<State>>, tx: &Sender<Cmd>) -> String {
+    let cmd = cmd.trim();
+
+    if cmd == "status" {
+        let st = state.lock().unwrap();
+        return serde_json::to_string(&build_status(&st)).unwrap_or_else(|_| off_state_json());
+    }
+
+    if let Some(field) = cmd.strip_prefix("get ") {
+        let st = state.lock().unwrap();
+        let value = match field.trim() {
+            "mode" => st.mode.as_str().to_string(),
+            "button" => st.button.clone(),
+            "interval" => st.interval_ms.to_string(),
+            "target" => match (&st.target_addr, &st.target_label) {
+                (None, _) => "any".to_string(),
+                (Some(_), Some(label)) => label.clone(),
+                (Some(addr), None) => addr.clone(),
+            },
+            other => return json_error(&format!("unknown field: {other}")),
+        };
+        return json_value(&value);
+    }
+
+    if let Some(mode) = cmd.strip_prefix("mode ") {
+        let Some(mode) = Mode::parse(mode) else {
+            return json_error("mode must be off, scroll-left, scroll-right or timer");
+        };
+        return if send_and_wait_mode(mode, tx) {
+            json_ok()
+        } else {
+            json_error("daemon did not acknowledge")
+        };
+    }
+
+    if cmd == "on" {
+        return if send_and_wait_mode(Mode::ScrollLeft, tx) {
+            json_ok()
+        } else {
+            json_error("daemon did not acknowledge")
+        };
+    }
+    if cmd == "off" {
+        return if send_and_wait_mode(Mode::Off, tx) {
+            json_ok()
+        } else {
+            json_error("daemon did not acknowledge")
+        };
+    }
+    if cmd == "toggle" {
+        let current = state.lock().unwrap().mode;
+        let next = if current == Mode::Off {
+            Mode::ScrollLeft
+        } else {
+            Mode::Off
+        };
+        return if send_and_wait_mode(next, tx) {
+            json_ok()
+        } else {
+            json_error("daemon did not acknowledge")
+        };
+    }
+    if cmd == "cycle" {
+        let current = state.lock().unwrap().mode;
+        let next = match current {
+            Mode::ScrollLeft => Mode::ScrollRight,
+            Mode::ScrollRight => Mode::ScrollLeft,
+            _ => Mode::ScrollLeft,
+        };
+        return if send_and_wait_mode(next, tx) {
+            json_ok()
+        } else {
+            json_error("daemon did not acknowledge")
+        };
+    }
+
+    if let Some(rest) = cmd.strip_prefix("set interval ") {
+        let Ok(ms) = rest.trim().parse::<u64>() else {
+            return json_error("interval must be a number of milliseconds");
+        };
+        let (ack_tx, ack_rx) = mpsc::channel();
+        if !send_cmd(tx, Cmd::Interval(ms, Some(ack_tx))) || !wait_ack(ack_rx) {
+            return json_error("daemon did not acknowledge");
+        }
+        return json_ok();
+    }
+
+    if let Some(rest) = cmd.strip_prefix("set button ") {
+        let button = valid_button(rest.trim());
+        let (ack_tx, ack_rx) = mpsc::channel();
+        if !send_cmd(tx, Cmd::Button(button, Some(ack_tx))) || !wait_ack(ack_rx) {
+            return json_error("daemon did not acknowledge");
+        }
+        return json_ok();
+    }
+
+    if cmd == "target any" {
+        return send_target(tx, None, None);
+    }
+    if cmd == "target none" {
+        return send_target(tx, None, None);
+    }
+    if let Some(rest) = cmd.strip_prefix("target set ") {
+        let rest = rest.trim();
+        let (addr, label) = match rest.split_once(' ') {
+            Some((addr, label)) => (addr, Some(label.trim().to_string())),
+            None => (rest, None),
+        };
+        if addr.is_empty() {
+            return json_error("target set needs an address");
+        }
+        return send_target(tx, Some(normalize_addr(addr)), label.filter(|l| !l.is_empty()));
+    }
+
+    json_error(&format!("unknown command: {cmd}"))
+}
+
+fn send_and_wait_mode(mode: Mode, tx: &Sender<Cmd>) -> bool {
+    let (ack_tx, ack_rx) = mpsc::channel();
+    if !send_cmd(tx, Cmd::Mode(mode, Some(ack_tx))) {
+        return false;
+    }
+    wait_ack(ack_rx)
+}
+
+fn send_target(tx: &Sender<Cmd>, addr: Option<String>, label: Option<String>) -> String {
+    let (ack_tx, ack_rx) = mpsc::channel();
+    if !send_cmd(tx, Cmd::Target(addr, label, Some(ack_tx))) || !wait_ack(ack_rx) {
+        return json_error("daemon did not acknowledge");
+    }
+    json_ok()
+}
+
+fn handle_connection(mut stream: UnixStream, state: Arc<Mutex<State>>, tx: Sender<Cmd>) {
+    let Ok(snapshot) = stream.try_clone() else {
+        return;
+    };
+    let mut reader = BufReader::new(snapshot);
     let mut line = String::new();
     if reader.read_line(&mut line).is_err() {
         return;
     }
 
-    let req: IpcRequest = match serde_json::from_str(&line) {
-        Ok(r) => r,
-        Err(_) => return,
+    let request: IpcRequest = match serde_json::from_str(line.trim()) {
+        Ok(request) => request,
+        Err(err) => {
+            let _ = writeln!(stream, "{}", json_error(&format!("bad request: {err}")));
+            return;
+        }
     };
 
-    match req.cmd.as_str() {
-        "stop" => {
-            stop_flag.store(true, Ordering::SeqCst);
-            let _ = writeln!(writer, r#"{{"ok":true}}"#);
-        }
-        "status" => {
-            let status = build_status(&state.lock().unwrap(), start_time);
-            let json = serde_json::to_string(&status).unwrap();
-            let _ = writeln!(writer, "{}", json);
-        }
-        "watch" => {
-            while !stop_flag.load(Ordering::Relaxed) {
-                let status = build_status(&state.lock().unwrap(), start_time);
-                let json = serde_json::to_string(&status).unwrap();
-                if writeln!(writer, "{}", json).is_err() {
-                    break;
+    if request.cmd.trim() == "watch" {
+        let mut last = String::new();
+        loop {
+            let json = {
+                let st = state.lock().unwrap();
+                serde_json::to_string(&build_status(&st)).unwrap_or_else(|_| off_state_json())
+            };
+            if json != last {
+                if writeln!(stream, "{json}").is_err() || stream.flush().is_err() {
+                    return;
                 }
-                writer.flush().ok();
-                thread::sleep(Duration::from_millis(500));
+                last = json;
+            }
+            thread::sleep(Duration::from_millis(200));
+        }
+    }
+
+    let response = dispatch(&request.cmd, &state, &tx);
+    let _ = writeln!(stream, "{response}");
+}
+
+fn spawn_socket_listener(listener: UnixListener, state: Arc<Mutex<State>>, tx: Sender<Cmd>) {
+    thread::spawn(move || {
+        for connection in listener.incoming() {
+            match connection {
+                Ok(stream) => {
+                    let state = state.clone();
+                    let tx = tx.clone();
+                    thread::spawn(move || handle_connection(stream, state, tx));
+                }
+                Err(err) => {
+                    eprintln!("autoclicker: accept failed: {err}");
+                    thread::sleep(Duration::from_millis(200));
+                }
             }
         }
-        _ => {}
-    }
+    });
 }
 
-// ─── Status builder ─────────────────────────────────────────
+// ─── Hyprland focused-window events ──────────────────────────
 
-fn build_status(ds: &DaemonState, _start_time: Instant) -> WaybarStatus {
-    if !ds.running {
-        return WaybarStatus {
-            text: "󰍺".to_string(),
-            class: "autoclicker-inactive".to_string(),
-            percentage: None,
-            tooltip: "Autoclicker: OFF".to_string(),
-        };
-    }
-
-    let deadman_str = if ds.deadman { "ON" } else { "OFF" };
-
-    if ds.max_duration > 0 {
-        let elapsed = ds.elapsed;
-        let remaining = ds.max_duration.saturating_sub(elapsed);
-        let pct = Some((elapsed * 100 / ds.max_duration).min(100));
-        let minutes = remaining / 60;
-        let seconds = remaining % 60;
-
-        let class = if remaining <= 10 {
-            "autoclicker-warning"
-        } else if remaining <= 60 {
-            "autoclicker-expiring"
-        } else {
-            "autoclicker-active"
-        };
-
-        WaybarStatus {
-            text: format!("{}:{:02}", minutes, seconds),
-            class: class.to_string(),
-            percentage: pct,
-            tooltip: format!(
-                "Autoclicker: ON\nButton: {}\nInterval: {}ms\nRemaining: {}m {}s\nSafety: dead-man {}",
-                ds.button, ds.interval, minutes, seconds, deadman_str
-            ),
-        }
-    } else {
-        let mut tooltip = format!(
-            "Autoclicker: ON\nButton: {}\nInterval: {}ms",
-            ds.button, ds.interval
-        );
-        if ds.deadman {
-            tooltip.push_str(&format!("\nSafety: dead-man {}", deadman_str));
-        }
-
-        WaybarStatus {
-            text: "󰕰".to_string(),
-            class: "autoclicker-active".to_string(),
-            percentage: None,
-            tooltip,
-        }
-    }
+fn hyprland_socket() -> Option<PathBuf> {
+    let runtime = std::env::var("XDG_RUNTIME_DIR").ok()?;
+    let signature = std::env::var("HYPRLAND_INSTANCE_SIGNATURE").ok()?;
+    Some(
+        PathBuf::from(runtime)
+            .join("hypr")
+            .join(signature)
+            .join(".socket2.sock"),
+    )
 }
 
-// ─── Daemon main loop ───────────────────────────────────────
-
-fn cmd_daemon(
-    interval: u64,
-    button: &str,
-    deadman: bool,
-    deadman_threshold: u32,
-    max_duration: u64,
-    max_clicks: u64,
-) {
-    let interval = interval.max(20); // Rate governor: 50 CPS max
-
-    // Write PID file
-    fs::write(PID_FILE, format!("{}\n", std::process::id())).expect("Failed to write PID file");
-
-    // Write start timestamp
-    let now = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap()
-        .as_secs();
-    fs::write(START_FILE, now.to_string()).expect("Failed to write start timestamp");
-
-    // Set up clicker
-    let mut clicker = Clicker::new();
-
-    // Shared state
-    let stop_flag = Arc::new(AtomicBool::new(false));
-    let state = Arc::new(Mutex::new(DaemonState {
-        interval,
-        button: button.to_string(),
-        deadman,
-        deadman_threshold,
-        max_duration,
-        max_clicks,
-        running: true,
-        elapsed: 0,
-        click_count: 0,
-    }));
-
-    let start_time = Instant::now();
-
-    // Spawn hotkey listener thread
-    let hotkey_stop = stop_flag.clone();
-    thread::spawn(move || hotkey_listener(hotkey_stop));
-
-    // Spawn socket listener thread
-    let sock_path = PathBuf::from(SOCK_FILE);
-    let sock_stop = stop_flag.clone();
-    let sock_state = state.clone();
-    let sock_start = start_time;
-    thread::spawn(move || socket_listener(sock_path, sock_stop, sock_state, sock_start));
-
-    // ─── Main click loop ──────────────────────────────────
-
-    let mut last_pos: Option<(i32, i32)> = None;
-    let mut click_count: u64 = 0;
-
+fn hyprland_events(state: Arc<Mutex<State>>) {
     loop {
-        if stop_flag.load(Ordering::Relaxed) {
-            break;
-        }
-
-        // Re-read config each iteration
-        let conf = read_conf();
-        let cur_interval = conf_get_u64(&conf, "INTERVAL", interval).max(20);
-        let cur_button = conf_get(&conf, "BUTTON", button);
-        let cur_deadman = conf_get_bool(&conf, "DEADMAN", deadman);
-        let cur_threshold = conf_get_u64(&conf, "DEADMAN_THRESHOLD", deadman_threshold as u64)
-            as u32;
-        let cur_max_dur = conf_get_u64(&conf, "MAX_DURATION", max_duration);
-        let cur_max_clk = conf_get_u64(&conf, "MAX_CLICKS", max_clicks);
-
-        // Update shared state
-        {
-            let mut s = state.lock().unwrap();
-            s.interval = cur_interval;
-            s.button = cur_button.clone();
-            s.deadman = cur_deadman;
-            s.deadman_threshold = cur_threshold;
-            s.max_duration = cur_max_dur;
-            s.max_clicks = cur_max_clk;
-            s.elapsed = start_time.elapsed().as_secs();
-            s.click_count = click_count;
-        }
-
-        // Max duration check
-        if cur_max_dur > 0 {
-            let elapsed = start_time.elapsed().as_secs();
-            if elapsed >= cur_max_dur {
-                let _ = Command::new("notify-send")
-                    .args([
-                        "Autoclicker",
-                        &format!("Auto-stopped: {}s elapsed", cur_max_dur),
-                    ])
-                    .status();
-                break;
-            }
-        }
-
-        // Max click count check
-        if cur_max_clk > 0 && click_count >= cur_max_clk {
-            let _ = Command::new("notify-send")
-                .args([
-                    "Autoclicker",
-                    &format!("Auto-stopped: {} clicks reached", cur_max_clk),
-                ])
-                .status();
-            break;
-        }
-
-        // Dead-man switch
-        if cur_deadman {
-            if let Some((cx, cy)) = get_cursor_pos() {
-                if let Some((lx, ly)) = last_pos {
-                    let dx = (cx - lx).unsigned_abs();
-                    let dy = (cy - ly).unsigned_abs();
-                    if dx + dy > cur_threshold {
-                        last_pos = Some((cx, cy));
-                        thread::sleep(Duration::from_millis(cur_interval));
-                        continue;
+        let Some(path) = hyprland_socket() else {
+            thread::sleep(Duration::from_secs(2));
+            continue;
+        };
+        match UnixStream::connect(&path) {
+            Ok(stream) => {
+                let reader = BufReader::new(stream);
+                for line in reader.lines().map_while(Result::ok) {
+                    if let Some(payload) = line.strip_prefix("activewindowv2>>") {
+                        let addr = normalize_addr(payload);
+                        let mut st = state.lock().unwrap();
+                        st.active_addr = if addr.is_empty() { None } else { Some(addr) };
                     }
                 }
-                last_pos = Some((cx, cy));
             }
+            Err(_) => {}
         }
-
-        // Perform click
-        clicker.click(&cur_button);
-        click_count += 1;
-
-        thread::sleep(Duration::from_millis(cur_interval));
+        thread::sleep(Duration::from_secs(2));
     }
-
-    // Cleanup
-    {
-        let mut s = state.lock().unwrap();
-        s.running = false;
-    }
-    let _ = fs::remove_file(PID_FILE);
-    let _ = fs::remove_file(SOCK_FILE);
-    let _ = Command::new("notify-send")
-        .args(["Autoclicker", "Stopped"])
-        .status();
-    let _ = Command::new("pkill").args(["-RTMIN+15", "waybar"]).status();
 }
 
-// ─── Commands ────────────────────────────────────────────────
+// ─── Client side ─────────────────────────────────────────────
 
 fn send_ipc(cmd: &str) -> Option<String> {
-    let mut stream = UnixStream::connect(SOCK_FILE).ok()?;
-    let request = serde_json::to_string(&IpcRequest {
-        cmd: cmd.to_string(),
-    })
-    .ok()?;
-    writeln!(stream, "{}", request).ok()?;
-
+    let path = sock_path()?;
+    let mut stream = UnixStream::connect(path).ok()?;
+    let request = serde_json::json!({ "cmd": cmd }).to_string();
+    writeln!(stream, "{request}").ok()?;
     let mut reader = BufReader::new(stream);
     let mut line = String::new();
     reader.read_line(&mut line).ok()?;
-    if line.is_empty() {
-        None
-    } else {
-        Some(line.trim().to_string())
+    Some(line.trim().to_string())
+}
+
+fn run_simple(cmd: &str) {
+    match send_ipc(cmd) {
+        Some(response) if response.contains("\"ok\":true") => {}
+        Some(response) => {
+            eprintln!("autoclicker: {response}");
+            std::process::exit(1);
+        }
+        None => {
+            eprintln!("autoclicker: daemon not running");
+            std::process::exit(1);
+        }
     }
 }
 
 fn cmd_status() {
     match send_ipc("status") {
-        Some(json) => {
-            println!("{}", json);
-        }
-        None => {
-            let _ = fs::remove_file(PID_FILE);
-            let _ = fs::remove_file(START_FILE);
-            let status = WaybarStatus {
-                text: "󰍺".to_string(),
-                class: "autoclicker-inactive".to_string(),
-                percentage: None,
-                tooltip: "Autoclicker: OFF".to_string(),
-            };
-            println!("{}", serde_json::to_string(&status).unwrap());
-        }
+        Some(response) => println!("{response}"),
+        None => println!("{}", off_state_json()),
     }
 }
 
 fn cmd_watch() {
-    match UnixStream::connect(SOCK_FILE) {
-        Ok(stream) => {
-            let request = serde_json::to_string(&IpcRequest {
-                cmd: "watch".to_string(),
-            })
-            .unwrap();
-            let mut writer = stream.try_clone().unwrap();
-            writeln!(writer, "{}", request).ok();
-
-            let reader = BufReader::new(stream);
-            for line in reader.lines() {
-                if let Ok(json) = line {
-                    println!("{}", json);
-                    io::stdout().flush().ok();
+    loop {
+        if let Some(path) = sock_path() {
+            if let Ok(stream) = UnixStream::connect(path) {
+                let request = serde_json::json!({ "cmd": "watch" }).to_string();
+                let mut writer = match stream.try_clone() {
+                    Ok(writer) => writer,
+                    Err(_) => {
+                        thread::sleep(Duration::from_secs(2));
+                        continue;
+                    }
+                };
+                if writeln!(writer, "{request}").is_ok() {
+                    let reader = BufReader::new(stream);
+                    for line in reader.lines().map_while(Result::ok) {
+                        if line.is_empty() {
+                            continue;
+                        }
+                        println!("{line}");
+                        let _ = io::stdout().flush();
+                    }
                 }
             }
         }
-        Err(_) => {
-            let status = WaybarStatus {
-                text: "󰍺".to_string(),
-                class: "autoclicker-inactive".to_string(),
-                percentage: None,
-                tooltip: "Autoclicker: OFF".to_string(),
-            };
-            loop {
-                println!("{}", serde_json::to_string(&status).unwrap());
-                io::stdout().flush().ok();
-                thread::sleep(Duration::from_millis(500));
+        // Daemon absent or the stream ended: Waybar must still get a line, otherwise it
+        // hides the module entirely.
+        println!("{}", off_state_json());
+        let _ = io::stdout().flush();
+        thread::sleep(Duration::from_secs(2));
+    }
+}
+
+// ─── Daemon ──────────────────────────────────────────────────
+
+fn cmd_daemon(device_args: Vec<String>, interval: u64, button: String) {
+    let Some(dir) = runtime_dir() else {
+        eprintln!("autoclicker: XDG_RUNTIME_DIR is not set");
+        std::process::exit(1);
+    };
+    let _ = fs::create_dir_all(&dir);
+    let sock = dir.join("sock");
+
+    if UnixStream::connect(&sock).is_ok() {
+        eprintln!("autoclicker: already running");
+        std::process::exit(1);
+    }
+    let _ = fs::remove_file(&sock);
+
+    let wanted: Vec<(u16, u16)> = device_args
+        .iter()
+        .filter_map(|arg| {
+            let parsed = parse_device_arg(arg);
+            if parsed.is_none() {
+                eprintln!("autoclicker: ignoring malformed --device {arg}");
             }
+            parsed
+        })
+        .collect();
+
+    let saved = load_state();
+    let interval_ms = saved
+        .get("INTERVAL")
+        .and_then(|v| v.parse::<u64>().ok())
+        .unwrap_or(interval)
+        .max(20);
+    let button = valid_button(saved.get("BUTTON").map(String::as_str).unwrap_or(&button));
+    let target_addr = saved.get("TARGET_ADDR").map(|v| normalize_addr(v));
+    let target_label = saved.get("TARGET_LABEL").cloned();
+
+    let state = Arc::new(Mutex::new(State::new(
+        interval_ms,
+        button,
+        target_addr,
+        target_label,
+    )));
+
+    let listener = match UnixListener::bind(&sock) {
+        Ok(listener) => listener,
+        Err(err) => {
+            eprintln!("autoclicker: cannot bind {}: {err}", sock.display());
+            std::process::exit(1);
         }
+    };
+
+    let (tx, rx) = mpsc::channel::<Cmd>();
+    spawn_socket_listener(listener, state.clone(), tx.clone());
+
+    {
+        let state = state.clone();
+        thread::spawn(move || hyprland_events(state));
     }
+
+    eprintln!(
+        "autoclicker: daemon ready (devices: {}, interval {}ms, button {})",
+        if wanted.is_empty() {
+            "none".to_string()
+        } else {
+            wanted
+                .iter()
+                .map(|(v, p)| format!("{v:04x}:{p:04x}"))
+                .collect::<Vec<_>>()
+                .join(",")
+        },
+        interval_ms,
+        state.lock().unwrap().button
+    );
+
+    control_loop(Ctl {
+        state,
+        rx,
+        wanted,
+        session: None,
+        clicker: None,
+        next_click: Instant::now(),
+        last_rescan: Instant::now() - Duration::from_secs(10),
+    });
 }
 
-fn cmd_stop() {
-    // Try socket first
-    if send_ipc("stop").is_some() {
-        thread::sleep(Duration::from_millis(100));
-    }
+// ─── Selftest ────────────────────────────────────────────────
 
-    // Also try SIGTERM via PID file (fallback)
-    if let Ok(pid_str) = fs::read_to_string(PID_FILE) {
-        if let Ok(pid) = pid_str.trim().parse::<i32>() {
-            let _ = kill(Pid::from_raw(pid), Signal::SIGTERM);
-        }
-    }
-
-    let _ = fs::remove_file(PID_FILE);
-    let _ = fs::remove_file(START_FILE);
-    let _ = fs::remove_file(SOCK_FILE);
-    let _ = Command::new("pkill").args(["-RTMIN+15", "waybar"]).status();
+fn ev(event_type: EventType, code: u16, value: i32) -> InputEvent {
+    InputEvent::new(event_type.0, code, value)
 }
 
-fn cmd_menu() {
-    let _ = Command::new("autoclicker-menu").status();
+fn syn() -> InputEvent {
+    ev(EventType::SYNCHRONIZATION, 0, 0)
+}
+
+fn wheel(value: i32) -> InputEvent {
+    ev(EventType::RELATIVE, RelativeAxisCode::REL_WHEEL.0, value)
+}
+
+fn rel(axis: RelativeAxisCode, value: i32) -> InputEvent {
+    ev(EventType::RELATIVE, axis.0, value)
+}
+
+fn key(code: KeyCode, value: i32) -> InputEvent {
+    ev(EventType::KEY, code.code(), value)
+}
+
+fn selftest() -> bool {
+    let mut failures = Vec::new();
+
+    let check = |name: &str, ok: bool, failures: &mut Vec<String>| {
+        if !ok {
+            failures.push(name.to_string());
+        }
+    };
+
+    // 1. One notch forward-clicked: exactly one press/release, wheel swallowed.
+    {
+        let mut cap = ClickBudget::new();
+        let frame = vec![wheel(-1), syn()];
+        let (out, clicks) = rewrite_frame(&frame, Some(KeyCode::BTN_RIGHT), &mut cap);
+        let ok = clicks == 1
+            && out.len() == 2
+            && out[0].code() == KeyCode::BTN_RIGHT.code()
+            && out[0].value() == 1
+            && out[1].value() == 0
+            && out
+                .iter()
+                .all(|e| !(e.event_type() == EventType::RELATIVE && is_wheel_code(e.code())));
+        check("case1 forward click", ok, &mut failures);
+    }
+
+    // 2. The HI_RES twin is not a second notch.
+    {
+        let mut cap = ClickBudget::new();
+        let frame = vec![
+            rel(RelativeAxisCode::REL_WHEEL_HI_RES, -120),
+            syn(),
+        ];
+        let (out, clicks) = rewrite_frame(&frame, Some(KeyCode::BTN_LEFT), &mut cap);
+        check(
+            "case2 hi-res only",
+            clicks == 0 && out.is_empty(),
+            &mut failures,
+        );
+    }
+
+    // 3. Motion passes through verbatim.
+    {
+        let mut cap = ClickBudget::new();
+        let frame = vec![
+            rel(RelativeAxisCode::REL_X, 5),
+            rel(RelativeAxisCode::REL_Y, -3),
+            syn(),
+        ];
+        let (out, clicks) = rewrite_frame(&frame, Some(KeyCode::BTN_LEFT), &mut cap);
+        let ok = clicks == 0
+            && out.len() == 2
+            && out[0].value() == 5
+            && out[1].value() == -3;
+        check("case3 motion passthrough", ok, &mut failures);
+    }
+
+    // 4. Target not focused: wheel still swallowed, nothing clicked.
+    {
+        let mut cap = ClickBudget::new();
+        let frame = vec![wheel(1), rel(RelativeAxisCode::REL_X, 1), syn()];
+        let (out, clicks) = rewrite_frame(&frame, None, &mut cap);
+        let ok = clicks == 0
+            && out.len() == 1
+            && out[0].event_type() == EventType::RELATIVE
+            && out[0].code() == RelativeAxisCode::REL_X.0;
+        check("case4 gated frame", ok, &mut failures);
+    }
+
+    // 5. Governor: a storm of notches cannot exceed 30 clicks.
+    {
+        let mut cap = ClickBudget::new();
+        let mut frame: Vec<InputEvent> = (0..100).map(|_| wheel(1)).collect();
+        frame.push(syn());
+        let (_, clicks) = rewrite_frame(&frame, Some(KeyCode::BTN_LEFT), &mut cap);
+        let noches = wheel_notches(&frame, true);
+        let dropped = noches.saturating_sub(clicks);
+        check(
+            "case5 click cap",
+            clicks <= 30 && clicks == 30 && dropped == 70,
+            &mut failures,
+        );
+    }
+
+    // 6. Address normalisation.
+    {
+        check(
+            "case6 normalize_addr",
+            normalize_addr("0x5E30D85D2280") == normalize_addr("5e30d85d2280")
+                && normalize_addr("5e30d85d2280") == "5e30d85d2280",
+            &mut failures,
+        );
+    }
+
+    // 7. Device matching: the receiver's keyboard node must be rejected.
+    {
+        let wanted = [(0x046d, 0xc547)];
+        let ok = matches_device(
+            0x046d,
+            0xc547,
+            &wanted,
+            true,
+            true,
+            "Logitech USB Receiver",
+        ) && !matches_device(
+            0x046d,
+            0xc547,
+            &wanted,
+            true,
+            false,
+            "Logitech USB Receiver",
+        ) && !matches_device(0x046d, 0xc547, &wanted, false, true, "Logitech USB Receiver")
+            && !matches_device(0x046d, 0xc547, &wanted, true, true, "autoclicker-scroll")
+            && !matches_device(0x342d, 0xe4c5, &wanted, true, true, "AKKO Keyboard");
+        check("case7 device match", ok, &mut failures);
+    }
+
+    if failures.is_empty() {
+        println!("selftest: PASS");
+        true
+    } else {
+        for failure in &failures {
+            println!("selftest: FAIL: {failure}");
+        }
+        false
+    }
 }
 
 // ─── Main ────────────────────────────────────────────────────
@@ -645,23 +1527,57 @@ fn main() {
     let cli = Cli::parse();
     match cli.command {
         Commands::Daemon {
+            devices,
             interval,
             button,
-            deadman,
-            deadman_threshold,
-            max_duration,
-            max_clicks,
-        } => cmd_daemon(
-            interval,
-            &button,
-            deadman,
-            deadman_threshold,
-            max_duration,
-            max_clicks,
-        ),
+        } => cmd_daemon(devices, interval, button),
         Commands::Status => cmd_status(),
         Commands::Watch => cmd_watch(),
-        Commands::Stop => cmd_stop(),
-        Commands::Menu => cmd_menu(),
+        Commands::On => run_simple("on"),
+        Commands::Off => run_simple("off"),
+        Commands::Toggle => run_simple("toggle"),
+        Commands::Cycle => run_simple("cycle"),
+        Commands::Mode { mode } => run_simple(&format!("mode {mode}")),
+        Commands::Set { what } => match what {
+            SetCmd::Interval { ms } => run_simple(&format!("set interval {ms}")),
+            SetCmd::Button { button } => run_simple(&format!("set button {button}")),
+        },
+        Commands::Get { field } => match send_ipc(&format!("get {field}")) {
+            Some(response) => match serde_json::from_str::<serde_json::Value>(&response) {
+                Ok(value) => {
+                    if let Some(text) = value.get("value").and_then(|v| v.as_str()) {
+                        println!("{text}");
+                    } else {
+                        eprintln!("autoclicker: {response}");
+                        std::process::exit(1);
+                    }
+                }
+                Err(_) => {
+                    eprintln!("autoclicker: {response}");
+                    std::process::exit(1);
+                }
+            },
+            None => {
+                eprintln!("autoclicker: daemon not running");
+                std::process::exit(1);
+            }
+        },
+        Commands::Target { target } => match target {
+            TargetCmd::Any => run_simple("target any"),
+            TargetCmd::None => run_simple("target none"),
+            TargetCmd::Set { addr, label } => {
+                let mut cmd = format!("target set {addr}");
+                if !label.is_empty() {
+                    cmd.push(' ');
+                    cmd.push_str(&label.join(" "));
+                }
+                run_simple(&cmd)
+            }
+        },
+        Commands::Selftest => {
+            if !selftest() {
+                std::process::exit(1);
+            }
+        }
     }
 }

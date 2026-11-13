@@ -223,3 +223,121 @@
               (label :text "${t.volume}%" :class "mp-row-volume")
               (label :text "" :class "mp-row-pin")))))
       (label :text "scroll a row to set its volume" :class "mp-hint" :halign "start"))))
+;; ── Autoclicker ───────────────────────────────────────────
+;; The poll drives the marks: `autoclicker-eww-sync` reads the daemon over IPC and pushes
+;; the active rows back with `eww update` (the same pattern as tailscale-eww-update).
+(defpoll ac_tick :interval "1s" "autoclicker-eww-sync")
+
+(defvar ac_mark_off "◎")
+(defvar ac_mark_scroll_left "◎")
+(defvar ac_mark_scroll_right "◎")
+(defvar ac_mark_timer "◎")
+(defvar ac_iv_100 "◎")
+(defvar ac_iv_250 "◎")
+(defvar ac_iv_500 "◎")
+(defvar ac_iv_1000 "◎")
+(defvar ac_btn_left "◎")
+(defvar ac_btn_middle "◎")
+(defvar ac_btn_right "◎")
+(defvar ac_details "")
+
+(defwindow autoclicker-menu
+  :monitor 0
+  :geometry (geometry
+              :x "0px"
+              :y "50px"
+              :width "420px"
+              :anchor "top center")
+  :stacking "overlay"
+  :focusable "none"
+  ;; Mouse-out closes it, exactly like the media picker; staying unfocusable means opening
+  ;; the menu never takes keyboard focus from the application being clicked.
+  (eventbox :onhoverlost "eww close autoclicker-menu"
+    (box :class "ac-window"
+         :orientation "vertical"
+         :halign "fill"
+         :space-evenly false
+      (box :class "ac-header"
+           :orientation "horizontal"
+           :halign "fill"
+           :space-evenly false
+        (label :text "󰍺" :class "ac-header-icon")
+        (label :text "Autoclicker" :class "ac-header-title" :hexpand true)
+        (button :onclick "eww close autoclicker-menu"
+                :timeout "1s"
+                :class "ac-header-close"
+          (label :text "×")))
+      (box :class "ac-section"
+           :orientation "vertical"
+           :halign "fill"
+           :space-evenly false
+        (label :text "Mode" :class "ac-section-title" :halign "start")
+        (eventbox :class "ac-row" :timeout "1s" :cursor "pointer" :onclick "autoclicker mode off"
+          (box :orientation "horizontal" :halign "fill" :space-evenly false
+            (label :text ac_mark_off :class "ac-row-mark")
+            (label :text "Off" :class "ac-row-name" :hexpand true :halign "start")))
+        (eventbox :class "ac-row" :timeout "1s" :cursor "pointer" :onclick "autoclicker mode scroll-left"
+          (box :orientation "horizontal" :halign "fill" :space-evenly false
+            (label :text ac_mark_scroll_left :class "ac-row-mark")
+            (label :text "Scroll -> left click" :class "ac-row-name" :hexpand true :halign "start")))
+        (eventbox :class "ac-row" :timeout "1s" :cursor "pointer" :onclick "autoclicker mode scroll-right"
+          (box :orientation "horizontal" :halign "fill" :space-evenly false
+            (label :text ac_mark_scroll_right :class "ac-row-mark")
+            (label :text "Scroll -> right click" :class "ac-row-name" :hexpand true :halign "start")))
+        (eventbox :class "ac-row" :timeout "1s" :cursor "pointer" :onclick "autoclicker mode timer"
+          (box :orientation "horizontal" :halign "fill" :space-evenly false
+            (label :text ac_mark_timer :class "ac-row-mark")
+            (label :text "Timer (auto-click)" :class "ac-row-name" :hexpand true :halign "start"))))
+      (box :class "ac-section"
+           :orientation "vertical"
+           :halign "fill"
+           :space-evenly false
+        (label :text "Timer interval" :class "ac-section-title" :halign "start")
+        (box :orientation "horizontal" :halign "fill" :space-evenly false
+          (eventbox :class "ac-row" :timeout "1s" :cursor "pointer" :onclick "autoclicker set interval 100"
+            (box :orientation "horizontal" :halign "fill" :space-evenly false
+              (label :text ac_iv_100 :class "ac-row-mark")
+              (label :text "100 ms" :class "ac-row-name" :hexpand true :halign "start")))
+          (eventbox :class "ac-row" :timeout "1s" :cursor "pointer" :onclick "autoclicker set interval 250"
+            (box :orientation "horizontal" :halign "fill" :space-evenly false
+              (label :text ac_iv_250 :class "ac-row-mark")
+              (label :text "250 ms" :class "ac-row-name" :hexpand true :halign "start")))
+          (eventbox :class "ac-row" :timeout "1s" :cursor "pointer" :onclick "autoclicker set interval 500"
+            (box :orientation "horizontal" :halign "fill" :space-evenly false
+              (label :text ac_iv_500 :class "ac-row-mark")
+              (label :text "500 ms" :class "ac-row-name" :hexpand true :halign "start")))
+          (eventbox :class "ac-row" :timeout "1s" :cursor "pointer" :onclick "autoclicker set interval 1000"
+            (box :orientation "horizontal" :halign "fill" :space-evenly false
+              (label :text ac_iv_1000 :class "ac-row-mark")
+              (label :text "1000 ms" :class "ac-row-name" :hexpand true :halign "start"))))
+        (label :text "Timer button" :class "ac-section-title" :halign "start")
+        (box :orientation "horizontal" :halign "fill" :space-evenly false
+          (eventbox :class "ac-row" :timeout "1s" :cursor "pointer" :onclick "autoclicker set button left"
+            (box :orientation "horizontal" :halign "fill" :space-evenly false
+              (label :text ac_btn_left :class "ac-row-mark")
+              (label :text "left" :class "ac-row-name" :hexpand true :halign "start")))
+          (eventbox :class "ac-row" :timeout "1s" :cursor "pointer" :onclick "autoclicker set button middle"
+            (box :orientation "horizontal" :halign "fill" :space-evenly false
+              (label :text ac_btn_middle :class "ac-row-mark")
+              (label :text "middle" :class "ac-row-name" :hexpand true :halign "start")))
+          (eventbox :class "ac-row" :timeout "1s" :cursor "pointer" :onclick "autoclicker set button right"
+            (box :orientation "horizontal" :halign "fill" :space-evenly false
+              (label :text ac_btn_right :class "ac-row-mark")
+              (label :text "right" :class "ac-row-name" :hexpand true :halign "start")))))
+      (box :class "ac-section"
+           :orientation "vertical"
+           :halign "fill"
+           :space-evenly false
+        (label :text "Scroll target window" :class "ac-section-title" :halign "start")
+        (eventbox :class "ac-row" :timeout "1s" :cursor "pointer" :onclick "autoclicker-target any"
+          (label :text "Any window" :class "ac-row-name" :halign "start"))
+        (eventbox :class "ac-row" :timeout "1s" :cursor "pointer" :onclick "autoclicker-target focused"
+          (label :text "Focused window" :class "ac-row-name" :halign "start"))
+        (eventbox :class "ac-row" :timeout "1s" :cursor "pointer" :onclick "autoclicker-target pick"
+          (label :text "Pick with mouse..." :class "ac-row-name" :halign "start"))
+        (eventbox :class "ac-row" :timeout "1s" :cursor "pointer" :onclick "autoclicker-target clear"
+          (label :text "Clear" :class "ac-row-name" :halign "start"))
+        (label :text ac_details :class "ac-details" :halign "start"))
+      (label :text "left-click bar icon = on/off, middle = left/right, right = this menu"
+             :class "ac-hint"
+             :halign "start"))))

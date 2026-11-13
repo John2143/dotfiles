@@ -365,20 +365,32 @@ window#waybar > box {
     min-width: 30px;
 }
 
-#custom-autoclicker.autoclicker-active {
-    background: @red;
-    color: @base;
-    font-weight: bold;
-    animation: pulse-active 2s steps(8) infinite;
-}
-
-#custom-autoclicker.autoclicker-inactive {
+#custom-autoclicker.autoclicker-off {
     color: @overlay0;
 }
 
-@keyframes pulse-active {
-    from { background-color: @red; }
-    to   { background-color: @maroon; }
+#custom-autoclicker.autoclicker-scroll-left {
+    background: @green;
+    color: @base;
+    font-weight: bold;
+}
+
+#custom-autoclicker.autoclicker-scroll-right {
+    background: @mauve;
+    color: @base;
+    font-weight: bold;
+}
+
+#custom-autoclicker.autoclicker-timer {
+    background: @peach;
+    color: @base;
+    font-weight: bold;
+}
+
+#custom-autoclicker.autoclicker-error {
+    background: @red;
+    color: @base;
+    font-weight: bold;
 }
 /* ---- Voxtype ---- */
 #custom-voxtype {

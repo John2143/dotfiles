@@ -230,6 +230,7 @@ in {
     ./home-cli.nix
     ./modules/waybar.nix
     ./modules/eww.nix
+    ./modules/autoclicker.nix
     #./modules/swaync.nix  # DISABLED: gitlab.gnome.org 503 — re-enable when upstream recovers
   ];
 
@@ -536,8 +537,8 @@ in {
         { _args = ["F11" (mkLua ''hl.dsp.exec_cmd([[notify-send -u low "Little Oil" "Emptying inventory..." && fish -c 'little_oil empty']])'')]; }
         { _args = ["F12" (mkLua ''hl.dsp.exec_cmd([[notify-send -u low "Little Oil" "Calibrating..." && fish -c 'little_oil reset_inv']])'')]; }
 
-        # Autoclicker stop hotkey
-        { _args = [(mkLua ''mainMod .. " + Escape"'') (mkLua ''hl.dsp.exec_cmd([[fish -c 'stop-autoclicker']])'')]; }
+        # Autoclicker stop hotkey (the daemon keeps running; only the mode turns off)
+        { _args = [(mkLua ''mainMod .. " + Escape"'') (mkLua ''hl.dsp.exec_cmd([[autoclicker off]])'')]; }
         # Notify slurp result
         { _args = [(mkLua ''mainMod .. " + N"'') (mkLua ''hl.dsp.exec_cmd([[fish -c "notify-send (slurp -p)"]])'')]; }
 

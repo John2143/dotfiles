@@ -359,3 +359,84 @@ $surface2: #585b70;
   color: $overlay0;
   padding: 6px 12px 0 12px;
 }
+
+/* -- Autoclicker Menu ---------------------------- */
+.ac-window {
+  background-color: $base;
+  border: 1px solid $surface0;
+  border-radius: 12px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+  min-width: 380px;
+  padding-bottom: 8px;
+}
+
+.ac-header {
+  background-color: $surface0;
+  padding: 8px 12px;
+  border-radius: 12px 12px 0 0;
+}
+
+.ac-header-icon {
+  font-size: 14px;
+  color: $green;
+  margin-right: 6px;
+}
+
+.ac-header-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: $text;
+}
+
+.ac-header-close {
+  font-size: 14px;
+  color: $subtext0;
+  padding: 0 4px;
+}
+
+.ac-header-close:hover {
+  color: $red;
+}
+
+.ac-section {
+  padding: 0 12px;
+}
+
+.ac-section-title {
+  font-size: 10px;
+  font-weight: 700;
+  color: $overlay0;
+  padding: 8px 0 4px;
+}
+
+.ac-row {
+  padding: 4px 6px;
+  border-radius: 8px;
+}
+
+.ac-row:hover {
+  background-color: $surface1;
+}
+
+.ac-row-mark {
+  font-size: 12px;
+  color: $subtext0;
+  padding-right: 8px;
+}
+
+.ac-row-name {
+  font-size: 12px;
+  color: $text;
+}
+
+.ac-details {
+  font-size: 10px;
+  color: $subtext0;
+  padding: 6px 6px 0 6px;
+}
+
+.ac-hint {
+  font-size: 10px;
+  color: $overlay0;
+  padding: 6px 12px 0 12px;
+}
