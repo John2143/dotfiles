@@ -12,7 +12,7 @@
 
 use clap::{Parser, Subcommand};
 use evdev::uinput::VirtualDevice;
-use evdev::{AttributeSet, Device, EventType, InputEvent, KeyCode, RelativeAxisCode};
+use evdev::{AttributeSet, Device, EventType, InputEvent, KeyCode, PropType, RelativeAxisCode};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::fs;
@@ -20,7 +20,7 @@ use std::io::{self, BufRead, BufReader, Write};
 use std::os::unix::net::{UnixListener, UnixStream};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender};
+use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender, SyncSender};
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
@@ -230,6 +230,7 @@ fn build_status(st: &State) -> WaybarStatus {
             let button = if st.mode == Mode::ScrollLeft { "left" } else { "right" };
             lines.push(format!("Scroll -> {button} click"));
             lines.push(format!("Notches: {}", st.notches));
+            lines.push(format!("Clicks: {}", st.clicks));
         }
         Mode::Timer => {
             lines.push(format!("Interval: {}ms", st.interval_ms));
@@ -401,7 +402,8 @@ fn wheel_notches(frame: &[InputEvent], counting: bool) -> u32 {
 }
 
 /// Rewrite one `SYN_REPORT`-delimited frame: drop the wheel codes, forward everything else,
-/// and inject `clicks` press/release pairs of `inject` before the forwarded events.
+/// and report how many clicks the frame is worth. The press/release pairs are emitted by the
+/// click thread as separate SYN frames, the way a real mouse reports them.
 /// `inject == None` means the target window is not focused: the wheel is still swallowed
 /// (a scroll mode must not scroll) but nothing is clicked.
 fn rewrite_frame(
@@ -409,7 +411,6 @@ fn rewrite_frame(
     inject: Option<KeyCode>,
     cap: &mut ClickBudget,
 ) -> (Vec<InputEvent>, u32) {
-    let mut clicks: Vec<InputEvent> = Vec::new();
     let mut forwarded: Vec<InputEvent> = Vec::with_capacity(frame.len());
     let mut click_count = 0u32;
 
@@ -427,18 +428,15 @@ fn rewrite_frame(
         // and EV_MSC carries hardware scan metadata a virtual device cannot reproduce.
     }
 
-    if let Some(key) = inject {
+    if inject.is_some() {
         for _ in 0..wheel_notches(frame, true) {
             if cap.allow() {
-                clicks.push(InputEvent::new(EventType::KEY.0, key.code(), 1));
-                clicks.push(InputEvent::new(EventType::KEY.0, key.code(), 0));
                 click_count += 1;
             }
         }
     }
 
-    clicks.extend(forwarded);
-    (clicks, click_count)
+    (forwarded, click_count)
 }
 
 // ─── Device matching (pure) ──────────────────────────────────
@@ -534,9 +532,10 @@ impl Clicker {
 
     fn click(&mut self, button: &str) {
         let code = button_to_key(button).code();
-        let down = InputEvent::new(EventType::KEY.0, code, 1);
-        let up = InputEvent::new(EventType::KEY.0, code, 0);
+        let down = InputEvent::new_now(EventType::KEY.0, code, 1);
         let _ = self.dev.emit(&[down]);
+        thread::sleep(CLICK_HOLD);
+        let up = InputEvent::new_now(EventType::KEY.0, code, 0);
         let _ = self.dev.emit(&[up]);
     }
 }
@@ -568,10 +567,14 @@ fn build_passthrough(devices: &[&Device]) -> io::Result<VirtualDevice> {
         }
     }
 
+    let mut props = AttributeSet::<PropType>::new();
+    props.insert(PropType::POINTER);
+
     VirtualDevice::builder()?
         .name("autoclicker-scroll")
         .with_keys(&keys)?
         .with_relative_axes(&axes)?
+        .with_properties(&props)?
         .build()
 }
 
@@ -588,13 +591,45 @@ struct Session {
     readers: Vec<(PathBuf, Arc<AtomicBool>, thread::JoinHandle<()>)>,
     closed_rx: Receiver<PathBuf>,
     pressed: Arc<Mutex<HashSet<u16>>>,
+    clicks: SyncSender<KeyCode>,
+    click_handle: Option<thread::JoinHandle<()>>,
 }
 
+/// A real mouse reports press and release in separate frames, tens of milliseconds apart.
+/// Reproducing that matters: a press and release squeezed into one frame, or a click shorter
+/// than a render frame, is not what any consumer of input expects.
+const CLICK_HOLD: Duration = Duration::from_millis(30);
+
+fn click_thread(
+    clicks: Receiver<KeyCode>,
+    sink: Sender<SinkMsg>,
+    pressed: Arc<Mutex<HashSet<u16>>>,
+    state: Arc<Mutex<State>>,
+) {
+    while let Ok(key) = clicks.recv() {
+        let code = key.code();
+        pressed.lock().unwrap().insert(code);
+        let down = InputEvent::new_now(EventType::KEY.0, code, 1);
+        if sink.send(SinkMsg::Events(vec![down])).is_err() {
+            break;
+        }
+        thread::sleep(CLICK_HOLD);
+        let up = InputEvent::new_now(EventType::KEY.0, code, 0);
+        if sink.send(SinkMsg::Events(vec![up])).is_err() {
+            break;
+        }
+        pressed.lock().unwrap().remove(&code);
+        state.lock().unwrap().clicks += 1;
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
 fn process_frame(
     frame: &[InputEvent],
     inject: KeyCode,
     cap: &mut ClickBudget,
     sink: &Sender<SinkMsg>,
+    clicks: &SyncSender<KeyCode>,
     state: &Arc<Mutex<State>>,
     pressed: &Arc<Mutex<HashSet<u16>>>,
 ) {
@@ -606,13 +641,23 @@ fn process_frame(
     let inject = if gated { Some(inject) } else { None };
 
     let notches = wheel_notches(frame, inject.is_some());
-    let (out, clicks) = rewrite_frame(frame, inject, cap);
+    let (out, clicks_wanted) = rewrite_frame(frame, inject, cap);
 
-    if notches > 0 || clicks > 0 {
+    if notches > 0 || clicks_wanted > 0 {
         let mut st = state.lock().unwrap();
         st.notches += u64::from(notches);
-        st.dropped += u64::from(notches.saturating_sub(clicks));
+        st.dropped += u64::from(notches.saturating_sub(clicks_wanted));
     }
+    if let Some(key) = inject {
+        for _ in 0..clicks_wanted {
+            // A full queue means the user is scrolling faster than clicks can be emitted
+            // (30 ms apart, 33/s): drop rather than build a backlog that would lag behind.
+            if clicks.try_send(key).is_err() {
+                break;
+            }
+        }
+    }
+
     if out.is_empty() {
         return;
     }
@@ -638,6 +683,7 @@ fn read_loop(
     mut dev: Device,
     path: PathBuf,
     sink: Sender<SinkMsg>,
+    clicks: SyncSender<KeyCode>,
     state: Arc<Mutex<State>>,
     stop: Arc<AtomicBool>,
     inject: KeyCode,
@@ -653,7 +699,7 @@ fn read_loop(
                 for ev in events {
                     frame.push(ev);
                     if ev.event_type() == EventType::SYNCHRONIZATION {
-                        process_frame(&frame, inject, &mut cap, &sink, &state, &pressed);
+                        process_frame(&frame, inject, &mut cap, &sink, &clicks, &state, &pressed);
                         frame.clear();
                     }
                 }
@@ -756,6 +802,13 @@ impl Ctl {
 
         let (closed_tx, closed_rx) = mpsc::channel::<PathBuf>();
         let pressed = Arc::new(Mutex::new(HashSet::new()));
+        let (clicks_tx, clicks_rx) = mpsc::sync_channel::<KeyCode>(8);
+        let click_handle = {
+            let sink = sink_tx.clone();
+            let pressed = pressed.clone();
+            let state = self.state.clone();
+            thread::spawn(move || click_thread(clicks_rx, sink, pressed, state))
+        };
         let mut readers = Vec::new();
         let mut last_err: Option<String> = None;
 
@@ -776,14 +829,17 @@ impl Ctl {
                 let stop = stop.clone();
                 let pressed = pressed.clone();
                 let closed = closed_tx.clone();
+                let clicks = clicks_tx.clone();
                 thread::spawn(move || {
-                    read_loop(dev, path, sink, state, stop, inject, pressed, closed);
+                    read_loop(dev, path, sink, clicks, state, stop, inject, pressed, closed);
                 })
             };
             readers.push((path, stop, handle));
         }
 
         if readers.is_empty() {
+            drop(clicks_tx);
+            let _ = click_handle.join();
             let _ = sink_tx.send(SinkMsg::Shutdown);
             let _ = sink_handle.join();
             let mut st = self.state.lock().unwrap();
@@ -804,6 +860,8 @@ impl Ctl {
             readers,
             closed_rx,
             pressed,
+            clicks: clicks_tx,
+            click_handle: Some(click_handle),
         });
     }
 
@@ -818,7 +876,13 @@ impl Ctl {
             let _ = handle.join();
         }
 
-        // 2. Release buttons the passthrough may still hold: a physical button held while
+        // 2. Let queued clicks finish, so no click is cut in half by the switch.
+        drop(session.clicks);
+        if let Some(handle) = session.click_handle {
+            let _ = handle.join();
+        }
+
+        // 3. Release buttons the passthrough may still hold: a physical button held while
         //    the mode switched would otherwise stay logically pressed in the compositor.
         let held: Vec<u16> = {
             let mut pressed = session.pressed.lock().unwrap();
@@ -827,12 +891,12 @@ impl Ctl {
         if !held.is_empty() {
             let releases: Vec<InputEvent> = held
                 .iter()
-                .map(|code| InputEvent::new(EventType::KEY.0, *code, 0))
+                .map(|code| InputEvent::new_now(EventType::KEY.0, *code, 0))
                 .collect();
             let _ = session.sink.send(SinkMsg::Events(releases));
         }
 
-        // 3. Drop the passthrough device.
+        // 4. Drop the passthrough device.
         let _ = session.sink.send(SinkMsg::Shutdown);
         if let Some(handle) = session.sink_handle {
             let _ = handle.join();
@@ -1403,19 +1467,16 @@ fn selftest() -> bool {
         }
     };
 
-    // 1. One notch forward-clicked: exactly one press/release, wheel swallowed.
+    // 1. One notch: one click queued, the wheel itself is not forwarded.
     {
         let mut cap = ClickBudget::new();
         let frame = vec![wheel(-1), syn()];
         let (out, clicks) = rewrite_frame(&frame, Some(KeyCode::BTN_RIGHT), &mut cap);
         let ok = clicks == 1
-            && out.len() == 2
-            && out[0].code() == KeyCode::BTN_RIGHT.code()
-            && out[0].value() == 1
-            && out[1].value() == 0
-            && out
+            && out.is_empty()
+            && !out
                 .iter()
-                .all(|e| !(e.event_type() == EventType::RELATIVE && is_wheel_code(e.code())));
+                .any(|e| e.event_type() == EventType::RELATIVE && is_wheel_code(e.code()));
         check("case1 forward click", ok, &mut failures);
     }
 
