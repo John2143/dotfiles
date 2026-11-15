@@ -12,25 +12,23 @@
 
 ## Kubernetes Infrastructure Tailnet
 
-**Headscale instance**: `headscale.9s.pics:6767` on home-pi (v0.28.0)
-**Base domain**: `ts.9s.pics`
+**Headscale instance**: in-cluster (`argo workloads/headscale`, single replica), `https://net.john2143.com` (v0.29.3)
+**Base domain**: `ts.2143.me`
 **Policy**: Deny-by-default ACL — only `tag:kube-control` nodes can reach each other on TCP/6443 + internet access for DERP relays
-**Nodes**: home-pi + tagged cloud control-plane nodes (`hetzner-ashburn-k3s`, `hetzner-hillsboro-k3s`, `do-nyc-k3s`)
-**Home API access**: home-pi advertises `192.168.5.10/32` (k3s VIP); cloud nodes reach `https://192.168.5.10:6443` via the route
+**Nodes**: tagged cloud control-plane nodes (`hetzner-ashburn-k3s`, `hetzner-hillsboro-k3s`, `do-nyc-k3s`) + home machines
+**Home API access**: LAN-only — the home k3s API VIP (`192.168.5.10`) is announced by MetalLB over BGP; no tailnet node advertises a route to it
 **Enrollment**: One-use preauth key with `tag:kube-control`, created per deployment by `create_kubecontrol_preauth_key()` in `post_deploy.py`
 **Teardown**: `headscale nodes delete -i <ID>` via `delete_headscale_node()` before cloud resource destruction
 
 ### Linkerd multicluster notes
-- Service-mirror deployments MUST use `hostNetwork: true` to resolve MagicDNS names (`*.ts.9s.pics`)
-- Kubeconfig secrets use MagicDNS FQDNs: `https://<hostname>.ts.9s.pics:6443`
+- Service-mirror deployments MUST use `hostNetwork: true` to resolve MagicDNS names (`*.ts.2143.me`)
+- Kubeconfig secrets use MagicDNS FQDNs: `https://<hostname>.ts.2143.me:6443`
 - Home cluster API: `https://192.168.5.10:6443` (VIP, TLS SAN added to k3s certs)
 
 ### Availability dependency
-home-pi is a single point of failure for MagicDNS resolution and the 192.168.5.10 route. During home-pi downtime (power loss, ISP outage):
+MagicDNS resolution depends on the single-replica headscale Deployment (`argo workloads/headscale`, `longhorn-3` PVC (1Gi)). It is not a home-host dependency any more, but it is still one process:
 - Existing peer-to-peer WireGuard tunnels between cloud nodes survive (kernel-level, no coordination needed)
-- MagicDNS names (`*.ts.9s.pics`) stop resolving
-- The home k8s VIP becomes unreachable from cloud nodes
-- Cloud-to-home Linkerd multicluster will be offline during home-pi outages
+- MagicDNS names (`*.ts.2143.me`) stop resolving while headscale or its PVC is down
 
 
 ### Per-Node IP Topology (Split-IP Firewall)
@@ -67,12 +65,8 @@ nixos/hetzner/
 │   ├── hetzner-k3s-server.nix      # k3s + ArgoCD + SSH + floating IP health
 │   ├── hetzner-k3s-agent.nix       # Agent node (k3s agent only)
 │   ├── hetzner-split-ip-firewall.nix   # Per-IP iptables (primary locked, floating open)
-│   ├── headscale.nix               # Headscale coordination server
 │   ├── tailscale.nix               # Tailscale client (parameterized login-server)
 │   └── longhorn-host.nix           # Longhorn storage prerequisites
-├── hosts/
-│   ├── home-pi.nix                 # Home Pi (Headscale + deSEC DDNS)
-│   └── home-pi-hardware-configuration.nix
 ├── secrets/
 │   ├── agenix-rules.nix            # agenix public key mapping
 │   └── hetzner/*.age               # Encrypted secrets
@@ -90,7 +84,7 @@ nixos/hetzner/
 # Decrypt Hetzner token
 export HCLOUD_TOKEN=$(cd nixos/hetzner/secrets && agenix -d hetzner/hcloud-token.age -i ~/.ssh/age)
 
-# Provision (any order — DNS is handled by deSEC, not home-pi PowerDNS)
+# Provision (any order — DNS is handled by deSEC)
 cd nixos/hetzner/scripts
 ./provision.sh ashburn server    # ~10-15 min
 ./provision.sh hillsboro server  # ~5 min (cache hits from ashburn)
@@ -107,9 +101,8 @@ The provision script automates: VM creation, floating IP allocation, deSEC NS+gl
 - Hetzner Cloud account + API token (in `secrets/hetzner/hcloud-token.age`)
 - `hcloud` CLI, `jq`, `nixos-anywhere` available via flake
 - SSH key `john@office` uploaded to Hetzner (`hcloud ssh-key create`)
-- Home-pi running Headscale (see `hosts/home-pi.nix`)
-- Port forward `6767 → home-pi:6767` on home router
-- DNS `headscale.9s.pics` → home public IP (auto-updated by deSEC DDNS on home-pi)
+- The in-cluster headscale answering `https://net.john2143.com/health` (`argo workloads/headscale`)
+- No router port-forward and no DNS record of its own — clients join `https://net.john2143.com` directly
 - deSEC account with `9s.pics` domain delegated
 
 ### Generating secrets
@@ -127,13 +120,13 @@ echo -n "YOUR_DESEC_TOKEN" | agenix -e hetzner/desec-token.age -i ~/.ssh/age
 echo -n "$(head -c 32 /dev/urandom | base64)" | agenix -e hetzner/k3s-token.age -i ~/.ssh/age
 ```
 
-### Headscale preauth key (generate once on home-pi)
+### Headscale preauth key (generated in the cluster)
 
 ```bash
-ssh 192.168.0.154 "sudo headscale users create hetzner-nodes"
-ssh 192.168.0.154 "sudo headscale preauthkeys create --user 1 --reusable --expiration 87600h"
+kubectl -n default exec deploy/headscale -- headscale users create hetzner-nodes
+kubectl -n default exec deploy/headscale -- headscale preauthkeys create --user hetzner-nodes --reusable --expiration 87600h
 # Encrypt the output key:
-echo -n "hskey-auth-..." | agenix -e nixos/hetzner/secrets/hetzner/headscale-preauth-key.age -i ~/.ssh/age
+echo -n "hskey-auth-..." | agenix -e nixos/cluster/secrets/hetzner/headscale-preauth-key.age -i ~/.ssh/age
 ```
 
 ## deSEC DNS Management
@@ -190,26 +183,28 @@ PostgreSQL runs inside k3s via CloudNativePG (installed automatically by `argocd
 # Verify PostgreSQL
 ssh root@<IP> "pg_isready -h 127.0.0.1 -p 5432 -U temporal -d temporal"
 
-## Nix Binary Cache (Attic on home-pi)
+## Nix Binary Cache (Attic on nas)
 
-Attic binary cache server runs on home-pi (`atticd` on port 8280/tailscale0). All Hetzner nodes
-push built paths and pull from cache for near-instant deploys after the first node is provisioned.
+Attic runs on `nas` (`atticd` listening on `[::]:8280`), reachable only over the tailnet as
+`nas:8280` / `100.64.0.14:8280` — there is no public path. The cloud nodes push built paths and
+pull from cache for near-instant deploys after the first node is provisioned.
 
-- **Server**: `atticd` systemd service on home-pi, listening on `100.64.0.2:8280` (Tailscale only)
-- **Storage**: `/var/lib/attic` on home-pi SD card (188GB free)
-- **Clients**: All 3 k3s nodes run `attic watch-store` + configure nix substituter
+- **Server**: `services.atticd` in `nixos/nas-configuration.nix`, listening on `[::]:8280`
+- **Storage**: `/tank/atticd` (SQLite db + chunk store), GC every 12 hours
+- **Clients**: the 3 k3s server nodes run `attic watch-store` + a `nas:8280` substituter (`nixos/cluster/modules/k3s-common.nix`)
 - **Cache name**: `2143nix`
-- **Module**: `nixos/modules/attic-server.nix` (server), inline in `hetzner-k3s-common.nix` (client)
+- **Signing key**: `2143nix:zqt4fb8…`, the same key every main-flake host trusts (`nixos/modules/attic.nix`)
 
 Flow:
 ```
-home-pi (atticd :8280)
+nas (atticd :8280, tailnet only)
   ↑ push (watch-store)        ↑ pull (substituter)
 hetzner-ashburn-k3s             hetzner-hillsboro-k3s, do-nyc-k3s
 ```
 
-- Ashburn builds everything → `attic watch-store` pushes to Pi
+- Ashburn builds everything → `attic watch-store` pushes to nas
 - Hillsboro / NYC pull from cache → 90%+ cache hits → near-instant deploys
+- A build that runs before `tailscaled` is up misses the cache and falls back to `cache.nixos.org`
 
 ## Known Issues
 
@@ -250,7 +245,7 @@ Traefik chart v35+ has template errors with `hostPort` and `hostNetwork`. The bo
 ### deSEC DNS
 - NS records set via `PUT` (full replacement) — each bootstrap call overwrites the NS set, so all 3 must be set.
 - Glue A records for ns1/ns2/ns3 are set individually by each node's `bootstrap-dns` call.
-- Home-pi runs a DDNS timer updating `headscale.9s.pics` every 5 minutes.
+- The in-cluster `ddns` CronJob (`argo workloads/ddns/cronjob.yaml`, every 15 minutes) syncs the `john2143.com`, `2143.me`, `dsstar.us` and `balabusta.homes` A records. `9s.pics` is not one of them — it carries only a `*` CNAME to `2143.me`.
 
 ### Script fixes
 - `hcloud` CLI: `--output-format json` → `-o json` (newer hcloud versions).

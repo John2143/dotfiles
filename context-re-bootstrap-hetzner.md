@@ -12,7 +12,7 @@ Bootstrap 3 Hetzner k3s clusters (ashburn, hillsboro, nuremberg) with all pods 1
 - **Last 2143-59s commit**: `21e42ae` fix: remove all placeholder secrets (anti-pattern — IgnoreExtraneous doesn't prevent selfHeal overwrite)
 - **Stashes**: 4 in dotfiles (pre-existing WIPs, not session-related)
 - **All VMs destroyed**: 0 servers, 0 floating IPs on Hetzner Cloud
-- **deSEC DNS**: Only `headscale.9s.pics` A record remains; NS delegation shell exists but glue A records removed
+- **deSEC DNS**: No records beyond `9s.pics`' `*` CNAME (the orphaned `headscale.9s.pics` A was deleted 2026-11-15); NS delegation shell exists but glue A records removed
 
 ## Key Decisions
 
@@ -77,14 +77,12 @@ Bootstrap 3 Hetzner k3s clusters (ashburn, hillsboro, nuremberg) with all pods 1
 
 ## Bootstrap Checklist (priority order)
 
-### 1. Verify home-pi services
-- [ ] Atticd running (`systemctl status atticd` on home-pi)
-- [ ] PowerDNS running
-- [ ] Headscale running
-- [ ] Port forward `8280 → home-pi:8280` active on home router
+### 1. Verify cache and coordination services
+- [ ] Atticd answering (`curl -s -o /dev/null -w '%{http_code}' http://nas:8280/` → non-`000`, from the tailnet)
+- [ ] Headscale answering (`curl -s https://net.john2143.com/health` → `{"status":"pass"}`)
 
 ### 2. Verify deSEC DNS baseline
-- [ ] `headscale.9s.pics` A record resolves to home public IP
+- [ ] `https://net.john2143.com/health` answers `{"status":"pass"}`
 - [ ] No stale NS glue A records (ns1, ns2, ns3 should be gone)
 - [ ] Run `nixos/hetzner/scripts/desec-dns.sh bootstrap-dns <region> <floating-ip>` during provision (script handles NS+glue)
 
@@ -119,4 +117,4 @@ Bootstrap 3 Hetzner k3s clusters (ashburn, hillsboro, nuremberg) with all pods 1
 - [ ] ArgoCD all apps Synced/Healthy
 
 ## Verification
-Successful bootstrap means: 3 VMs running, `kubectl get pods -A` shows zero non-Running/non-Completed pods across all 3 clusters, attest watch-store `👀 Pushing...` on all 3, deSEC DNS NS+glue resolves, and `curl http://headscale.9s.pics:8280/` returns the Attic ASCII art page.
+Successful bootstrap means: 3 VMs running, `kubectl get pods -A` shows zero non-Running/non-Completed pods across all 3 clusters, attest watch-store `👀 Pushing...` on all 3, deSEC DNS NS+glue resolves, and `curl -s http://nas:8280/` (from the tailnet) answers.

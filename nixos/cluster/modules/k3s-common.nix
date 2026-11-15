@@ -31,6 +31,10 @@
       "--cluster-cidr=10.42.0.0/16"
       "--service-cidr=10.43.0.0/16"
       "--node-label=node.longhorn.io/create-default-disk=true"
+      # Stale SAN from the retired home-pi headscale (base domain is ts.2143.me
+      # now) — deliberately left: nothing references *.ts.9s.pics, and changing
+      # the SAN list makes k3s regenerate its API certs and restart the control
+      # plane. Fix it as its own change if it ever matters.
       "--tls-san=${config.networking.hostName}.ts.9s.pics"
     ];
   };
@@ -390,9 +394,11 @@ CMEOF
     8472  # flannel VXLAN (k3s)
   ];
 
-  # ── Attic binary cache client (pushes to home-pi over Tailscale) ──
-  # Endpoint: home-pi via headscale.9s.pics:8280 (port-forwarded, works pre-Tailscale)
-  # Cache: 2143nix (signing key below)
+  # ── Attic binary cache client (nas, over Tailscale) ──
+  # Endpoint: nas:8280 (100.64.0.14), tailnet only — there is no public path any
+  # more, so a build that runs before tailscaled is up misses the cache and
+  # falls back to cache.nixos.org, which attic declares as an upstream key.
+  # Cache: 2143nix
 
   age.secrets.attic-admin-token = {
     file = ../secrets/hetzner/attic-token.age;
@@ -403,10 +409,10 @@ CMEOF
 
   # Add Attic as a substituter (higher priority than cache.nixos.org for our paths)
   nix.settings.substituters = lib.mkBefore [
-    "http://headscale.9s.pics:8280/2143nix"
+    "http://nas:8280/2143nix"
   ];
   nix.settings.trusted-public-keys = lib.mkBefore [
-    "2143nix:LvE5APLbagyNODEJJ4BHKV4le1vcC6JgNklqdyMPUl8="
+    "2143nix:zqt4fb8dINfCsQPqWQcggPm2eqk9RpotNh1u8QKRQVA="
   ];
   nix.settings.netrc-file = "/run/attic-netrc";
 
@@ -420,7 +426,7 @@ CMEOF
       RemainAfterExit = true;
       ExecStart = pkgs.writeShellScript "attic-netrc" ''
         mkdir -p /run
-        printf 'machine headscale.9s.pics password %s\n' \
+        printf 'machine nas password %s\n' \
           "$(for f in /run/agenix.d/*/attic-admin-token /run/agenix/attic-admin-token; do [ -f \"\$f\" ] && cat \"\$f\" && break; done)" \
           > /run/attic-netrc
         chmod 0444 /run/attic-netrc
@@ -439,14 +445,14 @@ CMEOF
       Type = "oneshot";
       RemainAfterExit = true;
       ExecStart = pkgs.writeShellScript "attic-login" ''
-        attic login home-pi --set-default http://headscale.9s.pics:8280 "$(for f in /run/agenix.d/*/attic-admin-token /run/agenix/attic-admin-token; do [ -f \"\$f\" ] && cat \"\$f\" && break; done)"
+        attic login nas --set-default http://nas:8280 "$(for f in /run/agenix.d/*/attic-admin-token /run/agenix/attic-admin-token; do [ -f \"\$f\" ] && cat \"\$f\" && break; done)"
       '';
     };
   };
 
-  # Watch store: push newly-built paths to Attic on home-pi
+  # Watch store: push newly-built paths to Attic on nas
   systemd.services.attic-watch-store = {
-    description = "Push built paths to Attic cache on home-pi";
+    description = "Push built paths to Attic cache on nas";
     requires = ["attic-login.service"];
     after = ["attic-login.service" "network-online.target"];
     wants = ["network-online.target"];

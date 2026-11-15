@@ -25,10 +25,12 @@ other fails silently, with no conntrack entry at the MikroTik.
 | WAN | DHCP from ISP |
 | IPv6 | DHCPv6-PD; delegated prefix and LAN prefix change on renumber — re-read the admin panel |
 
-Verizon forwards (all to `192.168.0.2` unless noted): 80, 443, 25, 587, 993, 3479, 7881,
-9987, 25565, 30033, 34197, 51820, 8280 → home-pi (192.168.0.154), and the two gameserver ranges
-`31000-34999` (ROTS previews) and `36000-37999` (ROTS prod). Anything not in that list never
-arrives, no matter what the MikroTik says.
+Verizon forwards to the gateway `192.168.0.2` (all "Both"): 80, 443, 25, 587, 993, 9987,
+25565, 30033, 51820, and the two gameserver ranges `31000-34999` (ROTS previews) and
+`36000-37999` (ROTS prod). Anything not in that list never arrives, no matter what the MikroTik
+says. The table also carries noise that never reaches the gateway: two `127.0.0.1` rows (4567,
+4577) and ~30 duplicate `35000-35006 → :7547` TR-069 rows — read the Fwd-to column, not just the
+port.
 
 **TURN is not here any more.** coturn moved to the fungible edges (`s1.edge.2143.me`,
 `s2.edge.2143.me`), which answer `tcp/3478` and STUN from the internet, so the Verizon forwards
@@ -37,6 +39,11 @@ in-cluster coturn LBs (`steam-lobby` `.6.14`, `matrix` `.6.21`) stay LAN-reachab
 a public path. Monero (`18080`) and OpenRCT2 (`11753`) were retired at the same time on purpose:
 monero because an unpatched P2P daemon on the public internet is a 0-day liability, openrct2
 because the service is parked at 0 replicas.
+
+**Attic left the WAN the same way.** The `8280 → home-pi` forward and the `headscale.9s.pics` A
+record it fed were retired on 2026-11-15: attic is tailnet-only on `nas:8280`, and tailnet clients
+join the in-cluster headscale at `https://net.john2143.com`. No MikroTik rule was ever involved —
+the router export has no `8280` row — so `check-drift.sh` is unaffected.
 
 | Edge | Provider | Address | Answers |
 |---|---|---|---|

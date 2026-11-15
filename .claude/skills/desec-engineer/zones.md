@@ -14,15 +14,18 @@ sinks: the ddns-owned home WAN IP, or `174.138.108.28` (DigitalOcean, static, wr
 | aross.studio | second account, token `desec-aross-studio-token` | hand | cert-manager only; LAN |
 
 `listen`, `anni`, `timestone.2143.me`, `prod.john2143.com` and `i.dsstar.us` CNAME into the DO apex;
-`*.dsstar.us`, `*.poe.sale` and (intended) `headscale.9s.pics` CNAME into `john2143.com`. An apex
+`*.dsstar.us` and `*.poe.sale` CNAME into `john2143.com`. An apex
 write on either sink therefore moves a lot of names.
 
 ## Drift, verified 2026-11-07
 
-- **`headscale.9s.pics` is orphaned.** A literal `A` at the WAN IP whose writer — the deSEC timer on
-  home-pi, `2143-59s/README.md:88` — was retired, while the ddns CronJob syncs four zones and
-  `9s.pics` is not one of them. It looks correct only because the IP has not moved. CNAME it to
-  `john2143.com.`, or add `sync 9s.pics headscale` to the CronJob.
+- **`headscale.9s.pics` — deleted 2026-11-15.** It was a literal `A` at the WAN IP whose writer (the
+  deSEC timer on the retired home-pi, `2143-59s/README.md:88`) was gone, so it looked correct only
+  because the IP had not moved. The rrset was removed with
+  `desec delete-record 9s.pics -t A -s headscale`; tailnet clients now join the in-cluster headscale
+  at `https://net.john2143.com`. The name now answers only through the zone's `*` CNAME to
+  `2143.me`, which is fine: no `8280` listener exists on the WAN. Nothing needs to re-create the A
+  record — do not add `sync 9s.pics headscale` to the ddns CronJob.
 - **`9s.pics` has no apex `NS` and no apex `A`**, yet reports `correctly_delegated` because that
   field only reflects the parent (`.pics`). `dig 9s.pics NS` returns nothing and
   `https://9s.pics` does not resolve. Restore the two NS rrsets if the apex should exist.

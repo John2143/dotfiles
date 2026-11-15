@@ -111,7 +111,7 @@ The most common failure point is DO's nixos-infect Phase 2 where `tailscaled-aut
 2. Copy age key: `scp ~/.ssh/age root@<ip>:/etc/ssh/age-identity`
 3. Activate agenix: `ssh root@<ip> "/run/current-system/activate"`
 4. Restart k3s: `ssh root@<ip> "systemctl restart k3s"`
-5. Connect tailscale: read the preauth key from `/run/agenix/hetzner/headscale-preauth-key` (if it exists) and run `tailscale up --reset --login-server=http://headscale.9s.pics:6767 --authkey='<key>' --accept-routes`
+5. Connect tailscale: read the preauth key from `/run/agenix/hetzner/headscale-preauth-key` (if it exists) and run `tailscale up --reset --login-server=https://net.john2143.com --authkey='<key>' --accept-routes`
 6. Wait 5s, verify: `ssh root@<ip> "kubectl get nodes -o wide | tail -2"`
 
 Hetzner nixos-anywhere rarely fails. If it does, the error output contains enough context to fix (usually a disk layout or networking issue). Read the terraform/modules/ disko config and the flake config for the failing host.
