@@ -458,6 +458,18 @@ fn matches_device(
         && !name.starts_with("autoclicker")
 }
 
+/// True when any key on the device is down. A device only reaches a scroll session after
+/// `matches_device`, i.e. it is a mouse node, so every key it reports is a button.
+fn any_button_held(keys: &AttributeSet<KeyCode>) -> bool {
+    keys.iter().next().is_some()
+}
+
+fn buttons_held(dev: &Device) -> bool {
+    dev.get_key_state()
+        .map(|keys| any_button_held(&keys))
+        .unwrap_or(false)
+}
+
 fn parse_device_arg(s: &str) -> Option<(u16, u16)> {
     let (v, p) = s.trim().split_once(':')?;
     Some((
@@ -736,12 +748,32 @@ struct Ctl {
     session: Option<Session>,
     clicker: Option<Clicker>,
     next_click: Instant,
-    last_rescan: Instant,
+    /// Earliest time the next session attempt may run (fast retry while deferred).
+    next_attempt: Instant,
+}
+
+/// Result of an attempt to enter a scroll mode.
+enum StartOutcome {
+    Started,
+    /// A button is held (or went down during the grab): retry in milliseconds, not seconds.
+    Deferred,
+    /// No matching device, or grab/uinput failed: retry on the slow rescan.
+    NoDevice,
+}
+
+/// How soon to retry after an attempt.
+fn retry_delay(outcome: &StartOutcome) -> Duration {
+    match outcome {
+        StartOutcome::Deferred => Duration::from_millis(25),
+        _ => Duration::from_secs(2),
+    }
 }
 
 impl Ctl {
-    fn start_scroll(&mut self, mode: Mode) {
-        let Some(inject) = mode.inject_key() else { return };
+    fn start_scroll(&mut self, mode: Mode) -> StartOutcome {
+        let Some(inject) = mode.inject_key() else {
+            return StartOutcome::NoDevice;
+        };
 
         let mut opened: Vec<(PathBuf, Device)> = Vec::new();
         let mut first_error: Option<String> = None;
@@ -772,7 +804,14 @@ impl Ctl {
                 // No permission problem: the device is simply absent (or was unplugged).
                 st.grab_error = None;
             }
-            return;
+            return StartOutcome::NoDevice;
+        }
+
+        // Never grab while a button is down: that press already reached the compositor
+        // through the real device, and its release would arrive through the passthrough as
+        // an unpaired release, leaving the button stuck down there.
+        if opened.iter().any(|(_, dev)| buttons_held(dev)) {
+            return StartOutcome::Deferred;
         }
 
         let refs: Vec<&Device> = opened.iter().map(|(_, dev)| dev).collect();
@@ -780,7 +819,7 @@ impl Ctl {
             Ok(dev) => dev,
             Err(err) => {
                 self.state.lock().unwrap().grab_error = Some(format!("uinput: {err}"));
-                return;
+                return StartOutcome::NoDevice;
             }
         };
         drop(refs);
@@ -809,7 +848,7 @@ impl Ctl {
             let state = self.state.clone();
             thread::spawn(move || click_thread(clicks_rx, sink, pressed, state))
         };
-        let mut readers = Vec::new();
+        let mut grabbed: Vec<(PathBuf, Device)> = Vec::new();
         let mut last_err: Option<String> = None;
 
         for (path, mut dev) in opened {
@@ -818,9 +857,27 @@ impl Ctl {
                 eprintln!("autoclicker: grab failed on {}: {err}", path.display());
                 continue;
             }
+            // Race guard: a press landing between the check above and this grab is exactly
+            // the case that strands a release, so undo the attempt and retry shortly.
+            if buttons_held(&dev) {
+                let _ = dev.ungrab();
+                for (_, mut other) in grabbed.drain(..) {
+                    let _ = other.ungrab();
+                }
+                drop(clicks_tx);
+                let _ = click_handle.join();
+                let _ = sink_tx.send(SinkMsg::Shutdown);
+                let _ = sink_handle.join();
+                return StartOutcome::Deferred;
+            }
             if let Err(err) = dev.set_nonblocking(true) {
                 eprintln!("autoclicker: set_nonblocking failed on {}: {err}", path.display());
             }
+            grabbed.push((path, dev));
+        }
+
+        let mut readers = Vec::new();
+        for (path, dev) in grabbed {
             let stop = Arc::new(AtomicBool::new(false));
             let handle = {
                 let path = path.clone();
@@ -845,7 +902,7 @@ impl Ctl {
             let mut st = self.state.lock().unwrap();
             st.matched = 0;
             st.grab_error = last_err.or(first_error);
-            return;
+            return StartOutcome::NoDevice;
         }
 
         {
@@ -863,6 +920,7 @@ impl Ctl {
             clicks: clicks_tx,
             click_handle: Some(click_handle),
         });
+        StartOutcome::Started
     }
 
     fn stop_scroll(&mut self) {
@@ -922,7 +980,8 @@ impl Ctl {
             self.next_click = Instant::now();
         }
         if mode.is_scroll() {
-            self.start_scroll(mode);
+            let outcome = self.start_scroll(mode);
+            self.next_attempt = Instant::now() + retry_delay(&outcome);
         }
     }
 
@@ -963,15 +1022,13 @@ impl Ctl {
         if let Some(session) = &self.session {
             if session.closed_rx.try_recv().is_ok() {
                 self.stop_scroll();
-                self.last_rescan = Instant::now();
-                self.start_scroll(mode);
-                return;
+                self.next_attempt = Instant::now();
             }
         }
 
-        if self.session.is_none() && self.last_rescan.elapsed() >= Duration::from_secs(2) {
-            self.last_rescan = Instant::now();
-            self.start_scroll(mode);
+        if self.session.is_none() && Instant::now() >= self.next_attempt {
+            let outcome = self.start_scroll(mode);
+            self.next_attempt = Instant::now() + retry_delay(&outcome);
         }
     }
 }
@@ -1432,7 +1489,7 @@ fn cmd_daemon(device_args: Vec<String>, interval: u64, button: String) {
         session: None,
         clicker: None,
         next_click: Instant::now(),
-        last_rescan: Instant::now() - Duration::from_secs(10),
+        next_attempt: Instant::now(),
     });
 }
 
@@ -1569,6 +1626,18 @@ fn selftest() -> bool {
             && !matches_device(0x046d, 0xc547, &wanted, true, true, "autoclicker-scroll")
             && !matches_device(0x342d, 0xe4c5, &wanted, true, true, "AKKO Keyboard");
         check("case7 device match", ok, &mut failures);
+    }
+
+    // 8. Held-button detection: a grab must not start while a click is in flight.
+    {
+        let empty = AttributeSet::<KeyCode>::new();
+        let mut down = AttributeSet::<KeyCode>::new();
+        down.insert(KeyCode::BTN_LEFT);
+        check(
+            "case8 button state",
+            !any_button_held(&empty) && any_button_held(&down),
+            &mut failures,
+        );
     }
 
     if failures.is_empty() {
