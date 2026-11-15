@@ -19,6 +19,7 @@
     ./modules/teamspeak.nix
     ./modules/nut-ups.nix
     ./modules/blueferry.nix
+    ./modules/cpu-priority.nix
 
     # inputs.home-manager.nixosModules.default
   ];
