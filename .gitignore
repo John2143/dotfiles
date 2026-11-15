@@ -14,7 +14,7 @@ vimfiles/*
 .claude/settings.local.json
 
 # nix build output
-result
+result*
 # tofu state and provider cache (generated at runtime)
 tofu/terraform.tfstate
 tofu/terraform.tfstate.*.backup
