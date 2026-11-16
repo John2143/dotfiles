@@ -40,6 +40,26 @@ a single broadcast domain without it; `2GWAN` added reach and nothing but the
 leak. Re-adding an interface here needs a reason that is not "cross-VLAN
 discovery" — put the VLAN on `bridge` instead.
 
+**Re-tested deliberately, 2026-11-16.** The repeater was re-enabled for a casting
+trial against the FiOS set-tops on the Verizon segment (`bridge,2GWAN`, plus a
+`cast-rx` address-list of seven TV addresses and four forward rules that bounded
+the unicast return path to the Chromecast/AirPlay ports). Two results:
+
+- **It broke the name again within four hours** — `12:30:59 Host name conflict,
+  retrying with nas-2`; `nas.local` stopped resolving and the box published
+  `nas-2.local` until avahi was restarted. Nine hours of exposure bought one
+  collision and no benefit.
+- **The trial found nothing to cast to.** No `_googlecast._tcp` was announced
+  anywhere, and no discovered mDNS record resolved into `192.168.0.0/24`; the
+  `VMS4100ATV` and the `0C:7F:B2:…` boxes are ARRIS FiOS set-tops, not cast
+  receivers.
+
+The setting cannot be scoped: RouterOS repeats every record both ways, so the
+whitelist governed connections only, never advertisements — the LAN's own names
+and its two AirPlay receivers (`living-room-2707`, `Bedroom-11607`) were visible
+to the whole Verizon segment the entire time. Treat a future casting request as a
+device problem, not a routing problem.
+
 Check it with:
 
 ```bash
