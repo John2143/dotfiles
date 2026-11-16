@@ -44,6 +44,10 @@
     systemd-boot.enable = true;
   };
   boot.supportedFilesystems = ["ntfs"];
+  # Desktop swap is a safety valve, not a cache: the anonymous working set is
+  # ~24.5 GiB resident + ~19.8 GiB swapped on 32 GiB RAM, so a low swappiness
+  # would OOM-kill instead of paging (fleet default is 10, see swap-tuning.nix).
+  boot.kernel.sysctl."vm.swappiness" = "60";
   boot.binfmt.emulatedSystems = ["aarch64-linux"];
   boot.kernelModules = [
     "target_core_mod"

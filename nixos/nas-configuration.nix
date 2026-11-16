@@ -139,7 +139,6 @@ nixpkgs.overlays = [
   boot.kernel.sysctl = {
     "kernel.softlockup_panic" = "1";
     "kernel.panic_on_rcu_stall" = "1";
-    "vm.swappiness" = "100";
   };
   # Panic dumps in reserved RAM: efivarfs here is 128K with ~98K free, too small
   # for a 112-180K dump.
@@ -153,7 +152,13 @@ nixpkgs.overlays = [
     # swap interacted with the memory-path crashes on this box (swap_cgroup /
     # page-alloc NULL derefs in pstore captures); the 16 GiB dm-crypt swap
     # partition remains as the only swap device.
-    "zfs.zfs_arc_max=6442450944"
+    #
+    # ARC capped at 4 GiB (was 6). With systemReserved=5Gi the host's whole
+    # guaranteed share is 5119 MiB, so a 6 GiB ARC exceeded it on its own and
+    # forced swap every night: measured pods 4837 + system.slice 4540 + kernel
+    # 1579 + ARC 4096 leaves ~320-580 MiB spare during the 03:00 backup, while
+    # 5120 was still ~700 MiB over. A kernel param, so it applies at boot.
+    "zfs.zfs_arc_max=4294967296"
   ];
   boot.kernelModules = [
     "target_core_mod"

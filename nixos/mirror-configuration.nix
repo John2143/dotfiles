@@ -105,6 +105,8 @@
     "video=HDMI-A-1:1920x1080@60"
   ];
   zramSwap.enable = true;
+  # Compressed swap is the cheap tier: fill it eagerly instead of reclaiming.
+  boot.kernel.sysctl."vm.swappiness" = "100";
   swapDevices = [{device = "/swapfile"; size = 4096;}];
 
   networking.hostName = compName; # Define your hostname.
