@@ -66,7 +66,6 @@ TCP half is forwarded and dropped. The prod range was widened from
 |---|---|---|---|
 | 80, 443 | TCP | `.6.6` (traefik) | ingress; kept current by the router script `ingress-follow` |
 | 25, 587, 993 | TCP | `.6.13` | stalwart |
-| 3479 | UDP | `.6.18` | headscale STUN (`externalTrafficPolicy: Local`) |
 | 7881 | TCP | `.6.22` | livekit signal — **dark**: the Deployment is at 0 replicas and the Verizon forward is gone, so the rule forwards into a closed door |
 | 9987 | UDP | `.6.15` | TeamSpeak voice |
 | 30033 | TCP | `.6.16` | TeamSpeak files |
@@ -76,6 +75,13 @@ TCP half is forwarded and dropped. The prod range was widened from
 | 36000-37999 | UDP | `.6.32` | ROTS prod; slot `k` is `36000 + k`, one `rots-gs-<k>-udp` Service per slot sharing the VIP (`allow-shared-ip: rots-prod`). 1,000 slots are configured, so `36000-36999` is in use and the rest is headroom the WAN already covers. Raising slots is a re-shard, see rots4 `docs/game-server-scaling.md` |
 
 `51820/UDP` is **not** dst-nat — WireGuard terminates on the router itself (`wireguard.md`).
+
+The tailnet's DERP relay and its STUN are **not** routed from home at all: `derper` runs on the
+two edge slots (`s1`/`s2.edge.2143.me`, `8443/tcp` for DERP over TLS and `3479/udp` for STUN),
+opened by each slot's own provider firewall rather than by anything in this table. Until
+2026-11-16 `udp/3479` reached headscale's embedded DERP here (`headscale stun -> .6.18`); the
+region, the VIP and the rule are gone, and the relay now follows the slots. The equivalent
+Verizon `3479` entry is removed by the owner in the admin UI.
 
 LAN-only, no dst-nat: mimir `.6.23:8080`, loki `.6.24:3100`, syslog `.6.25:514/udp`, frigate
 `.6.26`, mosquitto `.6.19:1883`, seaweedfs `.6.31:8333` (also reachable from the DO tunnel),
