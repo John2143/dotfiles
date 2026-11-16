@@ -81,7 +81,7 @@ two edge slots (`s1`/`s2.edge.2143.me`, `8443/tcp` for DERP over TLS and `3479/u
 opened by each slot's own provider firewall rather than by anything in this table. Until
 2026-11-16 `udp/3479` reached headscale's embedded DERP here (`headscale stun -> .6.18`); the
 region, the VIP and the rule are gone, and the relay now follows the slots. The equivalent
-Verizon `3479` entry is removed by the owner in the admin UI.
+Verizon `3479` entry was removed on 2026-11-16.
 
 LAN-only, no dst-nat: mimir `.6.23:8080`, loki `.6.24:3100`, syslog `.6.25:514/udp`, frigate
 `.6.26`, mosquitto `.6.19:1883`, seaweedfs `.6.31:8333` (also reachable from the DO tunnel),
