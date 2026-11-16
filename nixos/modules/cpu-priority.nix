@@ -77,12 +77,15 @@
 in {
   # Tier 1 is logind's session scope and owns its own name, so instead of raising
   # it we hold everything the user manager launches below its default of 100.
-  environment.etc."systemd/system/user@.service.d/50-cpu-priority.conf".text = ''
-    # Managed by dotfiles/nixos/modules/cpu-priority.nix
-    # Tier 1 (session-c1.scope, the compositor) stays at the default 100.
-    [Service]
-    CPUWeight=${toString tiers.appsBranch}
-  '';
+  #
+  # This cannot be an environment.etc entry: environment.etc."systemd/system" is
+  # a single symlink into the generated `system-units` derivation, so adding a
+  # file below it fails with "Permission denied" at build time. The systemd
+  # module owns that tree, and user@.service is already defined there as an
+  # asDropinIfExists override (the LOCALE_ARCHIVE/PATH environment), so contribute
+  # to the same definition — it lands in
+  # /etc/systemd/system/user@.service.d/overrides.conf.
+  systemd.services."user@".serviceConfig.CPUWeight = tiers.appsBranch;
 
   home-manager.users.john = {
     xdg.configFile = {
