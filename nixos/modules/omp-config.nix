@@ -642,6 +642,33 @@ in
       force = true;
     };
 
+    # Environment for every omp process, including a `/fork pane` child. The
+    # `omp` wrapper's `set -a; . llm-runtime-keys` reaches only its own child;
+    # a placed fork is exec'd straight from the store binary inside a fresh
+    # tmux pane, which inherits the tmux *server's* env. OMP therefore reads
+    # these dotenv files itself at startup, before any models.yml value is
+    # resolved (utils/src/env.ts: the agent `.env`, then the config-root one,
+    # both below a live shell export). Credentials the config names explicitly
+    # stay on `!command` (see the litellm/anthropic providers), so this file is
+    # for the key nobody can name there: BRAVE_API_KEY, read as an env var by
+    # the `web/brave` role, and NTFY_TOPIC_URL, read by the notification snippet.
+    #
+    # Side effect worth knowing: the runtime-keys file also carries
+    # ANTHROPIC_API_KEY, which the wrapper deliberately unsets to keep a billed
+    # API-key lane from outbidding the Max-subscription OAuth login. Stored
+    # OAuth still outranks env in the credential cascade, so this only changes
+    # the outcome when that login is missing or expired. Symlinked, never
+    # copied: a plain `source` would put the secret in the world-readable store.
+    # One file per path decides the split — the ntfy URL is a separate secret.
+    ".omp/agent/.env" = lib.mkIf ((osConfig.age.secrets or { }) ? llm-runtime-keys) {
+      source = config.lib.file.mkOutOfStoreSymlink osConfig.age.secrets.llm-runtime-keys.path;
+      force = true;
+    };
+    ".omp/.env" = lib.mkIf ((osConfig.age.secrets or { }) ? ntfy-topic-url) {
+      source = config.lib.file.mkOutOfStoreSymlink osConfig.age.secrets.ntfy-topic-url.path;
+      force = true;
+    };
+
     ".omp/agent/SYSTEM.md".text = ''
       You are a capable AI agent operating in a terminal-based harness. You handle software engineering tasks and complex research topics with equal rigor. You may be running under Oh My Pi, Claude Code, or another harness; do not assume defaults from any specific one.
 
