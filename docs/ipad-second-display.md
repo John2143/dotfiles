@@ -5,11 +5,16 @@ Two independent halves, both in `nixos/modules/ipad-display.nix`, imported by `a
 
 1. **An extended display.** Hyprland gets a headless output named `MOONLIGHT`, Sunshine
    captures it, and Moonlight on the iPad shows it. Nothing is mirrored.
-2. **A wired peer.** The same cable carries an IP link (`10.42.0.1/24`), so the stream works
+2. **A wired peer.** The same cable carries an IP link (`10.77.0.1/24`), so the stream works
    with Wi-Fi off and keeps working when the cable goes in or out.
 
 Deskflow is separate (`nixos/modules/deskflow.nix`, Linux server + macOS client) and shares
 nothing with either half except the two machines.
+
+Why the cable link is `10.77.0.1/24` and not NetworkManager's default `10.42.0.1/24`: k3s
+installs `10.42.0.0/24 via flannel.1` at metric 0 on every node, which beats the cable's
+metric 101, so the iPad's packets arrived but every reply went into the overlay. Anything in
+`10.42.0.0/16` (pods) or `10.43.0.0/16` (services) collides.
 
 ## Display: why each piece is the way it is
 
@@ -54,7 +59,7 @@ Interface *numbers* cannot tell them apart (the naming is `enp0s20f0u9c5i2` / `�
 port part changes per port, so the name is not stable either). Discovery is therefore by
 scanning `/sys/class/net` for vendor `05ac` + driver `cdc_ncm` and taking the lowest ifindex.
 
-`ipv4.method = shared` makes the host the iPad's DHCP server *and* gateway on `10.42.0.1/24`,
+`ipv4.method = shared` makes the host the iPad's DHCP server *and* gateway on `10.77.0.1/24`,
 which is what lets one Moonlight host entry work on Wi-Fi and on the cable: packets the iPad
 sends to the host's LAN or tailnet address arrive on the cable and are delivered locally.
 
@@ -130,12 +135,44 @@ the PIN from `https://localhost:47990`.
 Mac (once): Deskflow.app → client → server `100.64.0.1` → grant Accessibility, Input Monitoring,
 Local Network. If Gatekeeper calls it damaged: `xattr -dr com.apple.quarantine /Applications/Deskflow.app`.
 
+## The MacBook wire (Deskflow's path)
+
+Deskflow only moves pointer and keyboard events, so bandwidth is irrelevant and latency is
+everything. Over the Mac's Wi-Fi the hop measured 20-330 ms with ~100 ms jitter. The Mac's USB
+Ethernet adapter (an AX88179A, `en7` on macOS) plugged into `eno1` gives it a 1 Gb direct link:
+
+- office declares it: `networking.networkmanager.ensureProfiles.profiles.macbook-link` — `eno1`,
+  `ipv4.method = shared`, `10.99.0.1/24`, autoconnect priority 10 so it wins over NetworkManager's
+  auto-created "Wired connection 1".
+- The Mac leases a `10.99.0.10-254` address and reaches the server at `10.99.0.1`.
+- NAT is deliberately **off**: the Mac keeps its internet on Wi-Fi, only `10.99.0.0/24` crosses
+  the cable. (NetworkManager's `shared` mode installs no MASQUERADE rules on these hosts — only
+  k3s's flannel/kube ones exist — so sharing internet this way would not have worked anyway.)
+
+Two macOS traps, both seen in practice:
+
+1. **A newly attached Ethernet service becomes the primary service**, so its DHCP gateway becomes
+   the default route and the Mac loses internet. Order Wi-Fi first, once:
+
+   ```
+   sudo networksetup -ordernetworkservices "Wi-Fi" "AX88179A" "Thunderbolt Bridge" "Tailscale"
+   ```
+
+   macOS is subnet-aware, so `10.99.0.0/24` stays on-link over the wire while the default route
+   and DNS go out Wi-Fi. The order persists across reboots.
+2. **Tailscale can wedge** such that toggling it does nothing: `scutil --nc list` reports
+   `(Connecting)`, no `100.64.0.0/10` routes appear, the CLI fails with `Tailscale.CLIError
+   error 1`, and `/Library/Tailscale/ipn.log*.txt` stops advancing entirely. Restart the system
+   extension (`sudo launchctl kickstart -k system/io.tailscale.ipn.macsys.network-extension`) or
+   reboot. A user-initiated stop logs `Persistency disabled for stop reason userInitiated`; after
+   that the app cannot bring the tunnel back until the extension is restarted.
+
 ## Verification
 
 ```
 hyprctl monitors -j | jq -r '.[] | select(.name=="MOONLIGHT") | "\(.width)x\(.height)@\(.refreshRate) at \(.x)x\(.y) scale \(.scale)"'
 ipad-display status --waybar     # one JSON object, exit 0
-ip -br addr | grep 10.42.0.1     # cable link
+ip -br addr | grep 10.77.0.1     # cable link
 nmcli -t device status | grep enp0s20   # data iface on ipad-usb, private one unmanaged
 journalctl -b --since -1min | grep -c ipad-usb-attach   # 1-2, not dozens (a loop looks like dozens)
 ss -ltn | grep 24800             # Deskflow serving
