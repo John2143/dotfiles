@@ -15,28 +15,82 @@
 
   cfg = config.attic.pushHook;
 
-  # ── post-build-hook (pushes newly-built paths to cache) ────────────
-  # Runs as root, once per completed derivation. Replaces the
-  # `attic watch-store` daemon, which exited on its own after ~20-45 s on
-  # the CI runner and uploaded almost nothing (15 paths in 8 h).
-  pushHook = pkgs.writeShellScript "attic-post-build-hook" ''
-    # Never fails or stalls the build: an unreachable NAS must not mark a
-    # derivation as failed, nor add a timeout to every build on a laptop
-    # that is off the tailnet. The cache is private, so reachability is
-    # probed with a bare TCP connect — an HTTP probe would 401 and look
-    # like an outage.
-    export XDG_CONFIG_HOME=/etc
+  queueDir = "/var/lib/attic-push-queue";
+  queueFile = "${queueDir}/paths";
+
+  # ── post-build-hook (queues newly-built paths for upload) ──────────
+  # Runs as root, once per completed derivation, and only appends a line.
+  # A network push here costs ~10 s of fixed overhead (token, upstream
+  # check, one SQLite write) and atticd serialises those writes, so N
+  # concurrent hooks queue behind each other and trip the 300 s timeout
+  # (measured 2026-11-17: 6 pushes in one call 11 s, the same 6 in
+  # parallel 45 s). The timer below drains the spool in one push.
+  # Replaces the `attic watch-store` daemon, which exited on its own after
+  # ~20-45 s on the CI runner and uploaded almost nothing (15 paths in 8 h).
+  queueHook = pkgs.writeShellScript "attic-queue-built-paths" ''
+    # Never fails or stalls the build: no network, no attic, one append.
+    # writeShellScript gives a bare bash shebang (no `-e`), and this script
+    # depends on that — every failure path exits 0 explicitly.
     [ -n "''${OUT_PATHS:-}" ] || exit 0
-    timeout 3 ${pkgs.bash}/bin/bash -c "exec 3<>/dev/tcp/${server}/8280" 2>/dev/null || exit 0
-    printf '%s\n' $OUT_PATHS \
-      | timeout 300 ${pkgs.attic-client}/bin/attic push ${cacheName} --stdin >/dev/null 2>&1 || true
+    ${pkgs.coreutils}/bin/install -d -m 0700 -o root -g root ${queueDir} 2>/dev/null || exit 0
+    printf '%s\n' $OUT_PATHS >> ${queueFile} 2>/dev/null || exit 0
+    exit 0
+  '';
+
+  # Drains the spool with a single push. Runs as the oneshot unit below;
+  # a failed push must never show up as a red unit, so it always exits 0.
+  flushHook = pkgs.writeShellScript "attic-push-queue" ''
+    export PATH=${lib.makeBinPath [ pkgs.coreutils pkgs.attic-client pkgs.bash ]}
+    export XDG_CONFIG_HOME=/etc
+    spool=${queueFile}
+    work="$spool.work"
+
+    # A run killed mid-upload (unit stop, reboot, an activation that drops
+    # this unit) leaves its batch in $work. Fold it back in first: those
+    # paths were neither uploaded nor requeued, and the rotation below
+    # would otherwise delete them.
+    for f in "$work" "$work.batch"; do
+      if [ -s "$f" ]; then cat "$f" >> "$spool"; fi
+    done
+    rm -f "$work" "$work.batch"
+
+    [ -s "$spool" ] || exit 0
+    # Off the tailnet: leave the queue untouched and retry next tick.
+    timeout 3 bash -c "exec 3<>/dev/tcp/${server}/8280" 2>/dev/null || exit 0
+
+    # Rotate. An append that races the rotation recreates the spool
+    # (O_APPEND), so nothing is lost.
+    mv "$spool" "$work" && touch "$spool"
+
+    # attic aborts the WHOLE batch on one invalid path ("error: path … is
+    # not valid"), and a GC between build and flush produces exactly that,
+    # so drop paths that no longer exist before pushing.
+    while read -r p; do [ -e "$p" ] && printf '%s\n' "$p"; done < "$work" | sort -u > "$work.batch"
+
+    rc=0
+    if [ -s "$work.batch" ]; then
+      timeout 900 ${pkgs.attic-client}/bin/attic push ${cacheName} --stdin < "$work.batch" || rc=$?
+    fi
+
+    if [ "$rc" -eq 0 ]; then
+      rm -f "$work" "$work.batch"
+    else
+      # Transient failure (NAS restart, expired token): put the paths back.
+      # Duplicates are free, attic dedupes; cap the spool so a permanently
+      # failing push cannot grow it without bound.
+      cat "$work" >> "$spool"
+      rm -f "$work" "$work.batch"
+      tail -n 20000 "$spool" > "$spool.tmp" && mv "$spool.tmp" "$spool"
+      echo "attic-push-queue: push failed (rc=$rc), requeued" >&2
+    fi
+    exit 0
   '';
 
   # ── cache semantics (measured 2026-11-10) ──────────────────────────
   # Attic is not a plain binary cache: it serves /_api/v1 and exposes no PUT
   # endpoint, so `nix copy --to ${endpoint}/${cacheName}` fails with HTTP 405.
   # Upload with `attic push ${cacheName} <paths>` (closure by default,
-  # --no-closure to restrict), which is what the hook above does per derivation.
+  # --no-closure to restrict). The hook queues paths and the timer pushes them in batches.
   #
   # Do not probe presence with `nix path-info --store <url> <path>`: it answers
   # "path ... is not valid" for anything it cannot resolve, which reads as
@@ -89,7 +143,37 @@ in {
       token-file = "${config.age.secrets.attic-admin-token.path}"
     '';
 
-    nix.settings.post-build-hook = lib.mkIf cfg.enable (toString pushHook);
+    nix.settings.post-build-hook = lib.mkIf cfg.enable (toString queueHook);
+
+    # ── background flush of queued paths ────────────────────────────
+    systemd.tmpfiles.rules = lib.mkIf cfg.enable [
+      "d ${queueDir} 0700 root root -"
+    ];
+
+    systemd.services.attic-push-queue = lib.mkIf cfg.enable {
+      description = "Upload queued build paths to the Attic cache";
+      after = [ "network-online.target" ];
+      wants = [ "network-online.target" ];
+      serviceConfig = {
+        Type = "oneshot";
+        ExecStart = flushHook;
+        StateDirectory = "attic-push-queue";
+        StateDirectoryMode = "0700";
+        TimeoutStartSec = "20min";
+        Nice = 10;
+        IOSchedulingClass = "idle";
+      };
+    };
+
+    systemd.timers.attic-push-queue = lib.mkIf cfg.enable {
+      description = "Drain the Attic push queue";
+      wantedBy = [ "timers.target" ];
+      timerConfig = {
+        OnBootSec = "5min";
+        OnUnitInactiveSec = "2min";
+        AccuracySec = "30s";
+      };
+    };
 
     # ── attic login (oneshot, for interactive `attic push` in a shell) ─
     systemd.user.services.attic-login = {
