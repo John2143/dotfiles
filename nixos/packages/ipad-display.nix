@@ -17,6 +17,7 @@
   procps,
   systemd,
   iproute2,
+  networkmanager,
 }:
 
 writeShellApplication {
@@ -28,6 +29,7 @@ writeShellApplication {
     procps
     systemd
     iproute2
+    networkmanager
   ];
   text = ''
     readonly OUTPUT=MOONLIGHT
@@ -149,14 +151,36 @@ writeShellApplication {
     # vendor plus the CDC-NCM driver, which also skips Apple's private
     # multiplexor function. The data function registers first, so it holds the
     # lowest ifindex.
-    cable_iface() {
+    # Every Apple CDC-NCM netdev as "<ifindex> <ifname> <model>", lowest
+    # ifindex first. Within one device the data function has the lower
+    # ifindex, so the first line per model is that device's data interface.
+    apple_ncm() {
       local n d
       for n in /sys/class/net/*; do
         d=$(readlink -f "$n/device" 2>/dev/null) || continue
         [ "$(cat "$d/../idVendor" 2>/dev/null)" = 05ac ] || continue
         [ "$(basename "$(readlink -f "$d/driver" 2>/dev/null)")" = cdc_ncm ] || continue
-        printf '%s %s\n' "$(cat "$n/ifindex" 2>/dev/null)" "$(basename "$n")"
-      done | sort -n | head -n1 | cut -d' ' -f2
+        printf '%s %s %s\n' "$(cat "$n/ifindex" 2>/dev/null)" "$(basename "$n")" \
+          "$(cat "$d/../product" 2>/dev/null || echo unknown)"
+      done | sort -n
+    }
+
+    # The interface the shared profile is actually active on, which is where an
+    # explicit promotion (`ipad-usb-attach iPhone`) may have moved it. With no
+    # active link, fall back to the same preference the attach script uses: iPad
+    # before phone, then lowest ifindex (ifindex is recycled, so raw ordering
+    # alone says nothing about which device was intended).
+    cable_iface() {
+      local list pick
+      pick=$(nmcli -t -f NAME,DEVICE connection show --active 2>/dev/null \
+        | awk -F: '$1 == "ipad-usb" {print $2; exit}')
+      if [ -z "$pick" ]; then
+        list=$(apple_ncm)
+        [ -n "$list" ] || return 1
+        pick=$(printf '%s\n' "$list" | awk '$3 == "iPad" {print $2; exit}')
+        [ -n "$pick" ] || pick=$(printf '%s\n' "$list" | awk 'NR==1 {print $2}')
+      fi
+      printf '%s\n' "$pick"
     }
 
     # Sets CABLE_IFC, CABLE_ADDR and CABLE_PEER; returns 1 when no cable is
@@ -215,7 +239,7 @@ writeShellApplication {
 
     cmd_status() {
       local mode="''${1:-}" have=no stream=no geo="" cable=no cable_txt="not connected"
-      local link mark classes tip out_txt
+      local link mark classes tip out_txt devices
       if cable_status; then
         cable=yes
         cable_txt="''${CABLE_ADDR:-no address}"
@@ -245,6 +269,8 @@ writeShellApplication {
         printf 'sunshine: %s\n' "$(systemctl --user is-active sunshine.service 2>/dev/null || true)"
         printf 'session: %s\n' "$stream"
         printf 'cable: %s\n' "$cable_txt"
+        devices=$(apple_ncm | awk '{printf "%s%s(%s)", sep, $2, $3; sep=", "}')
+        printf 'devices: %s\n' "''${devices:-none}"
         return 0
       fi
       # waybar drops a module that exits non-zero, so this always prints exactly
