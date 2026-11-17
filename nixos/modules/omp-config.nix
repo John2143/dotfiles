@@ -536,6 +536,16 @@ in
       #    `compaction.keepRecentTokens` (20000), so the live turn is never
       #    what gets dropped.
       #
+      #    What does and does not count as idle (interactive-mode.ts:1926-1928,
+      #    :2458-2462, session-settle.ts:19-27) — worth knowing before debugging
+      #    "it never fired": ONLY the session currently on screen idles, so an
+      #    unapproved plan or a finished run in a background tab never shrinks.
+      #    Any text in the composer blocks it, a pending goal continuation or
+      #    loop auto-submit blocks it (a hardcoded guard, no setting), and
+      #    headless `-p`, RPC and SDK sessions never enable idle maintenance at
+      #    all. Plan mode is NOT a blocker: a plan awaiting approval is a
+      #    settled session, so the timer arms normally.
+      #
       # Net: 200K-600K sessions shrink after half an hour of silence; anything
       # that crosses 600K shrinks immediately, whatever the clock says.
       #
