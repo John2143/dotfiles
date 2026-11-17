@@ -146,8 +146,15 @@ in
           baseUrl: https://llm.2143.me
           api: anthropic-messages
           auth: oauth
+          # `!command`, not the bare env name: a `/fork pane` child is exec'd
+          # straight from the store binary inside a fresh tmux pane, so the
+          # `omp` wrapper's sourced env never reaches it — and an unresolved
+          # env-name config value silently degrades to its own literal
+          # (config/resolve-config-value.ts), which LiteLLM rejects as a
+          # non-`sk-` key. The command reads the same 0400 agenix file the
+          # wrapper sources; the parent resolves it identically.
           headers:
-            x-litellm-api-key: LITELLM_EDITOR_KEY
+            x-litellm-api-key: "!sed -n 's/^LITELLM_EDITOR_KEY=//p' /run/agenix/llm-runtime-keys"
           compat:
             # LiteLLM is not a signing endpoint; apply this to bundled Claude
             # models too so unsigned thinking blocks are never replayed.
@@ -198,7 +205,9 @@ in
         litellm:
           baseUrl: https://llm.2143.me/v1
           api: openai-completions
-          apiKey: LITELLM_EDITOR_KEY
+          # Same command as the anthropic provider's header above, for the same
+          # reason (fork-pane env) — see that comment.
+          apiKey: "!sed -n 's/^LITELLM_EDITOR_KEY=//p' /run/agenix/llm-runtime-keys"
           # discovery: litellm reads /model/info (max_input_tokens -> context
           # window) so discovered models show real windows (e.g. openrouter
           # flash = 1M) instead of the 128K default. Requires the editor key
@@ -529,11 +538,44 @@ in
       #
       # Net: 200K-600K sessions shrink after half an hour of silence; anything
       # that crosses 600K shrinks immediately, whatever the clock says.
+      #
+      # Method order decides whether the summary request reads the prompt
+      # cache, so it is a cost setting, not a taste setting. The default is
+      # remote → snapcompact → handoff → shake → soft, and `remote` is
+      # provider-native only (OpenAI Responses compact, Anthropic beta), which
+      # a DeepSeek chat-completions route never has — so the default resolves
+      # to `snapcompact`: history archived onto bitmap images with NO model
+      # call (compaction-methods.ts:19-23). Free, but it writes no summary and
+      # cannot use a warm cache, which defeats the point. Order here:
+      #
+      #   remote    first, so an Anthropic-native route compacts server-side
+      #             with no separate summary request. Skipped (not attempted
+      #             and failed) wherever it is unavailable, i.e. every DeepSeek
+      #             route (canUseRemoteCompaction).
+      #   handoff   the cache-warm summary: it appends the handoff instruction
+      #             to the LIVE conversation and sends it through the same
+      #             pipeline as a normal turn — same system prompt, same tools,
+      #             same provider cache key — so the provider reads the whole
+      #             prefix from cache (session-handoff.ts:60, 84-141).
+      #             $0.006/M on deepseek-flash against $0.30/M cold.
+      #   soft      cache-cold fallback: it flattens the conversation into a
+      #             <conversation> text blob under a different system prompt
+      #             (compaction.ts:1006-1059), so nothing matches the warm
+      #             prefix. Only reached if handoff fails.
+      #
+      # Both LLM-free methods are deliberately absent: `shake` (drops
+      # recoverable tool output) silently loses content, and snapcompact is
+      # still on demand — `/compact snapcompact` is a manual mode
+      # (compact-modes.ts:53-58), unaffected by this list.
       compaction:
         idleEnabled: true
         idleThresholdTokens: 200000
         idleTimeoutSeconds: 1800
         thresholdTokens: 600000
+        methodOrder:
+          - remote
+          - handoff
+          - soft
       # Tools — enable setting-gated tools that ship disabled by default.
       # Names must be nested mappings; dotted keys are silently ignored.
       checkpoint:
