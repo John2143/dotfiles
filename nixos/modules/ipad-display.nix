@@ -96,6 +96,14 @@ in {
     };
   };
 
+  # This module restarts sunshine on purpose (after every stream, to drop the
+  # placebo session that would otherwise make the next one a clone). systemd's
+  # default start limit -- 5 starts in 10 s -- turns that into a permanently
+  # dead service if a client connect/disconnect cycle comes too fast: the unit
+  # ends in `start-limit-hit` and every later start is refused until someone
+  # runs `reset-failed`.
+  systemd.user.services.sunshine.startLimitIntervalSec = lib.mkForce 0;
+
   systemd.user.services.ipad-display-watch = {
     description = "Remove the MOONLIGHT virtual output when no Sunshine stream is running";
     after = ["graphical-session.target" "sunshine.service"];
