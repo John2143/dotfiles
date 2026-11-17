@@ -25,6 +25,13 @@
     description = "Deskflow core server (start manually: systemctl --user start deskflow)";
     after = ["graphical-session.target" "xdg-desktop-portal.service"];
     partOf = ["graphical-session.target"];
+    # Without a limit an unstartable unit restarts forever: a missing server
+    # config exits 4, and a core owned by the GUI or another session exits 5
+    # ("an instance of deskflow core is already running"). 149 restarts in ten
+    # minutes is noise that hides the real cause, so stop after a few tries and
+    # let the bar report the failure.
+    startLimitIntervalSec = 60;
+    startLimitBurst = 5;
     serviceConfig = {
       ExecStart = "${pkgs.deskflow}/bin/deskflow-core server";
       Restart = "on-failure";
