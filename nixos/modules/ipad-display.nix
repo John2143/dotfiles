@@ -137,7 +137,14 @@ in {
   # appeared interface matches no profile, so nothing activates and no hook runs
   # (verified: the NCM netdevs come up `disconnected` and stay that way). udev
   # fires on arrival, which is the event the link actually needs.
+  #
+  # Matching uses the properties the usb_id builtin sets, not ATTRS{} plus
+  # DRIVERS: a rule cannot combine attributes from two different parents, and
+  # here idVendor lives on the USB device (1-9) while bInterfaceClass and the
+  # cdc_ncm driver live on the interface node (1-9:5.2). Such a rule is read,
+  # is valid, and simply never matches. ID_VENDOR_ID and ID_USB_DRIVER are set
+  # by the builtins, which run before 99-local, so they are visible here.
   services.udev.extraRules = ''
-    ACTION=="add", SUBSYSTEM=="net", ATTRS{idVendor}=="05ac", ATTRS{bInterfaceClass}=="02", DRIVERS=="cdc_ncm", RUN+="${pkgs.systemd}/bin/systemd-run --collect --quiet -- ${ipad-usb-attach}/bin/ipad-usb-attach"
+    ACTION=="add", SUBSYSTEM=="net", ENV{ID_VENDOR_ID}=="05ac", ENV{ID_USB_DRIVER}=="cdc_ncm", RUN+="${pkgs.systemd}/bin/systemd-run --collect --quiet -- ${ipad-usb-attach}/bin/ipad-usb-attach"
   '';
 }
