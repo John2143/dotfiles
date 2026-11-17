@@ -47,17 +47,40 @@
       # data function is registered first, so it holds the lowest ifindex; the
       # other is Apple's private multiplexor, which must stay out of
       # NetworkManager entirely.
+      # Optional selector: the first argument is a device model to promote,
+      # e.g. `ipad-usb-attach iPhone` when both an iPad and a phone are
+      # attached. Models rather than interface names, because each device
+      # exposes a data function and a private multiplexor and only the former
+      # may carry the profile.
+      prefer="''${1:-}"
+
       list=$(for n in /sys/class/net/*; do
         d=$(readlink -f "$n/device" 2>/dev/null) || continue
         [ "$(cat "$d/../idVendor" 2>/dev/null)" = 05ac ] || continue
         [ "$(basename "$(readlink -f "$d/driver" 2>/dev/null)")" = cdc_ncm ] || continue
-        printf '%s %s\n' "$(cat "$n/ifindex" 2>/dev/null)" "$(basename "$n")"
+        printf '%s %s %s\n' "$(cat "$n/ifindex" 2>/dev/null)" "$(basename "$n")" \
+          "$(cat "$d/../product" 2>/dev/null || echo unknown)"
       done | sort -n)
       # Late in an unplug the interfaces can already be gone.
       [ -n "$list" ] || exit 0
 
-      data=$(printf '%s\n' "$list" | head -n1 | cut -d' ' -f2)
-      for n in $(printf '%s\n' "$list" | tail -n +2 | cut -d' ' -f2); do
+      # ifindex is recycled, so raw ordering says nothing about which device
+      # you want: prefer the requested model, then an iPad over a phone, then
+      # the lowest ifindex. Within a model the first line is the data function.
+      data=""
+      if [ -n "$prefer" ]; then
+        data=$(printf '%s\n' "$list" | awk -v p="$prefer" '$3 == p {print $2; exit}') || true
+      fi
+      if [ -z "$data" ]; then
+        data=$(printf '%s\n' "$list" | awk '$3 == "iPad" {print $2; exit}') || true
+      fi
+      if [ -z "$data" ]; then
+        data=$(printf '%s\n' "$list" | head -n1 | cut -d' ' -f2)
+      fi
+
+      # Everything else stays out of NetworkManager: the private multiplexor,
+      # and the other device when two are attached.
+      for n in $(printf '%s\n' "$list" | awk -v d="$data" '$2 != d {print $2}'); do
         nmcli device set "$n" managed no 2>/dev/null || true
       done
 
