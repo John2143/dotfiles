@@ -30,12 +30,12 @@ error posts `desec-ddns failed` to ntfy.
 To force a rewrite (this is also how you prove a new token can write):
 
 ```fish
-ssh john@192.168.5.36 'kubectl create job -n ddns ddns-verify --from=cronjob/desec-ddns --dry-run=client -o json' \
+ssh john@closet 'kubectl create job -n ddns ddns-verify --from=cronjob/desec-ddns --dry-run=client -o json' \
   | jq '.spec.template.spec.containers[0].env=[{"name":"FORCE","value":"1"}]' \
-  | ssh john@192.168.5.36 'kubectl create -f -'
-ssh john@192.168.5.36 'kubectl wait -n ddns --for=condition=complete job/ddns-verify --timeout=180s'
-ssh john@192.168.5.36 'kubectl logs -n ddns job/ddns-verify'
-ssh john@192.168.5.36 'kubectl delete job -n ddns ddns-verify'
+  | ssh john@closet 'kubectl create -f -'
+ssh john@closet 'kubectl wait -n ddns --for=condition=complete job/ddns-verify --timeout=180s'
+ssh john@closet 'kubectl logs -n ddns job/ddns-verify'
+ssh john@closet 'kubectl delete job -n ddns ddns-verify'
 ```
 
 ## Where the outcome lives
@@ -178,7 +178,7 @@ matter:
 target may not be ready.
 
 ```fish
-ssh john@192.168.5.36 'kubectl get clusters.postgresql.cnpg.io -A -o custom-columns=NS:.metadata.namespace,NAME:.metadata.name,INST:.spec.instances,READY:.status.readyInstances,PRIMARY:.status.currentPrimary'
+ssh john@closet 'kubectl get clusters.postgresql.cnpg.io -A -o custom-columns=NS:.metadata.namespace,NAME:.metadata.name,INST:.spec.instances,READY:.status.readyInstances,PRIMARY:.status.currentPrimary'
 ```
 
 **2. Promote** every primary the node holds onto another node. Each switchover drops that
@@ -186,7 +186,7 @@ database's connections for a few seconds. Rerun the gate afterwards; `PRIMARY` m
 new instance.
 
 ```fish
-ssh john@192.168.5.36 'nix run nixpkgs#kubectl-cnpg -- promote <cluster> <instance-on-other-node> -n <namespace>'
+ssh john@closet 'nix run nixpkgs#kubectl-cnpg -- promote <cluster> <instance-on-other-node> -n <namespace>'
 ```
 
 **3. Cordon, add `node.kubernetes.io/exclude-from-external-load-balancers`, and wait for the
@@ -267,7 +267,7 @@ touches `flake.nix` or `flake.lock` — which every weekly bump does — so the 
 while the build is still writing to `/nix`.
 
 ```fish
-ssh john@192.168.5.108 'df -h / /dev/sda1'          # root is the one that matters
+ssh john@github 'df -h / /dev/sda1'          # root is the one that matters
 gh run list -R John2143/dotfiles --limit 3          # is a build still running
 ```
 

@@ -22,30 +22,37 @@ DRY_RUN=${DRY_RUN:-0}
 BUMP=${BUMP:-1}
 ONLY=${ONLY:-}
 HOST_TIMEOUT=${HOST_TIMEOUT:-1800}   # per-host switch cap; aarch64 source builds can exceed it
-KUBE_HOST=192.168.5.36   # closet: john's kubeconfig there works
+KUBE_HOST=closet   # john's kubeconfig works there; a name, not an IP, so DHCP moves don't break it
 SUDO=/run/wrappers/bin/sudo
 REBUILD=/run/current-system/sw/bin/nixos-rebuild
 SSH=(ssh -o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=yes
      -o ServerAliveInterval=30 -o ServerAliveCountMax=10)
 
 # Ring order, control planes last. name:max-jobs:address
+# The address is a HOSTNAME, never an IP: these boxes are on DHCP and their
+# leases move (secu went .140 -> .80 when its Wi-Fi adapter was swapped), so a
+# hardcoded IP silently reports a healthy host as OFFLINE and skips it.
+# MagicDNS covers the fleet; steam has no tailnet node so it uses the router's
+# DHCP DNS name, and vpin's tailnet identity is forced to its exit-node name by
+# services.tailscale.extraUpFlags in flake.nix.
 HOSTS=(
   office:auto:local
-  big:auto:192.168.5.68
-  github:auto:192.168.5.108
-  steam:1:192.168.5.122
-  pite:1:192.168.5.9
-  mirror:1:192.168.5.123
-  vpin:1:192.168.5.118
-  secu:auto:192.168.5.140
+  big:auto:big
+  github:auto:github
+  steam:1:steam.local
+  pite:1:pite
+  mirror:1:mirror
+  vpin:1:mullvad-us-vpin-deccam
+  secu:auto:secu
   aman:auto:aman
   term:auto:term
-  arch:auto:192.168.5.76
-  closet:auto:192.168.5.36
-  nas:auto:192.168.5.175
+  arch:auto:arch
+  closet:auto:closet
+  nas:auto:nas
 )
 CONTROL_PLANE=" arch closet nas "
 # Not NixOS: probed and reported, never changed. name:user@address
+# These two are IPs on purpose: neither has a tailnet node nor a DHCP DNS name.
 EXTERNAL=(bigp:root@192.168.5.19 unifi-os:john@192.168.5.30)
 
 mkdir -p "$STATE"

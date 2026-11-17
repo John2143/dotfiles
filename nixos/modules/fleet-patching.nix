@@ -10,9 +10,9 @@ in {
     big = pin ["big" "192.168.5.68"] "AAAAC3NzaC1lZDI1NTE5AAAAIDTQYNKdAp9+7zT/R5kC8QlzowHqrNss6iQNOi7xnGhF";
     pite = pin ["pite" "192.168.5.9"] "AAAAC3NzaC1lZDI1NTE5AAAAID1rtTicPGEiIp+A6/cYEJLK6LBdAyPl+ks2IZmkO9Xr";
     github = pin ["github" "192.168.5.108"] "AAAAC3NzaC1lZDI1NTE5AAAAIAl8MEtiXc7gINAJioWGAKExtBn6oMsAfMnG45WGD1vA";
-    steam = pin ["steam" "192.168.5.122"] "AAAAC3NzaC1lZDI1NTE5AAAAIEBiCzwwquvaj3Uc+ubd5mtab/GgxpfbUHzkCyfxeWJN";
+    steam = pin ["steam" "steam.local" "192.168.5.122"] "AAAAC3NzaC1lZDI1NTE5AAAAIEBiCzwwquvaj3Uc+ubd5mtab/GgxpfbUHzkCyfxeWJN";
     mirror = pin ["mirror" "192.168.5.123"] "AAAAC3NzaC1lZDI1NTE5AAAAIDNhW7W6JJH5ZF24KkaAKZT5zcaxAnq74BQJNDYtjOYE";
-    vpin = pin ["vpin" "192.168.5.118"] "AAAAC3NzaC1lZDI1NTE5AAAAIKWjl1w13Nce4AQ2oEl/QjyBImVROff3mafjLNhL5uEq";
+    vpin = pin ["vpin" "mullvad-us-vpin-deccam" "192.168.5.118"] "AAAAC3NzaC1lZDI1NTE5AAAAIKWjl1w13Nce4AQ2oEl/QjyBImVROff3mafjLNhL5uEq";
     secu = pin ["secu" "192.168.5.140"] "AAAAC3NzaC1lZDI1NTE5AAAAIMu+LVq4TXVmHfWQm0ilbcBKFuk/Gc5PatuvZwKT4UEQ";
     arch = pin ["arch" "192.168.5.76"] "AAAAC3NzaC1lZDI1NTE5AAAAIBZx+UeGOlNlL08WTwYps1TkGZkedaEmUuZ3Iy4O5gK2";
     closet = pin ["closet" "192.168.5.36"] "AAAAC3NzaC1lZDI1NTE5AAAAIDo8+Ir6w4D3PKauYj+GYPb4CMRh8oSwqslhiyzJqIEN";
