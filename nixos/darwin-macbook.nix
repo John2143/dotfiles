@@ -98,7 +98,18 @@
       autoUpdate = false;
       cleanup = "none";
     };
-    taps = ["peteonrails/voxtype"];
+    # `trusted = true` is required at tap level: Homebrew refuses untrusted
+    # third-party taps during activation. The tap's DMG is Developer ID signed and
+    # notarized — unlike nixpkgs' deskflow bundle, which is ad-hoc signed, so
+    # every rebuild changes the cdhash and silently invalidates the Accessibility
+    # grant (Apple TN3127).
+    taps = [
+      "peteonrails/voxtype"
+      {
+        name = "deskflow/tap";
+        trusted = true;
+      }
+    ];
     casks = [
       "krita"
       "obs"
@@ -110,6 +121,7 @@
       "firefox"
       "discord"
       "prismlauncher"
+      "deskflow"
     ];
     brews = [];
   };

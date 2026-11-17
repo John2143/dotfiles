@@ -174,6 +174,8 @@
           ./nixos/shared-configuration.nix
           ./nixos/shared-games-configuration.nix
           ./nixos/office-configuration.nix
+          ./nixos/modules/ipad-display.nix
+          ./nixos/modules/deskflow.nix
           ./nixos/modules/fleet-patching.nix
           ./nixos/firejail-desktop.nix
           ./nixos/modules/k3s-agent.nix
@@ -202,6 +204,8 @@
           ./nixos/shared-configuration.nix
           ./nixos/shared-games-configuration.nix
           ./nixos/arch-configuration.nix
+          ./nixos/modules/ipad-display.nix
+          ./nixos/modules/deskflow.nix
           ./nixos/firejail-desktop.nix
           ./nixos/modules/k3s-server.nix
           ./nixos/modules/restic-backup.nix
