@@ -9,9 +9,9 @@
 #     skips the prep hook and would otherwise capture a clone of the laptop
 #     panel (Sunshine's placebo desktop app reports itself as running forever).
 #   * The USB-C transport: usbmuxd switched into CDC-NCM mode exposes an NCM
-#     data interface, and a NetworkManager dispatcher gives that link a
-#     `shared` profile so the host is the iPad's DHCP server and gateway on
-#     10.42.0.1/24. Same address in, cable or Wi-Fi.
+#     data interface, and a udev rule gives that link a `shared` profile, so the
+#     host is the iPad's DHCP server and gateway on 10.42.0.1/24. Same address
+#     in, cable or Wi-Fi.
 #
 # Only hosts with a Hyprland session may import this (arch, office). The helper
 # itself lives in packages/ipad-display.nix because the waybar widget needs it
@@ -27,67 +27,55 @@
   # without shared-configuration.nix, where the overlay would live).
   ipadDisplay = pkgs.callPackage ../packages/ipad-display.nix { };
 
-  # NetworkManager dispatcher entry for the iPad's data interface. Filtering
-  # here keeps transient units off every unrelated network event.
-  ipad-usb-event = pkgs.writeShellApplication {
-    name = "ipad-usb-event";
-    runtimeInputs = with pkgs; [systemd coreutils];
-    text = ''
-      [ "''${2:-}" = up ] || exit 0
-      ifname=$1
-      dev=$(readlink -f "/sys/class/net/$ifname/device" 2>/dev/null) || exit 0
-      [ -n "$dev" ] || exit 0
-      [ "$(cat "$dev/../idVendor" 2>/dev/null)" = 05ac ] || exit 0
-      [ "$(basename "$(readlink -f "$dev/driver" 2>/dev/null)")" = cdc_ncm ] || exit 0
-      # A fixed --unit would still be registered on the second plug and make
-      # systemd-run refuse, leaving the link unconfigured; --collect lets the
-      # transient unit evaporate instead.
-      systemd-run --collect --quiet -- "${ipad-usb-attach}/bin/ipad-usb-attach" "$ifname"
-    '';
-  };
-
-  # Bringing the profile up from inside a dispatcher for the very device being
-  # dispatched can deadlock NetworkManager, hence the systemd-run hop in the
-  # caller.
+  # Run from a transient unit by the udev rule below, not directly by the rule:
+  # udev blocks until its RUN commands return, and nmcli can take seconds.
+  #
+  # The interface is discovered here rather than passed in: udev reports the
+  # pre-rename kernel name (usb0), and the predictable name differs per port.
   ipad-usb-attach = pkgs.writeShellApplication {
     name = "ipad-usb-attach";
     runtimeInputs = with pkgs; [networkmanager coreutils];
     text = ''
-      ifc="''${1:-}"
-      # A dispatcher can hand us an interface that has already gone away, or
-      # nothing at all.
-      if [ -z "$ifc" ] || [ ! -d "/sys/class/net/$ifc" ]; then
-        echo "ipad-usb-attach: no such interface: ''${ifc:-<none>}" >&2
-        exit 0
-      fi
       if ! nmcli connection show ipad-usb >/dev/null 2>&1; then
         echo "ipad-usb: profile missing (NetworkManager-ensure-profiles failed?)" >&2
         exit 1
       fi
 
-      # CDC-NCM consumes a control+data interface pair, so the data netdev's own
+      # CDC-NCM exposes a control+data interface pair, so the data netdev's own
       # interface number is not 0 and cannot be used to tell the functions
-      # apart. Of the Apple CDC-NCM netdevs the lowest ifindex is the data
-      # function; the other is Apple's private multiplexor, which must stay out
-      # of NetworkManager entirely.
-      data=$(for n in /sys/class/net/*; do
+      # apart (the kernel names them "Apple Tethering" and "Apple Private"). The
+      # data function is registered first, so it holds the lowest ifindex; the
+      # other is Apple's private multiplexor, which must stay out of
+      # NetworkManager entirely.
+      list=$(for n in /sys/class/net/*; do
         d=$(readlink -f "$n/device" 2>/dev/null) || continue
         [ "$(cat "$d/../idVendor" 2>/dev/null)" = 05ac ] || continue
         [ "$(basename "$(readlink -f "$d/driver" 2>/dev/null)")" = cdc_ncm ] || continue
-        printf '%s %s\n' "$(cat "$n/ifindex")" "$(basename "$n")"
-      done | sort -n | head -n1 | cut -d' ' -f2)
+        printf '%s %s\n' "$(cat "$n/ifindex" 2>/dev/null)" "$(basename "$n")"
+      done | sort -n)
+      # Late in an unplug the interfaces can already be gone.
+      [ -n "$list" ] || exit 0
 
-      if [ "$ifc" != "$data" ]; then
-        nmcli device set "$ifc" managed no
-        exit 0
-      fi
+      data=$(printf '%s\n' "$list" | head -n1 | cut -d' ' -f2)
+      for n in $(printf '%s\n' "$list" | tail -n +2 | cut -d' ' -f2); do
+        nmcli device set "$n" managed no 2>/dev/null || true
+      done
 
-      nmcli device set "$ifc" managed yes
-      nmcli connection up ipad-usb ifname "$ifc"
+      # udev fires before NetworkManager has realized the device, and the profile
+      # cannot be bound to an interface nmcli does not know yet.
+      for _ in $(seq 1 20); do
+        nmcli -t -f DEVICE device status | cut -d: -f1 | grep -qx "$data" && break
+        sleep 0.5
+      done
+
+      nmcli device set "$data" managed yes
+      nmcli connection up ipad-usb ifname "$data"
     '';
   };
 in {
-  environment.systemPackages = [ipadDisplay];
+  # The helper is on PATH so the link can be brought up by hand when udev is not
+  # in play (a stale interface, or after changing the profile).
+  environment.systemPackages = [ipadDisplay ipad-usb-attach];
 
   services.sunshine = {
     enable = true;
@@ -132,9 +120,9 @@ in {
   networking.firewall.allowedUDPPorts = [67];
 
   # Declared rather than created with `nmcli connection add`: no interface name
-  # is set (the netdev name is dynamic), the dispatcher binds it at `up` time,
-  # and the profile is regenerated on every activation instead of drifting in
-  # /etc.
+  # is set (the netdev name is dynamic and differs per port), the udev hook binds
+  # it to whichever interface arrived, and the profile is regenerated on every
+  # activation instead of drifting in /etc.
   networking.networkmanager.ensureProfiles.profiles.ipad-usb = {
     connection = {
       id = "ipad-usb";
@@ -145,13 +133,11 @@ in {
     ipv6.method = "ignore";
   };
 
-  networking.networkmanager.dispatcherScripts = [
-    {
-      type = "basic";
-      # `source` must be the script file, not the package: the module sets
-      # mode 0544 on the entry and materialises it, so a writeShellApplication
-      # directory lands as an empty file and the hook never does anything.
-      source = "${ipad-usb-event}/bin/ipad-usb-event";
-    }
-  ];
+  # NetworkManager dispatcher hooks fire on connection lifecycle, and a freshly
+  # appeared interface matches no profile, so nothing activates and no hook runs
+  # (verified: the NCM netdevs come up `disconnected` and stay that way). udev
+  # fires on arrival, which is the event the link actually needs.
+  services.udev.extraRules = ''
+    ACTION=="add", SUBSYSTEM=="net", ATTRS{idVendor}=="05ac", ATTRS{bInterfaceClass}=="02", DRIVERS=="cdc_ncm", RUN+="${pkgs.systemd}/bin/systemd-run --collect --quiet -- ${ipad-usb-attach}/bin/ipad-usb-attach"
+  '';
 }
