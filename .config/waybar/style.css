@@ -195,6 +195,8 @@ window#waybar > box {
 #custom-autoclicker,
 #custom-privacy,
 #custom-screenrec,
+#custom-ipad,
+#custom-deskflow,
 #custom-tailscale,
 #custom-temporal,
 #custom-theme,
@@ -300,6 +302,25 @@ window#waybar > box {
 
 #custom-screenrec.error {
     color: @red;
+}
+
+/* ---- iPad second display / Deskflow ---- */
+/* "off" is the normal resting state: the output only exists while streaming. */
+#custom-ipad.off,
+#custom-deskflow.off {
+    color: @overlay0;
+}
+
+/* Stream running without the virtual output: Sunshine captured the laptop
+   panel instead of the iPad. Click the widget to recover. */
+#custom-ipad.clone {
+    color: @red;
+    font-weight: bold;
+}
+
+#custom-ipad.connected,
+#custom-deskflow.on {
+    color: @green;
 }
 
 /* ---- Tray ---- */

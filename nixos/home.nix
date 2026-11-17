@@ -266,6 +266,8 @@ in {
       A1 = "1"; A2 = "2"; A3 = "3"; A4 = "4"; A5 = "5";
       B1 = "6"; B2 = "7"; B3 = "8"; B4 = "9"; B5 = "10";
       disc = "11"; obsidian = "12"; spotify = "13"; steam = "14"; ts = "15";
+      # MOONLIGHT (the iPad's headless output, modules/ipad-display.nix).
+      ip1 = "16"; ip2 = "17";
     };
     wsRule = name: monitor: { workspace = ws.${name}; default_name = name; monitor = mkLua monitor; default = true; };
   in {
@@ -388,6 +390,12 @@ in {
         (wsRule "steam" "MONITOR_RIGHT")
         (wsRule "obsidian" "MONITOR_RIGHT")
         (wsRule "spotify" "MONITOR_RIGHT")
+        # The iPad's output is dynamic, so these are written out rather than
+        # built with wsRule: that helper always sets default = true, and only the
+        # first workspace of a monitor may be the default. monitor needs the
+        # quoted Lua string; mkLua would look up a nonexistent Lua variable.
+        { workspace = ws.ip1; default_name = "ip1"; monitor = mkLua ''"MOONLIGHT"''; default = true; }
+        { workspace = ws.ip2; default_name = "ip2"; monitor = mkLua ''"MOONLIGHT"''; }
       ];
       # ---- Window rules ----
       window_rule = [
@@ -480,6 +488,10 @@ in {
         { _args = [(mkLua ''mainMod .. " + CTRL + period"'') (mkLua ''hl.dsp.exec_cmd("hyprctl dispatch movecurrentworkspacetomonitor 0")'')]; }
         { _args = [(mkLua ''mainMod .. " + CTRL + comma"'') (mkLua ''hl.dsp.exec_cmd("hyprctl dispatch movecurrentworkspacetomonitor 1")'')]; }
         { _args = [(mkLua ''mainMod .. " + CTRL + slash"'') (mkLua ''hl.dsp.exec_cmd("hyprctl dispatch movecurrentworkspacetomonitor 2")'')]; }
+        # iPad: move the focused workspace / window to the headless output. The
+        # dispatch takes a monitor name as readily as r/l/index.
+        { _args = [(mkLua ''mainMod .. " + CTRL + I"'') (mkLua ''hl.dsp.exec_cmd("hyprctl dispatch movecurrentworkspacetomonitor MOONLIGHT")'')]; }
+        { _args = [(mkLua ''mainMod .. " + CTRL + SHIFT + I"'') (mkLua ''hl.dsp.window.move({ workspace = "${ws.ip1}" })'')]; }
 
         # Move window to workspace
         { _args = [(mkLua ''mainMod .. " + CTRL + SHIFT + 1"'') (mkLua ''hl.dsp.window.move({ workspace = "${ws.A1}" })'')]; }
