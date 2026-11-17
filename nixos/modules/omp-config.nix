@@ -496,6 +496,44 @@ in
             - "litellm/anthropic/claude-fable-5-2"
             - "litellm/deepseek/deepseek-flash:high"
 
+      # Context maintenance — two independent triggers, deliberately tuned
+      # tighter than the defaults. Verified against omp 18.20.3:
+      # session/context-settings.ts (defaults), session/idle-maintenance.ts
+      # (idle path), agent/src/compaction/compaction.ts:396-410 (trigger math).
+      #
+      # 1. Hard ceiling, any time: `thresholdTokens` is a fixed trigger, so
+      #    the moment context passes 600000 tokens compaction runs at the next
+      #    safe point — turn end, or a tool-loop boundary mid-turn because
+      #    `midTurnEnabled` defaults true. It outranks `thresholdPercent`
+      #    (context-settings.ts:186). Unset, omp would instead use its
+      #    reserve policy, window − max(15% of window, 16384) = 850K on these
+      #    1M windows, which is too close to the limit for a mid-turn summary
+      #    to be comfortable. 600K is 60% of those windows and still well
+      #    inside that 850K budget, so this is what actually fires. The number
+      #    is absolute and checked against each model's real window, so a small
+      #    window (office-vllm qwen at 65536) can never reach it and falls back
+      #    to that window's own prompt budget rather than never firing
+      #    (compaction.ts:402-410).
+      #
+      # 2. Idle shrink, above 200000: `idleEnabled` compacts a quiet session
+      #    in the background after `idleTimeoutSeconds` (1800 = 30 min) with
+      #    no activity, but only while usage is at or above
+      #    `idleThresholdTokens` (200000) — checked when the timer arms and
+      #    again when it fires (idle-maintenance.ts:239, 292). Never while a
+      #    draft is in the composer or a turn is scheduled, never for models
+      #    whose prompt cache does not expire (logged-in Codex), and with a
+      #    confirmed 1-hour cache entry it aims just before that entry lapses
+      #    instead of at the plain timer. The recent tail survives per
+      #    `compaction.keepRecentTokens` (20000), so the live turn is never
+      #    what gets dropped.
+      #
+      # Net: 200K-600K sessions shrink after half an hour of silence; anything
+      # that crosses 600K shrinks immediately, whatever the clock says.
+      compaction:
+        idleEnabled: true
+        idleThresholdTokens: 200000
+        idleTimeoutSeconds: 1800
+        thresholdTokens: 600000
       # Tools — enable setting-gated tools that ship disabled by default.
       # Names must be nested mappings; dotted keys are silently ignored.
       checkpoint:
