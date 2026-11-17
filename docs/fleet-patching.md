@@ -101,8 +101,11 @@ Attic's post-build hook (`nix.settings.post-build-hook`) is on for every host th
 imports the attic module — office, arch, big, closet, pite, vpin, secu, term, github and
 the `vm-*` clones — but not for `nas` (the cache server itself), `steam`, `mirror` or
 `installer`. So the first *hooked* host that builds a new omp uploads it and every later
-host substitutes it. Keep the bump on fleet-patch unless the omp compile starts landing
-on more than one host.
+host substitutes it — within a couple of minutes, not instantly: the hook only appends to
+`/var/lib/attic-push-queue/paths` and `attic-push-queue.timer` drains that spool with one
+batched `attic push` every 2 minutes (5 minutes after boot). A rebuild started immediately
+after another host's will still compile omp if the flush has not run yet. Keep the bump on
+fleet-patch unless the omp compile starts landing on more than one host.
 
 To move omp alone, between weekly runs:
 
