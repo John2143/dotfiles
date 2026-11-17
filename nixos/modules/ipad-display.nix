@@ -10,8 +10,8 @@
 #     panel (Sunshine's placebo desktop app reports itself as running forever).
 #   * The USB-C transport: usbmuxd switched into CDC-NCM mode exposes an NCM
 #     data interface, and a udev rule gives that link a `shared` profile, so the
-#     host is the iPad's DHCP server and gateway on 10.42.0.1/24. Same address
-#     in, cable or Wi-Fi.
+#     host is the iPad's DHCP server and gateway on 10.77.0.1/24 (not
+#     NetworkManager's 10.42.0.1 default, which k3s owns).
 #
 # Only hosts with a Hyprland session may import this (arch, office). The helper
 # itself lives in packages/ipad-display.nix because the waybar widget needs it
@@ -130,6 +130,13 @@ in {
       autoconnect = "false";
     };
     ipv4.method = "shared";
+    # NetworkManager's shared default is 10.42.0.0/24, which k3s already routes
+    # into flannel.1 (`10.42.0.0/24 via 10.42.0.0 dev flannel.1 onlink`, metric
+    # 0, against the cable's metric 101). The iPad's packets arrived but every
+    # reply was swallowed by the overlay, so 10.42.0.1 was unreachable from the
+    # iPad while plain `ping -I` from the host worked. Stay outside
+    # 10.42.0.0/16 (pods) and 10.43.0.0/16 (services).
+    ipv4.addresses = "10.77.0.1/24";
     ipv6.method = "ignore";
   };
 
