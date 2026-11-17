@@ -45,13 +45,21 @@
     spool=${queueFile}
     work="$spool.work"
 
+    # A run killed mid-upload (unit stop, reboot, an activation that drops
+    # this unit) leaves its batch in $work. Fold it back in first: those
+    # paths were neither uploaded nor requeued, and the rotation below
+    # would otherwise delete them.
+    for f in "$work" "$work.batch"; do
+      if [ -s "$f" ]; then cat "$f" >> "$spool"; fi
+    done
+    rm -f "$work" "$work.batch"
+
     [ -s "$spool" ] || exit 0
     # Off the tailnet: leave the queue untouched and retry next tick.
     timeout 3 bash -c "exec 3<>/dev/tcp/${server}/8280" 2>/dev/null || exit 0
 
-    # Clear a previous run's leftovers, then rotate. An append that races
-    # the rotation recreates the spool (O_APPEND), so nothing is lost.
-    rm -f "$work" "$work.batch"
+    # Rotate. An append that races the rotation recreates the spool
+    # (O_APPEND), so nothing is lost.
     mv "$spool" "$work" && touch "$spool"
 
     # attic aborts the WHOLE batch on one invalid path ("error: path … is
