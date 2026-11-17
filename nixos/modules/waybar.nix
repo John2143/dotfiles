@@ -382,6 +382,42 @@
       esac
     '';
   };
+  # iPad second display helper. Built from the same expression as
+  # modules/ipad-display.nix, so no overlay is needed here (this module also
+  # loads on hosts that never import shared-configuration.nix).
+  ipad-display = pkgs.callPackage ../packages/ipad-display.nix { };
+  # Deskflow's server unit is started by hand (modules/deskflow.nix); this is the
+  # bar's read-out and click target for it.
+  deskflow-ctl = pkgs.writeShellApplication {
+    name = "deskflow-ctl";
+    runtimeInputs = with pkgs; [systemd coreutils jq];
+    text = ''
+      host=$(hostname)
+      # is-active exits non-zero when the unit is not up, hence the `|| true`.
+      state=$(systemctl --user is-active deskflow.service 2>/dev/null || true)
+      case "''${1:-status}" in
+        status)
+          if [ "$state" = active ]; then
+            jq -nc --arg h "$host" '{text: "DF", class: "on", tooltip: ("deskflow server: active on " + $h)}'
+          else
+            jq -nc --arg h "$host" --arg s "''${state:-unknown}" \
+              '{text: "DF", class: "off", tooltip: ("deskflow server: " + $s + " on " + $h)}'
+          fi
+          ;;
+        toggle)
+          if [ "$state" = active ]; then
+            systemctl --user stop deskflow.service
+          else
+            systemctl --user start deskflow.service
+          fi
+          ;;
+        *)
+          printf 'usage: deskflow-ctl {status|toggle}\n' >&2
+          exit 2
+          ;;
+      esac
+    '';
+  };
   temporal-status = pkgs.writeShellApplication {
     name = "temporal-status";
     runtimeInputs = [ pkgs.coreutils ];
@@ -433,11 +469,23 @@ in {
           ];
 
           # ---- Right zone ----
+          # The iPad and Deskflow widgets only make sense where those modules
+          # are imported (arch, office); elsewhere they would sit there inert.
           modules-right =
             [
               "custom/privacy"
               "custom/screenrec"
+            ]
+            ++ (lib.optionals (compName == "arch" || compName == "office") [
+              "custom/ipad"
+            ])
+            ++ [
               "custom/tailscale"
+            ]
+            ++ (lib.optionals (compName == "arch" || compName == "office") [
+              "custom/deskflow"
+            ])
+            ++ [
               "custom/temporal"
               "custom/voxtype"
               "group/hardware"
@@ -566,6 +614,19 @@ in {
             on-scroll-down = "${media-player-volume}/bin/media-player-volume 0.05-";
           };
 
+          # ---- iPad second display ----
+          # The output only exists while streaming (modules/ipad-display.nix).
+          # Left-click is the repair path: drop a stale output, restart Sunshine.
+          "custom/ipad" = {
+            exec = "${ipad-display}/bin/ipad-display status --waybar";
+            return-type = "json";
+            interval = 5;
+            format = "{}";
+            tooltip = true;
+            on-click = "${ipad-display}/bin/ipad-display recover";
+            on-click-right = "${ipad-display}/bin/ipad-display create";
+          };
+
           # ---- Tailscale VPN ----
           "custom/tailscale" = {
             exec = "${tailscale-status}/bin/tailscale-status";
@@ -589,6 +650,16 @@ in {
               pkill -RTMIN+14 waybar
             '";
             tooltip = true;
+          };
+
+          # ---- Deskflow server ----
+          "custom/deskflow" = {
+            exec = "${deskflow-ctl}/bin/deskflow-ctl status";
+            return-type = "json";
+            interval = 5;
+            format = "{}";
+            tooltip = true;
+            on-click = "${deskflow-ctl}/bin/deskflow-ctl toggle";
           };
 
           # ---- Temporal ----
