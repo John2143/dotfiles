@@ -148,7 +148,10 @@ in {
   networking.networkmanager.dispatcherScripts = [
     {
       type = "basic";
-      source = ipad-usb-event;
+      # `source` must be the script file, not the package: the module sets
+      # mode 0544 on the entry and materialises it, so a writeShellApplication
+      # directory lands as an empty file and the hook never does anything.
+      source = "${ipad-usb-event}/bin/ipad-usb-event";
     }
   ];
 }
