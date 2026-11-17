@@ -13,13 +13,20 @@ throttled; the numbers only decide who waits when every thread is runnable.
 | tier | cgroup | weight | holds |
 |---|---|---|---|
 | 1 | `session-c1.scope` (default, untouched) | 100 | Hyprland, Xwayland, tmux, terminals |
-| 2 | `app.slice` | 60 | waybar, portals, TeamSpeak, Steam client |
-| 3 | `discord.slice` | 30 | Discord |
-| 4 | `games.slice` | 10 | the game, firefox |
+| — | `session.slice` (inside `user@1000.service`, default 100) | 100 | `xdg-desktop-portal*`, `dbus-broker`, permission store |
+| 2 | `app.slice` | 60 | waybar, hyprpaper, dunst, eww, TeamSpeak proxy, Steam client |
+| 3 | `discord.slice` | 30 | Discord — empty in practice, see below |
+| 4 | `games.slice` | 10 | the game, firefox — empty in practice, see below |
 
 `CPUWeight=40` goes on `user@.service`, which is what puts **everything the user
-manager launches** below the compositor. At full saturation the session branch
-takes 100/140 ≈ 71 %, `app.slice` ≈ 17 %, `discord.slice` ≈ 9 %, `games.slice` ≈ 3 %.
+manager launches** below the compositor. At full saturation the session scope
+takes 100/140 ≈ 71 % and the whole user-manager branch 29 %. Inside that branch
+`session.slice` (100) is a sibling of the app tiers, so it takes half of it;
+`app.slice` gets ≈ 9 % of the machine, `discord.slice` ≈ 4 %, `games.slice` ≈ 1 %.
+
+The module never names `session.slice`, but it matters: systemd puts the portal
+stack there, so it keeps the default 100 and outranks `app.slice` inside the user
+manager. Anything the portal spawns inherits it (third trap below).
 
 Tune in one place: the `tiers` attrset at the top of the module.
 
@@ -113,10 +120,11 @@ The per-app tiers (3 and 4) are inert because of the self-adoption above. What
 this module actually delivers is **compositor above everything**, with firefox
 genuinely last (it is a plain `exec` and does not self-adopt). To get
 `compositor > services > discord/game`, invert the design instead of moving the
-apps: put the plain units (waybar, hyprpaper, portals, TeamSpeak — they never
-self-adopt) in a `services.slice` weighted above `app.slice`, and let `app.slice`
-be the low catch-all that self-adopting apps land in. Separating Discord from
-the game on top of that needs a watcher that calls
+apps: put the plain units (waybar, hyprpaper, dunst, eww, TeamSpeak proxy — they
+never self-adopt) in a `services.slice` weighted above `app.slice`, and let
+`app.slice` be the low catch-all that self-adopting apps land in. Portals need no
+moving: they are already in `session.slice` at 100. Separating Discord from the
+game on top of that needs a watcher that calls
 `systemctl --user set-property 'app-discord-*.scope' CPUWeight=…`.
 
 Confirmed live on `arch` (2026-11-17): Discord launched through the wrapped entry
