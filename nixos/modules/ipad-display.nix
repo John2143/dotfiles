@@ -163,6 +163,12 @@ in {
   # (verified: the NCM netdevs come up `disconnected` and stay that way). udev
   # fires on arrival, which is the event the link actually needs.
   #
+  # Any Apple device in this USB mode is a client: USBMUXD_DEFAULT_DEVICE_MODE=3
+  # is a daemon-wide default, so an iPhone is switched into the same CDC-NCM
+  # configuration and exposes the same interface pair as the iPad. Both are
+  # served the shared profile; only one device is attached at a time in
+  # practice, and if two are, the lowest ifindex wins.
+  #
   # Matching uses the properties the usb_id builtin sets, not ATTRS{} plus
   # DRIVERS: a rule cannot combine attributes from two different parents, and
   # here idVendor lives on the USB device (1-9) while bInterfaceClass and the

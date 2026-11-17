@@ -167,6 +167,7 @@ writeShellApplication {
       [ -n "$CABLE_IFC" ] || return 1
       CABLE_ADDR=$(ip -4 -br addr show dev "$CABLE_IFC" 2>/dev/null | awk '{print $3}' | head -n1)
       CABLE_PEER=$(ip neigh show dev "$CABLE_IFC" 2>/dev/null | awk '$1 ~ /^[0-9]+\./ {print $1; exit}')
+      CABLE_MODEL=$(cat "/sys/class/net/$CABLE_IFC/device/../product" 2>/dev/null || true)
       return 0
     }
 
@@ -218,7 +219,8 @@ writeShellApplication {
       if cable_status; then
         cable=yes
         cable_txt="''${CABLE_ADDR:-no address}"
-        if [ -n "$CABLE_PEER" ]; then cable_txt="$cable_txt / iPad $CABLE_PEER"; fi
+        if [ -n "$CABLE_MODEL" ]; then cable_txt="$cable_txt / $CABLE_MODEL"; fi
+        if [ -n "$CABLE_PEER" ]; then cable_txt="$cable_txt $CABLE_PEER"; fi
       fi
       if ! hypr_env; then
         if [ "$mode" = "--waybar" ]; then
