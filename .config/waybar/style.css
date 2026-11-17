@@ -305,10 +305,23 @@ window#waybar > box {
 }
 
 /* ---- iPad second display / Deskflow ---- */
-/* "off" is the normal resting state: the output only exists while streaming. */
-#custom-ipad.off,
+/* The iPad widget reads "iPad <USB|net> <●|○>": the link the cable is on, and
+   whether a stream is running. Idle is the normal resting state -- the virtual
+   output only exists while streaming. */
+#custom-ipad.idle,
 #custom-deskflow.off {
     color: @overlay0;
+}
+
+/* Cable attached. Weight rather than colour, so a running stream keeps the
+   green below instead of one state masking the other. */
+#custom-ipad.usb {
+    font-weight: bold;
+}
+
+#custom-ipad.streaming,
+#custom-deskflow.on {
+    color: @green;
 }
 
 /* Stream running without the virtual output: Sunshine captured the laptop
@@ -318,9 +331,14 @@ window#waybar > box {
     font-weight: bold;
 }
 
-#custom-ipad.connected,
-#custom-deskflow.on {
-    color: @green;
+/* MOONLIGHT left behind with no stream: the supervisor did not clean up. */
+#custom-ipad.stale {
+    color: @yellow;
+}
+
+/* Hyprland unreachable, so nothing here can be trusted. */
+#custom-ipad.off {
+    color: @red;
 }
 
 /* ---- Tray ---- */

@@ -16,6 +16,7 @@
   coreutils,
   procps,
   systemd,
+  iproute2,
 }:
 
 writeShellApplication {
@@ -26,6 +27,7 @@ writeShellApplication {
     coreutils
     procps
     systemd
+    iproute2
   ];
   text = ''
     readonly OUTPUT=MOONLIGHT
@@ -143,6 +145,31 @@ writeShellApplication {
       apply_mode "$w" "$h" "$fps"
     }
 
+    # The iPad's data netdev exists only while the cable is attached: Apple
+    # vendor plus the CDC-NCM driver, which also skips Apple's private
+    # multiplexor function. The data function registers first, so it holds the
+    # lowest ifindex.
+    cable_iface() {
+      local n d
+      for n in /sys/class/net/*; do
+        d=$(readlink -f "$n/device" 2>/dev/null) || continue
+        [ "$(cat "$d/../idVendor" 2>/dev/null)" = 05ac ] || continue
+        [ "$(basename "$(readlink -f "$d/driver" 2>/dev/null)")" = cdc_ncm ] || continue
+        printf '%s %s\n' "$(cat "$n/ifindex" 2>/dev/null)" "$(basename "$n")"
+      done | sort -n | head -n1 | cut -d' ' -f2
+    }
+
+    # Sets CABLE_IFC, CABLE_ADDR and CABLE_PEER; returns 1 when no cable is
+    # attached. The peer is the iPad's DHCP lease address, which is never
+    # stable, so it is only ever displayed.
+    cable_status() {
+      CABLE_IFC=$(cable_iface)
+      [ -n "$CABLE_IFC" ] || return 1
+      CABLE_ADDR=$(ip -4 -br addr show dev "$CABLE_IFC" 2>/dev/null | awk '{print $3}' | head -n1)
+      CABLE_PEER=$(ip neigh show dev "$CABLE_IFC" 2>/dev/null | awk '$1 ~ /^[0-9]+\./ {print $1; exit}')
+      return 0
+    }
+
     cmd_prep() {
       if ! hypr_env; then
         log "cannot reach Hyprland"
@@ -186,12 +213,21 @@ writeShellApplication {
     }
 
     cmd_status() {
-      local mode="''${1:-}" have=no stream=no geo=""
+      local mode="''${1:-}" have=no stream=no geo="" cable=no cable_txt="not connected"
+      local link mark classes tip out_txt
+      if cable_status; then
+        cable=yes
+        cable_txt="''${CABLE_ADDR:-no address}"
+        if [ -n "$CABLE_PEER" ]; then cable_txt="$cable_txt / iPad $CABLE_PEER"; fi
+      fi
       if ! hypr_env; then
         if [ "$mode" = "--waybar" ]; then
-          jq -nc '{text: "iPad ?", class: "off", tooltip: "hyprctl unreachable"}'
+          if [ "$cable" = yes ]; then link=USB; else link=net; fi
+          jq -nc --arg text "iPad $link ?" --arg cable "$cable_txt" \
+            '{text: $text, class: "off", tooltip: ("hyprctl unreachable\ncable: " + $cable)}'
         else
           printf 'hyprland: unreachable\n'
+          printf 'cable: %s\n' "$cable_txt"
         fi
         return 0
       fi
@@ -200,26 +236,44 @@ writeShellApplication {
         geo=$(geometry)
       fi
       if session_active; then stream=yes; fi
+      out_txt=none
+      if [ "$have" = yes ]; then out_txt="$OUTPUT $geo"; fi
       if [ "$mode" != "--waybar" ]; then
-        if [ "$have" = yes ]; then
-          printf 'output: %s %s\n' "$OUTPUT" "$geo"
-        else
-          printf 'output: none\n'
-        fi
+        printf 'output: %s\n' "$out_txt"
         printf 'sunshine: %s\n' "$(systemctl --user is-active sunshine.service 2>/dev/null || true)"
         printf 'session: %s\n' "$stream"
+        printf 'cable: %s\n' "$cable_txt"
         return 0
       fi
-      # waybar drops a module that exits non-zero, so this always prints one
-      # object and returns 0.
-      if [ "$have" = yes ]; then
-        jq -nc --arg geo "$geo" --arg stream "$stream" \
-          '{text: "iPad", class: "connected", tooltip: ("MOONLIGHT " + $geo + "\nstream: " + $stream)}'
-      elif [ "$stream" = yes ]; then
-        jq -nc '{text: "iPad!", class: "clone", tooltip: "streaming without MOONLIGHT: this is a clone of the laptop panel"}'
+      # waybar drops a module that exits non-zero, so this always prints exactly
+      # one object and returns 0. The text carries both states independently:
+      # the link the cable is (or is not) on, and whether a stream is running.
+      if [ "$cable" = yes ]; then
+        link=USB
+        classes=usb
       else
-        jq -nc '{text: "iPad off", class: "off", tooltip: "no virtual output"}'
+        link=net
+        classes=net
       fi
+      if [ "$stream" = yes ]; then
+        mark="●"
+        classes="$classes streaming"
+      else
+        mark="○"
+        classes="$classes idle"
+      fi
+      tip=$(printf 'cable: %s\nstream: %s\noutput: %s' "$cable_txt" "$stream" "$out_txt")
+      if [ "$stream" = yes ] && [ "$have" != yes ]; then
+        classes="$classes clone"
+        tip="$tip
+streaming without MOONLIGHT: this is a clone of the laptop panel"
+      elif [ "$stream" != yes ] && [ "$have" = yes ]; then
+        classes="$classes stale"
+        tip="$tip
+MOONLIGHT left behind with no stream"
+      fi
+      jq -nc --arg text "iPad $link $mark" --arg class "$classes" --arg tooltip "$tip" \
+        '{text: $text, class: $class, tooltip: $tooltip}'
     }
 
     cmd_recover() {
