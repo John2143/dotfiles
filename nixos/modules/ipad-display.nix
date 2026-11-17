@@ -104,6 +104,16 @@ in {
   # runs `reset-failed`.
   systemd.user.services.sunshine.startLimitIntervalSec = lib.mkForce 0;
 
+  # Sunshine is started from its store path, so it never receives NixOS' wrapper
+  # that puts the driver libraries on the loader path. Without this, dlopen of
+  # libnvidia-encode.so.1 fails, every hardware probe falls through and Sunshine
+  # silently runs libx264 in software: measured at 196% CPU for 2360x1640@60.
+  # Verified with a throwaway instance on different ports -- with the path set
+  # the probe reports `Found H.264 encoder: h264_nvenc [nvenc]` and the HEVC
+  # equivalent, and the per-codec "NVENC features" errors are the AV1 probes
+  # that Pascal cannot satisfy (harmless).
+  systemd.user.services.sunshine.environment.LD_LIBRARY_PATH = "/run/opengl-driver/lib";
+
   systemd.user.services.ipad-display-watch = {
     description = "Remove the MOONLIGHT virtual output when no Sunshine stream is running";
     after = ["graphical-session.target" "sunshine.service"];
