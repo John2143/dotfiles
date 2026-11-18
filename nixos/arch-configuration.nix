@@ -13,6 +13,9 @@
 {
   imports = [
     ./arch-hardware-configuration.nix
+    # Direct link to the MacBook's USB Ethernet adapter, same 10.99.0.1 as office
+    # so the Mac's `thunderbolt` entry works in either machine.
+    ./modules/macbook-link.nix
     ./modules/user-john.nix
     ./modules/vllm.nix
     # ./modules/frigate.nix  # migrated to k8s on big (2026-08-01); file kept for rollback
@@ -82,7 +85,10 @@
     };
   };
 
-  networking.hostName = "arch"; # Define your hostname.
+  networking.hostName = "arch";
+
+  # Either spare port, so the cable works wherever it is plugged in.
+  services.macbookLink.interfaces = ["enp7s0" "enp2s0f1"];
   networking.networkmanager.enable = true; # Easiest to use and most distros use this by default.
   networking.nameservers = [
     "1.1.1.1"

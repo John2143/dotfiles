@@ -135,6 +135,41 @@ the PIN from `https://localhost:47990`.
 Mac (once): Deskflow.app → client → server `100.64.0.1` → grant Accessibility, Input Monitoring,
 Local Network. If Gatekeeper calls it damaged: `xattr -dr com.apple.quarantine /Applications/Deskflow.app`.
 
+## Two Apple devices on one cable
+
+Any Apple device switched into CDC-NCM is a client — an iPad or an iPhone alike, because
+`USBMUXD_DEFAULT_DEVICE_MODE=3` is a daemon-wide default and both expose the same interface pair
+(observed: an iPhone 16 Pro at `1-8.3`, `cfg=5`, as `usb0`/`usb1`). Only one can hold the link:
+`ipad-usb` is a single connection on a single subnet, so the attach script serves one device and
+marks every other Apple netdev `unmanaged`.
+
+The choice is deterministic — **iPad before phone**, then the lowest ifindex — because the kernel
+recycles ifindexes and raw ordering once let a charging phone take the screen's link. To promote a
+specific device:
+
+```
+sudo ipad-usb-attach iPhone     # or iPad; no argument applies the preference above
+```
+
+The argument is a *model*, not an interface name: each device exposes a data function plus Apple's
+private multiplexor, and only the former may carry the profile.
+
+## The bar widget
+
+`custom/ipad` runs `ipad-display status --waybar` and renders `iPad <link> <state>`:
+
+| Text | Meaning |
+|------|---------|
+| `iPad USB ●` | cable attached, a stream is running |
+| `iPad USB ○` | cable attached, idle |
+| `iPad net ●` / `iPad net ○` | the same two states with no cable |
+
+The class list carries the rest: `usb`/`net` (the cable state, `usb` shown in bold so it cannot mask
+green), `streaming`/`idle`, plus `clone` (streaming with no `MOONLIGHT` — Sunshine is capturing the
+laptop panel, click to recover), `stale` (output left behind) and `off` (Hyprland unreachable).
+The tooltip holds the detail: `cable: 10.77.0.1/24 / iPad 10.77.0.56`, `stream: yes`, and the output
+geometry. Left click is `ipad-display recover`, right click `ipad-display create`.
+
 ## The MacBook wire (Deskflow's path)
 
 Deskflow only moves pointer and keyboard events, so bandwidth is irrelevant and latency is

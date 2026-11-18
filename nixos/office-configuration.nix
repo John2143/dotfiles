@@ -64,30 +64,15 @@
     }
   ];
   # Direct wire to the MacBook: its AX88179A USB adapter plugs into the onboard
-  # eno1 (2.5G, r8169). The point is the path, not the sharing — Deskflow's
-  # input events stay on this link instead of the Mac's Wi-Fi, which measured
-  # 20-330 ms with ~100 ms jitter. NAT is left off deliberately: the Mac keeps
-  # its internet on Wi-Fi, and only 10.99.0.0/24 crosses the cable.
+  # eno1 (2.5G, r8169). The link itself lives in modules/macbook-link.nix so arch
+  # serves the same address; the point is the path, not the sharing — Deskflow's
+  # input events stay off the Mac's Wi-Fi (20-330 ms, ~100 ms jitter).
   #
   # macOS makes a newly attached Ethernet service primary, so its DHCP gateway
-  # becomes the default route and the Mac loses internet (NetworkManager's
-  # shared NAT is not installed on this host). One-time fix on the Mac:
+  # becomes the default route and the Mac loses internet. One-time fix on the
+  # Mac, recorded in docs/ipad-second-display.md:
   #   networksetup -ordernetworkservices "Wi-Fi" "AX88179A" "Thunderbolt Bridge" "Tailscale"
-  # Wi-Fi then owns the default route and 10.99.0.0/24 stays on-link on the wire.
-  networking.networkmanager.ensureProfiles.profiles.macbook-link = {
-    connection = {
-      id = "macbook-link";
-      type = "ethernet";
-      interface-name = "eno1";
-      autoconnect = "true";
-      autoconnect-priority = "10";
-    };
-    ipv4 = {
-      method = "shared";
-      addresses = "10.99.0.1/24";
-    };
-    ipv6.method = "ignore";
-  };
+  services.macbookLink.interfaces = ["eno1"];
 
   # This wire exists for Deskflow, so unlike the module default the server starts
   # with the session instead of being started by hand.

@@ -193,6 +193,16 @@
     nerd-fonts.roboto-mono
   ];
 
+  # One name for the direct link, whichever desktop the cable is plugged into:
+  # both serve 10.99.0.1 on their spare NIC. Deskflow's client points at
+  # `thunderbolt` instead of an address. Appended idempotently — /etc/hosts is
+  # macOS's, so it is not declared wholesale.
+  system.activationScripts.macbookLinkHost.text = ''
+    if ! /usr/bin/grep -q '^10\.99\.0\.1[[:space:]]' /etc/hosts; then
+      printf '10.99.0.1\tthunderbolt\n' >> /etc/hosts
+    fi
+  '';
+
   system.activationScripts.postActivation.text = ''
     mkdir -p /Users/john/Screenshots
     chown john:staff /Users/john/Screenshots
