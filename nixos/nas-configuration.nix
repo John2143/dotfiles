@@ -698,6 +698,27 @@ nixpkgs.overlays = [
       api-endpoint = "http://nas:8280/";
       database.url = "sqlite:///tank/atticd/db/server.db?mode=rwc";
 
+      # atticd never runs ANALYZE, so a restored or rebuilt server.db has no
+      # sqlite_stat1, SQLite treats `state = ?` as selective as
+      # `chunk_hash = ?`, and every chunk insert scans all valid chunks: one
+      # worker pins a core and uploads collapse (measured 2026-11-18 on
+      # 79k valid chunks / 64 MB: 89% CPU on the sqlx thread, 105k read
+      # syscalls/s, client 86% receive-window limited, 0.5 MB/s).
+      # One ANALYZE fixes it — the plan flips to idx-chunk-chunk-hash and an
+      # 8 MB push went 15.19 s -> 0.59 s (0.5 -> 13.6 MB/s), no restart.
+      # Re-run after restoring the .preanalyze backup and periodically as
+      # chunks accumulate: the statistics go stale, the plan does not.
+      # Upstream zhaofengli/attic#377, unfixed in main as of 2026-11-18.
+      #
+      #   python3 -c 'import sqlite3;c=sqlite3.connect("/tank/atticd/db/server.db");c.execute("ANALYZE");c.commit()'
+      #
+      # Confirm with: EXPLAIN QUERY PLAN SELECT id FROM chunk WHERE
+      # chunk_hash=? AND state=? LIMIT 1 — good says
+      # "USING INDEX idx-chunk-chunk-hash (chunk_hash=?)", bad says
+      # idx-chunk-state-holders. Same class of gap, much smaller cost still
+      # unindexed: nar(nar_hash) and object(nar_id) (the 12-hourly GC walks
+      # the latter).
+
       # Periodic GC — atticd prunes NARs/chunks unreferenced by any cache.
       # Without this the DB and storage drift apart (DB rows pointing at
       # chunk files that no longer exist -> "Storage error: No such file").
