@@ -202,6 +202,34 @@ Two macOS traps, both seen in practice:
    reboot. A user-initiated stop logs `Persistency disabled for stop reason userInitiated`; after
    that the app cannot bring the tunnel back until the extension is restarted.
 
+## Which path a stream takes (Wi-Fi vs cable)
+
+The cable profile is `ipv4.method=shared`, so the iPad gets a `10.77.0.x` address from dnsmasq on the host and a route to `10.77.0.0/24` that is **directly connected** over the NCM interface. iPadOS sends to a directly connected subnet over that interface no matter which service is primary, and sends everything else over the primary service — which stays Wi-Fi while Wi-Fi is up.
+
+So with the cable plugged in and Wi-Fi on:
+
+| Moonlight entry | Path actually used |
+|---|---|
+| host LAN address (`192.168.5.x`) | Wi-Fi — the cable is ignored |
+| host tailnet address (`100.64.0.x`) | Wi-Fi — Tailscale picks the primary service |
+| `10.77.0.1` (the cable address) | **cable** — on-link over NCM |
+
+That is why forcing the cable meant turning Wi-Fi off: with Wi-Fi gone, Tailscale roams its endpoint to the NCM interface and the tailnet entry streams over the cable. Nothing about Sunshine changes in either direction; it accepts the stream on whatever address it arrives on.
+
+**There is no way to have two entries for one desktop.** Moonlight keys a host by the Sunshine instance's identity, so adding a second address for the same instance only *updates* the existing entry ("host updated") rather than creating a second tile. Switching paths therefore means editing the one entry's address, and the address must work on both paths — which `10.77.0.1` does not (it disappears with the cable).
+
+**Making it automatic** needs the iPad to route a *permanent* address over the cable. Two candidates, neither implemented:
+
+1. **Give the cable internet** (MASQUERADE `10.77.0.0/24` out the LAN interface). The `shared` profile already hands the iPad a default route, but no masquerade rule is installed on these hosts, so that route leads nowhere and iPadOS keeps Wi-Fi primary. With real connectivity the iPad may promote Ethernet on its own — then the tailnet entry rides the cable with no interaction, and falls back to Wi-Fi when unplugged. Side effect: all of the iPad's internet traffic transits the host while plugged in.
+2. **Push a classless static route** so the iPad reaches the host's tailnet address *through the cable*: DHCP option 121, `100.64.0.1/32 via 10.77.0.1`. A `/32` beats Tailscale's `100.64.0.0/10`, so the entry keeps working unplugged over Wi-Fi and switches to the cable the moment it is plugged in — seamless, one entry, no NAT. NetworkManager's shared mode cannot do this: it exposes only `ipv4.shared-dhcp-range` and `shared-dhcp-lease-time`, no generic dnsmasq options, so this requires running our own dnsmasq instead of NM's.
+
+**Reading the current path** while the iPad is attached:
+
+```bash
+tailscale status | grep -i ipad           # direct 10.77.0.x:... = cable, 192.168.5.x = Wi-Fi
+watch -n1 "cat /sys/class/net/enp0s20f0u9c5i2/statistics/rx_bytes"   # moves while streaming over cable
+```
+
 ## Verification
 
 ```
