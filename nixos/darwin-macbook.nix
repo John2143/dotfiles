@@ -194,18 +194,23 @@
   ];
 
   # One name for the direct link, whichever desktop the cable is plugged into:
-  # both serve 10.99.0.1 on their spare NIC. Deskflow's client points at
-  # `thunderbolt` instead of an address. Appended idempotently — /etc/hosts is
-  # macOS's, so it is not declared wholesale.
-  system.activationScripts.macbookLinkHost.text = ''
-    if ! /usr/bin/grep -q '^10\.99\.0\.1[[:space:]]' /etc/hosts; then
-      printf '10.99.0.1\tthunderbolt\n' >> /etc/hosts
-    fi
-  '';
-
+  # both serve 10.99.0.1 on their spare NIC, so Deskflow can target a name
+  # instead of an address. /etc/hosts is macOS's, so it is appended to rather
+  # than declared wholesale.
+  #
+  # It hangs off `postActivation` deliberately. nix-darwin's activate script
+  # concatenates a fixed list of script names (preActivation, checks, etc,
+  # homebrew, postActivation, ...) and never iterates the option, so a custom
+  # `system.activationScripts.<name>` is accepted by the module system and then
+  # silently never runs. postActivation is also the right phase: it runs after
+  # nix-darwin has rewritten /etc.
   system.activationScripts.postActivation.text = ''
     mkdir -p /Users/john/Screenshots
     chown john:staff /Users/john/Screenshots
+
+    if ! /usr/bin/grep -q '^10\.99\.0\.1[[:space:]]' /etc/hosts; then
+      printf '10.99.0.1\tthunderbolt\n' >> /etc/hosts
+    fi
   '';
 
   users.users.john = {

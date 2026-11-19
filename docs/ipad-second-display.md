@@ -209,7 +209,15 @@ cable (auto-MDIX on both ends, so any cable works), and either desktop serves it
 2. **A new adapter is a new service.** macOS keys a network service to the *chip*, so replacing the
    adapter (or adding a second one) creates a new entry that the command above does not mention.
    Re-run the ordering with the new name, and prune the old service if the old adapter is retired.
-3. **Tailscale can wedge** such that toggling it does nothing: `scutil --nc list` reports
+3. **A custom `system.activationScripts.<name>` never runs on nix-darwin.** The
+   activate script concatenates a *fixed* list of names — `preActivation`, `checks`, `createRun`,
+   `extraActivation`, `groups`, `users`, …, `homebrew`, `postActivation` — and never iterates the
+   option, so a made-up name is accepted by the module system and silently does nothing. The
+   `thunderbolt` hosts entry hid in such a name for a day. Put user snippets in
+   `postActivation` (last, and after `/etc` is rewritten) and verify with
+   `nix eval --raw .#darwinConfigurations.macbook.config.system.activationScripts.script.text | grep thunderbolt`
+   — that assembled text is what actually executes.
+4. **Tailscale can wedge** such that toggling it does nothing: `scutil --nc list` reports
    `(Connecting)`, no `100.64.0.0/10` routes appear, the CLI fails with `Tailscale.CLIError
    error 1`, and `/Library/Tailscale/ipn.log*.txt` stops advancing entirely. Restart the system
    extension (`sudo launchctl kickstart -k system/io.tailscale.ipn.macsys.network-extension`) or
