@@ -304,12 +304,11 @@ window#waybar > box {
     color: @red;
 }
 
-/* ---- iPad second display / Deskflow ---- */
+/* ---- iPad second display ---- */
 /* The iPad widget reads "iPad <USB|net> <●|○>": the link the cable is on, and
    whether a stream is running. Idle is the normal resting state -- the virtual
    output only exists while streaming. */
-#custom-ipad.idle,
-#custom-deskflow.off {
+#custom-ipad.idle {
     color: @overlay0;
 }
 
@@ -319,8 +318,7 @@ window#waybar > box {
     font-weight: bold;
 }
 
-#custom-ipad.streaming,
-#custom-deskflow.on {
+#custom-ipad.streaming {
     color: @green;
 }
 
@@ -339,6 +337,23 @@ window#waybar > box {
 /* Hyprland unreachable, so nothing here can be trusted. */
 #custom-ipad.off {
     color: @red;
+}
+
+/* ---- Deskflow ---- */
+/* stopped: nothing serves the port. idle: serving, no client. lan: a client
+   over the LAN, Wi-Fi or the tailnet. wire: a client on the dedicated cable. */
+#custom-deskflow.stopped {
+    background: #11111b;
+    color: #6c7086;
+}
+#custom-deskflow.idle {
+    color: @overlay0;
+}
+#custom-deskflow.lan {
+    color: @blue;
+}
+#custom-deskflow.wire {
+    color: @green;
 }
 
 /* ---- Tray ---- */
