@@ -457,8 +457,14 @@ in {
             fixed = builtins.filter (r: builtins.hasAttr (r.monitor.expr or "") outputs) hypr.workspace_rule;
             label = name: ws-icons.${name} or name;
           in {
-            # {windows} is what makes Waybar read workspace-taskbar at all.
-            format = "{icon}{windows}";
+            # Taskbar icons on the workspace buttons are off: with {windows} in
+            # the format Waybar reads workspace-taskbar, but the icons it draws
+            # are empty slots here (no matching icon in the active theme) and
+            # they only expand while the button itself is hovered, so the
+            # pointer leaves the button as soon as it reaches an icon. The
+            # workspace-taskbar block below and the CSS that styles it stay, so
+            # turning them back on is one line.
+            format = "{icon}";
             # Waybar's stand-in for a workspace that does not exist yet has to be keyed
             # by id: a name key ("A1") is parsed as a named workspace and never merges
             # with the live numbered one, which leaves two buttons. The stand-in then
