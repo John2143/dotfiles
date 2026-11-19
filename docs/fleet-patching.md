@@ -113,6 +113,12 @@ To move omp alone, between weekly runs:
 cd ~/dotfiles && nix flake update oh-my-pi   # then rebuild one host
 ```
 
+If a fleet patch fails with `unable to download 'http://nas:8280/2143nix/nar/<hash>.nar':
+HTTP error 500`, the cache is the problem, not the patch — nix treats a substituter
+500 as fatal and does **not** fall through to `cache.nixos.org`. Stop atticd for the
+run and it falls back cleanly (`sudo systemctl stop atticd` on nas). Failure modes,
+the watchdog and the DB's location are documented in `attic-cache.md`.
+
 Build it through this flake, not the fork's own lock: the input follows dotfiles'
 `nixpkgs` (`flake.nix`), so only this evaluation produces the same derivation every
 host asks for. After the first host rebuilds, confirm the upload with
