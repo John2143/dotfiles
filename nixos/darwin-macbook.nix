@@ -67,7 +67,19 @@
   programs.fish.enable = true;
   environment.shells = [pkgs.fish];
 
-  services.openssh.enable = true;
+  # The daemon stays up for key-based logins from the other desktops, but
+  # passwords are refused. A second (standard) account on this Mac otherwise
+  # becomes a password-guessable SSH login on the LAN; keys live in
+  # /etc/ssh/nix_authorized_keys.d/<user>, so none of that path needs PAM.
+  # KbdInteractiveAuthentication must go off too: with UsePAM yes (macOS's
+  # 100-macos.conf), pam_opendirectory would accept the same password there.
+  services.openssh = {
+    enable = true;
+    extraConfig = ''
+      PasswordAuthentication no
+      KbdInteractiveAuthentication no
+    '';
+  };
 
   security.pam.services.sudo_local.touchIdAuth = true;
 
