@@ -326,10 +326,11 @@
 
   privacy-status = pkgs.writeShellApplication {
     name = "privacy-status";
-    runtimeInputs = with pkgs; [coreutils];
+    runtimeInputs = with pkgs; [pulseaudio gnugrep];
     text = ''
-      # Check for active audio capture sources via pactl
-      if pactl list sources 2>/dev/null | grep -q "State: RUNNING"; then
+      # grep reads the whole list (no -q): under pipefail an early exit would
+      # SIGPIPE pactl and turn a match into a failure.
+      if pactl list sources 2>/dev/null | grep "State: RUNNING" >/dev/null; then
         echo '{"text": "●", "class": "recording", "tooltip": "An application is currently using your microphone."}'
       else
         echo '{"text": "", "class": "", "tooltip": ""}'
@@ -341,7 +342,7 @@
 
   tailscale-status = pkgs.writeShellApplication {
     name = "tailscale-status";
-    runtimeInputs = with pkgs; [tailscale jq coreutils];
+    runtimeInputs = with pkgs; [tailscale jq coreutils gawk];
     text = ''
       data=$(tailscale status --json 2>/dev/null) || {
         jq -nc '{text: "", class: "disconnected", tooltip: "Tailscale: not running"}'
@@ -394,12 +395,13 @@
   };
   temporal-status = pkgs.writeShellApplication {
     name = "temporal-status";
-    runtimeInputs = [ pkgs.coreutils ];
+    runtimeInputs = with pkgs; [bash coreutils jq];
     text = ''
-      if timeout 1 bash -c "exec 3<>/dev/tcp/192.168.6.20/7233" 2>/dev/null; then
-        ${pkgs.jq}/bin/jq -nc '{text: "T", class: "connected", tooltip: "Temporal: connected (192.168.6.20:7233)"}'
+      addr=192.168.6.20:7233
+      if timeout 1 bash -c "exec 3<>/dev/tcp/''${addr%:*}/''${addr#*:}" 2>/dev/null; then
+        jq -nc --arg a "$addr" '{text: "T", class: "connected", tooltip: ("Temporal: connected (" + $a + ")")}'
       else
-        ${pkgs.jq}/bin/jq -nc '{text: "T", class: "disconnected", tooltip: "Temporal: unreachable (192.168.6.20:7233)"}'
+        jq -nc --arg a "$addr" '{text: "T", class: "disconnected", tooltip: ("Temporal: unreachable (" + $a + ")")}'
       fi
     '';
   };
@@ -484,44 +486,40 @@ in {
 
           # ---- Workspaces ----
           "hyprland/workspaces" = let
-            left =
-              if compName == "office"
-              then "DP-2"
-              else "DP-3";
-            right =
-              if compName == "office"
-              then "DP-1"
-              else "HDMI-A-2";
+            # The fixed workspaces and the monitor each belongs to are declared once, as
+            # Hyprland workspace rules in nixos/home.nix. Read them from there instead of
+            # repeating the table; rules for any other output (the iPad's MOONLIGHT) are
+            # left out.
+            hypr = config.wayland.windowManager.hyprland.settings;
+            outputs = {
+              MONITOR_LEFT = hypr.MONITOR_LEFT._var;
+              MONITOR_RIGHT = hypr.MONITOR_RIGHT._var;
+            };
+            fixed = builtins.filter (r: builtins.hasAttr (r.monitor.expr or "") outputs) hypr.workspace_rule;
+            label = name: ws-icons.${name} or name;
           in {
-            format = "{icon}";
-            format-icons = ws-icons;
+            # {windows} is what makes Waybar read workspace-taskbar at all.
+            format = "{icon}{windows}";
+            # Waybar's stand-in for a workspace that does not exist yet has to be keyed
+            # by id: a name key ("A1") is parsed as a named workspace and never merges
+            # with the live numbered one, which leaves two buttons. The stand-in then
+            # only knows the id, so format-icons carries the label for it.
+            format-icons =
+              ws-icons
+              // lib.listToAttrs (map (r: lib.nameValuePair r.workspace (label r.default_name)) fixed);
             tooltip = true;
-            tooltip-format = "{name}";
             "workspace-taskbar" = {
               enable = true;
               "update-active-window" = true;
               "format" = "{icon}";
               "icon-size" = 24;
-              "on-click-window" = "hyprctl dispatch focuswindow address:{address}";
+              # {address} already carries the 0x prefix. Lua form: the legacy
+              # `dispatch focuswindow` syntax is rejected by a Lua-configured Hyprland.
+              "on-click-window" = "hyprctl dispatch \"hl.dsp.focus({ window = 'address:{address}' })\"";
               "ignore-list" = ["^xwaylandvideobridge$"];
             };
-            "persistent_workspaces" = {
-              "A1" = [left];
-              "A2" = [left];
-              "A3" = [left];
-              "A4" = [left];
-              "A5" = [left];
-              "B1" = [right];
-              "B2" = [right];
-              "B3" = [right];
-              "B4" = [right];
-              "B5" = [right];
-              "ts" = [right];
-              "disc" = [right];
-              "steam" = [right];
-              "obsidian" = [right];
-              "spotify" = [right];
-            };
+            "persistent-workspaces" =
+              lib.listToAttrs (map (r: lib.nameValuePair r.workspace [outputs.${r.monitor.expr}]) fixed);
           };
 
           # ---- New Workspace ----
@@ -578,6 +576,7 @@ in {
             return-type = "json";
             interval = 2;
             signal = 12;
+            escape = true;
             format = "{}";
             on-click = "${media-player-toggle}/bin/media-player-toggle";
             on-click-right = "media-picker-toggle";
@@ -642,7 +641,6 @@ in {
             exec = "${temporal-status}/bin/temporal-status";
             return-type = "json";
             interval = 30;
-            signal = 16;
             format = "{}";
             tooltip = true;
             on-click = "xdg-open https://temporal.ts.2143.me:8443";
@@ -694,11 +692,14 @@ in {
 
           # ---- Temperature ----
           temperature = {
-            criticalThreshold = 80;
+            # CPU package. thermal_zone indexes differ per board (zone 0 is acpitz on
+            # office, the chipset on arch); the coretemp path is the same on both. Where
+            # it is missing Waybar falls back to thermal zone 0.
+            hwmon-path-abs = "/sys/devices/platform/coretemp.0/hwmon";
+            input-filename = "temp1_input";
+            critical-threshold = 90;
             interval = 1;
             format = "  {temperatureC}°";
-            thermalZone = "thermal_zone2";
-            formatIcons = ["" "" "" "" ""];
             tooltip = true;
           };
 
@@ -725,8 +726,7 @@ in {
           "custom/privacy" = {
             exec = "${privacy-status}/bin/privacy-status";
             return-type = "json";
-            interval = "once";
-            signal = 13;
+            interval = 5;
             format = "{}";
           };
 
@@ -788,14 +788,14 @@ in {
               car = "";
               default = ["" ""];
             };
-            onClickRight = "pavucontrol";
-            onClickMiddle = "fish -c '/home/john/.config/polybar/scripts/sinks.fish bluetooth'";
-            onClick = "fish -c '/home/john/.config/polybar/scripts/sinks.fish scarlett'";
+            on-click = "fish -c '${config.home.homeDirectory}/.config/polybar/scripts/sinks.fish scarlett'";
+            on-click-middle = "fish -c '${config.home.homeDirectory}/.config/polybar/scripts/sinks.fish bluetooth'";
+            on-click-right = "pavucontrol";
           };
 
           # ---- System Tray ----
           tray = {
-            iconSize = 18;
+            "icon-size" = 18;
             spacing = 8;
           };
         }
