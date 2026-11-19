@@ -173,34 +173,84 @@ geometry. Left click is `ipad-display recover`, right click `ipad-display create
 ## The MacBook wire (Deskflow's path)
 
 Deskflow only moves pointer and keyboard events, so bandwidth is irrelevant and latency is
-everything. Over the Mac's Wi-Fi the hop measured 20-330 ms with ~100 ms jitter. The Mac's USB
-Ethernet adapter (an AX88179A, `en7` on macOS) plugged into `eno1` gives it a 1 Gb direct link:
+everything. Over the Mac's Wi-Fi the hop measured 20-330 ms with ~100 ms jitter, against
+sub-millisecond on a wire. The Mac reaches the desktop through a USB Ethernet adapter and a patch
+cable (auto-MDIX on both ends, so any cable works), and either desktop serves it.
 
-- office declares it: `networking.networkmanager.ensureProfiles.profiles.macbook-link` — `eno1`,
-  `ipv4.method = shared`, `10.99.0.1/24`, autoconnect priority 10 so it wins over NetworkManager's
-  auto-created "Wired connection 1".
-- The Mac leases a `10.99.0.10-254` address and reaches the server at `10.99.0.1`.
-- NAT is deliberately **off**: the Mac keeps its internet on Wi-Fi, only `10.99.0.0/24` crosses
-  the cable. (NetworkManager's `shared` mode installs no MASQUERADE rules on these hosts — only
-  k3s's flannel/kube ones exist — so sharing internet this way would not have worked anyway.)
+- Both hosts declare it: `services.macbookLink.interfaces` (`nixos/modules/macbook-link.nix`)
+  emits one NetworkManager profile **per port** — office `["eno1"]`, arch `["enp7s0" "enp2s0f1"]`
+  — each `ipv4.method = shared`, `10.99.0.1/24`, autoconnect priority 10, so it wins over
+  NetworkManager's auto-created "Wired connection N".
+- The Mac leases a `10.99.0.10-254` address and reaches the server at `10.99.0.1`, so **nothing on
+  the Mac changes when the cable moves rooms**. nix-darwin appends `10.99.0.1 thunderbolt` to the
+  Mac's `/etc/hosts`, so Deskflow can target a name instead of an address. The name is historical:
+  this is plain Ethernet, not Thunderbolt. Until `darwin-rebuild` has run on the Mac, that entry
+  does not exist — use the literal `10.99.0.1`.
+- Shared mode **also provides NAT**, in its own nftables table (`table ip nm-shared-<iface>`,
+  created when the link comes up, removed when it goes down). So the wire can carry the Mac's
+  internet as well; whether it does is purely the Mac's service order. Check with
+  `nft list ruleset | grep -A3 nm-shared` — `iptables -t nat` never shows NM's own table, which is
+  what produced the earlier, wrong "shared mode does not NAT here" note.
 
-Two macOS traps, both seen in practice:
+### macOS traps, all seen in practice
 
 1. **A newly attached Ethernet service becomes the primary service**, so its DHCP gateway becomes
-   the default route and the Mac loses internet. Order Wi-Fi first, once:
+   the default route. With NAT in place that is now merely a *choice*, not a breakage: keep the wire
+   primary if you want the Mac's internet over the cable, or order Wi-Fi first if you would rather
+   the desktop's uplink stayed out of the path:
 
    ```
    sudo networksetup -ordernetworkservices "Wi-Fi" "AX88179A" "Thunderbolt Bridge" "Tailscale"
    ```
 
-   macOS is subnet-aware, so `10.99.0.0/24` stays on-link over the wire while the default route
-   and DNS go out Wi-Fi. The order persists across reboots.
-2. **Tailscale can wedge** such that toggling it does nothing: `scutil --nc list` reports
+   `-ordernetworkservices` requires **every** current service name, so run
+   `networksetup -listallnetworkservices` first and pass the full list. The order persists across
+   reboots. macOS is subnet-aware, so `10.99.0.0/24` stays on-link over the wire either way.
+2. **A new adapter is a new service.** macOS keys a network service to the *chip*, so replacing the
+   adapter (or adding a second one) creates a new entry that the command above does not mention.
+   Re-run the ordering with the new name, and prune the old service if the old adapter is retired.
+3. **Tailscale can wedge** such that toggling it does nothing: `scutil --nc list` reports
    `(Connecting)`, no `100.64.0.0/10` routes appear, the CLI fails with `Tailscale.CLIError
    error 1`, and `/Library/Tailscale/ipn.log*.txt` stops advancing entirely. Restart the system
    extension (`sudo launchctl kickstart -k system/io.tailscale.ipn.macsys.network-extension`) or
    reboot. A user-initiated stop logs `Persistency disabled for stop reason userInitiated`; after
    that the app cannot bring the tunnel back until the extension is restarted.
+
+### Bringing up a new Mac-side adapter (RTL8153 class)
+
+The **host side needs nothing**: the profiles are per-port and all serve `10.99.0.1/24`, so a new
+adapter on the Mac changes nothing on the desktop. All the risk is on macOS.
+
+- **RTL8153 is the one chip with a bad reputation on Apple Silicon.** It is supported through
+  Apple's `AppleUSBRealtek8153Patcher`, and there are current reports of dongles that enumerate
+  but never become a usable interface on M-series Macs (macOS 15+), plus a documented case of a
+  dongle stuck in "USB configuration 2, CDC ECM mode" that only works via a legacy-ECM workaround.
+  Symptoms to distinguish:
+  - `system_profiler SPUSBDataType | grep -i -A6 realtek` — is the dongle even enumerated?
+  - `networksetup -listallhardwareports` — did a new "USB 10/100/1000 LAN" / RTL8153 port appear?
+  - `ifconfig <if>` — a `169.254.x.x` self-assigned address means the interface exists but DHCP
+    never reached the host; no interface at all means a driver problem, not our configuration.
+- **Throughput depends on which mode the dongle presents.** Some RTL8153 units attach as CDC-ECM,
+  which on macOS does not reach gigabit (2021 MacBook Pro owners report well under it); others
+  attach as NCM and saturate the gigabit link. Irrelevant for Deskflow, which moves kilobytes per
+  second, but visible on large file copies.
+- **Do not assume `en4`/`en5`/`en6` are the dongle.** On this Mac those already exist as "Ethernet
+  Adapter" hardware ports — Apple's hidden USB Device NCM interfaces. A new adapter shows up as its
+  own port, typically named `USB 10/100/1000 LAN`.
+- **The AX88179A is the known-good fallback.** If the new dongle misbehaves, the old adapter works
+  on the same cable and the same port with no configuration change.
+- Watch for the **"Allow accessories to connect"** prompt on first plug; the link stays down until
+  it is approved.
+
+Plug-in checklist, host side (either desktop):
+
+```
+nmcli device show enp7s0 | grep GENERAL.CONNECTION   # macbook-link-enp7s0, not "Wired connection N"
+ip -br addr show enp7s0                              # 10.99.0.1/24
+sudo cat /var/lib/NetworkManager/dnsmasq-enp7s0.leases
+ping -c2 10.99.0.<lease>
+ss -tnp | grep 24800                                 # peer must be 10.99.0.x, not 192.168.5.x
+```
 
 ## Which path a stream takes (Wi-Fi vs cable)
 
@@ -220,7 +270,7 @@ That is why forcing the cable meant turning Wi-Fi off: with Wi-Fi gone, Tailscal
 
 **Making it automatic** needs the iPad to route a *permanent* address over the cable. Two candidates, neither implemented:
 
-1. **Give the cable internet** (MASQUERADE `10.77.0.0/24` out the LAN interface). The `shared` profile already hands the iPad a default route, but no masquerade rule is installed on these hosts, so that route leads nowhere and iPadOS keeps Wi-Fi primary. With real connectivity the iPad may promote Ethernet on its own — then the tailnet entry rides the cable with no interaction, and falls back to Wi-Fi when unplugged. Side effect: all of the iPad's internet traffic transits the host while plugged in.
+1. **Give the cable internet** — already true, and therefore not the lever. `shared` mode installs NAT in its own nftables table (`table ip nm-shared-usb0`: `ip saddr 10.77.0.0/24 ip daddr != 10.77.0.0/24 masquerade`), and a cabled device really does reach the internet through the host: `/proc/net/nf_conntrack` shows `src=10.77.0.56 dst=1.1.1.1` masqueraded to the host's LAN address while the iPhone was attached. iPadOS still keeps Wi-Fi primary with both up, and iOS exposes no service order to change that, so NAT alone does not make the cable win.
 2. **Push a classless static route** so the iPad reaches the host's tailnet address *through the cable*: DHCP option 121, `100.64.0.1/32 via 10.77.0.1`. A `/32` beats Tailscale's `100.64.0.0/10`, so the entry keeps working unplugged over Wi-Fi and switches to the cable the moment it is plugged in — seamless, one entry, no NAT. NetworkManager's shared mode cannot do this: it exposes only `ipv4.shared-dhcp-range` and `shared-dhcp-lease-time`, no generic dnsmasq options, so this requires running our own dnsmasq instead of NM's.
 
 **Reading the current path** while the iPad is attached:

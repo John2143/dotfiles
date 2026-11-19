@@ -7,10 +7,12 @@
 # — the same trick as the Apple cable's 10.77.0.1. Only one machine can have the
 # cable at a time, so the duplicated address never collides.
 #
-# NAT is deliberately not configured: the Mac keeps its internet on Wi-Fi and
-# only 10.99.0.0/24 crosses the cable. NetworkManager's `shared` mode installs no
-# MASQUERADE rules on these hosts anyway, so sharing the connection this way
-# never worked.
+# `ipv4.method = shared` also provides NAT for this link, in its own nftables
+# table (`table ip nm-shared-<iface>`, created when the link comes up), so the
+# peer gets address, gateway, DNS and internet from this host. Whether the Mac
+# uses that as its default route is its own service order, not this module's
+# business. Check with `nft list ruleset | grep -A3 nm-shared` — `iptables -t
+# nat` never shows NM's own table.
 {
   config,
   lib,
