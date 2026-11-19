@@ -6,303 +6,242 @@
   lib,
   ...
 }: let
-  media-player-status = pkgs.writeShellApplication {
-    name = "media-player-status";
-    runtimeInputs = with pkgs; [playerctl jq pulseaudio gnused];
+  # Waybar re-runs every custom module declared with `signal = n` when it gets
+  # real-time signal n (SIGRTMIN plus n). Only the signals sent from this file
+  # are named here.
+  sig = {
+    vast = 9;
+    media = 12;
+    tailscale = 14;
+  };
+  # pidof rather than `pkill waybar`: the pattern form also matches
+  # vast-waybar-status and waybar-popup, and an unhandled real-time signal
+  # terminates them.
+  refresh = n: "${pkgs.procps}/bin/pidof -x waybar | ${pkgs.findutils}/bin/xargs -r ${pkgs.coreutils}/bin/kill -s RTMIN+${toString n}";
+  isDesk = builtins.elem compName ["arch" "office"];
+  # Copy the date and time; shared by the clock and the date it reveals.
+  copy-date = "fish -c 'date +\"%A, %e %B %Y — %H:%M:%S\" | wl-copy; notify-send \"Copied\" (wl-paste)'";
+  media-player = pkgs.writeShellApplication {
+    name = "media-player";
+    runtimeInputs = with pkgs; [coreutils findutils gawk gnugrep gnused hyprland jq playerctl procps pulseaudio];
     text = ''
-      # Icons: ▶ (playing), ⏸ (paused), ♫ (no player), ■ (stopped in tooltip)
       players=$(playerctl --list-all 2>/dev/null || true)
 
-      # Short player name for display: drop the ".instance<pid>"/".tab<id>"
-      # suffix playerctl uses, then capitalise the first letter.
-      pretty() {
-        printf '%s' "$1" | sed -E 's/\.(instance|tab)[^.]*$//' | sed -E 's/^./\U&/'
+      is_player() {
+        printf '%s\n' "$players" | grep -qxF -- "$1"
       }
 
-      # Firefox publishes one MPRIS player for the whole browser, but every tab
-      # that is producing sound owns its own audio stream, named after the page's
-      # document title (HTMLMediaElement::UpdateStreamName). Listing those
-      # streams is the only way to see the tabs behind that rolled-up player.
-      # Generic names are what Firefox falls back to when it cannot speak to
-      # PulseAudio directly; showing them would list noise instead of tabs.
-      # The same Firefox-family predicate selects rows in the eww media picker
-      # (media-picker-data in nixos/modules/eww.nix) - change both together.
-      tabs=$(pactl --format=json list sink-inputs 2>/dev/null | jq -r '
-        [ .[]
-          | . as $si
-          | ($si.properties["media.name"] // "") as $n
-          | select((((($si.properties["application.name"] // "") + " "
-                      + ($si.properties["application.process.binary"] // "") + " "
-                      + ($si.properties["application.icon_name"] // ""))
-                     | ascii_downcase | test("firefox|librewolf|zen|floorp")))
-                   and (($n | length) > 0)
-                   and (($n | test("^(alsa playback|audio ?stream|playback ?stream|playback)$"; "i")) | not))
-          | "\($n)\t"
-            + "\(((.volume // {})
-                  | [ .[].value_percent | sub("%"; "") | tonumber ]
-                  | if length > 0 then (add / length | floor) else 0 end))"
-        ] | .[]' 2>/dev/null || true)
-
-      tab_count=0
-      tab_list=""
-      if [ -n "$tabs" ]; then
-        while IFS=$'\t' read -r tab_title tab_vol; do
-          [ -n "$tab_title" ] || continue
-          tab_count=$((tab_count + 1))
-          tab_list="$tab_list\n  ▶ $tab_title ($tab_vol%)"
-        done <<< "$tabs"
-      fi
-
-      if [ -z "$players" ]; then
-        if [ "$tab_count" -eq 0 ]; then
-          echo '{"text": "♫", "class": "stopped", "tooltip": "No media playing"}'
-          exit 0
-        fi
-        first_title=$(printf '%s\n' "$tabs" | head -n 1 | cut -f 1 || true)
-        tooltip=$(printf '%b' "Firefox tabs:$tab_list" | head -c 1200 || true)
-        jq -nc --arg text "▶  Firefox: $first_title" --arg class playing \
-          --arg tooltip "$tooltip" '{text: $text, class: $class, tooltip: $tooltip}'
-        exit 0
-      fi
-
-      # Check for user-selected player override
-      selected=""
-      if [ -f /tmp/media-player-selected ]; then
+      # The player pinned in the eww media picker, if it is still running. A pin
+      # that outlived its player is dropped, otherwise clicks and scrolls keep
+      # targeting something that is gone.
+      selected_player() {
+        local sel
+        [ -f /tmp/media-player-selected ] || return 0
         sel=$(cat /tmp/media-player-selected)
-        if printf '%s\n' "$players" | grep -qxF -- "$sel"; then
-          selected="$sel"
+        if is_player "$sel"; then
+          printf '%s\n' "$sel"
         else
-          # The player was closed since it was picked: drop the dead override,
-          # otherwise scrolls and clicks keep targeting a player that is gone.
           rm -f /tmp/media-player-selected
         fi
-      fi
+      }
 
-      if [ -n "$selected" ]; then
-        best="$selected"
-        best_status=$(playerctl --player="$best" status 2>/dev/null || true)
-      else
-        # Find best player: prefer Playing (non-browser first), then Paused
-        best=""
-        best_status=""
-        browser_playing=""
+      # With nothing pinned: a playing non-browser, else a paused non-browser,
+      # else a playing browser, else the first player. The browser list is the
+      # same Firefox-family set the tab listing below selects on.
+      auto_player() {
+        local best="" browser="" p s
         for p in $players; do
           s=$(playerctl --player="$p" status 2>/dev/null || true)
           case "$p" in
             firefox*|chromium*|chrome*|Floorp*|librewolf*|zen*)
-              [ "$s" = "Playing" ] && browser_playing="$p"
+              if [ "$s" = Playing ]; then browser="$p"; fi
               continue
               ;;
           esac
-          case "$s" in
-            Playing) best="$p"; best_status="$s"; break ;;
-            Paused)  [ -z "$best" ] && { best="$p"; best_status="$s"; };;
-          esac
+          if [ "$s" = Playing ]; then
+            best="$p"
+            break
+          elif [ "$s" = Paused ] && [ -z "$best" ]; then
+            best="$p"
+          fi
         done
+        if [ -z "$best" ]; then best="$browser"; fi
+        if [ -z "$best" ]; then best=$(printf '%s\n' "$players" | head -n 1 || true); fi
+        printf '%s\n' "$best"
+      }
 
-        if [ -z "$best" ] && [ -n "$browser_playing" ]; then
-          best="$browser_playing"
-          best_status="Playing"
+      # What a click or scroll acts on: the pin, else the player the bar is
+      # showing (written by `status`), else a fresh pick.
+      target_player() {
+        local p
+        p=$(selected_player)
+        if [ -z "$p" ] && [ -f /tmp/media-player-active ]; then
+          p=$(cat /tmp/media-player-active)
+          if ! is_player "$p"; then p=""; fi
+        fi
+        if [ -z "$p" ]; then p=$(auto_player); fi
+        printf '%s\n' "$p"
+      }
+
+      refresh_bar() {
+        ${refresh sig.media} 2>/dev/null || true
+      }
+
+      # hyprctl exits 0 even when the selector matches nothing, so the reply is
+      # what tells a hit from a miss.
+      focus_class() {
+        ! hyprctl dispatch "hl.dsp.focus({ window = 'class:^($1)$' })" 2>&1 | grep -q 'not found'
+      }
+
+      status() {
+        # Icons: ▶ (playing), ⏸ (paused), ♫ (no player), ■ (stopped in tooltip)
+
+        # Short player name for display: drop the ".instance<pid>"/".tab<id>"
+        # suffix playerctl uses, then capitalise the first letter.
+        pretty() {
+          printf '%s' "$1" | sed -E 's/\.(instance|tab)[^.]*$//' | sed -E 's/^./\U&/'
+        }
+
+        # Firefox publishes one MPRIS player for the whole browser, but every tab
+        # that is producing sound owns its own audio stream, named after the page's
+        # document title (HTMLMediaElement::UpdateStreamName). Listing those
+        # streams is the only way to see the tabs behind that rolled-up player.
+        # Generic names are what Firefox falls back to when it cannot speak to
+        # PulseAudio directly; showing them would list noise instead of tabs.
+        # The same Firefox-family predicate selects rows in the eww media picker
+        # (media-picker-data in nixos/modules/eww.nix) - change both together.
+        tabs=$(pactl --format=json list sink-inputs 2>/dev/null | jq -r '
+          [ .[]
+            | . as $si
+            | ($si.properties["media.name"] // "") as $n
+            | select((((($si.properties["application.name"] // "") + " "
+                        + ($si.properties["application.process.binary"] // "") + " "
+                        + ($si.properties["application.icon_name"] // ""))
+                       | ascii_downcase | test("firefox|librewolf|zen|floorp")))
+                     and (($n | length) > 0)
+                     and (($n | test("^(alsa playback|audio ?stream|playback ?stream|playback)$"; "i")) | not))
+            | "\($n)\t"
+              + "\(((.volume // {})
+                    | [ .[].value_percent | sub("%"; "") | tonumber ]
+                    | if length > 0 then (add / length | floor) else 0 end))"
+          ] | .[]' 2>/dev/null || true)
+
+        tab_count=0
+        tab_list=""
+        if [ -n "$tabs" ]; then
+          while IFS=$'\t' read -r tab_title tab_vol; do
+            [ -n "$tab_title" ] || continue
+            tab_count=$((tab_count + 1))
+            tab_list="$tab_list\n  ▶ $tab_title ($tab_vol%)"
+          done <<< "$tabs"
         fi
 
-        if [ -z "$best" ]; then
-          best=$(printf '%s\n' "$players" | head -n 1 || true)
-          best_status=$(playerctl --player="$best" status 2>/dev/null || true)
-        fi
-      fi
-
-      # Write active player for scroll/volume commands
-      printf '%s\n' "$best" > /tmp/media-player-active
-
-      player_name=$(pretty "$best")
-      artist=$(playerctl --player="$best" metadata artist 2>/dev/null | head -c 30 || true)
-      title=$(playerctl --player="$best" metadata title 2>/dev/null | head -c 50 || true)
-
-      tooltip=""
-      for p in $players; do
-        s=$(playerctl --player="$p" status 2>/dev/null || true)
-        a=$(playerctl --player="$p" metadata artist 2>/dev/null || true)
-        t=$(playerctl --player="$p" metadata title 2>/dev/null || true)
-        case "$s" in
-          Playing) icon_t="▶" ;;
-          Paused)  icon_t="⏸" ;;
-          *)       icon_t="■" ;;
-        esac
-        if [ -n "$t" ]; then
-          tooltip="$tooltip$icon_t $(pretty "$p"): $a - $t\n"
-        fi
-      done
-      if [ "$tab_count" -gt 0 ]; then
-        tooltip="$tooltip""Firefox tabs:$tab_list"
-      fi
-      tooltip=$(printf '%b' "$tooltip" | head -c 1200 || true)
-
-      case "$best_status" in
-        Playing) class="playing"; icon="▶" ;;
-        Paused)  class="paused";  icon="⏸" ;;
-        *)
-          jq -nc --arg text "♫  $player_name" --arg class stopped \
+        if [ -z "$players" ]; then
+          if [ "$tab_count" -eq 0 ]; then
+            echo '{"text": "♫", "class": "stopped", "tooltip": "No media playing"}'
+            exit 0
+          fi
+          first_title=$(printf '%s\n' "$tabs" | head -n 1 | cut -f 1 || true)
+          tooltip=$(printf '%b' "Firefox tabs:$tab_list" | head -c 1200 || true)
+          jq -nc --arg text "▶  Firefox: $first_title" --arg class playing \
             --arg tooltip "$tooltip" '{text: $text, class: $class, tooltip: $tooltip}'
-          exit 0 ;;
+          exit 0
+        fi
+
+        best=$(selected_player)
+        if [ -z "$best" ]; then best=$(auto_player); fi
+        best_status=$(playerctl --player="$best" status 2>/dev/null || true)
+
+        # Write active player for scroll/volume commands
+        printf '%s\n' "$best" > /tmp/media-player-active
+
+        player_name=$(pretty "$best")
+        artist=$(playerctl --player="$best" metadata artist 2>/dev/null | head -c 30 || true)
+        title=$(playerctl --player="$best" metadata title 2>/dev/null | head -c 50 || true)
+
+        tooltip=""
+        for p in $players; do
+          s=$(playerctl --player="$p" status 2>/dev/null || true)
+          a=$(playerctl --player="$p" metadata artist 2>/dev/null || true)
+          t=$(playerctl --player="$p" metadata title 2>/dev/null || true)
+          case "$s" in
+            Playing) icon_t="▶" ;;
+            Paused)  icon_t="⏸" ;;
+            *)       icon_t="■" ;;
+          esac
+          if [ -n "$t" ]; then
+            tooltip="$tooltip$icon_t $(pretty "$p"): $a - $t\n"
+          fi
+        done
+        if [ "$tab_count" -gt 0 ]; then
+          tooltip="$tooltip""Firefox tabs:$tab_list"
+        fi
+        tooltip=$(printf '%b' "$tooltip" | head -c 1200 || true)
+
+        case "$best_status" in
+          Playing) class="playing"; icon="▶" ;;
+          Paused)  class="paused";  icon="⏸" ;;
+          *)
+            jq -nc --arg text "♫  $player_name" --arg class stopped \
+              --arg tooltip "$tooltip" '{text: $text, class: $class, tooltip: $tooltip}'
+            exit 0 ;;
+        esac
+
+        vol=$(playerctl --player="$best" volume 2>/dev/null || true)
+        vol_text=""
+        if [ -n "$vol" ]; then
+          vol_pct=$(printf '%s' "$vol" | awk '{printf "%.0f", $1 * 100}')
+          vol_text=" $vol_pct%"
+        fi
+
+        if [ -n "$title" ]; then
+          if [ -n "$artist" ]; then
+            text="$icon  $player_name: $artist - $title"
+          else
+            text="$icon  $player_name: $title"
+          fi
+        else
+          text="$icon  $player_name"
+        fi
+        text="$text$vol_text"
+
+        jq -nc --arg text "$text" --arg class "$class" --arg tooltip "$tooltip" \
+          '{text: $text, class: $class, tooltip: $tooltip}'
+      }
+
+      case "''${1:-status}" in
+        status)
+          # Waybar drops a module whose output is not JSON, so a failed run is
+          # replaced by a neutral pill instead.
+          out=$("$0" raw-status 2>/dev/null || true)
+          if jq -e . >/dev/null 2>&1 <<<"$out"; then
+            printf '%s\n' "$out"
+          else
+            echo '{"text":"♫","class":"stopped","tooltip":""}'
+          fi
+          ;;
+        raw-status) status ;;
+        toggle)
+          [ -n "$players" ] || exit 0
+          playerctl --player="$(target_player)" play-pause
+          refresh_bar
+          ;;
+        volume)
+          [ -n "$players" ] || exit 0
+          playerctl --player="$(target_player)" volume "$2"
+          refresh_bar
+          ;;
+        focus)
+          [ -n "$players" ] || exit 0
+          player=$(target_player)
+          app=''${player%%.*}
+          focus_class "$app" || focus_class "''${app^}" || true
+          ;;
+        *)
+          printf 'usage: media-player {status|toggle|volume <delta>|focus}\n' >&2
+          exit 2
+          ;;
       esac
-
-      vol=$(playerctl --player="$best" volume 2>/dev/null || true)
-      vol_text=""
-      if [ -n "$vol" ]; then
-        vol_pct=$(printf '%s' "$vol" | awk '{printf "%.0f", $1 * 100}')
-        vol_text=" $vol_pct%"
-      fi
-
-      if [ -n "$title" ]; then
-        if [ -n "$artist" ]; then
-          text="$icon  $player_name: $artist - $title"
-        else
-          text="$icon  $player_name: $title"
-        fi
-      else
-        text="$icon  $player_name"
-      fi
-      text="$text$vol_text"
-
-      jq -nc --arg text "$text" --arg class "$class" --arg tooltip "$tooltip" \
-        '{text: $text, class: $class, tooltip: $tooltip}'
-    '';
-  };
-
-  media-player-toggle = pkgs.writeShellApplication {
-    name = "media-player-toggle";
-    runtimeInputs = with pkgs; [playerctl procps];
-    text = ''
-      players=$(playerctl --list-all 2>/dev/null)
-      if [ -z "$players" ]; then
-        exit 0
-      fi
-
-      # Respect user-selected player first
-      if [ -f /tmp/media-player-selected ]; then
-        sel=$(cat /tmp/media-player-selected)
-        if printf '%s\n' "$players" | grep -qxF -- "$sel"; then
-          playerctl --player="$sel" play-pause
-          pidof -x waybar 2>/dev/null | xargs -r kill -46 2>/dev/null || true
-          exit 0
-        fi
-      fi
-
-      # Fall back to active player
-      if [ -f /tmp/media-player-active ]; then
-        active=$(cat /tmp/media-player-active)
-        if printf '%s\n' "$players" | grep -qxF -- "$active"; then
-          playerctl --player="$active" play-pause
-          pidof -x waybar 2>/dev/null | xargs -r kill -46 2>/dev/null || true
-          exit 0
-        fi
-      fi
-
-      # Final fallback: auto-select
-      best=""
-      browser_playing=""
-      for p in $players; do
-        s=$(playerctl --player="$p" status 2>/dev/null)
-        case "$p" in
-          firefox*|chromium*|chrome*|Floorp*)
-            [ "$s" = "Playing" ] && browser_playing="$p"
-            continue
-            ;;
-        esac
-        case "$s" in
-          Playing) best="$p"; break ;;
-          Paused)  [ -z "$best" ] && best="$p" ;;
-        esac
-      done
-
-      if [ -z "$best" ] && [ -n "$browser_playing" ]; then
-        best="$browser_playing"
-      fi
-
-      if [ -z "$best" ]; then
-        best=$(echo "$players" | head -1)
-      fi
-
-      playerctl --player="$best" play-pause
-      pidof -x waybar 2>/dev/null | xargs -r kill -46 2>/dev/null || true
-    '';
-  };
-
-  media-player-focus = pkgs.writeShellApplication {
-    name = "media-player-focus";
-    runtimeInputs = with pkgs; [playerctl hyprland coreutils];
-    text = ''
-      players=$(playerctl --list-all 2>/dev/null)
-      if [ -z "$players" ]; then
-        exit 0
-      fi
-
-      # Find best player (same logic as media-player-status)
-      best=""
-      browser_playing=""
-      for p in $players; do
-        s=$(playerctl --player="$p" status 2>/dev/null)
-        case "$p" in
-          firefox*|chromium*|chrome*|Floorp*)
-            [ "$s" = "Playing" ] && browser_playing="$p"
-            continue
-            ;;
-        esac
-        case "$s" in
-          Playing) best="$p"; break ;;
-          Paused)  [ -z "$best" ] && best="$p" ;;
-        esac
-      done
-
-      if [ -z "$best" ] && [ -n "$browser_playing" ]; then
-        best="$browser_playing"
-      fi
-
-      if [ -z "$best" ]; then
-        best=$(echo "$players" | head -1)
-      fi
-
-      # Focus the window using Hyprland 0.55 Lua dispatch API
-      # Try both lowercase and capitalized first letter
-      cap="''${best^}"
-      hyprctl dispatch "hl.dsp.focus({ window = 'class:^($best)$' })" 2>/dev/null || \
-      hyprctl dispatch "hl.dsp.focus({ window = 'class:^($cap)$' })" 2>/dev/null || \
-      hyprctl dispatch "hl.dsp.focus({ window = 'address:($best)' })" 2>/dev/null || true
-    '';
-  };
-
-  media-player-volume = pkgs.writeShellApplication {
-    name = "media-player-volume";
-    runtimeInputs = with pkgs; [coreutils playerctl procps];
-    text = ''
-      players=$(playerctl --list-all 2>/dev/null || true)
-      if [ -z "$players" ]; then
-        exit 0
-      fi
-
-      # A selection that outlived its player (closed since it was picked) must
-      # not swallow the event: drop it and fall back to what the bar shows.
-      player=""
-      if [ -f /tmp/media-player-selected ]; then
-        sel=$(cat /tmp/media-player-selected)
-        if printf '%s\n' "$players" | grep -qxF -- "$sel"; then
-          player="$sel"
-        else
-          rm -f /tmp/media-player-selected
-        fi
-      fi
-      if [ -z "$player" ] && [ -f /tmp/media-player-active ]; then
-        active=$(cat /tmp/media-player-active)
-        if printf '%s\n' "$players" | grep -qxF -- "$active"; then
-          player="$active"
-        fi
-      fi
-      if [ -z "$player" ]; then
-        player=$(printf '%s\n' "$players" | head -n 1 || true)
-      fi
-
-      playerctl --player="$player" volume "$1"
-      pidof -x waybar 2>/dev/null | xargs -r kill -46 2>/dev/null || true
     '';
   };
 
@@ -384,6 +323,26 @@
       esac
     '';
   };
+
+  tailscale-exit-node = pkgs.writeShellApplication {
+    name = "tailscale-exit-node";
+    runtimeInputs = with pkgs; [tailscale jq wofi libnotify];
+    text = ''
+      nodes=$(tailscale status --json | jq -r '.Peer[] | select(.ExitNodeOption == true) | .DNSName | rtrimstr(".")' 2>/dev/null || true)
+      if [ -z "$nodes" ]; then
+        notify-send "Tailscale" "No exit node candidates found"
+        exit 0
+      fi
+      choice=$(printf 'None\n%s\n' "$nodes" | wofi --dmenu -p "Exit Node" -i 2>/dev/null || true)
+      # The setuid wrapper, by path: the bar's PATH only has the plain sudo binary.
+      if [ "$choice" = None ]; then
+        /run/wrappers/bin/sudo tailscale set --exit-node=
+      elif [ -n "$choice" ]; then
+        /run/wrappers/bin/sudo tailscale set --exit-node="$choice" --exit-node-allow-lan-access
+      fi
+      ${refresh sig.tailscale} 2>/dev/null || true
+    '';
+  };
   # iPad second display helper. Built from the same expression as
   # modules/ipad-display.nix, so no overlay is needed here (this module also
   # loads on hosts that never import shared-configuration.nix).
@@ -452,13 +411,13 @@ in {
               "custom/privacy"
               "custom/screenrec"
             ]
-            ++ (lib.optionals (compName == "arch" || compName == "office") [
+            ++ (lib.optionals isDesk [
               "custom/ipad"
             ])
             ++ [
               "custom/tailscale"
             ]
-            ++ (lib.optionals (compName == "arch" || compName == "office") [
+            ++ (lib.optionals isDesk [
               "custom/deskflow"
             ])
             ++ [
@@ -550,41 +509,32 @@ in {
           clock = {
             interval = 1;
             format = "{:%H:%M:%S}";
-            on-click-right = "fish -c 'date +\"%A, %e %B %Y — %H:%M:%S\" | wl-copy; notify-send \"Copied\" (wl-paste)'";
+            on-click-right = copy-date;
             on-click = "toggle-calendar";
           };
 
           # ---- Clock Date (hidden until hover) ----
           "custom/clock-date" = {
-            exec = "${pkgs.writeShellScript "waybar-clock-date" ''
-              date '+%A, %e %B %Y'
-            ''}";
+            exec = "${pkgs.coreutils}/bin/date '+%A, %e %B %Y'";
             interval = 10;
-            on-click-right = "fish -c 'date +\"%A, %e %B %Y — %H:%M:%S\" | wl-copy; notify-send \"Copied\" (wl-paste)'";
+            on-click-right = copy-date;
           };
 
           # ---- Media Player (center) ----
           "custom/media" = {
-            exec = "${pkgs.writeShellScript "media-safe" ''
-              out=$(${media-player-status}/bin/media-player-status 2>/dev/null)
-              if echo "$out" | ${pkgs.jq}/bin/jq empty 2>/dev/null; then
-                echo "$out"
-              else
-                echo '{"text":"♫","class":"stopped","tooltip":""}'
-              fi
-            ''}";
+            exec = "${media-player}/bin/media-player status";
             return-type = "json";
             interval = 2;
-            signal = 12;
+            signal = sig.media;
             escape = true;
             format = "{}";
-            on-click = "${media-player-toggle}/bin/media-player-toggle";
+            on-click = "${media-player}/bin/media-player toggle";
             on-click-right = "media-picker-toggle";
-            on-click-backward = "playerctl --all-players previous; pidof -x waybar 2>/dev/null | xargs -r kill -46 2>/dev/null || true";
-            on-click-forward = "playerctl --all-players next; pidof -x waybar 2>/dev/null | xargs -r kill -46 2>/dev/null || true";
-            on-click-middle = "${media-player-focus}/bin/media-player-focus";
-            on-scroll-up = "${media-player-volume}/bin/media-player-volume 0.05+";
-            on-scroll-down = "${media-player-volume}/bin/media-player-volume 0.05-";
+            on-click-backward = "playerctl --all-players previous; ${refresh sig.media}";
+            on-click-forward = "playerctl --all-players next; ${refresh sig.media}";
+            on-click-middle = "${media-player}/bin/media-player focus";
+            on-scroll-up = "${media-player}/bin/media-player volume 0.05+";
+            on-scroll-down = "${media-player}/bin/media-player volume 0.05-";
           };
 
           # ---- iPad second display ----
@@ -605,23 +555,10 @@ in {
             exec = "${tailscale-status}/bin/tailscale-status";
             return-type = "json";
             interval = 20;
-            signal = 14;
+            signal = sig.tailscale;
             format = "{}";
             on-click = "eww open tailscale || eww close tailscale";
-            on-click-right = "fish -c '
-              set nodes (tailscale status --json | jq -r \".Peer[] | select(.ExitNodeOption == true) | .DNSName | rtrimstr(\\\".\\\")\" 2>/dev/null | string collect)
-              if test -z \"$nodes\"
-                notify-send \"Tailscale\" \"No exit node candidates found\"
-                exit 0
-              end
-              set choice (printf \"None\n%s\" \"$nodes\" | wofi --dmenu -p \"Exit Node\" -i 2>/dev/null)
-              if test \"$choice\" = \"None\"
-                sudo tailscale set --exit-node=\"\"
-              else if test -n \"$choice\"
-                sudo tailscale set --exit-node=\"$choice\" --exit-node-allow-lan-access
-              end
-              pkill -RTMIN+14 waybar
-            '";
+            on-click-right = "${tailscale-exit-node}/bin/tailscale-exit-node";
             tooltip = true;
           };
 
@@ -750,6 +687,29 @@ in {
             tooltip = true;
           };
 
+          "custom/vast" = {
+            exec = "vast-waybar-status";
+            return-type = "json";
+            interval = 60;
+            signal = sig.vast;
+            format = "{}";
+            tooltip = true;
+            on-click = "rm -f /tmp/vast-waybar-status.json && ${refresh sig.vast}";
+          };
+          # `signal` + no `interval` makes Waybar run the command once and wait for it to
+          # exit; `autoclicker watch` never exits, so the module never rendered. A long-lived
+          # exec must instead be declared with `restart-interval` only.
+          "custom/autoclicker" = {
+            exec = "${autoclicker} watch";
+            return-type = "json";
+            restart-interval = 2;
+            format = "{}";
+            tooltip = true;
+            on-click = "${autoclicker} toggle";
+            on-click-middle = "${autoclicker} cycle";
+            on-click-right = "autoclicker-menu-toggle";
+          };
+
           # ---- Eww Hello World ----
           "custom/eww-hello" = {
             format = "";
@@ -799,7 +759,7 @@ in {
             spacing = 8;
           };
         }
-        // (lib.optionalAttrs (compName == "arch") {
+        // lib.optionalAttrs (compName == "arch") {
           "custom/thermostat" = {
             exec = "hass-thermostat-status";
             return-type = "json";
@@ -811,30 +771,6 @@ in {
             on-scroll-down = "hass-macro thermostat-down";
             on-click-middle = "hass-macro thermostat-toggle";
             tooltip = true;
-          };
-        })
-        // {
-          "custom/vast" = {
-            exec = "vast-waybar-status";
-            return-type = "json";
-            interval = 60;
-            signal = 9;
-            format = "{}";
-            tooltip = true;
-            on-click = "rm -f /tmp/vast-waybar-status.json && pkill -RTMIN+9 waybar";
-          };
-          # `signal` + no `interval` makes Waybar run the command once and wait for it to
-          # exit; `autoclicker watch` never exits, so the module never rendered. A long-lived
-          # exec must instead be declared with `restart-interval` only.
-          "custom/autoclicker" = {
-            exec = "${autoclicker} watch";
-            return-type = "json";
-            restart-interval = 2;
-            format = "{}";
-            tooltip = true;
-            on-click = "autoclicker toggle";
-            on-click-middle = "autoclicker cycle";
-            on-click-right = "autoclicker-menu-toggle";
           };
         };
     };
