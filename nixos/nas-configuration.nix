@@ -692,9 +692,10 @@ nixpkgs.overlays = [
   # ZFS datasets (one-time):
   #   Data:    sudo zfs create -o mountpoint=/tank/atticd -o recordsize=1M -o compression=lz4 -o atime=off tank/atticd
   #   Cache:   sudo zfs create -o mountpoint=/tank/atticd/storage -o recordsize=1M -o compression=lz4 -o atime=off tank/atticd/storage
-  #   DB:      sudo zfs create -o mountpoint=/tank/atticd/db -o recordsize=64K -o compression=lz4 -o atime=off tank/atticd/db
-  #   Owner:   sudo chown atticd:atticd /tank/atticd /tank/atticd/storage /tank/atticd/db
-  #   Migrate: systemctl stop atticd && mv /tank/atticd/server.db /tank/atticd/db/ && systemctl start atticd
+  #   DB:      legacy — the DB moved to /var/lib/atticd (root SSD) on 2026-11-19
+  #            because tank's pool-wide txg coupled every commit to bulk HDD I/O.
+  #            tank/atticd/db still holds the pre-move copy; destroy it when done.
+  #   Owner:   sudo chown atticd:atticd /tank/atticd /tank/atticd/storage
 
   # Declarative cache bootstrap — creates + configures the cache on first boot.
   # Token generation remains imperative: atticd-atticadm make-token
@@ -726,7 +727,14 @@ nixpkgs.overlays = [
       listen = "[::]:8280";
       allowed-hosts = ["nas.ts.2143.me" "nas.ts.2143.me:8280" "nas" "nas:8280" "nas.local" "nas.local:8280" "localhost" "localhost:8280" "100.64.0.14" "100.64.0.14:8280"];
       api-endpoint = "http://nas:8280/";
-      database.url = "sqlite:///tank/atticd/db/server.db?mode=rwc";
+      # The DB lives on the root SSD, NOT on tank. On tank every SQLite commit
+      # waits for a pool-wide txg that also carries Longhorn, seaweedfs and
+      # immich writes (raidz1 with two SMR drives), so under any bulk I/O the
+      # DB blocks, the connection pool starves and every narinfo 500s — 2026-11-19
+      # produced 14 failures in the first five minutes of a post-reboot Longhorn
+      # rebuild, each a 30 s pool timeout that nix escalates to a build failure.
+      # 103 MB of metadata on an SSD also sits outside the pool's corruption.
+      database.url = "sqlite:///var/lib/atticd/server.db?mode=rwc";
 
       # atticd never runs ANALYZE, so a restored or rebuilt server.db has no
       # sqlite_stat1, SQLite treats `state = ?` as selective as
@@ -740,7 +748,7 @@ nixpkgs.overlays = [
       # chunks accumulate: the statistics go stale, the plan does not.
       # Upstream zhaofengli/attic#377, unfixed in main as of 2026-11-18.
       #
-      #   python3 -c 'import sqlite3;c=sqlite3.connect("/tank/atticd/db/server.db");c.execute("ANALYZE");c.commit()'
+      #   python3 -c 'import sqlite3;c=sqlite3.connect("/var/lib/atticd/server.db");c.execute("ANALYZE");c.commit()'
       #
       # Confirm with: EXPLAIN QUERY PLAN SELECT id FROM chunk WHERE
       # chunk_hash=? AND state=? LIMIT 1 — good says
@@ -1044,6 +1052,46 @@ nixpkgs.overlays = [
     MemoryMax = "6G";
     MemorySwapMax = "1G";
     TimeoutStopSec = "30s";
+  };
+
+  # One-time move of the DB off tank/atticd/db (2026-11-19). Runs as the
+  # atticd user after systemd has created /var/lib/atticd, so the switch that
+  # introduces database.url's new path performs the migration itself. The old
+  # copy stays on tank as a fallback; destroy the dataset once this is past.
+  systemd.services.atticd.preStart = ''
+    if [ ! -e /var/lib/atticd/server.db ] && [ -e /tank/atticd/db/server.db ]; then
+      echo "migrating attic DB to /var/lib/atticd"
+      for f in server.db server.db-wal server.db-shm; do
+        [ -e "/tank/atticd/db/$f" ] && cp -p "/tank/atticd/db/$f" "/var/lib/atticd/$f"
+      done
+    fi
+  '';
+
+  # atticd can wedge while staying `active` — SQLite pool starvation (Nov 16,
+  # Nov 19) and ZFS directory hangs all look like this — so systemd never
+  # restarts it and every request 500s, which nix turns into a failed build.
+  # A wedged daemon still answers nothing at all, so probe a DB-backed
+  # narinfo: anything that is not a real HTTP answer means restart.
+  systemd.services.atticd-watchdog = {
+    description = "Restart atticd if narinfo stops answering";
+    serviceConfig.Type = "oneshot";
+    script = ''
+      systemctl is-active --quiet atticd || exit 0
+      code=$(${lib.getExe pkgs.curl} -s -o /dev/null -m 15 -w '%{http_code}' \
+        http://localhost:8280/2143nix/narinfo/00000000000000000000000000000000.narinfo || true)
+      case "$code" in
+        2*|3*|4*) exit 0 ;;
+      esac
+      echo "atticd narinfo probe returned '$code' - restarting" >&2
+      systemctl restart atticd
+    '';
+  };
+  systemd.timers.atticd-watchdog = {
+    wantedBy = ["timers.target"];
+    timerConfig = {
+      OnBootSec = "10min";
+      OnUnitActiveSec = "5min";
+    };
   };
 
   security.rtkit.enable = true;
