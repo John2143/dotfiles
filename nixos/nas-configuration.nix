@@ -348,6 +348,11 @@ nixpkgs.overlays = [
     curl
     smartmontools # smartctl — inspect SMART on SATA/SCSI disks
     restic
+    # Interactive use of the offsite jobs' tools (drills, `rclone lsl`) as root.
+    # The units themselves set `path`; systemPackages is not on a unit's PATH.
+    rclone
+    jq
+    kubectl
   ];
 
   programs.gnupg.agent = {
@@ -400,6 +405,14 @@ nixpkgs.overlays = [
         monthly = 3;
       };
       "tank/private" = {
+        autosnap = true;
+        daily = 30;
+        monthly = 12;
+        yearly = 1;
+      };
+      # Vault directories that stay on-site (never sent offsite). Same policy
+      # as tank/private: the pool snapshots are its only history.
+      "tank/private-local" = {
         autosnap = true;
         daily = 30;
         monthly = 12;
@@ -552,6 +565,16 @@ nixpkgs.overlays = [
         browseable = "yes";
         "read only" = "no";
         "valid users" = "john amandastry";
+        "create mask" = "0600";
+        "directory mask" = "0700";
+      };
+      # Second gocryptfs root (same master key) for vault directories that
+      # are excluded from offsite-private. Only john has a root here.
+      private-local = {
+        path = "/tank/private-local/%U";
+        browseable = "yes";
+        "read only" = "no";
+        "valid users" = "john";
         "create mask" = "0600";
         "directory mask" = "0700";
       };
@@ -743,6 +766,238 @@ nixpkgs.overlays = [
     mode = "0400";
     owner = "root";
     group = "root";
+  };
+
+  # ======================
+  # === Offsite (B2)   ===
+  # ======================
+  # Append-only copies of the data that cannot be rebuilt, into three
+  # COMPLIANCE-locked (30 d) B2 buckets with prefix-scoped lifecycle rules.
+  # Runbook and restore procedures: argo docs/offsite-data.md.
+  # Each env file defines the rclone remote `hz` (bucket-scoped app key plus
+  # that bucket's SSE-C key) through RCLONE_CONFIG_HZ_* variables.
+  age.secrets.rclone-immich-env = {
+    file = ../secrets/rclone-immich.env.age;
+    mode = "0400";
+    owner = "root";
+    group = "root";
+  };
+  age.secrets.rclone-private-env = {
+    file = ../secrets/rclone-private.env.age;
+    mode = "0400";
+    owner = "root";
+    group = "root";
+  };
+  age.secrets.rclone-volumes-env = {
+    file = ../secrets/rclone-volumes.env.age;
+    mode = "0400";
+    owner = "root";
+    group = "root";
+  };
+  # NTFY_TOPIC_URL for notify-failure@ below.
+  age.secrets.ntfy-topic-url = {
+    file = ../secrets/ntfy-topic-url.age;
+    mode = "0400";
+    owner = "root";
+    group = "root";
+  };
+
+  # Daily logical dump. immich's Postgres lives on the root SSD, not the pool,
+  # so this object is the only copy if that disk dies. Expires via `db/` rule.
+  systemd.services.offsite-immich-db = {
+    description = "Offsite: pg_dump immich to B2";
+    restartIfChanged = false;
+    onFailure = ["notify-failure@%n.service"];
+    path = [pkgs.util-linux pkgs.rclone];
+    environment = {
+      RCLONE_STATS = "10m";
+      RCLONE_STATS_LOG_LEVEL = "NOTICE";
+    };
+    serviceConfig = {
+      Type = "oneshot";
+      EnvironmentFile = config.age.secrets.rclone-immich-env.path;
+    };
+    script = ''
+      set -euo pipefail
+      runuser -u postgres -- ${config.services.postgresql.package}/bin/pg_dump -Fc immich \
+        | rclone rcat "hz:j2143-argo-immich/db/$(date -u +%Y%m%dT%H%M%SZ).dump"
+    '';
+  };
+  systemd.timers.offsite-immich-db = {
+    wantedBy = ["timers.target"];
+    timerConfig = {
+      OnCalendar = "*-*-* 05:30:00";
+      Persistent = true;
+    };
+  };
+
+  # Weekly originals. Plain `copy` (never sync): objects are written once and
+  # never expire; thumbs/ and encoded-video/ are regenerable and excluded.
+  systemd.services.offsite-immich-media = {
+    description = "Offsite: copy immich originals to B2";
+    restartIfChanged = false;
+    onFailure = ["notify-failure@%n.service"];
+    path = [pkgs.rclone];
+    environment = {
+      RCLONE_STATS = "10m";
+      RCLONE_STATS_LOG_LEVEL = "NOTICE";
+    };
+    serviceConfig = {
+      Type = "oneshot";
+      EnvironmentFile = config.age.secrets.rclone-immich-env.path;
+    };
+    script = ''
+      set -euo pipefail
+      rclone copy /tank/immich hz:j2143-argo-immich/media \
+        --exclude "thumbs/**" --exclude "encoded-video/**" \
+        --transfers 8 --checkers 16 --s3-chunk-size 32M
+    '';
+  };
+  systemd.timers.offsite-immich-media = {
+    wantedBy = ["timers.target"];
+    timerConfig = {
+      OnCalendar = "Sun *-*-* 05:00:00";
+      Persistent = true;
+    };
+  };
+
+  # Weekly `zfs send` of tank/private (gocryptfs ciphertext). One full stream
+  # per 13-week generation, then incrementals; the `zfs/` rule hides objects
+  # at day 120, so a generation's base always outlives its chain. Only the
+  # newest @offsite-* snapshot is kept: it is the next incremental's source.
+  systemd.services.offsite-private = {
+    description = "Offsite: zfs send tank/private to B2";
+    restartIfChanged = false;
+    onFailure = ["notify-failure@%n.service"];
+    path = [config.boot.zfs.package pkgs.rclone pkgs.gawk pkgs.gnugrep pkgs.findutils];
+    environment = {
+      RCLONE_STATS = "10m";
+      RCLONE_STATS_LOG_LEVEL = "NOTICE";
+    };
+    serviceConfig = {
+      Type = "oneshot";
+      StateDirectory = "offsite";
+      EnvironmentFile = config.age.secrets.rclone-private-env.path;
+    };
+    script = ''
+      set -euo pipefail
+      state=/var/lib/offsite
+      week=$(date -u +%G-W%V)
+      gen="gen-$(date -u +%G)-$(printf %02d $(( 10#$(date -u +%V) / 13 )))"
+      last=$(cat "$state/private.last" 2>/dev/null || true)
+      if [ "$last" = "$week" ]; then
+        echo "offsite-private: $week already sent; nothing to do"
+        exit 0
+      fi
+      snap="tank/private@offsite-$week"
+      zfs list -H -o name -t snapshot "$snap" >/dev/null 2>&1 || zfs snapshot "$snap"
+      if [ "$(cat "$state/private.gen" 2>/dev/null || true)" = "$gen" ] && [ -n "$last" ] \
+         && zfs list -H -o name -t snapshot "tank/private@offsite-$last" >/dev/null 2>&1; then
+        send=(-c -i "@offsite-$last" "$snap"); obj="zfs/$gen/$week.zfs"
+      else
+        send=(-c "$snap"); obj="zfs/$gen/$week-full.zfs"
+      fi
+      # rcat of an unknown-size stream is capped at 10,000 parts: size the
+      # chunk from zfs's own estimate so a multi-TiB full cannot hit the cap.
+      bytes=$(zfs send -nP "''${send[@]}" | awk '$1 == "size" {print $2}')
+      chunk=$(( bytes / 9000 / 1048576 + 1 ))
+      if [ "$chunk" -lt 32 ]; then chunk=32; fi
+      echo "offsite-private: sending $obj (~$bytes bytes, chunk ''${chunk}M)"
+      zfs send "''${send[@]}" | rclone rcat "hz:j2143-argo-private/$obj" --s3-chunk-size "''${chunk}M"
+      printf %s "$week" > "$state/private.last"
+      printf %s "$gen" > "$state/private.gen"
+      # grep exits 1 when only $snap exists; that is the normal steady state.
+      old=$(zfs list -H -o name -t snapshot tank/private | grep '^tank/private@offsite-' | grep -vxF "$snap" || true)
+      for s in $old; do zfs destroy "$s"; done
+    '';
+  };
+  systemd.timers.offsite-private = {
+    wantedBy = ["timers.target"];
+    timerConfig = {
+      OnCalendar = "Sun *-*-* 04:00:00";
+      Persistent = true;
+    };
+  };
+
+  # Weekly mirror of the Longhorn backupstore for PVCs annotated
+  # offsite.backup/enabled=true. Longhorn backups share deduplicated blocks,
+  # so an append-only mirror under a fixed prefix would lose still-referenced
+  # blocks to the `longhorn/` 60-day rule. Each 4-week generation is therefore
+  # a complete, self-contained copy (blocks re-uploaded), and every backup in
+  # a generation stays restorable for 60 days after that generation began.
+  # The hashed volumes/<xx>/<yy>/<pvc> layout is kept so a restore copies the
+  # directory straight back into a backupstore.
+  systemd.services.offsite-volumes = {
+    description = "Offsite: mirror tagged Longhorn backups to B2";
+    restartIfChanged = false;
+    onFailure = ["notify-failure@%n.service"];
+    after = ["k3s.service"];
+    path = [pkgs.kubectl pkgs.jq pkgs.rclone pkgs.findutils];
+    environment = {
+      KUBECONFIG = "/etc/rancher/k3s/k3s.yaml";
+      RCLONE_STATS = "10m";
+      RCLONE_STATS_LOG_LEVEL = "NOTICE";
+    };
+    serviceConfig = {
+      Type = "oneshot";
+      EnvironmentFile = config.age.secrets.rclone-volumes-env.path;
+    };
+    script = ''
+      set -euo pipefail
+      store=/tank/longhorn-backups/backupstore/volumes
+      gen="gen-$(date -u +%G)-$(printf %02d $(( 10#$(date -u +%V) / 4 )))"
+      # namespace/name pairs: two namespaces each have a `seafile-data` and an
+      # `odoo-filestore`, so a bare name would match untagged PVCs too.
+      selected=$(kubectl get pvc -A -o json | jq -r '.items[]
+        | select(.metadata.annotations["offsite.backup/enabled"] == "true")
+        | .metadata.namespace + "/" + .metadata.name')
+      # Empty-selection guards: without them a filter typo would not fail,
+      # it would silently mirror nothing (or, if loosened, everything).
+      if [ -z "$selected" ]; then echo "offsite-volumes: no PVCs tagged; nothing to mirror"; exit 0; fi
+      volumes=$(kubectl -n longhorn-system get volumes.longhorn.io -o json | jq -r --arg sel "$selected" '
+        ($sel | split("\n")) as $s | .items[]
+        | select((.status.kubernetesStatus.namespace + "/" + .status.kubernetesStatus.pvcName) as $k
+                 | $s | any(. == $k))
+        | .metadata.name')
+      if [ -z "$volumes" ]; then echo "offsite-volumes: no volumes matched; nothing to mirror"; exit 0; fi
+      want=$(printf '%s\n' "$selected" | wc -l); got=$(printf '%s\n' "$volumes" | wc -l)
+      echo "offsite-volumes: $want tagged PVCs -> $got Longhorn volumes, generation $gen"
+      rc=0
+      if [ "$want" -ne "$got" ]; then echo "offsite-volumes: tagged PVC without a Longhorn volume"; rc=1; fi
+      for v in $volumes; do
+        d=$(find "$store" -mindepth 3 -maxdepth 3 -type d -name "$v" -print -quit)
+        if [ -z "$d" ]; then echo "offsite-volumes: no backupstore directory for $v"; rc=1; continue; fi
+        rclone copy "$d" "hz:j2143-argo-volumes/longhorn/$gen/volumes/''${d#"$store"/}" \
+          --transfers 4 --checkers 8 --s3-chunk-size 32M
+      done
+      exit "$rc"
+    '';
+  };
+  systemd.timers.offsite-volumes = {
+    wantedBy = ["timers.target"];
+    timerConfig = {
+      OnCalendar = "Sun *-*-* 06:00:00";
+      Persistent = true;
+    };
+  };
+
+  # ntfy push for a failed unit (OnFailure=notify-failure@%n.service). Same
+  # shape as modules/fleet-patching.nix, which this host does not import; the
+  # root-owned secret is handed to the john-run unit as a credential.
+  systemd.services."notify-failure@" = {
+    description = "ntfy alert for failed unit %i";
+    path = [pkgs.curl];
+    scriptArgs = "%i";
+    serviceConfig = {
+      Type = "oneshot";
+      User = "john";
+      LoadCredential = ["ntfy-topic-url:${config.age.secrets.ntfy-topic-url.path}"];
+    };
+    script = ''
+      set -a; . "$CREDENTIALS_DIRECTORY/ntfy-topic-url"; set +a
+      curl -fsS -m 20 -H "Title: $1 failed on nas" -H "Priority: high" -H "Tags: rotating_light" \
+        -d "journalctl -u $1 -n 200 on nas" "$NTFY_TOPIC_URL"
+    '';
   };
 
   # Persistent user for ZFS dataset ownership.

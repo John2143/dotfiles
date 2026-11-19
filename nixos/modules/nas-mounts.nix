@@ -92,4 +92,13 @@ in {
     fsType = "cifs";
     options = mountOpts;
   };
+
+  # Second gocryptfs root, same master key as `private` (gocryptfs.conf copied,
+  # not re-initialised). Holds the vault directories that must never leave the
+  # building: tank/private is sent offsite weekly, tank/private-local is not.
+  fileSystems."/mnt/nas/private-local" = {
+    device = "//nas.ts.2143.me/private-local";
+    fsType = "cifs";
+    options = mountOpts;
+  };
 }
