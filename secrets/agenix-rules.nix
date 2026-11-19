@@ -120,7 +120,7 @@ in {
   # ntfy.sh topic URL for OMP agent notifications. Topic name is not a
   # cryptographic secret (public server, anyone with the name can publish),
   # but keeping it out of the Nix store avoids accidental exposure.
-  "ntfy-topic-url.age".publicKeys = [office arch pite];
+  "ntfy-topic-url.age".publicKeys = [office arch pite nas];
   "omp-mcp.json.age".publicKeys = [office arch];
   # MikroTik SSH key — router (192.168.1.1) + two switches.
   # Upstairs: 192.168.5.3, Downstairs: 192.168.5.2. All use admin@.
@@ -194,6 +194,10 @@ in {
   "idrac-aiuser.age".publicKeys = [office arch];
 
   "router-snmp.age".publicKeys = [office arch pite];
+
+  "rclone-immich.env.age".publicKeys = [office arch nas];
+  "rclone-private.env.age".publicKeys = [office arch nas];
+  "rclone-volumes.env.age".publicKeys = [office arch nas];
 
   # Read-only Home Assistant account for the home-assistant-engineer skill.
   "ha-aiuser.age".publicKeys = [office arch];
