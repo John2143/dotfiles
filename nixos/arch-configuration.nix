@@ -87,8 +87,9 @@
 
   networking.hostName = "arch";
 
-  # Either spare port, so the cable works wherever it is plugged in.
-  services.macbookLink.interfaces = ["enp7s0" "enp2s0f1"];
+  # Any spare port, so the cable works wherever it is plugged in (eno1 is the
+  # one the MacBook's adapter actually reaches).
+  services.macbookLink.interfaces = ["eno1" "enp7s0" "enp2s0f1"];
   networking.networkmanager.enable = true; # Easiest to use and most distros use this by default.
   networking.nameservers = [
     "1.1.1.1"
