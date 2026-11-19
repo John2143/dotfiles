@@ -82,11 +82,13 @@ in
         #   deepseek-v4-pro: $1.32 / $3.96 output  cache hit $0.044
         # Source: https://api-docs.deepseek.com/quick_start/pricing
         # Requires DEEPSEEK_API_KEY in /run/agenix/llm-runtime-keys.
+        # Read per request via `!command` (not the env name) so the key never
+        # enters omp's environment — same reason as the litellm provider below.
         # Get one: https://platform.deepseek.com/api_keys
         deepseek:
           baseUrl: https://api.deepseek.com/v1
           api: openai-completions
-          apiKey: DEEPSEEK_API_KEY
+          apiKey: "!sed -n 's/^DEEPSEEK_API_KEY=//p' /run/agenix/llm-runtime-keys"
           models:
             - id: deepseek-flash
               name: DeepSeek Flash (Direct API)
@@ -452,8 +454,9 @@ in
         vision: anthropic/claude-opus-5-5
         # Web search became a model-kind role in 18.15; the old
         # `providers.webSearch: brave` key is retired and auto-migrated into
-        # this role, then deleted. `web/brave` needs BRAVE_API_KEY from
-        # /run/agenix/llm-runtime-keys. Swap to `web/deepseek` (DEEPSEEK_API_KEY,
+        # this role, then deleted. `web/brave` reads its key from the omp auth
+        # vault (~/.omp/agent/agent.db, loaded once per machine with
+        # `omp auth import`; nothing is exported to env). Swap to `web/deepseek` (DEEPSEEK_API_KEY,
         # POST /v1/tools/search) to use DeepSeek's search API instead.
         web: web/brave
 
@@ -642,33 +645,6 @@ in
       force = true;
     };
 
-    # Environment for every omp process, including a `/fork pane` child. The
-    # `omp` wrapper's `set -a; . llm-runtime-keys` reaches only its own child;
-    # a placed fork is exec'd straight from the store binary inside a fresh
-    # tmux pane, which inherits the tmux *server's* env. OMP therefore reads
-    # these dotenv files itself at startup, before any models.yml value is
-    # resolved (utils/src/env.ts: the agent `.env`, then the config-root one,
-    # both below a live shell export). Credentials the config names explicitly
-    # stay on `!command` (see the litellm/anthropic providers), so this file is
-    # for the key nobody can name there: BRAVE_API_KEY, read as an env var by
-    # the `web/brave` role, and NTFY_TOPIC_URL, read by the notification snippet.
-    #
-    # Side effect worth knowing: the runtime-keys file also carries
-    # ANTHROPIC_API_KEY, which the wrapper deliberately unsets to keep a billed
-    # API-key lane from outbidding the Max-subscription OAuth login. Stored
-    # OAuth still outranks env in the credential cascade, so this only changes
-    # the outcome when that login is missing or expired. Symlinked, never
-    # copied: a plain `source` would put the secret in the world-readable store.
-    # One file per path decides the split — the ntfy URL is a separate secret.
-    ".omp/agent/.env" = lib.mkIf ((osConfig.age.secrets or { }) ? llm-runtime-keys) {
-      source = config.lib.file.mkOutOfStoreSymlink osConfig.age.secrets.llm-runtime-keys.path;
-      force = true;
-    };
-    ".omp/.env" = lib.mkIf ((osConfig.age.secrets or { }) ? ntfy-topic-url) {
-      source = config.lib.file.mkOutOfStoreSymlink osConfig.age.secrets.ntfy-topic-url.path;
-      force = true;
-    };
-
     ".omp/agent/SYSTEM.md".text = ''
       You are a capable AI agent operating in a terminal-based harness. You handle software engineering tasks and complex research topics with equal rigor. You may be running under Oh My Pi, Claude Code, or another harness; do not assume defaults from any specific one.
 
@@ -819,7 +795,8 @@ in
       </agent-cron>
       <user-notification>
       ntfy.sh for job completion and status updates only (not questions):
-        curl -H "Priority: max" -H "Tags: warning" -d "message" "$NTFY_TOPIC_URL"
+        curl -H "Priority: max" -H "Tags: warning" -d "message" \
+          --config <(printf 'url = "%s"\n' "$(sed -n 's/^NTFY_TOPIC_URL=//p' /run/agenix/ntfy-topic-url)")
 
       Home Assistant for critical alerts that must bypass Do Not Disturb / silent mode:
         TOKEN=$(cat /run/agenix/hass-credentials 2>/dev/null)
