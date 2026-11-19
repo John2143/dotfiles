@@ -6,29 +6,26 @@
   compName,
   ...
 }: let
-  # omp wrapper: sources runtime keys from agenix and forces the local OAuth
-  # subscription path, mirroring nixos/shared-cli-configuration.nix.
+  # omp wrapper: checks the agenix runtime keys are readable (omp resolves them
+  # at use time) and forces the local OAuth subscription path, mirroring
+  # nixos/shared-cli-configuration.nix.
   omp = let
     omp-unwrapped = inputs.oh-my-pi.packages.${pkgs.stdenv.hostPlatform.system}.omp;
   in
     pkgs.writeShellScriptBin "omp" ''
-      if [ -f /run/agenix/llm-runtime-keys ]; then
-        set -a
-        . /run/agenix/llm-runtime-keys
-        set +a
-      fi
-      if [ -z "$LITELLM_EDITOR_KEY" ]; then
-        echo "omp: LITELLM_EDITOR_KEY missing from /run/agenix/llm-runtime-keys" >&2
+      # Provider credentials are NOT exported here. omp resolves them at
+      # use time: models.yml uses `!command` (nixos/modules/omp-config.nix)
+      # and Brave lives in ~/.omp/agent/agent.db via `omp auth import`.
+      # Exporting them put every key — LITELLM_MASTER_KEY included — into
+      # the process env, where any tool-call `env` dumps it and every
+      # spawned process inherits it.
+      if [ ! -r /run/agenix/llm-runtime-keys ]; then
+        echo "omp: /run/agenix/llm-runtime-keys is not readable; model credentials cannot be resolved" >&2
         exit 1
       fi
       # Force Anthropic through the locally stored OAuth subscription;
       # an inherited platform key would otherwise enable billed fallback.
       unset ANTHROPIC_API_KEY
-      if [ -f /run/agenix/ntfy-topic-url ]; then
-        set -a
-        . /run/agenix/ntfy-topic-url
-        set +a
-      fi
       ${omp-unwrapped}/bin/omp "$@"
     '';
 
@@ -39,11 +36,10 @@
     claude-unwrapped = inputs.claude-code-nix.packages.${pkgs.stdenv.hostPlatform.system}.default;
   in
     pkgs.writeShellScriptBin "claude" ''
-      if [ -f /run/agenix/llm-runtime-keys ]; then
-        set -a
-        . /run/agenix/llm-runtime-keys
-        set +a
-      fi
+      # Read only the proxy key, into a NON-exported shell variable. Sourcing
+      # the whole file with `set -a` exported all of llm-runtime-keys
+      # (LITELLM_MASTER_KEY included) into Claude Code and every tool it runs.
+      LITELLM_EDITOR_KEY="$(sed -n 's/^LITELLM_EDITOR_KEY=//p' /run/agenix/llm-runtime-keys 2>/dev/null)"
       if [ -z "$LITELLM_EDITOR_KEY" ]; then
         echo "claude: LITELLM_EDITOR_KEY missing from /run/agenix/llm-runtime-keys" >&2
         exit 1
