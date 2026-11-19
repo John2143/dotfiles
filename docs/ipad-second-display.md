@@ -299,6 +299,7 @@ ip -br addr | grep 10.77.0.1     # cable link
 nmcli -t device status | grep enp0s20   # data iface on ipad-usb, private one unmanaged
 journalctl -b --since -1min | grep -c ipad-usb-attach   # 1-2, not dozens (a loop looks like dozens)
 ss -ltn | grep 24800             # Deskflow serving
+deskflow-ctl status | jq -r '.class, .tooltip'   # what the DF pill reports: stopped|idle|lan|wire, and its tooltip
 ```
 
 ## Pitfalls seen in practice
