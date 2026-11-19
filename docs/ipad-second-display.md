@@ -105,9 +105,11 @@ bug to chase.
 
 **The GUI and the unit both want port 24800.** The GUI starts its own core when you press Start,
 which wins the port and makes the unit fail with `status=5`. The working pattern is: configure in
-the GUI, **quit the GUI**, then `systemctl --user start deskflow`. The bar's `DF` widget reports a
-core that is serving regardless of who started it, and refuses to toggle silently when the core
-belongs to the GUI.
+the GUI, **quit the GUI**, then `systemctl --user start deskflow`. The bar's `DF` widget reports
+whatever serves the port, regardless of who started it: black when nothing does, gray with no
+client, blue with a client over the LAN, Wi-Fi or tailnet, green with a client on the dedicated
+wire. Its tooltip shows the round-trip time to the client and a two-minute graph. A click toggles
+the unit; when the core belongs to the GUI it sends a notification instead.
 
 The server will not start at all until the GUI has saved a layout: it reads
 `~/.config/Deskflow/deskflow-server.conf`, and a layout with only the host screen in it means there
@@ -307,4 +309,4 @@ ss -ltn | grep 24800             # Deskflow serving
 | `iPad USB ○` stays while streaming | `cable:` is false — the NCM netdev is up but NetworkManager has not bound the profile. Run `sudo ipad-usb-attach`. |
 | iPad's Tailscale/Headscale says *failed to resolve* `net.john2143.com` on the cable | The link does advertise DNS (`10.77.0.1`) and dnsmasq answers that name with the public IP, but the iPad sends **zero** queries to `:53` — it resolves via encrypted DNS and never contacts the control server, so it fails while Wi-Fi works. Moonlight is unaffected; use Wi-Fi for the VPN until the device-side resolver is understood. |
 | Deskflow unit cycles every 3 s | No `deskflow-server.conf` yet (exit 4), or the GUI's core owns the port (exit 5). |
-| Bar says `DF` on but nothing listens | Should not happen: the widget checks for a running core, not just the unit. If it does, the core is running but failed to bind. |
+| `DF` is blue although the Mac is cabled | The widget colours by the route to the client, so the Mac's Deskflow client is connected through the LAN address. Point it at `thunderbolt` (`10.99.0.1`). |

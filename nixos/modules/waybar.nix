@@ -2,6 +2,7 @@
   pkgs,
   compName,
   config,
+  osConfig,
   lib,
   ...
 }: let
@@ -386,49 +387,10 @@
   # modules/ipad-display.nix, so no overlay is needed here (this module also
   # loads on hosts that never import shared-configuration.nix).
   ipad-display = pkgs.callPackage ../packages/ipad-display.nix { };
-  # Deskflow's server unit is started by hand (modules/deskflow.nix); this is the
-  # bar's read-out and click target for it.
-  deskflow-ctl = pkgs.writeShellApplication {
-    name = "deskflow-ctl";
-    runtimeInputs = with pkgs; [systemd coreutils jq procps];
-    text = ''
-      host=$(hostname)
-      # is-active exits non-zero when the unit is not up, hence the `|| true`.
-      state=$(systemctl --user is-active deskflow.service 2>/dev/null || true)
-      # The deskflow GUI starts its own core, which serves clients just as well as
-      # the unit does (and wins the port, so the unit then fails). Reading only
-      # the unit would report "off" while a server is answering on 24800.
-      core=no
-      if pgrep -f "bin/deskflow-core" >/dev/null 2>&1; then
-        core=yes
-      fi
-      case "''${1:-status}" in
-        status)
-          if [ "$state" = active ]; then
-            jq -nc --arg h "$host" '{text: "DF", class: "on", tooltip: ("deskflow server: unit active on " + $h)}'
-          elif [ "$core" = yes ]; then
-            jq -nc --arg h "$host" '{text: "DF", class: "on", tooltip: ("deskflow server: core running outside the unit on " + $h)}'
-          else
-            jq -nc --arg h "$host" --arg s "''${state:-unknown}" \
-              '{text: "DF", class: "off", tooltip: ("deskflow server: " + $s + " on " + $h)}'
-          fi
-          ;;
-        toggle)
-          if [ "$state" = active ]; then
-            systemctl --user stop deskflow.service
-          elif [ "$core" = yes ]; then
-            printf 'deskflow core is running outside the unit (deskflow GUI?); quit it to stop serving\n' >&2
-            exit 1
-          else
-            systemctl --user start deskflow.service
-          fi
-          ;;
-        *)
-          printf 'usage: deskflow-ctl {status|toggle}\n' >&2
-          exit 2
-          ;;
-      esac
-    '';
+  # Bar read-out and click target for the Deskflow server. The wire interfaces
+  # come from the host's macbook-link module; hosts without it have none.
+  deskflow-ctl = pkgs.callPackage ../packages/deskflow-ctl.nix {
+    wireIfaces = osConfig.services.macbookLink.interfaces or [];
   };
   temporal-status = pkgs.writeShellApplication {
     name = "temporal-status";
@@ -668,7 +630,8 @@ in {
           "custom/deskflow" = {
             exec = "${deskflow-ctl}/bin/deskflow-ctl status";
             return-type = "json";
-            interval = 5;
+            interval = 2;
+            escape = true;
             format = "{}";
             tooltip = true;
             on-click = "${deskflow-ctl}/bin/deskflow-ctl toggle";
