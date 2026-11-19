@@ -180,9 +180,10 @@ window#waybar > box {
     background: @surface1;
     transition: background 0.15s ease;
 }
-/* ---- Module Pills (right zone) ---- */
+/* ---- Module Pills (left and right zones) ---- */
 #tray,
 #pulseaudio,
+#bluetooth,
 #network,
 #battery,
 #temperature,
@@ -213,6 +214,18 @@ window#waybar > box {
 
 /* ---- Pulseaudio ---- */
 #pulseaudio.muted {
+    color: @overlay0;
+}
+
+/* ---- Bluetooth ---- */
+/* Connected is the state worth seeing at a glance; off, rfkill-blocked and
+   "no adapter" all read as inert. */
+#bluetooth.connected {
+    color: @green;
+}
+#bluetooth.off,
+#bluetooth.disabled,
+#bluetooth.no-controller {
     color: @overlay0;
 }
 
