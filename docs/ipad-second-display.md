@@ -305,5 +305,6 @@ ss -ltn | grep 24800             # Deskflow serving
 |---|---|
 | iPad shows a mirror of the laptop panel | Sunshine restarted without the prep hook running, or `MOONLIGHT` was removed while a stream was live. Left-click the bar's iPad widget (`ipad-display recover`). |
 | `iPad USB ○` stays while streaming | `cable:` is false — the NCM netdev is up but NetworkManager has not bound the profile. Run `sudo ipad-usb-attach`. |
+| iPad's Tailscale/Headscale says *failed to resolve* `net.john2143.com` on the cable | The link does advertise DNS (`10.77.0.1`) and dnsmasq answers that name with the public IP, but the iPad sends **zero** queries to `:53` — it resolves via encrypted DNS and never contacts the control server, so it fails while Wi-Fi works. Moonlight is unaffected; use Wi-Fi for the VPN until the device-side resolver is understood. |
 | Deskflow unit cycles every 3 s | No `deskflow-server.conf` yet (exit 4), or the GUI's core owns the port (exit 5). |
 | Bar says `DF` on but nothing listens | Should not happen: the widget checks for a running core, not just the unit. If it does, the core is running but failed to bind. |
