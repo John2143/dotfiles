@@ -412,6 +412,13 @@ nixpkgs.overlays = [
       };
       # Vault directories that stay on-site (never sent offsite). Same policy
       # as tank/private: the pool snapshots are its only history.
+      # One-time (2026-11-19): a second gocryptfs root sharing the vault's master
+      # key, so ciphertext can move between roots. Never `gocryptfs -init` here.
+      #   sudo zfs create -o mountpoint=/tank/private-local -o compression=lz4 \
+      #     -o recordsize=128K -o atime=off tank/private-local
+      #   sudo mkdir /tank/private-local/john
+      #   sudo cp /tank/private/john/gocryptfs.{conf,diriv} /tank/private-local/john/
+      #   sudo chown -R john:users /tank/private-local/john
       "tank/private-local" = {
         autosnap = true;
         daily = 30;
