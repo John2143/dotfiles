@@ -878,6 +878,14 @@ nixpkgs.overlays = [
   systemd.services.offsite-private = {
     description = "Offsite: zfs send tank/private to B2";
     restartIfChanged = false;
+    # Hard hold. While this file exists the unit is skipped (ConditionPathExists,
+    # not a failure) even when the timer fires: both timers are Persistent=true,
+    # so a re-armed timer with no record of a past run fires IMMEDIATELY. Without
+    # this, a reboot or a fleet-patch switch would start uploading whatever
+    # tank/private holds at that moment.
+    #   Hold:   sudo mkdir -p /var/lib/offsite && sudo touch /var/lib/offsite/hold
+    #   Resume: sudo rm /var/lib/offsite/hold
+    unitConfig.ConditionPathExists = "!/var/lib/offsite/hold";
     onFailure = ["notify-failure@%n.service"];
     path = [config.boot.zfs.package pkgs.rclone pkgs.gawk pkgs.gnugrep pkgs.findutils];
     environment = {
