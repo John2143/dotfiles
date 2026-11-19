@@ -812,6 +812,8 @@ nixpkgs.overlays = [
     environment = {
       RCLONE_STATS = "10m";
       RCLONE_STATS_LOG_LEVEL = "NOTICE";
+      # Without HOME (and no getent on PATH) rclone logs three ERROR lines per run.
+      HOME = "/root";
     };
     serviceConfig = {
       Type = "oneshot";
@@ -841,6 +843,7 @@ nixpkgs.overlays = [
     environment = {
       RCLONE_STATS = "10m";
       RCLONE_STATS_LOG_LEVEL = "NOTICE";
+      HOME = "/root";
     };
     serviceConfig = {
       Type = "oneshot";
@@ -873,6 +876,7 @@ nixpkgs.overlays = [
     environment = {
       RCLONE_STATS = "10m";
       RCLONE_STATS_LOG_LEVEL = "NOTICE";
+      HOME = "/root";
     };
     serviceConfig = {
       Type = "oneshot";
@@ -937,6 +941,7 @@ nixpkgs.overlays = [
       KUBECONFIG = "/etc/rancher/k3s/k3s.yaml";
       RCLONE_STATS = "10m";
       RCLONE_STATS_LOG_LEVEL = "NOTICE";
+      HOME = "/root";
     };
     serviceConfig = {
       Type = "oneshot";
@@ -995,7 +1000,8 @@ nixpkgs.overlays = [
     };
     script = ''
       set -a; . "$CREDENTIALS_DIRECTORY/ntfy-topic-url"; set +a
-      curl -fsS -m 20 -H "Title: $1 failed on nas" -H "Priority: high" -H "Tags: rotating_light" \
+      # -o /dev/null: ntfy echoes the message JSON, topic name included, into the journal.
+      curl -fsS -o /dev/null -m 20 -H "Title: $1 failed on nas" -H "Priority: high" -H "Tags: rotating_light" \
         -d "journalctl -u $1 -n 200 on nas" "$NTFY_TOPIC_URL"
     '';
   };
