@@ -133,7 +133,7 @@ in {
   # without a rebuild. asciinema server lives in the `argo` repo
   # (apps/asciinema.yaml, workloads/asciinema/); admin panel at /admin.
   xdg.configFile = {
-    "asciinema/config.toml".source = config.lib.file.mkOutOfStoreSymlink ../.config/asciinema/config.toml;
+    "asciinema/config.toml".source = config.lib.file.mkOutOfStoreSymlink "${config.home.homeDirectory}/dotfiles/.config/asciinema/config.toml";
   };
 
   # Home Manager can also manage your environment variables through
@@ -206,7 +206,10 @@ in {
     vimAlias = true;
     withRuby = true;
     withPython3 = true;
+    # copilot.vim ships no bundled server and otherwise fetches one at runtime
+    # with npx (unpinned, needs network); use the nixpkgs build instead.
     extraConfig = ''
+      let g:copilot_command = '${pkgs.copilot-language-server}/bin/copilot-language-server'
       source ~/.vimrc
     '';
     plugins = with pkgs.vimPlugins; [

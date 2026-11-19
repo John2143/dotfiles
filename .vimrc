@@ -163,6 +163,9 @@ lua << END
     vim.lsp.config("nixd", {
         on_attach = on_attach,
         capabilities = capabilities,
+        -- nixd rejects a null workspace/configuration reply ("expected object").
+        -- A plain {} would be encoded as a JSON array, so use empty_dict().
+        settings = { nixd = vim.empty_dict() },
     })
     vim.lsp.config("tailwindcss", {
         on_attach = on_attach,
