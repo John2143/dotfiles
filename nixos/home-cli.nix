@@ -208,26 +208,6 @@ in {
     withPython3 = true;
     extraConfig = ''
       source ~/.vimrc
-
-      " yramagicman on reddit:
-      " https://www.reddit.com/r/neovim/comments/qh7f3u/fzf_integration_on_nix_os_solution/
-      function! NixosPluginPath()
-        let seen = {}
-        for p in reverse(split($NIX_PROFILES))
-            for d in split(glob(p . '/share/vim-plugins/*'))
-                let pluginname = substitute(d, ".*/", "", "")
-                if !has_key(seen, pluginname)
-                    exec 'set runtimepath^='.d
-                    let after = d."/after"
-                    if isdirectory(after)
-                        exec 'set runtimepath^='.after
-                    endif
-                    let seen[pluginname] = 1
-                endif
-            endfor
-        endfor
-      endfunction
-      execute NixosPluginPath()
     '';
     plugins = with pkgs.vimPlugins; [
       nvim-lspconfig
@@ -247,17 +227,10 @@ in {
       # rust.vim
       webapi-vim
 
-      nvim-treesitter
-      # " silent but deadly
-      vim-rooter
-      # " kinda don't like this but I keep it around
-      # vim-json
       # " better than the default, worse than fzf for browsing stuff
       nerdtree
       # " just syntax highlighting for vue/js/c
-      vim-vue
       vim-javascript
-      # TagHighlight
       # " fish told me to use this
       vim-fish
       # " useful for self-interrogation
@@ -267,8 +240,7 @@ in {
       # "let g:neocomplete#enable_at_startup = 1
       # "Plug 'Shougo/neocomplete.vim'
       # "Plug 'Shougo/deoplete.nvim', { 'do': ':UpdateRemotePlugins' }
-      (vimPluginFromGithub "mihaifm/bufstop" "9ae087c74e3f184192c55c8d6bbba3a33e1d8dd6")
-      (vimPluginFromGithub "dmmulroy/ts-error-translator.nvim" "47e5ba89f71b9e6c72eaaaaa519dd59bd6897df4")
+      (vimPluginFromGithub "mihaifm/bufstop" "929adfa82dca38b1834406a4a987cdf290a8d94a")
 
       lightline-vim
 
@@ -280,15 +252,12 @@ in {
       # Plug 'sagi-z/vimspectorpy', { 'do': { -> vimspectorpy#update() } }
 
       # " :Tab
-      # tabular
+      tabular
 
       ctrlp-vim
 
       # " allows ctrl hjkl to work between both vim and tmux (also install tmux plugin)
       vim-tmux-navigator
-
-      # " file explorer (:NvimTreeToggle)
-      nvim-tree-lua
 
       # " fzf is very cool. Use a LOT of [:Files, :Buf, :Rg]
       # if has("mac")
@@ -301,11 +270,6 @@ in {
       # " colorschemes
       # Plug 'altercation/vim-colors-solarized'
       vim-colors-solarized
-      sonokai
-      gruvbox-material
-      base16-vim
-      vim-gruvbox8
-      tokyonight-nvim
       catppuccin-nvim
 
       # " rainbow parens
@@ -316,9 +280,7 @@ in {
       }
 
       # " Semantic language support
-      lsp_extensions-nvim
       cmp-nvim-lsp
-      cmp-buffer
       cmp-path
       nvim-cmp
       lsp_signature-nvim
@@ -326,11 +288,7 @@ in {
       cmp-vsnip
       vim-vsnip
       # " Syntactic language support
-      vim-toml
-      vim-yaml
       rust-vim
-      vim-clang-format
-      nvim-jdtls
       # if has("mac")
       #     Plug 'tpope/vim-dispatch'
       #     Plug 'Shougo/vimproc.vim', {'do' : 'make'}
@@ -341,8 +299,6 @@ in {
       #     "let g:OmniSharp_server_path =
       # endif
       vim-go
-      vim-markdown
-      lsp-status-nvim
 
       nvim-highlight-colors
 
@@ -352,7 +308,6 @@ in {
       copilot-vim
 
       refactoring-nvim
-      plenary-nvim
       rustaceanvim
       vim-which-key
       #(vimPluginFromGithub "frankroeder/parrot.nvim" "c992483dd0cf9d7481b55714d52365d1f7a66f91")

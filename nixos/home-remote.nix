@@ -68,24 +68,6 @@
     vimAlias = true;
     extraConfig = ''
       source ~/.vimrc
-
-      function! NixosPluginPath()
-        let seen = {}
-        for p in reverse(split($NIX_PROFILES))
-            for d in split(glob(p . '/share/vim-plugins/*'))
-                let pluginname = substitute(d, ".*/", "", "")
-                if !has_key(seen, pluginname)
-                    exec 'set runtimepath^='.d
-                    let after = d."/after"
-                    if isdirectory(after)
-                        exec 'set runtimepath^='.after
-                    endif
-                    let seen[pluginname] = 1
-                endif
-            endfor
-        endfor
-      endfunction
-      execute NixosPluginPath()
     '';
     plugins = with pkgs.vimPlugins; [
       vim-easymotion
@@ -94,21 +76,11 @@
       vim-abolish
       nerdcommenter
       nerdtree
-      vim-rooter
       vim-fish
       vim-tmux-navigator
       ctrlp-vim
 
-      vim-toml
-      vim-yaml
-      vim-markdown
-
       vim-colors-solarized
-      sonokai
-      gruvbox-material
-      base16-vim
-      vim-gruvbox8
-      tokyonight-nvim
       catppuccin-nvim
 
       fzf-vim

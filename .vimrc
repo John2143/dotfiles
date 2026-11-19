@@ -51,134 +51,6 @@ if has("mac")
     let &t_EI = "\<Esc>Ptmux;\<Esc>\<Esc>]50;CursorShape=0\x7\<Esc>\\"
 endif
 
-
-filetype off                  " required
-
-" office computer uses NixOS to manage packages
-" Check if $NIX env var is set. if so, skip
-if empty($NIX)
-    call plug#begin()
-
-    " full monitor-sized movements made easy
-    Plug 'easymotion/vim-easymotion'
-    " niche things I use once a year
-    Plug 'tpope/vim-surround'
-    Plug 'tpope/vim-fugitive'
-    Plug 'tpope/vim-abolish'
-    " useful for a work specific setup (metadata files + source files)
-    Plug 'derekwyatt/vim-fswitch'
-    " <leader>c<Space> is the only thing I know about this but it sure does work
-    Plug 'scrooloose/nerdcommenter'
-    " not sure what these two do /exactly/ just know they work
-    Plug 'rust-lang/rust.vim'
-    Plug 'mattn/webapi-vim'
-
-    Plug 'nvim-treesitter/nvim-treesitter'
-    " silent but deadly
-    "Plug 'airblade/vim-rooter'
-    " kinda don't like this but I keep it around
-    Plug 'elzr/vim-json'
-    " better than the default, worse than fzf for browsing stuff
-    Plug 'scrooloose/nerdtree'
-    " just syntax highlighting for vue/js/c
-    Plug 'posva/vim-vue'
-    Plug 'pangloss/vim-javascript'
-    Plug 'vim-scripts/TagHighlight'
-    " fish told me to use this
-    Plug 'dag/vim-fish'
-    " useful for self-interrogation
-    Plug 'APZelos/blamer.nvim'
-    " make my tab do something useful when theres no LSP
-    " NOTE: don't use with neovim
-    "let g:neocomplete#enable_at_startup = 1
-    "Plug 'Shougo/neocomplete.vim'
-    "Plug 'Shougo/deoplete.nvim', { 'do': ':UpdateRemotePlugins' }
-
-    Plug 'mihaifm/bufstop'
-
-    Plug 'itchyny/lightline.vim'
-
-    " Images in terminal?
-    " Plug 'edluffy/hologram.nvim'
-
-    Plug 'AndrewRadev/linediff.vim'
-    Plug 'puremourning/vimspector'
-    Plug 'sagi-z/vimspectorpy', { 'do': { -> vimspectorpy#update() } }
-
-    " :Tab
-    Plug 'godlygeek/tabular'
-
-    Plug 'ctrlpvim/ctrlp.vim'
-
-    " allows ctrl hjkl to work between both vim and tmux (also install tmux plugin)
-    Plug 'christoomey/vim-tmux-navigator'
-
-    " file explorer (:NvimTreeToggle)
-    "Plug 'nvim-tree/nvim-tree.lua'
-
-    " fzf is very cool. Use a LOT of [:Files, :Buf, :Rg]
-    if has("mac")
-        set rtp+=/usr/local/opt/fzf
-    end
-    Plug 'junegunn/fzf', { 'do': { -> fzf#install() } }
-    Plug 'junegunn/fzf.vim'
-
-    " colorschemes
-    Plug 'altercation/vim-colors-solarized'
-    Plug 'sainnhe/sonokai'
-    Plug 'sainnhe/gruvbox-material'
-    Plug 'chriskempson/base16-vim'
-    Plug 'lifepillar/vim-gruvbox8'
-    Plug 'folke/tokyonight.nvim', { 'branch': 'main' }
-    Plug 'catppuccin/nvim', { 'as': 'catppuccin' }
-
-    " rainbow parens
-    Plug 'luochen1990/rainbow'
-    let g:rainbow_active = 1
-
-    " Semantic language support
-    Plug 'nvim-lua/lsp_extensions.nvim'
-    Plug 'hrsh7th/cmp-nvim-lsp', {'branch': 'main'}
-    Plug 'hrsh7th/cmp-buffer', {'branch': 'main'}
-    Plug 'hrsh7th/cmp-path', {'branch': 'main'}
-    Plug 'hrsh7th/nvim-cmp', {'branch': 'main'}
-    Plug 'ray-x/lsp_signature.nvim'
-    " Only because nvim-cmp _requires_ snippets
-    Plug 'hrsh7th/cmp-vsnip', {'branch': 'main'}
-    Plug 'hrsh7th/vim-vsnip'
-    " Syntactic language support
-    Plug 'cespare/vim-toml', {'branch': 'main'}
-    Plug 'stephpy/vim-yaml'
-    Plug 'rust-lang/rust.vim'
-    Plug 'rhysd/vim-clang-format'
-    Plug 'mfussenegger/nvim-jdtls' "java
-    if has("mac")
-        Plug 'tpope/vim-dispatch'
-        Plug 'Shougo/vimproc.vim', {'do' : 'make'}
-        Plug 'OmniSharp/omnisharp-vim' " c#
-        let g:OmniSharp_selector_ui = 'fzf'
-        let g:OmniSharp_server_stdio = 1
-        let g:OmniSharp_popup = 0
-        "let g:OmniSharp_server_path = 
-    endif
-    "Plug 'fatih/vim-go'
-    "Plug 'plasticboy/vim-markdown'
-    "Plug 'nvim-lua/lsp-status.nvim'
-
-    Plug 'nvim-lua/plenary.nvim'
-    Plug 'saecki/crates.nvim', { 'tag': 'v0.7.0' }
-
-    Plug 'github/copilot.vim'
-
-    Plug 'mrcjkb/rustaceanvim'
-
-    "Plug 'frankroeder/parrot.nvim'
-
-    "Plug 'https://git.sr.ht/~whynothugo/lsp_lines.nvim'
-
-    call plug#end()
-endif
-
 if executable('rg')
     set grepprg=rg\ --no-heading\ --vimgrep
     set grepformat=%f:%l:%c:%m
@@ -186,16 +58,6 @@ endif
 
 lua << END
     local cmp = require'cmp'
-
-    -- local lsp_status = require('lsp-status')
-    -- lsp_status.register_progress()
-    -- lsp_status.config({
-    --     indicator_errors = 'E',
-    --     indicator_warnings = 'W',
-    --     indicator_info = 'i',
-    --     indicator_hint = 'H',
-    --     indicator_ok = 'Ok',
-    -- })
 
     cmp.setup({
       snippet = {
@@ -233,73 +95,36 @@ lua << END
     })
 
     -- Setup lspconfig.
+    local opts = { noremap = true, silent = true }
+
     local on_attach = function(client, bufnr)
-      local function buf_set_keymap(...) vim.api.nvim_buf_set_keymap(bufnr, ...) end
-      local function buf_set_option(...) vim.api.nvim_buf_set_option(bufnr, ...) end
-
-      --Enable completion triggered by <c-x><c-o>
-      buf_set_option('omnifunc', 'v:lua.vim.lsp.omnifunc')
-
-      -- Mappings.
-      local opts = { noremap=true, silent=true }
-
-
-      -- See `:help vim.lsp.*` for documentation on any of the below functions
-      -- buf_set_keymap('n', 'gD', '<Cmd>lua vim.lsp.buf.declaration()<CR>', opts)
       vim.keymap.set('n', 'gD', function() vim.lsp.buf.declaration() end, opts)
-      -- buf_set_keymap('n', 'gd', '<Cmd>lua vim.lsp.buf.definition()<CR>', opts)
       vim.keymap.set('n', 'gd', function() vim.lsp.buf.definition() end, opts)
-      -- buf_set_keymap('n', 'gi', '<cmd>lua vim.lsp.buf.implementation()<CR>', opts)
       vim.keymap.set('n', 'gi', function() vim.lsp.buf.implementation() end, opts)
-      -- buf_set_keymap('n', 'gr', '<cmd>lua vim.lsp.buf.references()<CR>', opts)
       vim.keymap.set('n', 'gr', function() vim.lsp.buf.references() end, opts)
 
+      -- vim.diagnostic.goto_prev/goto_next are deprecated in 0.12.
+      vim.keymap.set('n', '[g', function() vim.diagnostic.jump({ count = -1, float = true }) end, opts)
+      vim.keymap.set('n', ']g', function() vim.diagnostic.jump({ count = 1, float = true }) end, opts)
 
-      -- buf_set_keymap('n', '[g', '<cmd>lua vim.diagnostic.goto_prev()<CR>', opts)
-      -- buf_set_keymap('n', ']g', '<cmd>lua vim.diagnostic.goto_next()<CR>', opts)
-      vim.keymap.set('n', '[g', function() vim.diagnostic.goto_prev() end, opts)
-      vim.keymap.set('n', ']g', function() vim.diagnostic.goto_next() end, opts)
-
-      -- buf_set_keymap('n', 'K', '<Cmd>lua vim.lsp.buf.hover()<CR>', opts)
       vim.keymap.set('n', 'K', function() vim.lsp.buf.hover() end, opts)
-      -- buf_set_keymap('n', 'gt', '<Cmd>lua vim.lsp.buf.type_definition()<CR>', opts)
       vim.keymap.set('n', 'gt', function() vim.lsp.buf.type_definition() end, opts)
-
-      -- buf_set_keymap('n', ',rn', '<cmd>lua vim.lsp.buf.rename()<CR>', opts)
       vim.keymap.set('n', ',rn', function() vim.lsp.buf.rename() end, opts)
-      -- buf_set_keymap('n', ',y', '<cmd>lua vim.lsp.buf.code_action()<CR>', opts)
       vim.keymap.set('n', ',y', function() vim.lsp.buf.code_action() end, opts)
-      -- buf_set_keymap('n', ',z', '<cmd>lua vim.diagnostic.open_float()<CR>', opts)
       vim.keymap.set('n', ',z', function() vim.diagnostic.open_float() end, opts)
-
-      -- buf_set_keymap('n', ",q", "<cmd>lua vim.lsp.buf.formatting()<CR>", opts)
-      vim.keymap.set('n', ",q", "<cmd>lua vim.lsp.buf.formatting()<CR>", opts)
-      -- buf_set_keymap('n', ',rz', '<cmd>lua vim.diagnostic.set_loclist()<CR>', opts)
-      vim.keymap.set('n', ',rz', function() vim.diagnostic.set_loclist() end, opts)
-
-      -- buf_set_keymap('n', '<C-h>', '<cmd>NvimTmuxNavigateLeft<CR>', opts)
-      -- buf_set_keymap('n', '<C-j>', '<cmd>NvimTmuxNavigateDown<CR>', opts)
-      -- buf_set_keymap('n', '<C-k>', '<cmd>NvimTmuxNavigateUp<CR>', opts)
-      -- buf_set_keymap('n', '<C-l>', '<cmd>NvimTmuxNavigateRight<CR>', opts)
-
-      -- buf_set_keymap('n', '<C-k>', '<cmd>lua vim.lsp.buf.signature_help()<CR>', opts)
-      -- buf_set_keymap('n', ',D', '<cmd>lua vim.lsp.buf.type_definition()<CR>', opts)
+      -- vim.lsp.buf.formatting() was removed; format() is the replacement.
+      vim.keymap.set('n', ',q', function() vim.lsp.buf.format() end, opts)
+      -- vim.diagnostic.set_loclist() was removed; the name is now setloclist().
+      vim.keymap.set('n', ',rz', function() vim.diagnostic.setloclist() end, opts)
 
       -- Get signatures (and _only_ signatures) when in argument lists.
       require "lsp_signature".on_attach({
         doc_lines = 0,
-
-        handler_opts = {
-          border = "none"
-        },
+        handler_opts = { border = "none" },
       })
-
-      -- lsp_status.on_attach(client)
     end
 
-    local capabilities_cmp = require('cmp_nvim_lsp').default_capabilities()
-    local capabilities = capabilities_cmp
-    -- local capabilities = vim.tbl_extend('keep', capabilities_cmp, lsp_status.capabilities)
+    local capabilities = require('cmp_nvim_lsp').default_capabilities()
 
     vim.g.rustaceanvim = {
         tools = {
@@ -322,57 +147,29 @@ lua << END
         }
     }
 
-    -- tsserver was renamed to ts_ls, but we need to support both:
+    -- tsserver was renamed to ts_ls.
     vim.lsp.config("ts_ls", {
         on_attach = on_attach,
-        flags = {
-            debounce_text_changes = 150,
-        },
         capabilities = capabilities,
     })
-
     vim.lsp.config("pyright", {
         on_attach = on_attach,
-        flags = {
-            debounce_text_changes = 150,
-        },
-        -- root_dir = lspconfig.util.find_git_ancestor,
         capabilities = capabilities,
     })
-    vim.lsp.config("jdtls", {
+    vim.lsp.config("clangd", {
         on_attach = on_attach,
-        flags = {
-            debounce_text_changes = 150,
-        },
-        capabilities = capabilities,
-    })
-    vim.lsp.config("ccls", {
-        on_attach = on_attach,
-        flags = {
-            debounce_text_changes = 150,
-        },
-        -- root_dir = lspconfig.util.find_git_ancestor,
         capabilities = capabilities,
     })
     vim.lsp.config("nixd", {
         on_attach = on_attach,
-        flags = {
-            debounce_text_changes = 150,
-        },
         capabilities = capabilities,
     })
     vim.lsp.config("tailwindcss", {
         on_attach = on_attach,
-        flags = {
-            debounce_text_changes = 150,
-        },
         capabilities = capabilities,
     })
     vim.lsp.config("yamlls", {
         on_attach = on_attach,
-        flags = {
-            debounce_text_changes = 150,
-        },
         capabilities = capabilities,
         settings = {
             yaml = {
@@ -397,9 +194,6 @@ lua << END
     })
     vim.lsp.config("gopls", {
         on_attach = on_attach,
-        flags = {
-            debounce_text_changes = 150,
-        },
         capabilities = capabilities,
         settings = {
             gopls = {
@@ -412,15 +206,11 @@ lua << END
         },
     })
 
-    vim.lsp.handlers["textDocument/publishDiagnostics"] = vim.lsp.with(
-      vim.lsp.diagnostic.on_publish_diagnostics, {
-        virtual_text = true,
-        signs = true,
-        update_in_insert = true,
-      }
-    )
-
-    -- require("lsp_lines").setup()
+    -- Start the servers whose binaries nixos/modules/language-servers.nix installs.
+    -- Required since Neovim 0.11: vim.lsp.config() only registers a config.
+    vim.lsp.enable({ "ts_ls", "pyright", "clangd", "nixd", "tailwindcss", "yamlls" })
+    -- lsp/gopls.lua shells out to `go env`; only darwin hosts install the go toolchain.
+    vim.lsp.enable("gopls", vim.fn.executable("go") == 1)
 
     local crates = require('crates')
     vim.keymap.set('n', ',Ct', crates.toggle, opts)
@@ -448,56 +238,11 @@ lua << END
         virtual_text = false,
     })
 
-    -- vim.keymap.set(
-    --     "",
-    --     "<Leader>rg",
-    --     require("lsp_lines").toggle,
-    --     { desc = "Toggle lsp_lines" }
-    -- )
-
     vim.g.loaded_netrw = 1
     vim.g.loaded_netrwPlugin = 1
 
     -- set termguicolors to enable highlight groups
     vim.opt.termguicolors = true
-
-      -- empty setup using defaults
-    -- require("nvim-tree").setup()
-
-    --[[
-    local function my_on_attach(bufnr)
-        local api = require "nvim-tree.api"
-
-        local function opts(desc)
-            return { desc = "nvim-tree: " .. desc, buffer = bufnr, noremap = true, silent = true, nowait = true }
-        end
-
-        -- default mappings
-        api.config.mappings.default_on_attach(bufnr)
-
-        -- custom mappings
-        vim.keymap.set('n', '<C-t>', api.tree.change_root_to_parent,        opts('Up'))
-        vim.keymap.set('n', '?',     api.tree.toggle_help,                  opts('Help'))
-    end
-
-    -- OR setup with some options
-    require("nvim-tree").setup({
-        -- sort = {
-            -- sorter = "case_sensitive",
-        -- },
-        view = {
-            width = 30,
-        },
-        renderer = {
-            group_empty = false,
-        },
-        filters = {
-            dotfiles = false,
-        },
-        on_attach = my_on_attach,
-    })
-
-    --]]
 
     require("catppuccin").setup({
         flavour = "auto", -- latte, frappe, macchiato, mocha; auto follows `background`
@@ -535,24 +280,9 @@ lua << END
         integrations = {
             -- (https://github.com/catppuccin/nvim#integrations)
             cmp = true,
-            nvimtree = true,
             treesitter = true,
         },
     })
-
-    -- require("refactoring").setup({
-        -- show_success_message = false, -- shows a message with information about the refactor on success
-                              -- i.e. [Refactor] Inlined 3 variable occurrences
-    -- })
-
-    -- require("parrot").setup({
-    --   providers = {
-    --     ollama = {},
-    --     openai = {
-    --       api_key = os.getenv "OPENAI_API_KEY",
-    --     }
-    --   }
-    -- })
 
     vim.cmd.colorscheme "catppuccin"
 
@@ -574,42 +304,22 @@ lua << END
     vim.api.nvim_create_user_command(
       'DiagnosticsToggle',
       function()
-        local current_value = vim.diagnostic.is_disabled()
-        if current_value then
-          vim.diagnostic.enable()
-        else
-          vim.diagnostic.disable()
-        end
+        vim.diagnostic.enable(not vim.diagnostic.is_enabled())
       end,
       {}
     )
 
-    vim.lsp.config("Github Copilot", {
-        enabled = true,
-        filetypes = {
-            "javascript",
-            "typescript",
-            "typescriptreact",
-            "javascriptreact",
-            "vue",
-            "html",
-            "css",
-            "scss",
-            "less",
-            "markdown",
-            "python",
-            "go",
-            "rust",
-            "c",
-            "cpp",
-        },
-        suggestion = {
-            auto_trigger = true,
-        },
+    -- nvim-treesitter main branch has no setup(): highlighting is opted in per
+    -- FileType. withAllGrammars ships every parser, and pcall leaves filetypes
+    -- without one on the regex syntax.
+    vim.api.nvim_create_autocmd('FileType', {
+      callback = function() pcall(vim.treesitter.start) end,
     })
+
+    require('nvim-highlight-colors').setup({})
 END
 
-filetype plugin indent on    " required
+filetype plugin indent on
 
 " the million dollar stock-vim mistake. I can't even tell you what ; does
 " normally
@@ -686,8 +396,6 @@ set shiftwidth=4
 set expandtab
 set smarttab
 
-set tabstop=4
-set shiftwidth=4
 set softtabstop=4
 " my tab key works fine, thank you
 set nosmartindent
@@ -702,8 +410,6 @@ set autoindent
 " my statusline has stuff like filetype and line endings, so always display it
 set laststatus=2
 "set noshowmode
-" buffed backspace
-set bs=2
 
 " move swapfiles
 set nobackup
@@ -763,7 +469,7 @@ au FocusGained * :set relativenumber
 " take current filename and add include guards (for c/c++)
 let @e='i%F.hcaw v0pI#ifndef A vF.s_Hyyplcawdefine o#endifO' "Header declare
 
-noremap <leader>t :!ctags -R .<cr>:UpdateTypesFileOnly<cr>:redr!<cr>
+noremap <leader>t :!ctags -R .<cr>:redr!<cr>
 au Filetype rust noremap <leader>t :RustTest<cr>
 inoremap <c-BS> vbc
 nnoremap <leader>/ :NERDTreeToggle<CR>
@@ -799,7 +505,7 @@ vnoremap <leader>s :call SpellToggle()<cr>
 cmap w!! w !sudo tee > /dev/null %
 
 " inline hints
-noremap <leader>rr :CocCommand rust-analyzer.toggleInlayHints<CR>
+noremap <leader>rr <cmd>lua vim.lsp.inlay_hint.enable(not vim.lsp.inlay_hint.is_enabled({ bufnr = 0 }), { bufnr = 0 })<cr>
 noremap <leader>rb :BlamerToggle<CR>
 noremap <leader>rm :RainbowToggle<CR>
 
@@ -841,13 +547,6 @@ nmap <Leader>qj <Plug>VimspectorStepOver
 nmap <Leader>di <Plug>VimspectorBalloonEval
 " for visual mode, the visually selected text
 xmap <Leader>di <Plug>VimspectorBalloonEval
-
-let g:vim_json_syntax_conceal = 0
-
-let g:syntastic_always_populate_loc_list = 1
-let g:syntastic_auto_loc_list = 1
-let g:syntastic_check_on_open = 1
-let g:syntastic_check_on_wq = 0
 
 let g:rustfmt_autosave = 0
 if has('mac')
@@ -980,10 +679,6 @@ let g:solarized_termcolors=256
 let g:solarized_italic=0
 let g:solarized_visibility="medium"
 
-let g:sonokai_style = 'shusia'
-let g:sonokai_enable_italic = 0
-let g:sonokai_disable_italic_comment = 1
-
 call togglebg#map("<F4>")
 
 " work related internal bindings for common functions
@@ -1023,14 +718,6 @@ function! Rallydiff(extra)
 endfunction
 
 
-function! TSInstallAllF()
-  for s:ts_lang in ["rust", "json", "typescript", "javascript", "python", "c", "vue", "html", "latex", "lua"]
-    execute "TSInstallFromGrammar " . s:ts_lang
-  endfor
-endfunction
-
-command! TSInstallAll :call TSInstallAllF()
-
 function! VisualSelection()
     if mode()=="v"
         let [line_start, column_start] = getpos("v")[1:2]
@@ -1055,7 +742,7 @@ endfunction
 function! NumberToDate()
     " take the current selection in pass it into the unix command `date -r`.
     " this will convert the number into a date.
-    let vs = GetVisualSelection()
+    let vs = VisualSelection()
     let date = system("date -r " . vs . " +'%Y-%m-%d %H:%M:%S'")
     " print the date to status line
     echom date
