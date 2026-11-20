@@ -102,6 +102,13 @@
   # one the MacBook's adapter actually reaches).
   services.macbookLink.interfaces = ["eno1" "enp7s0" "enp2s0f1"];
   networking.networkmanager.enable = true; # Easiest to use and most distros use this by default.
+
+  # mDNS on the stable links only. Left to itself avahi joins every interface,
+  # including each k3s pod's ephemeral veth pair; the pod churn makes it
+  # re-probe the host name, and five conflicts on 2026-11-19 left it calling
+  # itself arch-6.local. enp2s0f0 is the LAN, eno1 the direct MacBook link.
+  services.avahi.settings.server.allow-interfaces = ["enp2s0f0" "eno1"];
+
   networking.nameservers = [
     "1.1.1.1"
     "192.168.1.12"

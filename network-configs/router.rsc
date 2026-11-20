@@ -1,4 +1,4 @@
-# 2026-11-15 20:34:55 by RouterOS 7.24.5
+# 2026-11-19 22:58:36 by RouterOS 7.24.5
 # software id = 7RHC-3MMG
 #
 # model = RB5009UPr+S+
@@ -202,8 +202,7 @@ add address=192.168.1.0/24 dns-server=192.168.5.1 gateway=192.168.1.1
 add address=192.168.5.0/24 dns-server=192.168.5.1 gateway=192.168.5.1 \
     netmask=24
 /ip dns
-set allow-remote-requests=yes mdns-repeat-ifaces=bridge,2GWAN servers=\
-    1.1.1.1,1.0.0.1
+set allow-remote-requests=yes servers=1.1.1.1,1.0.0.1
 /ip dns static
 add address=192.168.5.1 comment=defconf name=router.lan type=A
 add comment="lan-dns forward" forward-to=192.168.6.30 match-subdomain=yes \
@@ -343,8 +342,7 @@ set api-ssl disabled=yes
 /ipv6 address
 add address=fd00:1::1 interface=bridge
 /ipv6 dhcp-server
-add address-pool=ula-addr-pool dhcp-option=dns-router-ula interface=bridge \
-    name=ula-dhcp
+add dhcp-option=dns-router-ula interface=bridge name=ula-dhcp
 /ipv6 dhcp-server binding
 add address=fd00:1::36/128 duid=0x000448750ccae3a454a0f9f03492c0c3c4ed \
     ia-type=na iaid=2138897477 life-time=3d prefix-pool=ula-addr-pool server=\
@@ -413,7 +411,7 @@ add action=drop chain=forward comment=\
 /ipv6 firewall nat
 add action=masquerade chain=srcnat out-interface=2GWAN
 /ipv6 nd
-set [ find default=yes ] managed-address-configuration=yes
+set [ find default=yes ] other-configuration=yes
 /routing bfd configuration
 add addresses=192.168.5.0/24 comment="metallb speakers: BFD for BGP (argo docs\
     /2026-10-15-fungible-ingress.md)" min-rx=300ms min-tx=300ms multiplier=5
@@ -485,5 +483,4 @@ add comment="ingress-follow: runs the follower every minute (test-script; devi\
     md" host=john2143.com interval=1m name=ingress-follow test-script=\
     "/system script run ingress-follow" timeout=3s type=dns
 /tool sniffer
-set filter-interface=2GWAN filter-ip-address=108.56.153.222/32 filter-port=\
-    18080
+set filter-ip-address=108.56.153.222/32
