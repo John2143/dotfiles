@@ -139,7 +139,16 @@ in {
 
       initialize = true;
 
-      backupPrepareCommand = cfg.prepareCommand;
+      # `restic unlock` in the generated unit is the third of three sequential
+      # ExecStart commands, so it never runs when the backup fails: one exclusive
+      # lock created 2026-10-20 03:17 on big blocked every nightly run (58
+      # failures) until it was cleared by hand on 2026-11-20. Clear stale locks
+      # before the backup instead. Plain `unlock` only removes locks whose owner
+      # is gone, so a concurrent run is never disturbed, and `|| true` keeps a
+      # transient repo error from failing the run before it starts.
+      backupPrepareCommand =
+        "${config.services.restic.backups.nas.package}/bin/restic -o sftp.command='ssh backup@nas.ts.2143.me -i ${config.age.secrets.backup-ssh-key.path} -o StrictHostKeyChecking=accept-new -s sftp' unlock || true"
+        + lib.optionalString (cfg.prepareCommand != null) "\n${cfg.prepareCommand}";
 
       extraOptions = [
         "sftp.command='ssh backup@nas.ts.2143.me -i ${config.age.secrets.backup-ssh-key.path} -o StrictHostKeyChecking=accept-new -s sftp'"
