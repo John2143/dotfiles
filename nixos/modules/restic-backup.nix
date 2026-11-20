@@ -154,5 +154,32 @@ in {
         "sftp.command='ssh backup@nas.ts.2143.me -i ${config.age.secrets.backup-ssh-key.path} -o StrictHostKeyChecking=accept-new -s sftp'"
       ];
     };
+
+    # Publish whether the backup ran and when it last succeeded, so a silent
+    # failure is visible: big's unit failed all 58 nights from 2026-10-20 and
+    # nothing said so. ExecStopPost rather than ExecStartPost because it must
+    # report failures too — a series that never appears cannot alert, and a
+    # failed unit writes no success timestamp. `|| true` via the `-` prefix: a
+    # metric write must never fail a backup.
+    systemd.services."restic-backups-nas".serviceConfig.ExecStopPost = [
+      "-${pkgs.writeShellScript "restic-freshness" ''
+        set -eu
+        d=/var/lib/node_exporter/textfile
+        ${pkgs.coreutils}/bin/mkdir -p "$d"
+        tmp=$(${pkgs.coreutils}/bin/mktemp "$d/.restic.XXXXXX")
+        if [ "''${EXIT_STATUS:-0}" -eq 0 ]; then
+          ts=$(${pkgs.coreutils}/bin/date +%s); failed=0
+        else
+          # Keep the last known success so staleness stays meaningful after a
+          # failure; 0 when there never was one.
+          ts=$(${pkgs.gnused}/bin/sed -n 's/^restic_last_success_timestamp_seconds //p' "$d/restic.prom" 2>/dev/null | ${pkgs.coreutils}/bin/head -1)
+          ts=''${ts:-0}; failed=1
+        fi
+        ${pkgs.coreutils}/bin/printf 'restic_last_success_timestamp_seconds %s\nrestic_last_run_failed %s\n' \
+          "$ts" "$failed" > "$tmp"
+        ${pkgs.coreutils}/bin/chmod 0644 "$tmp"
+        ${pkgs.coreutils}/bin/mv "$tmp" "$d/restic.prom"
+      ''}"
+    ];
   };
 }

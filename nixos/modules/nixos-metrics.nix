@@ -56,6 +56,13 @@ in {
     # collector, including the `os` collector that produces node_os_info.
     services.prometheus.exporters.node.extraFlags = [
       "--collector.textfile.directory=/var/lib/node_exporter/textfile"
+      # Not part of node_exporter's default set (1.12.1: `--collector.systemd`,
+      # default false). Services only — the default include pattern also matches
+      # targets, sockets, mounts and swap units (1205 series vs 710 on nas).
+      # node_exporter wraps the pattern in ^…$, so it must not carry anchors of
+      # its own: `\.service$` matches nothing. Backs SystemdUnitFailed on pite.
+      "--collector.systemd"
+      "--collector.systemd.unit-include=.*\\.service"
     ];
 
     # A real file, rewritten on every activation, so node_textfile_mtime_seconds
