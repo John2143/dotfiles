@@ -369,20 +369,25 @@ in {
     ];
   };
 
-  # Runs after bluetoothd enables both controllers, and again whenever it is
-  # restarted (partOf), which is the only moment AutoEnable re-powers them.
+  # bluetoothd sets AutoEnable=true globally, so both controllers come up
+  # powered on every time it (re)starts — and that power-on happens after the
+  # unit is already "active", so the script waits before switching the Intel
+  # radio off. It is pulled in by bluetooth.service (see below) as well as by
+  # multi-user.target, and it leaves itself inactive so each restart re-runs it.
   systemd.services.bluetooth-hci1-off = {
     description = "Power off the unused Intel Bluetooth controller";
     wantedBy = ["multi-user.target"];
     after = ["bluetooth.service"];
-    requires = ["bluetooth.service"];
-    partOf = ["bluetooth.service"];
     serviceConfig = {
       Type = "oneshot";
+      ExecStartPre = "${pkgs.coreutils}/bin/sleep 3";
       ExecStart = "${btmgmt-off}/bin/btmgmt-off";
-      RemainAfterExit = true;
+      RemainAfterExit = false;
     };
   };
+  # Restarting bluetoothd re-powers both controllers; this makes the oneshot
+  # run again each time instead of only once at boot.
+  systemd.services.bluetooth.wants = ["bluetooth-hci1-off.service"];
 
   #systemd.timers."kdeconnect-refresh" = {
   #wantedBy = [ "timers.target" ];
