@@ -25,10 +25,20 @@ jobs:
         with:
           github_access_token: ${{ secrets.GITHUB_TOKEN }}
       - name: Build images (parallel)
+        # Bare `wait` returns 0 whatever the jobs did, so both builds could fail
+        # while this step stayed green and the out-links never appeared — which
+        # the next step then reported as its own missing file (runs 44656903602,
+        # 44660075526). Wait on each pid and fail if either failed.
         run: |
+          set -euo pipefail
           nix build '.#frigate-genai-genai-image' --out-link result-genai &
+          genai=$!
           nix build '.#frigate-genai-ffmpeg-image' --out-link result-ffmpeg &
-          wait
+          ffmpeg=$!
+          rc=0
+          wait "$genai" || rc=1
+          wait "$ffmpeg" || rc=1
+          exit "$rc"
 
       - name: Push to Attic
         # The out-links are resolved to their store paths before pushing: attic
