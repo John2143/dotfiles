@@ -801,11 +801,13 @@ in {
               on-click-right = "bluetoothctl power \"$(bluetoothctl show | grep -q 'Powered: yes' && echo off || echo on)\"";
             }
             // lib.optionalAttrs (compName == "arch") {
-              # Two adapters stay powered on arch (hci0 "arch #1", hci1 "arch").
-              # Unpinned, Waybar takes whichever controller the ObjectManager
-              # lists first (bluetooth.cpp findCurController), and every paired
-              # device lives on hci0, so name it.
-              controller = "arch #1";
+              # Only the ASUS dongle stays powered (bluetooth-hci1-off switches
+              # the Intel radio off), but bluetoothd still lists both adapters,
+              # so Waybar's findCurController can land on the powered-down one.
+              # Pin the powered adapter by the alias BlueZ persists for it —
+              # Waybar matches `controller` against the Alias property, not the
+              # HCI index or the address.
+              controller = "Arch";
             };
         }
         // lib.optionalAttrs (compName == "arch") {
