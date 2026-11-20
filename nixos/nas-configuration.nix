@@ -1072,13 +1072,32 @@ nixpkgs.overlays = [
   # restarts it and every request 500s, which nix turns into a failed build.
   # A wedged daemon still answers nothing at all, so probe a DB-backed
   # narinfo: anything that is not a real HTTP answer means restart.
+  #
+  # It also publishes atticd's blocked-thread count. A `du`/`find` over
+  # /tank/atticd/storage wedges ZFS dentries (twice on 2026-11-19) and
+  # every victim sits in path_openat: narinfo still answers in ~7 ms while NAR
+  # bodies stall mid-stream, so no HTTP probe can see it. Do NOT restart on a
+  # high count — a kernel-level dentry hang outlives the process and the old one
+  # leaves zombie threads holding its DB handle (2026-11-19: restart produced a
+  # defunct atticd and `database is locked` for the new one). Only a reboot clears it.
   systemd.services.atticd-watchdog = {
     description = "Restart atticd if narinfo stops answering";
+    path = [pkgs.gawk];
     serviceConfig.Type = "oneshot";
     script = ''
+      pid=$(systemctl show atticd -p MainPID --value)
+      blocked=$(awk '$3 == "D" {n++} END {print n+0}' /proc/"$pid"/task/*.stat 2>/dev/null)
+      [ -n "$blocked" ] || blocked=0
+      out=$(mktemp /var/lib/node_exporter/textfile/.attic.XXXXXX)
+      trap 'rm -f "$out"' EXIT
+      echo "atticd_blocked_threads $blocked" > "$out"
+      chmod 0644 "$out"
+      mv "$out" /var/lib/node_exporter/textfile/attic.prom
+      trap - EXIT
+
       systemctl is-active --quiet atticd || exit 0
       code=$(${lib.getExe pkgs.curl} -s -o /dev/null -m 15 -w '%{http_code}' \
-        http://localhost:8280/2143nix/narinfo/00000000000000000000000000000000.narinfo || true)
+        http://localhost:8280/2143nix/00000000000000000000000000000000.narinfo || true)
       case "$code" in
         2*|3*|4*) exit 0 ;;
       esac

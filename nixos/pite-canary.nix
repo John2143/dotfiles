@@ -175,10 +175,14 @@
           }
         ];
       }
-      # Blackbox probe — attic binary cache. A 404 for a hash that cannot exist
-      # is the healthy answer, and producing it reads the SQLite DB that wedged on
-      # 2026-11-19. probe_duration_seconds catches the slow-but-200 mode (10–21 s
-      # under pool contention) that a status-only check would miss.
+      # Blackbox probe — attic binary cache. The target is attic's canonical
+      # /<cache>/<hash>.narinfo route: a hash that cannot exist answers 404
+      # {"error":"NoSuchObject"} only after the SQLite lookup, so this exercises the
+      # DB that wedged on 2026-11-19. /<cache>/narinfo/<hash>.narinfo is NOT a route —
+      # it 404s with {"error":"NotFound"} from the router without touching the DB,
+      # which is what this probe originally pointed at.
+      # A 404 is healthy; probe_duration_seconds catches the slow-but-200 mode
+      # (10–21 s under pool contention) that a status-only check would miss.
       #
       # Target `nas` (tailnet MagicDNS), not `nas.local`: `nas` is what every host's
       # substituter uses, and the mDNS name is not dependable — on 2026-11-19 nas
@@ -192,7 +196,7 @@
         static_configs = [
           {
             targets = [
-              "http://nas:8280/2143nix/narinfo/00000000000000000000000000000000.narinfo"
+              "http://nas:8280/2143nix/00000000000000000000000000000000.narinfo"
             ];
           }
         ];
@@ -448,6 +452,16 @@
                 for: 0m
                 labels: { severity: warning }
                 annotations: { summary: "ZFS device {{ $labels.vdev }} in {{ $labels.zpool }} counted read/write/cksum errors in the last hour" }
+              # A `du`/`find` over /tank/atticd/storage wedges ZFS dentries on tank
+              # (twice on 2026-11-19): chunk-store opens block in path_openat, NAR
+              # bodies stall mid-stream and nix fails with "HTTP error 200 (curl
+              # error: Timeout was reached)" while narinfo still answers in ~7 ms, so
+              # no probe notices. A restart cannot clear a kernel-level hang.
+              - alert: AtticThreadsBlocked
+                expr: 'atticd_blocked_threads > 50'
+                for: 10m
+                labels: { severity: warning }
+                annotations: { summary: "atticd has {{ $value }} threads blocked in kernel I/O — NAR downloads stall mid-stream while narinfo still answers (look for a du/find over /tank/atticd/storage; only a reboot clears it)" }
       '';
     in [alertRules];
     alertmanagers = [
