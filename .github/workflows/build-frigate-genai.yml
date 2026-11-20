@@ -69,11 +69,17 @@ jobs:
           docker tag frigate-genai-ffmpeg:v1 ghcr.io/${OWNER_LOWER}/frigate-genai-ffmpeg:v${{ github.run_number }}
           docker tag frigate-genai-ffmpeg:v1 ghcr.io/${OWNER_LOWER}/frigate-genai-ffmpeg:latest
 
-          docker push ghcr.io/${OWNER_LOWER}/frigate-genai-genai:v${{ github.run_number }} &
-          docker push ghcr.io/${OWNER_LOWER}/frigate-genai-genai:latest &
-          docker push ghcr.io/${OWNER_LOWER}/frigate-genai-ffmpeg:v${{ github.run_number }} &
-          docker push ghcr.io/${OWNER_LOWER}/frigate-genai-ffmpeg:latest &
-          wait
+          # Same trap as the build step: a bare `wait` returns 0 whatever its
+          # jobs did, so a rejected docker push would leave this step green.
+          rc=0
+          for repo in frigate-genai-genai frigate-genai-ffmpeg; do
+            img="ghcr.io/${OWNER_LOWER}/${repo}"
+            docker push "${img}:v${{ github.run_number }}" & p_version=$!
+            docker push "${img}:latest" & p_latest=$!
+            wait "$p_version" || rc=1
+            wait "$p_latest" || rc=1
+          done
+          exit "$rc"
 
   update-argo:
     needs: build
