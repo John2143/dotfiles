@@ -9,8 +9,7 @@
   lib,
   sshKeys,
   ...
-}:
-{
+}: {
   imports = [
     ./arch-hardware-configuration.nix
     # Direct link to the MacBook's USB Ethernet adapter, same 10.99.0.1 as office
@@ -137,7 +136,6 @@
   # doesn't trip exit-code-4 in switch-to-configuration's post-activation scan.
   systemd.services.openrgb.enable = lib.mkForce false;
 
-
   custom.k3sStorageAfter = ["mnt-longhorn.mount"];
 
   # k3s server — joins through the API VIP; identity and cluster networking
@@ -178,7 +176,6 @@
     path = [pkgs.hyprland];
   };
 
-
   networking.firewall.allowedTCPPorts = [
     50051 # screen-control REST API (arch-configuration.nix:290, screen-control/src/main.rs:129)
     10250 # kubelet (k3s agent)
@@ -191,11 +188,13 @@
     8472 # flannel VXLAN (k3s)
   ];
   networking.firewall.allowedTCPPortRanges = [
-    { from = 30000; to = 32767; } # Kubernetes NodePort range
+    {
+      from = 30000;
+      to = 32767;
+    } # Kubernetes NodePort range
   ];
 
   # NAS CIFS mounts live in ./modules/nas-mounts.nix (shared across workstations).
-
 
   # ollama disabled: CUDA build broken upstream (GCC ICE in ggml-cuda),
   # and arch GPU has <8GB VRAM — only gemma4 fits, never used in practice.
@@ -216,7 +215,7 @@
   # Desktop k3s node — notify-send, wall, k3s drain, then poweroff.
   # See modules/nut-ups.nix for the shared config.
   custom.nut-ups = {
-    enable = false;  # TODO: true once Goldenmate UPS arrives
+    enable = false; # TODO: true once Goldenmate UPS arrives
     k3sDrain = true;
     desktopNotifications = true;
   };
