@@ -31,10 +31,20 @@ jobs:
           wait
 
       - name: Push to Attic
+        # The out-links are resolved to their store paths before pushing: attic
+        # canonicalises its arguments, and a missing or dangling link surfaces
+        # only as "I/O error: No such file or directory (os error 2)", which is
+        # what this step used to swallow as a warning (run 44656903602). A
+        # missing link now fails here and names the link.
         run: |
           set -euo pipefail
-          command -v attic >/dev/null || { echo "attic not installed; skipping"; exit 0; }
-          XDG_CONFIG_HOME=/etc attic push 2143nix ./result-genai ./result-ffmpeg || echo "::warning::attic push failed"
+          command -v attic >/dev/null || { echo "::error::attic is not on PATH — the runner needs pkgs.attic-client"; exit 1; }
+          paths=()
+          for link in ./result-genai ./result-ffmpeg; do
+            [ -e "$link" ] || { echo "::error::$link is missing — the build step produced no out-link"; exit 1; }
+            paths+=("$(readlink -f "$link")")
+          done
+          XDG_CONFIG_HOME=/etc attic push 2143nix "${paths[@]}"
 
       - name: Push to ghcr.io (parallel)
         run: |
