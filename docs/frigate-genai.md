@@ -227,7 +227,9 @@ The system uses two retry strategies depending on error type:
 git push (dotfiles master)
   → CI: .github/workflows/build-frigate-genai.yml
     → build job:
-       nix build → docker tag → ghcr push (v57, v58, ...)
+       nix build both images (parallel) → out-links result-genai / result-ffmpeg
+       → attic push 2143nix (build cache)
+       → docker load → tag v<run_number> + latest → ghcr push (parallel)
     → update-argo job:
        clone argo repo → update image tag in *-deployment.yaml
        → verify tags → git commit → git push (argo main)
@@ -236,6 +238,27 @@ git push (dotfiles master)
   → Kubernetes:
     → Recreate strategy: old pod terminates, new pod starts with new image
 ```
+
+### When this pipeline goes red
+
+Three different faults have all presented as "the images didn't reach ghcr" (2026-11-19/20),
+and they nest. GitHub shows the *failing* step, not the cause, so work from the artifact
+backwards: reproduce the build locally, then `curl` the nar, and only then look at the
+workflow.
+
+1. **A later step blames a file an earlier green step should have produced.** Two bugs made
+   that possible and are now fixed: a bare `wait` returns 0 whatever its jobs did (both
+   builds could fail while the step stayed green), and the attic step passed `./result-*`
+   to `attic`, which canonicalises its arguments — a dangling link surfaced only as
+   `I/O error: No such file or directory (os error 2)`, which `|| echo "::warning::"`
+   swallowed. The step now resolves the links with `readlink -f`, names a missing one, and
+   fails on a rejected push. The `ghcr` step had the same bare-`wait` hole and is fixed too.
+2. **The cache cannot serve an object.** Signature: `error: unable to download
+   'http://nas:8280/2143nix/nar/<hash>.nar': HTTP error 200 (curl error: Timeout was
+   reached)`, then `path ... is required, but there is no substituter that can build it`.
+   `narinfo` answers in milliseconds while the body stalls — never verify an attic object
+   with `narinfo` alone; fetch the nar and compare bytes. See `attic-cache.md`.
+3. **The inputs genuinely do not build.** Only visible once 1 and 2 are excluded.
 
 **Why standard Deployments instead of WorkerDeployments?** The WorkerDeployment system (Temporal-managed rainbow deploys with progressive rollout) added operational complexity without proportional benefit for this workload. Frigate GenAI workflows are short-lived (p50 ~82s). Standard Kubernetes Deployments with Recreate strategy provide clean cutover: old pod drains in-flight work, new pod picks up fresh workflows. No versioned pods, no controller, no progressive rollout — simpler GitOps with ArgoCD.
 

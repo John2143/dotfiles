@@ -462,6 +462,33 @@
                 for: 10m
                 labels: { severity: warning }
                 annotations: { summary: "atticd has {{ $value }} threads blocked in kernel I/O — NAR downloads stall mid-stream while narinfo still answers (look for a du/find over /tank/atticd/storage; only a reboot clears it)" }
+
+              # Backups: the series are written by the restic unit itself
+              # (nixos/modules/restic-backup.nix, ExecStopPost). big failed all 58
+              # nights from 2026-10-20 with only journalctl to show it.
+              - alert: ResticBackupFailed
+                expr: 'restic_last_run_failed > 0'
+                for: 5m
+                labels: { severity: warning }
+                annotations: { summary: "restic on {{ $labels.instance }} failed its last run — `journalctl -u restic-backups-nas` (a failed run used to skip the unit's own unlock and stay locked for weeks)" }
+              - alert: ResticBackupStale
+                expr: 'time() - restic_last_success_timestamp_seconds > 36 * 3600'
+                for: 15m
+                labels: { severity: warning }
+                annotations: { summary: "restic on {{ $labels.instance }} last succeeded {{ $value | humanizeDuration }} ago (nightly timer is 03:00)" }
+
+              # node_systemd_unit_state comes from the systemd collector enabled
+              # in nixos-metrics.nix. 30 m keeps one-shot flakes out. Two known
+              # exceptions, matched by exact name — a regex would need `\\` in the
+              # YAML for no benefit here:
+              #   status-report     — pite, exits 1 whenever a check is missing
+              #   nas-disk-health   — fails daily while tank's 2 permanent errors
+              #                       stand; the ZFS rules own that signal (#443)
+              - alert: SystemdUnitFailed
+                expr: 'node_systemd_unit_state{state="failed", name!="status-report.service", name!="nas-disk-health.service"} == 1'
+                for: 30m
+                labels: { severity: warning }
+                annotations: { summary: "{{ $labels.name }} on {{ $labels.instance }} has been failed for 30 m" }
       '';
     in [alertRules];
     alertmanagers = [

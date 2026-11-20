@@ -1096,7 +1096,7 @@
     serviceConfig.Type = "oneshot";
     script = ''
       pid=$(systemctl show atticd -p MainPID --value)
-      blocked=$(awk '$3 == "D" {n++} END {print n+0}' /proc/"$pid"/task/*.stat 2>/dev/null)
+      blocked=$(cat /proc/"$pid"/task/*/stat 2>/dev/null | awk '$3 == "D" {n++} END {print n+0}')
       [ -n "$blocked" ] || blocked=0
       out=$(mktemp /var/lib/node_exporter/textfile/.attic.XXXXXX)
       trap 'rm -f "$out"' EXIT
