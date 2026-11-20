@@ -98,10 +98,9 @@
     enable = true;
     onActivation = {
       autoUpdate = false;
-      # brew 5 dropped --force-cleanup, which nix-darwin still emits for
-      # cleanup = "zap"; pass the replacement flags directly instead.
-      cleanup = "none";
-      extraFlags = ["--cleanup" "--zap"];
+      # nix-darwin passes `--zap --force-cleanup`. Homebrew 7 disabled the bare
+      # `--cleanup` this used to pass through extraFlags, failing activation.
+      cleanup = "zap";
     };
     casks = [
       # "bruno"
@@ -116,12 +115,24 @@
       "mongodb-compass"
       # "keycastr"
       # "sage"
+      # Deskflow client; arch or office (modules/deskflow.nix) is the server,
+      # reached over Wi-Fi. Same cask as darwin-macbook.nix, for the same reason.
+      "deskflow"
     ];
     brews = [
       # "probe-rs"
     ];
+    # `trusted = true` is required at tap level: Homebrew refuses untrusted
+    # third-party taps during activation. The tap's DMG is Developer ID signed and
+    # notarized — unlike nixpkgs' deskflow bundle, which is ad-hoc signed, so
+    # every rebuild changes the cdhash and silently invalidates the Accessibility
+    # grant (Apple TN3127).
     taps = [
       # "probe-rs/probe-rs"
+      {
+        name = "deskflow/tap";
+        trusted = true;
+      }
     ];
   };
 

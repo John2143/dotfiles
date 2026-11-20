@@ -175,6 +175,42 @@
           }
         ];
       }
+      # Blackbox probe — attic binary cache. A 404 for a hash that cannot exist
+      # is the healthy answer, and producing it reads the SQLite DB that wedged on
+      # 2026-11-19. probe_duration_seconds catches the slow-but-200 mode (10–21 s
+      # under pool contention) that a status-only check would miss.
+      #
+      # Target `nas` (tailnet MagicDNS), not `nas.local`: `nas` is what every host's
+      # substituter uses, and the mDNS name is not dependable — on 2026-11-19 nas
+      # renamed itself to nas-5.local after host-name conflicts, which silently
+      # dropped nas.local:9633 to up=0 while nas.local:9100 survived on a live
+      # connection. Both names are in atticd's allowed-hosts.
+      {
+        job_name = "blackbox-attic";
+        metrics_path = "/probe";
+        params.module = ["http_2xx_or_404"];
+        static_configs = [
+          {
+            targets = [
+              "http://nas:8280/2143nix/narinfo/00000000000000000000000000000000.narinfo"
+            ];
+          }
+        ];
+        relabel_configs = [
+          {
+            source_labels = ["__address__"];
+            target_label = "__param_target";
+          }
+          {
+            source_labels = ["__param_target"];
+            target_label = "instance";
+          }
+          {
+            target_label = "__address__";
+            replacement = "127.0.0.1:9115";
+          }
+        ];
+      }
       # Blackbox TCP probes — services + self-monitoring
       {
         job_name = "blackbox-tcp";
@@ -385,6 +421,33 @@
                 for: 15m
                 labels: { severity: warning }
                 annotations: { summary: "Router WAN 2GWAN has counted interface errors for 15m" }
+              # Attic answers a narinfo probe in ~20ms; 2s means the DB or the
+              # pool is dragging and every fleet build is waiting on it.
+              - alert: AtticSlow
+                expr: 'probe_duration_seconds{job="blackbox-attic"} > 2'
+                for: 10m
+                labels: { severity: warning }
+                annotations: { summary: "atticd took {{ $value }}s to answer a narinfo probe (healthy ~20ms) — builds block while it is this slow" }
+              # node_exporter's zfs collector supplies this; the pool is healthy
+              # only in the state="online" series being 1.
+              - alert: ZfsPoolNotOnline
+                expr: 'node_zfs_zpool_state{state="online"} == 0'
+                for: 5m
+                labels: { severity: critical }
+                annotations: { summary: "ZFS pool {{ $labels.zpool }} is not online" }
+              # Change-based: tank carries one standing data error, so a `> 0`
+              # expression would fire on deploy and re-notify every 4h forever.
+              # Graph the count; alert when it moves (new damage, or a clear).
+              - alert: ZfsPoolDataErrors
+                expr: 'changes(zfs_pool_data_errors[1h]) > 0'
+                for: 0m
+                labels: { severity: warning }
+                annotations: { summary: "ZFS pool {{ $labels.zpool }} data-error count is {{ $value }} — new damage or a clear in the last hour (zpool status -v)" }
+              - alert: ZfsDeviceErrors
+                expr: 'sum by (zpool, vdev) (increase(zfs_pool_device_errors[1h])) > 0'
+                for: 0m
+                labels: { severity: warning }
+                annotations: { summary: "ZFS device {{ $labels.vdev }} in {{ $labels.zpool }} counted read/write/cksum errors in the last hour" }
       '';
     in [alertRules];
     alertmanagers = [
@@ -482,6 +545,13 @@
           http:
             valid_status_codes: [200, 301, 302, 403]
             tls_config: { insecure_skip_verify: false }
+        # attic answers 404 for a hash that cannot exist; that answer requires a
+        # DB read, so 404 is health. Do not fold this into http_2xx.
+        http_2xx_or_404:
+          prober: http
+          timeout: 10s
+          http:
+            valid_status_codes: [200, 404]
         tcp_connect:
           prober: tcp
           timeout: 5s

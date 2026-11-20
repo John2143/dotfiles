@@ -1094,6 +1094,56 @@ nixpkgs.overlays = [
     };
   };
 
+  # Basic ZFS pool health for Prometheus. node_exporter's zfs collector reads
+  # /proc/spl/kstat/zfs only, so it reports pool *state* but never the data-error
+  # count, per-device error counters or fragmentation that zpool(8) carries.
+  # Publish those through the textfile collector services.nixos-metrics already
+  # points at /var/lib/node_exporter/textfile.
+  systemd.services.zfs-metrics = {
+    description = "Publish basic ZFS pool health to node_exporter";
+    path = [config.boot.zfs.package pkgs.gawk pkgs.gnused pkgs.coreutils];
+    serviceConfig = {
+      Type = "oneshot";
+      User = "root"; # zpool(8) needs /dev/zfs
+    };
+    script = ''
+      set -eu
+      out=$(mktemp /var/lib/node_exporter/textfile/.zfs.XXXXXX)
+      trap 'rm -f "$out"' EXIT
+      {
+        for pool in $(zpool list -Hpo name); do
+          # `zpool status -x` exits 0 whether or not the pool is healthy — the
+          # signal is its `errors:` line: "No known data errors" vs "N data errors".
+          errors=$(zpool status -x "$pool" | sed -n 's/^errors: \([0-9][0-9]*\) data errors.*/\1/p')
+          echo "zfs_pool_data_errors{zpool=\"$pool\"} ''${errors:-0}"
+
+          frag=$(zpool list -Hpo fragmentation "$pool")
+          if [ -n "$frag" ] && [ "$frag" != "-" ]; then
+            echo "zfs_pool_fragmentation_ratio{zpool=\"$pool\"} $(awk -v f="$frag" 'BEGIN { printf "%.2f", f / 100 }')"
+          fi
+
+          zpool status -px "$pool" | awk -v p="$pool" '$2 ~ /^(ONLINE|DEGRADED|FAULTED|OFFLINE|UNAVAIL|REMOVED|SUSPENDED)$/ && NF >= 5 {
+            printf "zfs_pool_device_errors{zpool=\"%s\",vdev=\"%s\",type=\"read\"} %s\n", p, $1, $3
+            printf "zfs_pool_device_errors{zpool=\"%s\",vdev=\"%s\",type=\"write\"} %s\n", p, $1, $4
+            printf "zfs_pool_device_errors{zpool=\"%s\",vdev=\"%s\",type=\"cksum\"} %s\n", p, $1, $5
+          }'
+        done
+      } > "$out"
+      chmod 0644 "$out"
+      mv "$out" /var/lib/node_exporter/textfile/zfs.prom
+      trap - EXIT
+    '';
+  };
+
+  systemd.timers.zfs-metrics = {
+    description = "Refresh ZFS pool health metrics";
+    wantedBy = ["timers.target"];
+    timerConfig = {
+      OnBootSec = "2min";
+      OnUnitActiveSec = "5min";
+    };
+  };
+
   security.rtkit.enable = true;
 
   networking.firewall = {
