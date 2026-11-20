@@ -58,6 +58,18 @@
     "iscsi_target_mod"
   ];
 
+  # The Realtek RTL8761BU in the ASUS USB-BT500 (0b05:190e) aborts its firmware
+  # with "RTL: hw err, trigger devcoredump (51)" when USB autosuspend parks it,
+  # and that crash drops every Bluetooth link at once (2026-11-19 21:23, after
+  # ~91 min up, taking the Mac, iPad and iPhone with it). This kernel build sets
+  # btusb.enable_autosuspend=Y, so turn it off for the driver and pin the
+  # dongle's power control: the parameter covers the driver, the rule covers the
+  # device node across re-plugs.
+  boot.kernelParams = ["btusb.enable_autosuspend=0"];
+  services.udev.extraRules = ''
+    ACTION=="add|change", SUBSYSTEM=="usb", ATTR{idVendor}=="0b05", ATTR{idProduct}=="190e", TEST=="power/control", ATTR{power/control}="on"
+  '';
+
   # Panic dumps in reserved RAM: efivarfs is 192K with ~136K free here, too
   # small for a 112-180K dump.
   custom.crashCapture.enable = true;
