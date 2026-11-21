@@ -100,6 +100,12 @@ in {
           # lives in the NAS `private` share, which sanoid already snapshots
           # (daily 30 / monthly 12 / yearly 1) — see nas-configuration.nix.
           "/home/john/private"
+          # Second gocryptfs mount, on office only (fuse.gocryptfs on
+          # /mnt/nas/private-local, user_id=1000): same failure, and it has been
+          # costing office every nightly run since at least 2026-11-19 —
+          # `lstat /home/john/private-local: permission denied`, restic exit 3,
+          # unit failed, `forget --prune` skipped.
+          "/home/john/private-local"
           "/home/john/.cache"
           "/home/john/.local/share"
           # Re-downloadable bulk under the one-big-root layout (office migration):
