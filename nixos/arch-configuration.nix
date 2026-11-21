@@ -67,6 +67,18 @@
   boot.kernelParams = ["btusb.enable_autosuspend=0"];
   services.udev.extraRules = ''
     ACTION=="add|change", SUBSYSTEM=="usb", ATTR{idVendor}=="0b05", ATTR{idProduct}=="190e", TEST=="power/control", ATTR{power/control}="on"
+
+    # The onboard Intel radio (8087:0aa7, the "arch(in" controller) is never
+    # used: it has no bonded devices, every device lives on the USB dongle, and
+    # only the dongle reports the "Arch" alias. Powering it off after the fact
+    # does not hold — blueman's PowerManager iterates every adapter and
+    # re-powers them (2026-11-20 21:13:10, two minutes after btmgmt-off ran).
+    # While it is up, paired phones page it, BlueZ spawns transient
+    # /org/bluez/hci1/dev_* objects, blueman throws KeyError on each Connected
+    # change, and iOS raises a pairing prompt over and over. Deauthorize the
+    # USB device instead, so no hci1 ever exists. The same card's Wi-Fi is PCIe
+    # (0000:06:00.0), so this touches Bluetooth only.
+    ACTION=="add|change", SUBSYSTEM=="usb", ATTR{idVendor}=="8087", ATTR{idProduct}=="0aa7", ATTR{authorized}="0"
   '';
 
   # Panic dumps in reserved RAM: efivarfs is 192K with ~136K free here, too
