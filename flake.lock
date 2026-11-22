@@ -797,11 +797,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1795324884,
-        "narHash": "sha256-ryeebFEhNbnLuwtSURgG6Uh6X8HyqCMKerySQGyEy5U=",
+        "lastModified": 1795328667,
+        "narHash": "sha256-eJORPiFY9g1TIpzQ2TZkD9bU+NQw8/vNVaEVC1p9prE=",
         "owner": "2143-Labs",
         "repo": "timestone-lobby-watcher",
-        "rev": "afd4713df1704861dabdd5522d206a2369de7797",
+        "rev": "562788f9ed7a6e3ae5ce29f8bc0b17b28eaebad0",
         "type": "github"
       },
       "original": {
