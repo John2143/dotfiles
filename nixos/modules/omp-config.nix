@@ -482,7 +482,7 @@ in
         # thinking-level, so agents that need another level (oracle: xhigh)
         # pin their own model selector instead of routing through this role.
         slow: anthropic/claude-opus-5-5:high
-        advisor: litellm/deepseek/deepseek-flash
+        advisor: litellm/deepseek/deepseek-flash:low
         # Image questions (`read <path>?q=<question>`) resolve @vision ->
         # @default -> session model, so without this role image analysis
         # silently runs on the DeepSeek text model. Pin it to a Claude model
@@ -514,15 +514,10 @@ in
         baseDelayMs: 2000
         fallbackChains:
           smol:
-            - "litellm/deepseek/deepseek-flash"
-            - "anthropic/claude-haiku-5-5"
+            - "litellm/deepseek/deepseek-flash:low"
           default:
-            - "litellm/deepseek/deepseek-flash"
-            - "anthropic/claude-opus-5-5"
-            - "litellm/openrouter/deepseek/deepseek-v4.1-flash"
-            - "litellm/openrouter/openrouter/auto"
+            - "litellm/deepseek/deepseek-flash:high"
           slow:
-            - "anthropic/claude-opus-5-5"
             - "litellm/anthropic/claude-opus-5-5"
             - "litellm/deepseek/deepseek-flash:high"
           # Per-model keys, one Twin per Claude model: Max subscription first
