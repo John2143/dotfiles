@@ -88,6 +88,23 @@ nix store verify --store http://nas:8280/2143nix \
   --option netrc-file /run/agenix/attic-netrc /nix/store/<path>
 ```
 
+A NAR that delivers **some** bytes and then stops — `bytes=15898518` of 44,749,560
+with the transfer never terminating — is not corruption but the dentry wedge: a
+`du`/`find`/`ls -R` over `/tank/atticd/storage` wedges ZFS path lookups on `tank`
+(twice on 2026-11-19), every affected atticd thread parks in
+`path_openat`, and the chunk stream stalls mid-object while `narinfo` still answers
+in milliseconds. Confirm with the blocked-thread count:
+
+```bash
+sudo cat /proc/$(systemctl show atticd -p MainPID --value)/task/*.stat | awk '$3=="D"' | wc -l
+```
+
+or the `atticd_blocked_threads` metric (`AtticThreadsBlocked` alerts above 50 for
+10m). Hundreds means wedged; a handful is normal. `systemctl restart atticd` does
+**not** clear it — the old daemon goes defunct with its threads still in `D`, holding
+its SQLite handle, and the replacement dies on `database is locked`. A reboot does.
+Never walk that tree: no `du`, `find` or `ls -R` on `/tank/atticd/storage`.
+
 ## Watchdog
 
 `atticd-watchdog.timer` (every 5 min, `OnBootSec=10min`) probes a DB-backed narinfo
@@ -116,6 +133,6 @@ like "everything is broken" rather than "the cache is broken".
 systemctl status atticd atticd-watchdog.timer
 sudo journalctl -u atticd --since '-30m' | grep -c 'Status code: 500'
 curl -s --netrc-file /run/agenix/attic-netrc -o /dev/null -w '%{http_code} %{time_total}s\n' \
-  http://nas:8280/2143nix/narinfo/<hash>.narinfo
+  http://nas:8280/2143nix/<hash>.narinfo
 zfs list -o name,used,refer tank/atticd/storage
 ```

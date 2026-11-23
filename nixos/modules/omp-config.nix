@@ -263,6 +263,43 @@ in
               input: [text, image]
               contextWindow: 1048576
               maxTokens: 384000
+            # Gemini 4 Neon through the proxy's `gemini/*` wildcard
+            # (workloads/llm-proxy/configmap.yaml). Pinned for the same reason
+            # as the OpenRouter entry above: discovery reports the row (the
+            # proxy's /model/info expands the wildcard from its runtime cost
+            # map) but never builds it into a chat model, so unpinned it does
+            # not reach `omp models`.
+            #
+            # Efforts are Google's ladder for Neon — low/medium/high/xhigh,
+            # default high (gemini.kdl, `models "gemini-4-hydrogen"
+            # "gemini-4-neon"`). `minimal` is rejected by native Gemini 4
+            # thinkingLevel and the proxy would collapse it to `low` anyway
+            # (litellm vertex_and_google_ai_studio_gemini.py,
+            # _map_reasoning_effort_to_thinking_level). xhigh only reaches the
+            # wire on proxy image v1.108.15+: v1.108.1 has no xhigh mapping
+            # and its drop_params discards the effort silently, so Neon would
+            # run at its own default level.
+            #
+            # maxTokens is the long-decode ceiling the catalog pins for the
+            # direct Gemini 4 transports: the API closes a request at its
+            # 65,536-token segment with MAX_TOKENS unless maxOutputTokens is
+            # larger, and LiteLLM then follows Google's continuation tokens.
+            # Prices are Neon's paid tier; caching is implicit-only, so
+            # cacheWrite stays 0.
+            - id: gemini/gemini-4-neon
+              name: Gemini 4 Neon (LiteLLM proxy)
+              api: openai-completions
+              reasoning: true
+              supportsTools: true
+              input: [text, image]
+              cost: { input: 3, output: 15, cacheRead: 0.15, cacheWrite: 0 }
+              contextWindow: 1048576
+              maxTokens: 262144
+              thinking:
+                mode: effort
+                efforts: [low, medium, high, xhigh]
+                defaultLevel: high
+                requiresEffort: true
             # Anthropic on the API key instead of the Max subscription — the
             # API-key rungs in retry.fallbackChains below. The proxy answers
             # `anthropic/<id>` from its ANTHROPIC_API_KEY lane
@@ -445,7 +482,7 @@ in
         # thinking-level, so agents that need another level (oracle: xhigh)
         # pin their own model selector instead of routing through this role.
         slow: anthropic/claude-opus-5-5:high
-        advisor: litellm/deepseek/deepseek-flash
+        advisor: litellm/deepseek/deepseek-flash:low
         # Image questions (`read <path>?q=<question>`) resolve @vision ->
         # @default -> session model, so without this role image analysis
         # silently runs on the DeepSeek text model. Pin it to a Claude model
@@ -477,15 +514,10 @@ in
         baseDelayMs: 2000
         fallbackChains:
           smol:
-            - "litellm/deepseek/deepseek-flash"
-            - "anthropic/claude-haiku-5-5"
+            - "litellm/deepseek/deepseek-flash:low"
           default:
-            - "litellm/deepseek/deepseek-flash"
-            - "anthropic/claude-opus-5-5"
-            - "litellm/openrouter/deepseek/deepseek-v4.1-flash"
-            - "litellm/openrouter/openrouter/auto"
+            - "litellm/deepseek/deepseek-flash:high"
           slow:
-            - "anthropic/claude-opus-5-5"
             - "litellm/anthropic/claude-opus-5-5"
             - "litellm/deepseek/deepseek-flash:high"
           # Per-model keys, one Twin per Claude model: Max subscription first

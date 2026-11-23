@@ -1,4 +1,4 @@
-# 2026-11-15 20:34:56 by RouterOS 7.24.5
+# 2026-11-19 22:58:37 by RouterOS 7.24.5
 # software id = 7RHC-3MMG
 #
 # model = RB5009UPr+S+
@@ -613,9 +613,8 @@ set address-list-extra-time=0s allow-remote-requests=yes cache-max-ttl=1w \
     cache-size=2048KiB doh-max-concurrent-queries=50 \
     doh-max-server-connections=5 doh-timeout=5s max-concurrent-queries=100 \
     max-concurrent-tcp-sessions=20 max-udp-packet-size=4096 \
-    mdns-repeat-ifaces=bridge,2GWAN query-server-timeout=2s \
-    query-total-timeout=10s servers=1.1.1.1,1.0.0.1 use-doh-server="" \
-    verify-doh-cert=no vrf=main
+    mdns-repeat-ifaces="" query-server-timeout=2s query-total-timeout=10s \
+    servers=1.1.1.1,1.0.0.1 use-doh-server="" verify-doh-cert=no vrf=main
 /ip dns static
 add address=192.168.5.1 comment=defconf disabled=no name=router.lan ttl=1d \
     type=A
@@ -875,7 +874,7 @@ set allow-disable-external-interface=no enabled=no show-dummy-rule=yes
 add address=fd00:1::1/64 advertise=yes auto-link-local=yes disabled=no \
     eui-64=no from-pool="" interface=bridge no-dad=no
 /ipv6 dhcp-server
-add address-lists="" address-pool=ula-addr-pool dhcp-option=dns-router-ula \
+add address-lists="" address-pool=static-only dhcp-option=dns-router-ula \
     disabled=no ignore-ia-na-bindings=no interface=bridge lease-time=3d name=\
     ula-dhcp preference=255 prefix-pool=static-only rapid-commit=yes \
     route-distance=1 use-radius=no use-reconfigure=no
@@ -959,7 +958,7 @@ add action=masquerade chain=srcnat out-interface=2GWAN !to-address !to-ports
 /ipv6 nd
 set [ find default=yes ] advertise-dns=no advertise-mac-address=yes disabled=\
     no !dns hop-limit=unspecified interface=all \
-    managed-address-configuration=yes mtu=unspecified other-configuration=no \
+    managed-address-configuration=no mtu=unspecified other-configuration=yes \
     !pref64 ra-delay=3s ra-interval=3m20s-10m ra-lifetime=30m ra-preference=\
     medium reachable-time=unspecified retransmit-interval=unspecified
 /ipv6 nd prefix default
@@ -1147,10 +1146,10 @@ set allowed-number="" channel=0 polling=no port=none receive-enabled=no \
 /tool sniffer
 set file-limit=1000KiB file-name="" filter-cpu="" filter-direction=any \
     filter-dst-ip-address="" filter-dst-ipv6-address="" \
-    filter-dst-mac-address="" filter-dst-port="" filter-interface=2GWAN \
+    filter-dst-mac-address="" filter-dst-port="" filter-interface="" \
     filter-ip-address=108.56.153.222/32 filter-ip-protocol="" \
     filter-ipv6-address="" filter-mac-address="" filter-mac-protocol="" \
-    filter-operator-between-entries=or filter-port=18080 filter-size="" \
+    filter-operator-between-entries=or filter-port="" filter-size="" \
     filter-src-ip-address="" filter-src-ipv6-address="" \
     filter-src-mac-address="" filter-src-port="" filter-stream=no \
     filter-vlan="" max-packet-size=2048 memory-limit=100KiB memory-scroll=yes \

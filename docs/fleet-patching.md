@@ -1,14 +1,34 @@
 # Fleet patching
 
-Two systemd timers on **office** keep the fleet current. Neither one reboots anything.
+**Nothing patches the fleet on a schedule right now** (verified 2026-11-20):
 
-| Timer | When | Does |
+| Timer | Planned | Actual |
 |---|---|---|
-| `fleet-patch.timer` | Sunday 04:00 (+ up to 5 min jitter) | bumps `nixpkgs` and `nixpkgs-stable`, pushes `flake.lock`, switches every NixOS host to that exact commit |
-| `renovate.timer` | Sunday 05:00 | opens PRs against `2143-Labs/argo` for chart and image bumps |
+| `fleet-patch.timer` | Sunday 04:00 (+ up to 5 min jitter) | **Masked on office** since 2026-11 — `nixos/office-configuration.nix` sets `systemd.timers.fleet-patch.enable = false` while the i9-14900K is stress-tested for Vmin-shift degradation (RMA pending). Delete that line to resume; `Persistent=true` means the next switch runs the missed week immediately. Tracked on card #363. |
+| `renovate.timer` | Sunday 05:00 | **Never deployed.** `nixos/modules/renovate.nix` is imported by no host config, no host has the unit (`is-enabled` → `not-found` on office/pite/nas/big/arch), and `2143-Labs/argo` has never received a PR from renovate despite its `renovate.json`. |
 
-Both push to ntfy on failure (`notify-failure@<unit>`), so a broken week is visible without
-logging in. `fleet-patch` also always sends its report, summarised in the notification title.
+When enabled, `fleet-patch` bumps `nixpkgs`, `nixpkgs-stable` and `oh-my-pi`, pushes
+`flake.lock`, and switches every NixOS host to that exact commit. Neither job reboots
+anything.
+
+## What builds without being asked
+
+Nothing rebuilds dotfiles on a schedule. The only recurring builds are in CI:
+
+| What | When | Result |
+|---|---|---|
+| `fork-sync.yml` in `John2143/oh-my-pi` | daily 05:17 UTC, or `workflow_dispatch` | rebases the fork's patches on `upstream/main`, runs typecheck + native build + full suite, force-pushes `john` |
+| `build-frigate-genai.yml` in dotfiles | on push to the frigate/nix paths, or by hand | builds both images, pushes to attic and ghcr, then bumps the tag in `2143-Labs/argo` |
+| `attic-push-queue.timer` | 2 min after the previous run, on every host with attic | uploads paths queued by the post-build hook; it builds nothing |
+
+Consequence for `omp`: the fork advances daily, but dotfiles' `flake.lock` only follows when
+someone runs `fleet-patch.sh` (or switches by hand), and then every host builds the new
+derivation itself — the first to finish queues it to attic and the rest substitute. There is
+no scheduled warm; the hourly warmer is parked on `omp-warmer-wip` (card #450).
+
+Both timers push to ntfy on failure (`notify-failure@<unit>`), so a broken week is visible
+without logging in. `fleet-patch` also always sends its report, summarised in the
+notification title.
 
 The job never reboots, so the kernel it stages only takes effect at the next reboot. When a
 host's running kernel differs from the booted-only generation, its row says `REBOOT NEEDED`.

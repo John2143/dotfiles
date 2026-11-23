@@ -178,6 +178,25 @@
       ' || echo '{"text": "\u26a0", "class": "error", "tooltip": "Failed to parse weather data"}'
     '';
   };
+  # The Intel controller (USB 8087:0aa7) is unused: every paired device lives on
+  # the ASUS dongle. hciN numbering is not stable across boots, so look the
+  # index up by MAC and power off that one.
+  btmgmt-off = pkgs.writeShellApplication {
+    name = "btmgmt-off";
+    runtimeInputs = [pkgs.bluez pkgs.gawk];
+    text = ''
+      target="04:D3:B0:87:47:8A"
+      idx=$(btmgmt info | awk -v want="$target" '
+        /^hci[0-9]+:/ { i = $1; sub(/^hci/, "", i); sub(/:$/, "", i); next }
+        /^[ \t]+addr / { if ($2 == want) { print i; exit } }
+      ')
+      if [ -z "$idx" ]; then
+        echo "controller $target not present, nothing to do"
+        exit 0
+      fi
+      btmgmt --index "$idx" power off
+    '';
+  };
 in {
   hardware.uinput.enable = true;
   # setup my two input channels
@@ -227,19 +246,23 @@ in {
         ];
       };
     };
-    wireplumber.extraConfig = {
-      "monitor.bluez.properties" = {
-        "bluez5.enable-sbc-xq" = true;
-        "bluez5.enable-msbc" = true;
-        "bluez5.enable-hw-volume" = true;
-        "bluez5.roles" = [
-          "hsp_hs"
-          "hsp_ag"
-          "hfp_hf"
-          "hfp_ag"
-        ];
-      };
-    };
+    # WirePlumber's `extraConfig` keys are *file names*, so the section wrapper
+    # (`monitor.bluez.properties = { … }`) cannot be expressed with it: the
+    # block used to land as flat top-level keys and never took effect.
+    # configPackages writes the file verbatim, the same way
+    # modules/blueferry.nix already does for its seat-monitoring fragment.
+    wireplumber.configPackages = [
+      (pkgs.writeTextDir "share/wireplumber/wireplumber.conf.d/51-bluez.conf" ''
+        monitor.bluez.properties = {
+          bluez5.enable-sbc-xq = true
+          bluez5.enable-msbc = true
+          bluez5.enable-hw-volume = true
+          # a2dp_sink is the role this machine was missing: without it there is
+          # no endpoint for a phone or laptop (an A2DP source) to stream into.
+          bluez5.roles = [ hsp_hs hsp_ag a2dp_source a2dp_sink hfp_hf hfp_ag ]
+        }
+      '')
+    ];
     #jack.enable = true;
   };
 
@@ -310,7 +333,7 @@ in {
   # /etc/pam.d/hyprlock is missing it silently falls back to /etc/pam.d/su. The empty attrset
   # makes nixpkgs generate the complete default stack (auth/account/password/session, pam_unix,
   # no pam_faillock) — the same shape as the generated /etc/pam.d/swaylock.
-  security.pam.services.hyprlock = { };
+  security.pam.services.hyprlock = {};
   security.polkit.enable = true;
 
   # Secret Service (org.freedesktop.secrets) for libsecret clients: Chromium's
@@ -329,10 +352,42 @@ in {
 
   # bluetooth
   services.blueman.enable = true;
-  # Fix blueman-applet user service: the NixOS module generated an override
-  # that adds a second ExecStart= line on top of the package's Type=dbus
-  # service, which systemd refuses to load.
-  systemd.user.services.blueman-applet.serviceConfig.ExecStart = lib.mkForce "${pkgs.blueman}/bin/blueman-applet";
+  # The packaged unit is Type=dbus and already sets ExecStart=, and it ships no
+  # [Install] section, so nothing ever started it. The empty first element
+  # resets the packaged ExecStart=; without it systemd counts two ExecStart=
+  # lines and refuses the unit ("bad-setting"). wantedBy/partOf/after and
+  # serviceConfig are first-class NixOS unit options
+  # (nixos/lib/systemd-unit-options.nix); the unit's [Install] section is not
+  # used because NixOS never runs `systemctl enable`.
+  systemd.user.services.blueman-applet = {
+    wantedBy = ["graphical-session.target"];
+    partOf = ["graphical-session.target"];
+    after = ["graphical-session.target"];
+    serviceConfig.ExecStart = lib.mkForce [
+      ""
+      "${pkgs.blueman}/bin/blueman-applet"
+    ];
+  };
+
+  # bluetoothd sets AutoEnable=true globally, so both controllers come up
+  # powered on every time it (re)starts — and that power-on happens after the
+  # unit is already "active", so the script waits before switching the Intel
+  # radio off. It is pulled in by bluetooth.service (see below) as well as by
+  # multi-user.target, and it leaves itself inactive so each restart re-runs it.
+  systemd.services.bluetooth-hci1-off = {
+    description = "Power off the unused Intel Bluetooth controller";
+    wantedBy = ["multi-user.target"];
+    after = ["bluetooth.service"];
+    serviceConfig = {
+      Type = "oneshot";
+      ExecStartPre = "${pkgs.coreutils}/bin/sleep 3";
+      ExecStart = "${btmgmt-off}/bin/btmgmt-off";
+      RemainAfterExit = false;
+    };
+  };
+  # Restarting bluetoothd re-powers both controllers; this makes the oneshot
+  # run again each time instead of only once at boot.
+  systemd.services.bluetooth.wants = ["bluetooth-hci1-off.service"];
 
   #systemd.timers."kdeconnect-refresh" = {
   #wantedBy = [ "timers.target" ];
@@ -359,12 +414,12 @@ in {
     # iPhone Bluetooth bridge, packaged locally (not in nixpkgs). Hosts opt in
     # with services.blueferry.enable; see modules/blueferry.nix.
     (final: prev: {
-      blueferry = final.callPackage ./packages/blueferry.nix { };
+      blueferry = final.callPackage ./packages/blueferry.nix {};
     })
     # deSEC DNS API client (`desec`), packaged locally (not in nixpkgs). Installed
     # per user from home.nix.
     (final: prev: {
-      desec-dns = final.callPackage ./packages/desec-dns.nix { };
+      desec-dns = final.callPackage ./packages/desec-dns.nix {};
     })
     (final: prev: {
       # Vulkan whisper: GPU acceleration on both desktops (arch: NVIDIA legacy_580/Pascal,

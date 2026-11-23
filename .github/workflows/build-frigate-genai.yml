@@ -25,16 +25,36 @@ jobs:
         with:
           github_access_token: ${{ secrets.GITHUB_TOKEN }}
       - name: Build images (parallel)
-        run: |
-          nix build '.#frigate-genai-genai-image' --out-link result-genai &
-          nix build '.#frigate-genai-ffmpeg-image' --out-link result-ffmpeg &
-          wait
-
-      - name: Push to Attic
+        # Bare `wait` returns 0 whatever the jobs did, so both builds could fail
+        # while this step stayed green and the out-links never appeared — which
+        # the next step then reported as its own missing file (runs 44656903602,
+        # 44660075526). Wait on each pid and fail if either failed.
         run: |
           set -euo pipefail
-          command -v attic >/dev/null || { echo "attic not installed; skipping"; exit 0; }
-          XDG_CONFIG_HOME=/etc attic push 2143nix ./result-genai ./result-ffmpeg || echo "::warning::attic push failed"
+          nix build '.#frigate-genai-genai-image' --out-link result-genai &
+          genai=$!
+          nix build '.#frigate-genai-ffmpeg-image' --out-link result-ffmpeg &
+          ffmpeg=$!
+          rc=0
+          wait "$genai" || rc=1
+          wait "$ffmpeg" || rc=1
+          exit "$rc"
+
+      - name: Push to Attic
+        # The out-links are resolved to their store paths before pushing: attic
+        # canonicalises its arguments, and a missing or dangling link surfaces
+        # only as "I/O error: No such file or directory (os error 2)", which is
+        # what this step used to swallow as a warning (run 44656903602). A
+        # missing link now fails here and names the link.
+        run: |
+          set -euo pipefail
+          command -v attic >/dev/null || { echo "::error::attic is not on PATH — the runner needs pkgs.attic-client"; exit 1; }
+          paths=()
+          for link in ./result-genai ./result-ffmpeg; do
+            [ -e "$link" ] || { echo "::error::$link is missing — the build step produced no out-link"; exit 1; }
+            paths+=("$(readlink -f "$link")")
+          done
+          XDG_CONFIG_HOME=/etc attic push 2143nix "${paths[@]}"
 
       - name: Push to ghcr.io (parallel)
         run: |
@@ -49,11 +69,17 @@ jobs:
           docker tag frigate-genai-ffmpeg:v1 ghcr.io/${OWNER_LOWER}/frigate-genai-ffmpeg:v${{ github.run_number }}
           docker tag frigate-genai-ffmpeg:v1 ghcr.io/${OWNER_LOWER}/frigate-genai-ffmpeg:latest
 
-          docker push ghcr.io/${OWNER_LOWER}/frigate-genai-genai:v${{ github.run_number }} &
-          docker push ghcr.io/${OWNER_LOWER}/frigate-genai-genai:latest &
-          docker push ghcr.io/${OWNER_LOWER}/frigate-genai-ffmpeg:v${{ github.run_number }} &
-          docker push ghcr.io/${OWNER_LOWER}/frigate-genai-ffmpeg:latest &
-          wait
+          # Same trap as the build step: a bare `wait` returns 0 whatever its
+          # jobs did, so a rejected docker push would leave this step green.
+          rc=0
+          for repo in frigate-genai-genai frigate-genai-ffmpeg; do
+            img="ghcr.io/${OWNER_LOWER}/${repo}"
+            docker push "${img}:v${{ github.run_number }}" & p_version=$!
+            docker push "${img}:latest" & p_latest=$!
+            wait "$p_version" || rc=1
+            wait "$p_latest" || rc=1
+          done
+          exit "$rc"
 
   update-argo:
     needs: build

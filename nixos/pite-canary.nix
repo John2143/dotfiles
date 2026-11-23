@@ -175,6 +175,46 @@
           }
         ];
       }
+      # Blackbox probe — attic binary cache. The target is attic's canonical
+      # /<cache>/<hash>.narinfo route: a hash that cannot exist answers 404
+      # {"error":"NoSuchObject"} only after the SQLite lookup, so this exercises the
+      # DB that wedged on 2026-11-19. /<cache>/narinfo/<hash>.narinfo is NOT a route —
+      # it 404s with {"error":"NotFound"} from the router without touching the DB,
+      # which is what this probe originally pointed at.
+      # A 404 is healthy; probe_duration_seconds catches the slow-but-200 mode
+      # (10–21 s under pool contention) that a status-only check would miss.
+      #
+      # Target `nas` (tailnet MagicDNS), not `nas.local`: `nas` is what every host's
+      # substituter uses, and the mDNS name is not dependable — on 2026-11-19 nas
+      # renamed itself to nas-5.local after host-name conflicts, which silently
+      # dropped nas.local:9633 to up=0 while nas.local:9100 survived on a live
+      # connection. Both names are in atticd's allowed-hosts.
+      {
+        job_name = "blackbox-attic";
+        metrics_path = "/probe";
+        params.module = ["http_2xx_or_404"];
+        static_configs = [
+          {
+            targets = [
+              "http://nas:8280/2143nix/00000000000000000000000000000000.narinfo"
+            ];
+          }
+        ];
+        relabel_configs = [
+          {
+            source_labels = ["__address__"];
+            target_label = "__param_target";
+          }
+          {
+            source_labels = ["__param_target"];
+            target_label = "instance";
+          }
+          {
+            target_label = "__address__";
+            replacement = "127.0.0.1:9115";
+          }
+        ];
+      }
       # Blackbox TCP probes — services + self-monitoring
       {
         job_name = "blackbox-tcp";
@@ -385,6 +425,70 @@
                 for: 15m
                 labels: { severity: warning }
                 annotations: { summary: "Router WAN 2GWAN has counted interface errors for 15m" }
+              # Attic answers a narinfo probe in ~20ms; 2s means the DB or the
+              # pool is dragging and every fleet build is waiting on it.
+              - alert: AtticSlow
+                expr: 'probe_duration_seconds{job="blackbox-attic"} > 2'
+                for: 10m
+                labels: { severity: warning }
+                annotations: { summary: "atticd took {{ $value }}s to answer a narinfo probe (healthy ~20ms) — builds block while it is this slow" }
+              # node_exporter's zfs collector supplies this; the pool is healthy
+              # only in the state="online" series being 1.
+              - alert: ZfsPoolNotOnline
+                expr: 'node_zfs_zpool_state{state="online"} == 0'
+                for: 5m
+                labels: { severity: critical }
+                annotations: { summary: "ZFS pool {{ $labels.zpool }} is not online" }
+              # Change-based: tank carries one standing data error, so a `> 0`
+              # expression would fire on deploy and re-notify every 4h forever.
+              # Graph the count; alert when it moves (new damage, or a clear).
+              - alert: ZfsPoolDataErrors
+                expr: 'changes(zfs_pool_data_errors[1h]) > 0'
+                for: 0m
+                labels: { severity: warning }
+                annotations: { summary: "ZFS pool {{ $labels.zpool }} data-error count is {{ $value }} — new damage or a clear in the last hour (zpool status -v)" }
+              - alert: ZfsDeviceErrors
+                expr: 'sum by (zpool, vdev) (increase(zfs_pool_device_errors[1h])) > 0'
+                for: 0m
+                labels: { severity: warning }
+                annotations: { summary: "ZFS device {{ $labels.vdev }} in {{ $labels.zpool }} counted read/write/cksum errors in the last hour" }
+              # A `du`/`find` over /tank/atticd/storage wedges ZFS dentries on tank
+              # (twice on 2026-11-19): chunk-store opens block in path_openat, NAR
+              # bodies stall mid-stream and nix fails with "HTTP error 200 (curl
+              # error: Timeout was reached)" while narinfo still answers in ~7 ms, so
+              # no probe notices. A restart cannot clear a kernel-level hang.
+              - alert: AtticThreadsBlocked
+                expr: 'atticd_blocked_threads > 50'
+                for: 10m
+                labels: { severity: warning }
+                annotations: { summary: "atticd has {{ $value }} threads blocked in kernel I/O — NAR downloads stall mid-stream while narinfo still answers (look for a du/find over /tank/atticd/storage; only a reboot clears it)" }
+
+              # Backups: the series are written by the restic unit itself
+              # (nixos/modules/restic-backup.nix, ExecStopPost). big failed all 58
+              # nights from 2026-10-20 with only journalctl to show it.
+              - alert: ResticBackupFailed
+                expr: 'restic_last_run_failed > 0'
+                for: 5m
+                labels: { severity: warning }
+                annotations: { summary: "restic on {{ $labels.instance }} failed its last run — `journalctl -u restic-backups-nas` (a failed run used to skip the unit's own unlock and stay locked for weeks)" }
+              - alert: ResticBackupStale
+                expr: 'time() - restic_last_success_timestamp_seconds > 36 * 3600'
+                for: 15m
+                labels: { severity: warning }
+                annotations: { summary: "restic on {{ $labels.instance }} last succeeded {{ $value | humanizeDuration }} ago (nightly timer is 03:00)" }
+
+              # node_systemd_unit_state comes from the systemd collector enabled
+              # in nixos-metrics.nix. 30 m keeps one-shot flakes out. Two known
+              # exceptions, matched by exact name — a regex would need `\\` in the
+              # YAML for no benefit here:
+              #   status-report     — pite, exits 1 whenever a check is missing
+              #   nas-disk-health   — fails daily while tank's 2 permanent errors
+              #                       stand; the ZFS rules own that signal (#443)
+              - alert: SystemdUnitFailed
+                expr: 'node_systemd_unit_state{state="failed", name!="status-report.service", name!="nas-disk-health.service"} == 1'
+                for: 30m
+                labels: { severity: warning }
+                annotations: { summary: "{{ $labels.name }} on {{ $labels.instance }} has been failed for 30 m" }
       '';
     in [alertRules];
     alertmanagers = [
@@ -482,6 +586,13 @@
           http:
             valid_status_codes: [200, 301, 302, 403]
             tls_config: { insecure_skip_verify: false }
+        # attic answers 404 for a hash that cannot exist; that answer requires a
+        # DB read, so 404 is health. Do not fold this into http_2xx.
+        http_2xx_or_404:
+          prober: http
+          timeout: 10s
+          http:
+            valid_status_codes: [200, 404]
         tcp_connect:
           prober: tcp
           timeout: 5s

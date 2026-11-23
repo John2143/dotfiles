@@ -9,8 +9,7 @@
   lib,
   sshKeys,
   ...
-}:
-{
+}: {
   imports = [
     ./arch-hardware-configuration.nix
     # Direct link to the MacBook's USB Ethernet adapter, same 10.99.0.1 as office
@@ -58,6 +57,30 @@
     "iscsi_target_mod"
   ];
 
+  # The Realtek RTL8761BU in the ASUS USB-BT500 (0b05:190e) aborts its firmware
+  # with "RTL: hw err, trigger devcoredump (51)" when USB autosuspend parks it,
+  # and that crash drops every Bluetooth link at once (2026-11-19 21:23, after
+  # ~91 min up, taking the Mac, iPad and iPhone with it). This kernel build sets
+  # btusb.enable_autosuspend=Y, so turn it off for the driver and pin the
+  # dongle's power control: the parameter covers the driver, the rule covers the
+  # device node across re-plugs.
+  boot.kernelParams = ["btusb.enable_autosuspend=0"];
+  services.udev.extraRules = ''
+    ACTION=="add|change", SUBSYSTEM=="usb", ATTR{idVendor}=="0b05", ATTR{idProduct}=="190e", TEST=="power/control", ATTR{power/control}="on"
+
+    # The onboard Intel radio (8087:0aa7, the "arch(in" controller) is never
+    # used: it has no bonded devices, every device lives on the USB dongle, and
+    # only the dongle reports the "Arch" alias. Powering it off after the fact
+    # does not hold — blueman's PowerManager iterates every adapter and
+    # re-powers them (2026-11-20 21:13:10, two minutes after btmgmt-off ran).
+    # While it is up, paired phones page it, BlueZ spawns transient
+    # /org/bluez/hci1/dev_* objects, blueman throws KeyError on each Connected
+    # change, and iOS raises a pairing prompt over and over. Deauthorize the
+    # USB device instead, so no hci1 ever exists. The same card's Wi-Fi is PCIe
+    # (0000:06:00.0), so this touches Bluetooth only.
+    ACTION=="add|change", SUBSYSTEM=="usb", ATTR{idVendor}=="8087", ATTR{idProduct}=="0aa7", ATTR{authorized}="0"
+  '';
+
   # Panic dumps in reserved RAM: efivarfs is 192K with ~136K free here, too
   # small for a 112-180K dump.
   custom.crashCapture.enable = true;
@@ -91,6 +114,13 @@
   # one the MacBook's adapter actually reaches).
   services.macbookLink.interfaces = ["eno1" "enp7s0" "enp2s0f1"];
   networking.networkmanager.enable = true; # Easiest to use and most distros use this by default.
+
+  # mDNS on the stable links only. Left to itself avahi joins every interface,
+  # including each k3s pod's ephemeral veth pair; the pod churn makes it
+  # re-probe the host name, and five conflicts on 2026-11-19 left it calling
+  # itself arch-6.local. enp2s0f0 is the LAN, eno1 the direct MacBook link.
+  services.avahi.settings.server.allow-interfaces = ["enp2s0f0" "eno1"];
+
   networking.nameservers = [
     "1.1.1.1"
     "192.168.1.12"
@@ -124,7 +154,6 @@
   # openrgb flakes occasionally — keep the unit out of "failed" state so it
   # doesn't trip exit-code-4 in switch-to-configuration's post-activation scan.
   systemd.services.openrgb.enable = lib.mkForce false;
-
 
   custom.k3sStorageAfter = ["mnt-longhorn.mount"];
 
@@ -166,7 +195,6 @@
     path = [pkgs.hyprland];
   };
 
-
   networking.firewall.allowedTCPPorts = [
     50051 # screen-control REST API (arch-configuration.nix:290, screen-control/src/main.rs:129)
     10250 # kubelet (k3s agent)
@@ -179,11 +207,13 @@
     8472 # flannel VXLAN (k3s)
   ];
   networking.firewall.allowedTCPPortRanges = [
-    { from = 30000; to = 32767; } # Kubernetes NodePort range
+    {
+      from = 30000;
+      to = 32767;
+    } # Kubernetes NodePort range
   ];
 
   # NAS CIFS mounts live in ./modules/nas-mounts.nix (shared across workstations).
-
 
   # ollama disabled: CUDA build broken upstream (GCC ICE in ggml-cuda),
   # and arch GPU has <8GB VRAM — only gemma4 fits, never used in practice.
@@ -204,7 +234,7 @@
   # Desktop k3s node — notify-send, wall, k3s drain, then poweroff.
   # See modules/nut-ups.nix for the shared config.
   custom.nut-ups = {
-    enable = false;  # TODO: true once Goldenmate UPS arrives
+    enable = false; # TODO: true once Goldenmate UPS arrives
     k3sDrain = true;
     desktopNotifications = true;
   };

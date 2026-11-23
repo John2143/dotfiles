@@ -392,11 +392,19 @@ in {
           reload_style_on_change = true;
 
           # ---- Left zone ----
-          modules-left = [
-            "hyprland/workspaces"
-            "custom/newworkspace"
-            "hyprland/window"
-          ];
+          modules-left =
+            [
+              "hyprland/workspaces"
+              "custom/newworkspace"
+            ]
+            # Bluetooth sits ahead of the window title: the title's width
+            # changes with every window, so anything after it would drift.
+            ++ (lib.optionals (osConfig.hardware.bluetooth.enable or false) [
+              "bluetooth"
+            ])
+            ++ [
+              "hyprland/window"
+            ];
 
           # ---- Center zone ----
           modules-center = [
@@ -764,6 +772,43 @@ in {
             "icon-size" = 18;
             spacing = 8;
           };
+        }
+        // lib.optionalAttrs (osConfig.hardware.bluetooth.enable or false) {
+          # ---- Bluetooth ----
+          # Built-in module: it watches org.bluez over D-Bus, so the pill updates
+          # on property changes instead of polling. Icon only on the bar — the
+          # state is the colour (style.css) and the detail is in the tooltip.
+          bluetooth =
+            {
+              format = "{icon}";
+              format-icons = {
+                on = "󰂯";
+                off = "󰂲";
+                disabled = "󰂲";
+                connected = "󰂱";
+              };
+              tooltip = true;
+              tooltip-format = "{controller_alias}\n{controller_address}\n\nno device connected";
+              tooltip-format-connected = "{controller_alias}\n{controller_address}\n\n{device_enumerate}";
+              tooltip-format-enumerate-connected = "• {device_alias}\n  {device_address}";
+              # blueferry runs bluetoothd with -E, so the iPhone's GATT battery
+              # (org.bluez.Battery1) reaches this line.
+              tooltip-format-enumerate-connected-battery = "• {device_alias} — {device_battery_percentage}%\n  {device_address}";
+              on-click = "blueman-manager";
+              # Left-click manages, right-click flips the adapter's power. The
+              # state is read first because `bluetoothctl power` takes an
+              # argument, not a toggle.
+              on-click-right = "bluetoothctl power \"$(bluetoothctl show | grep -q 'Powered: yes' && echo off || echo on)\"";
+            }
+            // lib.optionalAttrs (compName == "arch") {
+              # Only the ASUS dongle stays powered (bluetooth-hci1-off switches
+              # the Intel radio off), but bluetoothd still lists both adapters,
+              # so Waybar's findCurController can land on the powered-down one.
+              # Pin the powered adapter by the alias BlueZ persists for it —
+              # Waybar matches `controller` against the Alias property, not the
+              # HCI index or the address.
+              controller = "Arch";
+            };
         }
         // lib.optionalAttrs (compName == "arch") {
           "custom/thermostat" = {

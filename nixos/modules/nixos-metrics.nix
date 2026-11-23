@@ -56,7 +56,26 @@ in {
     # collector, including the `os` collector that produces node_os_info.
     services.prometheus.exporters.node.extraFlags = [
       "--collector.textfile.directory=/var/lib/node_exporter/textfile"
+      # Not part of node_exporter's default set (1.12.1: `--collector.systemd`,
+      # default false). Services only — the default include pattern also matches
+      # targets, sockets, mounts and swap units (1205 series vs 710 on nas).
+      # node_exporter wraps the pattern in ^…$, so it must not carry anchors of
+      # its own: `\.service$` matches nothing. Backs SystemdUnitFailed on pite.
+      "--collector.systemd"
+      "--collector.systemd.unit-include=.*\\.service"
     ];
+
+    # …but the collector talks to org.freedesktop.systemd1 over the system bus,
+    # and the exporter framework hardens the unit with
+    # RestrictAddressFamilies = [ AF_NETLINK AF_INET AF_INET6 ] (nixpkgs
+    # modules/services/monitoring/prometheus/exporters.nix:379). Without AF_UNIX
+    # every scrape logs `collector failed name=systemd err="couldn't get dbus
+    # connection: dial unix /var/run/dbus/system_bus_socket: socket: address
+    # family not supported by protocol"` and exports no series. mkForce because
+    # the framework's value is not mkDefault. Running the binary by hand does not
+    # reproduce it — the sandbox is the whole difference.
+    systemd.services.prometheus-node-exporter.serviceConfig.RestrictAddressFamilies =
+      lib.mkForce [ "AF_INET" "AF_INET6" "AF_NETLINK" "AF_UNIX" ];
 
     # A real file, rewritten on every activation, so node_textfile_mtime_seconds
     # is when this host last applied its configuration rather than the store's

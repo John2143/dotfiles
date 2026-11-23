@@ -519,11 +519,11 @@
     },
     "nixpkgs_2": {
       "locked": {
-        "lastModified": 1794750194,
-        "narHash": "sha256-c6ZxSsG1c2luSrbESFfp9Jq2pSVhGst2to4aIzt2Nes=",
+        "lastModified": 1795234589,
+        "narHash": "sha256-f/VVvxf5RsQgWVhUtefoca5ktVg0DA2bnkMOcmSnozo=",
         "owner": "NixOS",
         "repo": "nixpkgs",
-        "rev": "1a08097fc1ed85575db39763b2c4a5d8970a37ba",
+        "rev": "2786a2a72088ecf32aea5b3ec52099e6a7cff78f",
         "type": "github"
       },
       "original": {
@@ -581,11 +581,11 @@
         "rust-overlay": "rust-overlay"
       },
       "locked": {
-        "lastModified": 1794798190,
-        "narHash": "sha256-6rVu7e5WHUDERpG2S19gnACizyefOJD2MoWqtUmNnMc=",
+        "lastModified": 1795183245,
+        "narHash": "sha256-8tSIFqP8e5yP0IMHxpQVwsqQpJ+/XXTaWx/7ycq6ZK8=",
         "owner": "John2143",
         "repo": "oh-my-pi",
-        "rev": "1d1cc93e4cbf55a19ecadf86060cd6083e17a99c",
+        "rev": "6bebe6e65158ed2d7c12ba742bc93fdcf90a9342",
         "type": "github"
       },
       "original": {
@@ -797,11 +797,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1792535325,
-        "narHash": "sha256-WX+lSVu+h4uV8pFK7MKKSPgHZ6pu8r4BX9cuAKUhPxg=",
+        "lastModified": 1795328667,
+        "narHash": "sha256-eJORPiFY9g1TIpzQ2TZkD9bU+NQw8/vNVaEVC1p9prE=",
         "owner": "2143-Labs",
         "repo": "timestone-lobby-watcher",
-        "rev": "181711305512490a4c75e6ee84390661a970dd8e",
+        "rev": "562788f9ed7a6e3ae5ce29f8bc0b17b28eaebad0",
         "type": "github"
       },
       "original": {
