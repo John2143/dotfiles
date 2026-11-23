@@ -50,7 +50,7 @@ in {
     };
   };
 
-  # Generic "unit failed" push. Used by fleet-patch and renovate.
+  # Generic "unit failed" push. Used by fleet-patch.
   systemd.services."notify-failure@" = {
     description = "ntfy alert for failed unit %i";
     path = [pkgs.curl];

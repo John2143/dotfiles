@@ -2,14 +2,14 @@
 
 **Nothing patches the fleet on a schedule right now** (verified 2026-11-20):
 
-| Timer | Planned | Actual |
+| Timer or job | Planned | Actual |
 |---|---|---|
-| `fleet-patch.timer` | Sunday 04:00 (+ up to 5 min jitter) | **Masked on office** since 2026-11 — `nixos/office-configuration.nix` sets `systemd.timers.fleet-patch.enable = false` while the i9-14900K is stress-tested for Vmin-shift degradation (RMA pending). Delete that line to resume; `Persistent=true` means the next switch runs the missed week immediately. Tracked on card #363. |
-| `renovate.timer` | Sunday 05:00 | **Never deployed.** `nixos/modules/renovate.nix` is imported by no host config, no host has the unit (`is-enabled` → `not-found` on office/pite/nas/big/arch), and `2143-Labs/argo` has never received a PR from renovate despite its `renovate.json`. |
+| `fleet-patch.timer` | Sunday 04:00, + up to 5 min jitter (only office defines the unit — `flake.nix:180` adds `nixos/modules/fleet-patching.nix` to office's module list alone) | **Masked on office** since 2026-11 — `nixos/office-configuration.nix` sets `systemd.timers.fleet-patch.enable = false` while the i9-14900K is stress-tested for Vmin-shift degradation (RMA pending). Delete that line to resume; `Persistent=true` means the next switch runs the missed week immediately. Tracked on card #363. |
+| CronJob `renovate` in 2143-Labs/argo | Sundays 05:00 America/New_York | Runs in-cluster on k3s (`workloads/renovate/`); opens dependency PRs on argo only. It does not touch this fleet. |
 
 When enabled, `fleet-patch` bumps `nixpkgs`, `nixpkgs-stable` and `oh-my-pi`, pushes
-`flake.lock`, and switches every NixOS host to that exact commit. Neither job reboots
-anything.
+`flake.lock`, and switches every NixOS host to that exact commit. `fleet-patch` never
+reboots anything, and neither does the Renovate CronJob.
 
 ## What builds without being asked
 
@@ -26,9 +26,10 @@ someone runs `fleet-patch.sh` (or switches by hand), and then every host builds 
 derivation itself — the first to finish queues it to attic and the rest substitute. There is
 no scheduled warm; the hourly warmer is parked on `omp-warmer-wip` (card #450).
 
-Both timers push to ntfy on failure (`notify-failure@<unit>`), so a broken week is visible
-without logging in. `fleet-patch` also always sends its report, summarised in the
-notification title.
+`fleet-patch` pushes to ntfy on failure (`notify-failure@fleet-patch`) and always sends its
+report, summarised in the notification title, so a broken week is visible without logging in.
+The argo Renovate CronJob pushes nowhere: its surface is `kubectl -n renovate get jobs` and
+the Dependency Dashboard going stale.
 
 The job never reboots, so the kernel it stages only takes effect at the next reboot. When a
 host's running kernel differs from the booted-only generation, its row says `REBOOT NEEDED`.
@@ -93,11 +94,13 @@ still completes, because nixos-rebuild runs it under `systemd-run --wait`). Reru
 
 ```fish
 sudo systemctl disable --now fleet-patch.timer
-sudo systemctl disable --now renovate.timer
+ssh closet 'sudo -n k3s kubectl -n renovate patch cronjob renovate --type merge -p "{\"spec\":{\"suspend\":true}}"'
 ```
 
-Re-enable with `enable --now`. `Persistent = true` means a window missed while office was off
-runs on the next boot.
+Re-enable `fleet-patch` with `enable --now`; resume the CronJob with the same patch and
+`{"spec":{"suspend":false}}`. `Persistent = true` means a window missed while office was off
+runs on the next boot; a CronJob window missed while the cluster was down is skipped instead,
+so trigger that one by hand (`kubectl -n renovate create job --from=cronjob/renovate renovate-manual`).
 
 ## Roll back one host
 
