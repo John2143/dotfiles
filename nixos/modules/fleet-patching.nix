@@ -41,15 +41,6 @@ in {
     };
   };
 
-  systemd.timers.fleet-patch = {
-    wantedBy = ["timers.target"];
-    timerConfig = {
-      OnCalendar = "Sun *-*-* 04:00:00";
-      RandomizedDelaySec = "5min";
-      Persistent = true;
-    };
-  };
-
   # Generic "unit failed" push. Used by fleet-patch.
   systemd.services."notify-failure@" = {
     description = "ntfy alert for failed unit %i";

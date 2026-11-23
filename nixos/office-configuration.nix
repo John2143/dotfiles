@@ -102,10 +102,6 @@
   # sound.enable = true;
   # hardware.pulseaudio.enable = true;
 
-  # Fleet patching paused while the CPU is stress-tested (2026-11). Delete this line to
-  # resume; the next switch then runs the missed weekly patch at once (Persistent=true).
-  systemd.timers.fleet-patch.enable = false;
-
   # i9-14900K has Intel Vmin Shift degradation; RMA pending (2026-11). Cap boost
   # below the 5.7 GHz top bins; lowered stepwise when scripts/office-cpu-test.sh fails.
   powerManagement.cpufreq.max = 5400000;

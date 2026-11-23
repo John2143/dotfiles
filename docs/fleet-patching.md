@@ -1,15 +1,43 @@
 # Fleet patching
 
-**Nothing patches the fleet on a schedule right now** (verified 2026-11-20):
+**The weekly patch runs from GitHub Actions** (since 2026-11-23):
 
-| Timer or job | Planned | Actual |
+| Job | Planned | Actual |
 |---|---|---|
-| `fleet-patch.timer` | Sunday 04:00, + up to 5 min jitter (only office defines the unit — `flake.nix:180` adds `nixos/modules/fleet-patching.nix` to office's module list alone) | **Masked on office** since 2026-11 — `nixos/office-configuration.nix` sets `systemd.timers.fleet-patch.enable = false` while the i9-14900K is stress-tested for Vmin-shift degradation (RMA pending). Delete that line to resume; `Persistent=true` means the next switch runs the missed week immediately. Tracked on card #363. |
+| `fleet-patch.yml` in dotfiles | Sundays 09:00 UTC (04:00 America/New_York), plus `workflow_dispatch` | Runs on the org's self-hosted runners (`[self-hosted, nixos]`), logging in to OpenBao with GitHub OIDC as the `ci-fleet-patch` role. No stored credential: the token lasts 10 minutes and is revoked when the run ends. |
 | CronJob `renovate` in 2143-Labs/argo | Sundays 05:00 America/New_York | Runs in-cluster on k3s (`workloads/renovate/`); opens dependency PRs on argo only. It does not touch this fleet. |
 
-When enabled, `fleet-patch` bumps `nixpkgs`, `nixpkgs-stable` and `oh-my-pi`, pushes
-`flake.lock`, and switches every NixOS host to that exact commit. `fleet-patch` never
-reboots anything, and neither does the Renovate CronJob.
+The job bumps `nixpkgs`, `nixpkgs-stable` and `oh-my-pi`, pushes `flake.lock`, and switches
+every NixOS host to that exact commit. It never reboots anything, and neither does the Renovate
+CronJob.
+
+It replaces the office `fleet-patch` timer, which was masked during the i9-14900K stress test
+(card #363) and is now deleted; `systemd.services.fleet-patch` remains as the manual escape
+hatch (`sudo systemctl start fleet-patch`, or run the script by hand). The `github` host runs the
+CI job, so the job only *stages* its generation with `boot` instead of switching it: reboot
+`github` to activate, until then it keeps running the previous system.
+
+What the job trusts, and what to change when rotating anything:
+
+- OpenBao role `auth/jwt-github/role/ci-fleet-patch` — `token_max_ttl 10m`, policy
+  `fleet-patch-read` (read-only on the KV path below), and `bound_claims` of `repository_id`
+  82301766, `ref: refs/heads/master`, `runner_environment: self-hosted`,
+  `event_name: [schedule, workflow_dispatch]`, and
+  `workflow_ref: John2143/dotfiles/.github/workflows/fleet-patch.yml@refs/heads/master`. A
+  dispatch from any other branch or workflow is refused at login.
+- KV `consumers/data/john2143-com/default/fleet-patch` — fields `ssh_private`, `ssh_public`,
+  `ntfy_file`. The public half is also a `my-keys` entry in `flake.nix`, which is what makes it
+  work fleet-wide; a new key needs both places plus one run of the job to distribute it.
+- `scripts/fleet-known_hosts` — the host keys CI pins instead of reading a `~/.ssh`.
+
+Run it by hand:
+
+```fish
+gh workflow run fleet-patch.yml                     # the full weekly run
+gh workflow run fleet-patch.yml -f dry_run=true     # bump, evaluate, probe — changes nothing
+gh workflow run fleet-patch.yml -f only=mirror -f bump=false
+gh run watch                                        # follow the newest run
+```
 
 ## What builds without being asked
 
@@ -21,8 +49,8 @@ Nothing rebuilds dotfiles on a schedule. The only recurring builds are in CI:
 | `build-frigate-genai.yml` in dotfiles | on push to the frigate/nix paths, or by hand | builds both images, pushes to attic and ghcr, then bumps the tag in `2143-Labs/argo` |
 | `attic-push-queue.timer` | 2 min after the previous run, on every host with attic | uploads paths queued by the post-build hook; it builds nothing |
 
-Consequence for `omp`: the fork advances daily, but dotfiles' `flake.lock` only follows when
-someone runs `fleet-patch.sh` (or switches by hand), and then every host builds the new
+Consequence for `omp`: the fork advances daily, and dotfiles' `flake.lock` follows it weekly when
+the fleet-patch job runs (or whenever you switch by hand). Each host then builds the new
 derivation itself — the first to finish queues it to attic and the rest substitute. There is
 no scheduled warm; the hourly warmer is parked on `omp-warmer-wip` (card #450).
 
@@ -93,14 +121,14 @@ still completes, because nixos-rebuild runs it under `systemd-run --wait`). Reru
 ## Hold the schedule
 
 ```fish
-sudo systemctl disable --now fleet-patch.timer
+gh workflow disable fleet-patch.yml
 ssh closet 'sudo -n k3s kubectl -n renovate patch cronjob renovate --type merge -p "{\"spec\":{\"suspend\":true}}"'
 ```
 
-Re-enable `fleet-patch` with `enable --now`; resume the CronJob with the same patch and
-`{"spec":{"suspend":false}}`. `Persistent = true` means a window missed while office was off
-runs on the next boot; a CronJob window missed while the cluster was down is skipped instead,
-so trigger that one by hand (`kubectl -n renovate create job --from=cronjob/renovate renovate-manual`).
+Re-enable it with `gh workflow enable fleet-patch.yml`; resume the CronJob with the same patch
+and `{"spec":{"suspend":false}}`. Neither timer survives a missed window: trigger the workflow
+by hand after re-enabling, and the CronJob with
+`kubectl -n renovate create job --from=cronjob/renovate renovate-manual`.
 
 ## Roll back one host
 
@@ -178,12 +206,14 @@ cores, `--max-jobs 0` hands the work to `big` instead of building locally.
 ## Roll back a bump
 
 ```fish
-git -C ~/dotfiles revert <chore(fleet): weekly nixpkgs bump …>   # push it
-sudo systemctl disable --now fleet-patch.timer
+git -C ~/dotfiles revert <chore(fleet): weekly input bump …>   # push it
+gh workflow run fleet-patch.yml -f bump=false                   # deploy the revert
 ```
 
-Disable the timer until the revert is understood: the next run re-bumps to branch head, which
-would undo the revert.
+Keep running with `-f bump=false` until the revert is understood: a normal run re-bumps to
+branch head, which would undo the revert. `gh workflow disable fleet-patch.yml` stops the
+schedule entirely; `bao delete auth/jwt-github/role/ci-fleet-patch` makes every run fail at
+login instead of touching a host.
 
 ## Roll back an argo bump
 
