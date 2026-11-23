@@ -30,6 +30,18 @@ What the job trusts, and what to change when rotating anything:
   work fleet-wide; a new key needs both places plus one run of the job to distribute it.
 - `scripts/fleet-known_hosts` — the host keys CI pins instead of reading a `~/.ssh`.
 
+The runner gives the job a curated `PATH`: `nix`, `git`, `curl`, `bash` and coreutils, but **no
+`ssh`, `jq`, `grep` or `python3`**, and its user has no git identity. That is why the job runs the
+script inside `nix shell nixpkgs#openssh`, reads OpenBao with `nix run nixpkgs#jq`, matches with
+bash `case` rather than `grep`, and sets `GIT_AUTHOR_*`/`GIT_COMMITTER_*` for the bump commit.
+Drop the openssh wrapper and every host reports `FAILED (ssh)`, because the script tests the
+connection itself and discards ssh's own message.
+
+`REBOOT NEEDED` on every host is the steady state, not a failure: the job switches generations and
+never reboots, so a kernel bump waits for you. The job's own host adds
+`STAGED (host runs the CI job)`: `github` is only staged and takes the new generation on its next
+reboot.
+
 Run it by hand:
 
 ```fish
