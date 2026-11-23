@@ -149,6 +149,9 @@
     #inputs.hyprcap.packages.x86_64-linux.default
     pkgs.voxtype
     #inputs.self.packages.x86_64-linux.waytop
+    # Discord Rich Presence for Proton games (Timestone/UMVC3). Steam launch
+    # option: /run/current-system/sw/bin/rpc-bridge-steam %command%
+    (pkgs.callPackage ./packages/rpc-bridge.nix {})
   ];
 
   # openrgb flakes occasionally — keep the unit out of "failed" state so it
