@@ -101,6 +101,7 @@
       "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFVckq0oXyXkxiLo39typ6PR039XrLwze/Cb0PZaTzmi john@office"
       "ecdsa-sha2-nistp256 AAAAE2VjZHNhLXNoYTItbmlzdHAyNTYAAAAIbmlzdHAyNTYAAABBBHjc0NNrHCwjrBUvUByFoFPW9vKGVFsWVD6LoKp1FLtNaIjyigMTYXoCKZSNNguKdNwUiyqKIZfCExZmgc3Cccw= iphone"
       "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIPqCbYtG3irr037WTxZ563wWcRE+atjKjBshU7Opf1oU john@macbook-id_ed25519"
+      "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAILBRUIynzDbKB2qcwShS1e/CnbQGlr54/0vVrXRKcgmg fleet-patch-ci" # CI key, see docs/fleet-patching.md
     ];
 
     # mkHost name modules → { name = <config>; "vm-<name>" = <vm-config>; }
