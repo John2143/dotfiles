@@ -11,9 +11,9 @@
 # put ripgrep first as `grep`, so the script never calls grep/sed locally.
 set -uo pipefail
 
-STATE=/home/john/.local/state/fleet-patch
-CLONE=$STATE/dotfiles
-ORIGIN=git@github.com:John2143/dotfiles.git
+STATE=${FLEET_STATE:-/home/john/.local/state/fleet-patch}
+CLONE=${FLEET_CLONE:-$STATE/dotfiles}
+ORIGIN=${FLEET_ORIGIN:-git@github.com:John2143/dotfiles.git}
 FLAKE_BASE=github:John2143/dotfiles
 LOG=$STATE/run.log
 REPORT=$STATE/last-run.md
@@ -25,8 +25,12 @@ HOST_TIMEOUT=${HOST_TIMEOUT:-1800}   # per-host switch cap; aarch64 source build
 KUBE_HOST=closet   # john's kubeconfig works there; a name, not an IP, so DHCP moves don't break it
 SUDO=/run/wrappers/bin/sudo
 REBUILD=/run/current-system/sw/bin/nixos-rebuild
-SSH=(ssh -o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=yes
-     -o ServerAliveInterval=30 -o ServerAliveCountMax=10)
+SSH_OPTS=(-o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=yes
+          -o ServerAliveInterval=30 -o ServerAliveCountMax=10)
+# CI runs from a runner that has no ~/.ssh: pass the key and the pinned host keys in.
+[ -n "${FLEET_SSH_IDENTITY:-}" ] && SSH_OPTS+=(-i "$FLEET_SSH_IDENTITY" -o IdentitiesOnly=yes)
+[ -n "${FLEET_KNOWN_HOSTS:-}" ] && SSH_OPTS+=(-o UserKnownHostsFile="$FLEET_KNOWN_HOSTS")
+SSH=(ssh "${SSH_OPTS[@]}")
 
 # Ring order, control planes last. name:max-jobs:address
 # The address is a HOSTNAME, never an IP: these boxes are on DHCP and their
@@ -36,7 +40,7 @@ SSH=(ssh -o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=yes
 # DHCP DNS name, and vpin's tailnet identity is forced to its exit-node name by
 # services.tailscale.extraUpFlags in flake.nix.
 HOSTS=(
-  office:auto:local
+  office:auto:${FLEET_OFFICE_ADDR:-local}
   big:auto:big
   github:auto:github
   steam:1:steam.local
@@ -53,7 +57,9 @@ HOSTS=(
 CONTROL_PLANE=" arch closet nas "
 # Not NixOS: probed and reported, never changed. name:user@address
 # These two are IPs on purpose: neither has a tailnet node nor a DHCP DNS name.
-EXTERNAL=(bigp:root@192.168.5.19 unifi-os:john@192.168.5.30)
+if [ "${FLEET_SKIP_EXTERNAL:-0}" = 1 ]; then EXTERNAL=(); else
+  EXTERNAL=(bigp:root@192.168.5.19 unifi-os:john@192.168.5.30)
+fi
 
 mkdir -p "$STATE"
 exec 9>"$STATE/lock"
@@ -76,7 +82,7 @@ reachable() { [ "$1" = local ] || timeout 6 bash -c "exec 3<>/dev/tcp/$1/22" 2>/
 
 notify() {
   [ "$DRY_RUN" = 1 ] && return 0
-  local f=/run/agenix/ntfy-topic-url prio=default tags=white_check_mark title
+  local f=${FLEET_NTFY_FILE:-/run/agenix/ntfy-topic-url} prio=default tags=white_check_mark title
   [ -r "$f" ] || { log "no $f; no notification sent"; return 0; }
   set -a; . "$f"; set +a
   [ -e "$ATTENTION" ] && { prio=high; tags=warning; }
@@ -166,6 +172,10 @@ for entry in "${HOSTS[@]}"; do
     fi
     [ "$wantnv" != "$loaded" ] && { mode=boot; nvnote="nvidia $loaded → $wantnv"; }
   fi
+  # A host running this job must never restart its own runner mid-run: stage it.
+  case " ${FLEET_STAGE_HOSTS:-} " in
+    *" $name "*) mode=boot; nvnote="${nvnote:-host runs the CI job}";;
+  esac
   if [ "$DRY_RUN" = 1 ]; then
     if cur=$(on_host "$addr" "readlink -f /run/current-system" 2>>"$LOG"); then
       row "$name" "DRY RUN $mode${nvnote:+ ($nvnote)}: $(label "$cur") → $(label "$want")" – –
