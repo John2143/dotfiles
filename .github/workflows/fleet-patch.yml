@@ -93,7 +93,9 @@ jobs:
           FLEET_OFFICE_ADDR: office
           FLEET_SKIP_EXTERNAL: "1"
           FLEET_STAGE_HOSTS: github
-        run: bash scripts/fleet-patch.sh
+        # The runner service's PATH is a curated list with no ssh, and the job needs
+        # it for every host; nix shell puts openssh in front for this one command.
+        run: nix shell nixpkgs#openssh -c bash scripts/fleet-patch.sh
 
       - name: Report
         if: always()
