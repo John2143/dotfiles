@@ -243,13 +243,19 @@ obstacle). Its cordon is what makes
 CNPG move each primary, so a kured reboot needs no promotion step. Expect the
 `lh-volume-degraded` alert for up to ~1 h afterwards while replicas rebuild.
 
+Expect the **ExternalSecret-backed apps to go `Degraded` for a few minutes** as well: the
+reboot drops the `ClusterSecretStore`'s connection to OpenBao, every `ExternalSecret` retries
+into `ClusterSecretStore "openbao" is not ready`, and ArgoCD's `ExternalSecret` health check
+turns those Applications red. It clears by itself — observed 2026-11-23: the store was
+`Ready=True` four minutes after the last node returned, and the fleet was back to 134
+`Healthy` within ~10 minutes. One still `False` *after* the store is `Ready` is only waiting
+out its retry backoff; `kubectl annotate externalsecret <name> force-sync=$(date +%s)
+--overwrite` proves it immediately.
+
 This procedure remains the way to reboot **big** or **pite** (kured does not manage them, and
 they hold no cluster-wide kubeconfig to gate on) and to reboot a control plane outside the
-window. `scripts/fleet-reboot-cycle.sh` drives that loop for those hosts — the same gate,
-then cordon, BGP withdrawal, a wait for CNPG to move its primaries, kured's own stay list as
-the drain selector, the reboot, and a wait for pods and replica rebuilds between hosts —
-and `--dry-run` only prints what it would do. The full procedure is
-`~/repos/argo/docs/node-maintenance.md`; the deviations that matter:
+window. The full procedure is `~/repos/argo/docs/node-maintenance.md`; the deviations that
+matter:
 
 **1. Gate.** Every row must show `READY` = `INST`. If any row is short, stop: the promote
 target may not be ready.
@@ -300,7 +306,10 @@ evicted pinned pod only goes Pending until the node returns; no data is lost.
 do not move back, which is fine.
 
 **`secu`** is the exception to everything above: reboot it only with its LUKS unlock USB
-inserted, or type the passphrase at its console (`nixos/modules/disko_secu.nix:26-27`).
+inserted, or type the passphrase at its console (`nixos/modules/disko_secu.nix:26-27`). Since
+`9153cef` the initrd also waits 10 s for `/dev/disk/by-partlabel/CRYPTKEY` and then falls back
+to that prompt (`keyFileTimeout`; the scripted-stage-1 `fallbackToPassword` is a removed option
+with no effect), so a missing stick is a prompt rather than a boot that never gets there.
 
 **`pite`** permanently carries the exclude-from-LB label; never remove it on return.
 
@@ -356,6 +365,14 @@ faults.
 
 `FAILED (switch)` on any other host is a real error: read the last 40 lines of `run.log`
 before rerunning.
+
+**A bumped `nixpkgs` can silently drop an option you still set.** `mkRemovedOptionModule` only
+throws when something *reads* the option; once the module that consumed it is gone, nothing
+does, so the definition stays, the build succeeds, and the setting is ignored.
+`boot.initrd.luks.devices.<name>.fallbackToPassword` and disko's `preLVM` are both in that
+state since the scripted stage 1 was removed. Read values back rather than trusting the file —
+`nix eval --json '.#nixosConfigurations.secu.config.boot.initrd.luks.devices.cryptroot'` failed
+on `preLVM` the moment it was asked, which is how this one was found.
 
 ## A LOCKED host (deadman)
 
