@@ -27,7 +27,9 @@ The Darwin block in `.config/fish/config.fish` runs work-only setup
 
 - Login keys: `my-keys` in `flake.nix`, assigned to
   `users.users.<name>.openssh.authorizedKeys.keys` by every NixOS host and by
-  `darwin-macbook.nix`; sshd serves it from `/etc/ssh/authorized_keys.d/<user>`.
+  `darwin-macbook.nix`; sshd serves them from
+  `/etc/ssh/nix_authorized_keys.d/<user>` (nix-darwin's `AuthorizedKeysCommand`
+  drop-in; `/etc/ssh/authorized_keys.d` no longer exists).
   sshd *also* honours each host's hand-written `~/.ssh/authorized_keys`, so a
   key can log in if it is in `my-keys` **or** pasted into that file — and a
   rebuild never removes what was pasted. Add client keys to `my-keys`.
@@ -35,6 +37,39 @@ The Darwin block in `.config/fish/config.fish` runs work-only setup
   (`~/.ssh/age` on each host). macbook is granted only
   `llm-runtime-keys` and `llm-admin-keys`; it is not in `allKeys`.
 - Re-encrypt after editing rules: `cd secrets && agenix -r -i ~/.ssh/age`.
+
+## SSH on macbook
+
+`services.openssh.enable` stays on for key-based logins from the other
+desktops, but `PasswordAuthentication` and `KbdInteractiveAuthentication` are
+both `no` (`nixos/darwin-macbook.nix`, via `services.openssh.extraConfig`, which
+lands in `/etc/ssh/sshd_config.d/100-nix-darwin.conf`). Turning off only the
+first is not enough: macOS's `100-macos.conf` sets `UsePAM yes`, and
+`pam_opendirectory` would accept the same password through keyboard-interactive.
+The reason is the second local account below — a standard account must not be a
+password-guessable login on the LAN. Check it with
+`ssh -o PreferredAuthentications=none <user>@localhost`: it must answer
+`Permission denied (publickey).`
+
+## Second local account
+
+macbook also carries a standard (non-admin) account for shared use. Nothing in
+this repo manages it: `users.knownUsers` is empty, and nix-darwin only creates
+or deletes users listed there (its user activation script is gated on a
+non-empty list), while Home Manager activates for `john` only. Rebuilds
+therefore leave the account, its home and its dotfiles alone. The global files
+nix-darwin does write (`/etc/zshrc`, `/etc/zshenv`, `/etc/fish/config.fish`)
+apply to it as well, so its zsh is not stock macOS.
+
+- FileVault is on and the account has a Secure Token, so it can unlock the disk
+  at the pre-boot login window on its own.
+- SSH is key-only (above); the account has no remote login path unless a key
+  from `my-keys` is added for it.
+- Home directories are `0750 <user>:staff` and both users are in `staff`, so
+  each can traverse the other's home and read anything group/world-readable.
+  Private material has to be mode `600` (or the home tightened) to stay private.
+- No Time Machine destination is configured, so non-iCloud files of either
+  account have no backup.
 
 ## Fresh-install gotchas
 
