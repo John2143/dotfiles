@@ -245,8 +245,11 @@ CNPG move each primary, so a kured reboot needs no promotion step. Expect the
 
 This procedure remains the way to reboot **big** or **pite** (kured does not manage them, and
 they hold no cluster-wide kubeconfig to gate on) and to reboot a control plane outside the
-window. The full procedure is `~/repos/argo/docs/node-maintenance.md`; the deviations that
-matter:
+window. `scripts/fleet-reboot-cycle.sh` drives that loop for those hosts — the same gate,
+then cordon, BGP withdrawal, a wait for CNPG to move its primaries, kured's own stay list as
+the drain selector, the reboot, and a wait for pods and replica rebuilds between hosts —
+and `--dry-run` only prints what it would do. The full procedure is
+`~/repos/argo/docs/node-maintenance.md`; the deviations that matter:
 
 **1. Gate.** Every row must show `READY` = `INST`. If any row is short, stop: the promote
 target may not be ready.
