@@ -352,6 +352,20 @@
   deskflow-ctl = pkgs.callPackage ../packages/deskflow-ctl.nix {
     wireIfaces = osConfig.services.macbookLink.interfaces or [];
   };
+  # The server can serve several clients at once, but Waybar cannot add a module
+  # for a client it discovers at runtime, so the bar declares a fixed row of
+  # slots to the right of the DF pill. A slot with no client prints empty text,
+  # which Waybar hides, so unused slots cost nothing.
+  deskflowSlots = 4;
+  deskflowClientModules =
+    lib.listToAttrs (map (i: lib.nameValuePair "custom/deskflow-${toString i}" {
+      exec = "${deskflow-ctl}/bin/deskflow-ctl client ${toString i}";
+      return-type = "json";
+      interval = 2;
+      escape = true;
+      format = "{}";
+      tooltip = true;
+    }) (lib.range 1 deskflowSlots));
   temporal-status = pkgs.writeShellApplication {
     name = "temporal-status";
     runtimeInputs = with pkgs; [bash coreutils jq];
@@ -425,9 +439,10 @@ in {
             ++ [
               "custom/tailscale"
             ]
-            ++ (lib.optionals isDesk [
-              "custom/deskflow"
-            ])
+            ++ (lib.optionals isDesk (
+              ["custom/deskflow"]
+              ++ map (i: "custom/deskflow-${toString i}") (lib.range 1 deskflowSlots)
+            ))
             ++ [
               "custom/temporal"
               "custom/voxtype"
@@ -577,6 +592,10 @@ in {
           };
 
           # ---- Deskflow server ----
+          # Summary pill: every connected client, each with its own latency and
+          # sparkline in the tooltip. The per-client pills beside it come from
+          # deskflowClientModules in the let block; this one stays clickable so
+          # the server can be started and stopped whatever is connected.
           "custom/deskflow" = {
             exec = "${deskflow-ctl}/bin/deskflow-ctl status";
             return-type = "json";
@@ -810,6 +829,7 @@ in {
               controller = "Arch";
             };
         }
+        // lib.optionalAttrs isDesk deskflowClientModules
         // lib.optionalAttrs (compName == "arch") {
           "custom/thermostat" = {
             exec = "hass-thermostat-status";
