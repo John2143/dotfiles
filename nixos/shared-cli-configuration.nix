@@ -234,6 +234,10 @@
     enable = true;
     settings = {
       PasswordAuthentication = false;
+      # With UsePAM, keyboard-interactive accepts the account password even though
+      # PasswordAuthentication is off, so it must go off too (the Mac already does
+      # this, darwin-macbook.nix). Every host here logs in with keys.
+      KbdInteractiveAuthentication = false;
       PermitRootLogin = "no";
     };
   };
