@@ -146,6 +146,12 @@ Failures:
   `systemctl --user restart xdg-desktop-portal`. If the pointer is still gone, the compositor
   still holds the confinement: log out (the keyboard works) and back in.
   **Never restart `xdg-desktop-portal` while Deskflow is running** — that is what causes it.
+- **Settings → Security → Unlock fails with `sudo: execvp error: Err(ENOENT)`.** RustDesk runs
+  `sudo /bin/sh -c …` for that dialog (`execvp("sudo", …)`), and a systemd *service* gets the
+  stock service PATH, not the manager's, so `sudo` in `/run/wrappers/bin` is invisible. The
+  module sets `Environment = "PATH=…"` on the unit; if you hit it before re-switching, stop the
+  unit and start it with `PATH=/run/wrappers/bin:$PATH rustdesk &`. `rustdesk --password` is not
+  an alternative here: it requires the service IPC daemon, which this setup deliberately omits.
 - **The port answers from the tailnet although the rule exists.**
   `sudo iptables -vnL nixos-fw | grep 21118` showing 0 packets while another host connects means
   the drop is in the wrong table: `-A INPUT -j ts-input` runs first. Check

@@ -307,6 +307,14 @@ in {
     serviceConfig = {
       ExecStartPre = "${rustdesk-pin-options}/bin/rustdesk-pin-options";
       ExecStart = lib.getExe pkgs.rustdesk-flutter;
+      # Settings → Security → Unlock runs `sudo /bin/sh -c …` via execvp
+      # (src/platform/gtk_sudo.rs:468-534), and a systemd *service* gets the
+      # stock service PATH, not the manager's: without this, execvp("sudo")
+      # fails with ENOENT because sudo lives in /run/wrappers/bin, and the
+      # permanent password cannot be set from the GUI at all. The CLI cannot
+      # stand in: `rustdesk --password` goes through the service IPC daemon,
+      # which this setup deliberately does not run.
+      Environment = "PATH=/run/wrappers/bin:/etc/profiles/per-user/%u/bin:/run/current-system/sw/bin";
       Restart = "always";
       RestartSec = 5;
     };
