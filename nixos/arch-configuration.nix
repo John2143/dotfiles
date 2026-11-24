@@ -241,6 +241,15 @@
     k3sDrain = true;
     desktopNotifications = true;
   };
+
+  # ── Valve base station power management ───────────────────────────
+  # No UPS on this host: after a power cut the PC and the stations reboot
+  # together and the stations come up ON (firmware default). The boot timer
+  # returns them to standby; the periodic leg covers units plugged in later.
+  custom.basestation = {
+    enable = true;
+    standbyInterval = "30min";
+  };
   # system.copySystemConfiguration = true;
 
   # This option defines the first version of NixOS you have installed on this particular machine,

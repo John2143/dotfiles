@@ -213,6 +213,7 @@
           ./nixos/modules/k3s-server.nix
           ./nixos/modules/restic-backup.nix
           ./nixos/modules/nas-mounts.nix
+          ./nixos/modules/basestation.nix
           ./nixos/tailscale.nix
 
           ./nixos/modules/attic.nix
