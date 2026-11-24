@@ -34,6 +34,19 @@
   # sshd still accepts ~/.ssh/authorized_keys too, so nothing is revoked.
   users.users."john".openssh.authorizedKeys.keys = sshKeys;
 
+  # Leave `trusted-users` alone. A trusted user is root-equivalent to the nix
+  # daemon — it may override sandboxing, substituters and keys for every user —
+  # so it is not worth granting just to silence "ignoring the client-specified
+  # setting 'netrc-file' / 'trusted-public-keys': you are not a trusted user".
+  # The cache is configured system-wide instead: modules/attic.nix (imported by
+  # flake.nix for this host) sets substituters, trusted-public-keys and
+  # netrc-file, and the daemon applies those regardless of what the client asks
+  # for. Keep ~/.config/nix/nix.conf free of restricted keys — a client copy is
+  # ignored with the warning above, and would shadow the system key if john ever
+  # did become trusted. John's stale copy was removed 2026-11-24 (it carried the
+  # old 2143nix key, and nothing in this repo referenced its netrc).
+  # (The commented value below is john's SSH public key, not a nix signing key —
+  # nix wants `name:base64` there, so it would be inert.)
   #nix.settings.trusted-users = [ "@wheel" ];
   #nix.settings.trusted-public-keys = [
   #"ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFVckq0oXyXkxiLo39typ6PR039XrLwze/Cb0PZaTzmi john@office"
