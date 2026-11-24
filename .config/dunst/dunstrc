@@ -449,4 +449,15 @@
 #    appname = "some_volume_notifiers"
 #    set_stack_tag = "volume"
 #
+# Phase out base station connect/disconnect notifications
+[base-station-connect]
+    # Blueman's ConnectionNotifier pops a notification for every device that
+    # connects or disconnects. The basestation-standby timer links to both
+    # Valve base stations every 30 min just to read their power state, which
+    # is two popups each time. Station names are LHB-*, so this stays quiet
+    # without muting phones, tablets and headphones.
+    summary = "LHB-*"
+    skip_display = yes
+    history_ignore = yes
+
 # vim: ft=cfg

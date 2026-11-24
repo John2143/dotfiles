@@ -98,6 +98,28 @@ The unit's state is also a **Mimir** metric, scraped by the `home-nodes` job on 
 node_systemd_unit_state{name="basestation-standby.service", instance="arch.local:9100"}
 ```
 
+## Desktop popups
+
+Blueman's `ConnectionNotifier` applet plugin raises a notification for every device whose
+`Connected` property changes — there is no per-device filter in it. Left alone, the 30-minute
+leg means four popups an hour (connect and disconnect, two stations).
+
+The fix is at the daemon, not in Blueman: a dunst rule keyed on the station name. It drops
+only `LHB-*`, so phones, tablets and headphones keep their notifications.
+
+```ini
+# .config/dunst/dunstrc
+[base-station-connect]
+    summary = "LHB-*"
+    skip_display = yes
+    history_ignore = yes
+```
+
+`~/.config/dunst/dunstrc` is an out-of-store symlink to the dotfiles copy, so
+`dunstctl reload` applies it without a rebuild. Verified 2026-11-24: a real
+`basestation status` run produced no displayed notification and no history entry, while a
+control notification from the same app did.
+
 ## Checks
 
 ```sh
