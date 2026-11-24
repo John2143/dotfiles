@@ -1,8 +1,6 @@
-import { Box, Text } from "@oh-my-pi/pi-tui";
-
-// UI stats extension — timestamps in chat, timing in widget, tokens/sec in footer.
+// UI stats extension — local-time stamp in prompts, timing in widget, tokens/sec in footer.
 //
-// Chat: injects timestamp banners via `before_agent_start`.
+// Chat: stamps the local wall clock on the first line of each submitted prompt (`input` hook).
 // Widget: shows turn timing + token speed below the editor via `setWidget`.
 // Footer: registers a segment showing live tokens/sec via OMP's built-in computation.
 
@@ -17,8 +15,17 @@ export default function (pi: any) {
   // Helpers
   // ============================================================
 
-  function isoNow(): string {
-    return new Date().toISOString().replace("T", " ").slice(0, 19);
+  /** Local wall clock with numeric UTC offset, e.g. `2026-11-21 02:08:25 -05:00`. */
+  function localStamp(date: Date = new Date()): string {
+    const pad2 = (value: number) => String(value).padStart(2, "0");
+    const offsetMinutes = date.getTimezoneOffset();
+    const sign = offsetMinutes <= 0 ? "+" : "-";
+    const abs = Math.abs(offsetMinutes);
+    return (
+      `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())} ` +
+      `${pad2(date.getHours())}:${pad2(date.getMinutes())}:${pad2(date.getSeconds())} ` +
+      `${sign}${pad2(Math.floor(abs / 60))}:${pad2(abs % 60)}`
+    );
   }
 
   function formatDuration(ms: number): string {
@@ -60,35 +67,21 @@ export default function (pi: any) {
   }
 
   // ============================================================
-  // Custom message renderer: render timestamp without [type] label
-  // ============================================================
-
-  pi.registerMessageRenderer("timestamp", (msg: any, _opts: any, _theme: any) => {
-    const dim = "\x1b[2m";
-    const reset = "\x1b[0m";
-    const content = typeof msg.content === "string" ? msg.content : "";
-    const box = new Box(1, 1);
-    box.addChild(new Text(`${dim}${content}${reset}`, 0, 0));
-    return box;
-  });
-
-  // ============================================================
   // Hook handlers
   // ============================================================
 
-  // Chat timestamp banner
-  pi.on("before_agent_start", async (_event: any, _ctx: any) => {
-    const ts = isoNow();
-    const bold = "\x1b[1m";
-    const dim = "\x1b[2m";
-    const reset = "\x1b[0m";
-    return {
-      message: {
-        customType: "timestamp",
-        content: `╭─ ${bold}${ts}${reset}${dim} ──────────────`,
-        display: true,
-      },
-    };
+  // Timestamp: first line of the submitted prompt, local wall clock. omp fires `input`
+  // before it parses slash/bash/btw/python/queue leaders, so those are left untouched.
+  const COMMAND_LEADERS = ["/", "!", "?", "$", "->", "=>"] as const;
+  const STAMP_PREFIX = /^\[\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} [+-]\d{2}:\d{2}\]\n/;
+
+  pi.on("input", async (event: any) => {
+    const text = typeof event?.text === "string" ? event.text : "";
+    const trimmed = text.trimStart();
+    if (!trimmed) return undefined;
+    if (COMMAND_LEADERS.some(leader => trimmed.startsWith(leader))) return undefined;
+    if (STAMP_PREFIX.test(trimmed)) return undefined;
+    return { text: `[${localStamp()}]\n${text}` };
   });
 
   pi.on("session_start", async (_event: any, ctx: any) => {
