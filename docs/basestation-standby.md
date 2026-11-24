@@ -120,6 +120,14 @@ only `LHB-*`, so phones, tablets and headphones keep their notifications.
 `basestation status` run produced no displayed notification and no history entry, while a
 control notification from the same app did.
 
+The rule is the declarative option: the file lives in `dotfiles` and home-manager exposes it
+(`nixos/home.nix:612`), so a rebuild always reproduces it. Muting Blueman instead would mean
+disabling its `ConnectionNotifier` plugin through `org.blueman.general` `plugin-list`, which
+home-manager can also declare (`dconf.settings`, dconf is in use on this host; the list is
+currently empty). Prefer the dunst rule: `plugin-list` is one list holding every plugin
+toggle, so declaring it pins all of them and would silently revert any later change made in
+Blueman's plugin dialog.
+
 ## Checks
 
 ```sh
