@@ -1,15 +1,55 @@
 # Fleet patching
 
-**Nothing patches the fleet on a schedule right now** (verified 2026-11-20):
+**The weekly patch runs from GitHub Actions** (since 2026-11-23):
 
-| Timer | Planned | Actual |
+| Job | Planned | Actual |
 |---|---|---|
-| `fleet-patch.timer` | Sunday 04:00 (+ up to 5 min jitter) | **Masked on office** since 2026-11 — `nixos/office-configuration.nix` sets `systemd.timers.fleet-patch.enable = false` while the i9-14900K is stress-tested for Vmin-shift degradation (RMA pending). Delete that line to resume; `Persistent=true` means the next switch runs the missed week immediately. Tracked on card #363. |
-| `renovate.timer` | Sunday 05:00 | **Never deployed.** `nixos/modules/renovate.nix` is imported by no host config, no host has the unit (`is-enabled` → `not-found` on office/pite/nas/big/arch), and `2143-Labs/argo` has never received a PR from renovate despite its `renovate.json`. |
+| `fleet-patch.yml` in dotfiles | Sundays 09:00 UTC (04:00 America/New_York), plus `workflow_dispatch` | Runs on the org's self-hosted runners (`[self-hosted, nixos]`), logging in to OpenBao with GitHub OIDC as the `ci-fleet-patch` role. No stored credential: the token lasts 10 minutes and is revoked when the run ends. |
+| CronJob `renovate` in 2143-Labs/argo | Sundays 05:00 America/New_York | Runs in-cluster on k3s (`workloads/renovate/`); opens dependency PRs on argo only. It does not touch this fleet. |
 
-When enabled, `fleet-patch` bumps `nixpkgs`, `nixpkgs-stable` and `oh-my-pi`, pushes
-`flake.lock`, and switches every NixOS host to that exact commit. Neither job reboots
-anything.
+The job bumps `nixpkgs`, `nixpkgs-stable` and `oh-my-pi`, pushes `flake.lock`, and switches
+every NixOS host to that exact commit. It never reboots anything, and neither does the Renovate
+CronJob.
+
+It replaces the office `fleet-patch` timer, which was masked during the i9-14900K stress test
+(card #363) and is now deleted; `systemd.services.fleet-patch` remains as the manual escape
+hatch (`sudo systemctl start fleet-patch`, or run the script by hand). The `github` host runs the
+CI job, so the job only *stages* its generation with `boot` instead of switching it: reboot
+`github` to activate, until then it keeps running the previous system.
+
+What the job trusts, and what to change when rotating anything:
+
+- OpenBao role `auth/jwt-github/role/ci-fleet-patch` — `token_max_ttl 10m`, policy
+  `fleet-patch-read` (read-only on the KV path below), and `bound_claims` of `repository_id`
+  82301766, `ref: refs/heads/master`, `runner_environment: self-hosted`,
+  `event_name: [schedule, workflow_dispatch]`, and
+  `workflow_ref: John2143/dotfiles/.github/workflows/fleet-patch.yml@refs/heads/master`. A
+  dispatch from any other branch or workflow is refused at login.
+- KV `consumers/data/john2143-com/default/fleet-patch` — fields `ssh_private`, `ssh_public`,
+  `ntfy_file`. The public half is also a `my-keys` entry in `flake.nix`, which is what makes it
+  work fleet-wide; a new key needs both places plus one run of the job to distribute it.
+- `scripts/fleet-known_hosts` — the host keys CI pins instead of reading a `~/.ssh`.
+
+The runner gives the job a curated `PATH`: `nix`, `git`, `curl`, `bash` and coreutils, but **no
+`ssh`, `jq`, `grep` or `python3`**, and its user has no git identity. That is why the job runs the
+script inside `nix shell nixpkgs#openssh`, reads OpenBao with `nix run nixpkgs#jq`, matches with
+bash `case` rather than `grep`, and sets `GIT_AUTHOR_*`/`GIT_COMMITTER_*` for the bump commit.
+Drop the openssh wrapper and every host reports `FAILED (ssh)`, because the script tests the
+connection itself and discards ssh's own message.
+
+`REBOOT NEEDED` on every host is the steady state, not a failure: the job switches generations and
+never reboots, so a kernel bump waits for you. The job's own host adds
+`STAGED (host runs the CI job)`: `github` is only staged and takes the new generation on its next
+reboot.
+
+Run it by hand:
+
+```fish
+gh workflow run fleet-patch.yml                     # the full weekly run
+gh workflow run fleet-patch.yml -f dry_run=true     # bump, evaluate, probe — changes nothing
+gh workflow run fleet-patch.yml -f only=mirror -f bump=false
+gh run watch                                        # follow the newest run
+```
 
 ## What builds without being asked
 
@@ -21,14 +61,15 @@ Nothing rebuilds dotfiles on a schedule. The only recurring builds are in CI:
 | `build-frigate-genai.yml` in dotfiles | on push to the frigate/nix paths, or by hand | builds both images, pushes to attic and ghcr, then bumps the tag in `2143-Labs/argo` |
 | `attic-push-queue.timer` | 2 min after the previous run, on every host with attic | uploads paths queued by the post-build hook; it builds nothing |
 
-Consequence for `omp`: the fork advances daily, but dotfiles' `flake.lock` only follows when
-someone runs `fleet-patch.sh` (or switches by hand), and then every host builds the new
+Consequence for `omp`: the fork advances daily, and dotfiles' `flake.lock` follows it weekly when
+the fleet-patch job runs (or whenever you switch by hand). Each host then builds the new
 derivation itself — the first to finish queues it to attic and the rest substitute. There is
 no scheduled warm; the hourly warmer is parked on `omp-warmer-wip` (card #450).
 
-Both timers push to ntfy on failure (`notify-failure@<unit>`), so a broken week is visible
-without logging in. `fleet-patch` also always sends its report, summarised in the
-notification title.
+`fleet-patch` pushes to ntfy on failure (`notify-failure@fleet-patch`) and always sends its
+report, summarised in the notification title, so a broken week is visible without logging in.
+The argo Renovate CronJob pushes nowhere: its surface is `kubectl -n renovate get jobs` and
+the Dependency Dashboard going stale.
 
 The job never reboots, so the kernel it stages only takes effect at the next reboot. When a
 host's running kernel differs from the booted-only generation, its row says `REBOOT NEEDED`.
@@ -92,12 +133,14 @@ still completes, because nixos-rebuild runs it under `systemd-run --wait`). Reru
 ## Hold the schedule
 
 ```fish
-sudo systemctl disable --now fleet-patch.timer
-sudo systemctl disable --now renovate.timer
+gh workflow disable fleet-patch.yml
+ssh closet 'sudo -n k3s kubectl -n renovate patch cronjob renovate --type merge -p "{\"spec\":{\"suspend\":true}}"'
 ```
 
-Re-enable with `enable --now`. `Persistent = true` means a window missed while office was off
-runs on the next boot.
+Re-enable it with `gh workflow enable fleet-patch.yml`; resume the CronJob with the same patch
+and `{"spec":{"suspend":false}}`. Neither timer survives a missed window: trigger the workflow
+by hand after re-enabling, and the CronJob with
+`kubectl -n renovate create job --from=cronjob/renovate renovate-manual`.
 
 ## Roll back one host
 
@@ -175,12 +218,14 @@ cores, `--max-jobs 0` hands the work to `big` instead of building locally.
 ## Roll back a bump
 
 ```fish
-git -C ~/dotfiles revert <chore(fleet): weekly nixpkgs bump …>   # push it
-sudo systemctl disable --now fleet-patch.timer
+git -C ~/dotfiles revert <chore(fleet): weekly input bump …>   # push it
+gh workflow run fleet-patch.yml -f bump=false                   # deploy the revert
 ```
 
-Disable the timer until the revert is understood: the next run re-bumps to branch head, which
-would undo the revert.
+Keep running with `-f bump=false` until the revert is understood: a normal run re-bumps to
+branch head, which would undo the revert. `gh workflow disable fleet-patch.yml` stops the
+schedule entirely; `bao delete auth/jwt-github/role/ci-fleet-patch` makes every run fail at
+login instead of touching a host.
 
 ## Roll back an argo bump
 
@@ -197,6 +242,15 @@ a hibernated or scaled-to-zero CNPG cluster has no pod, so it is neither inspect
 obstacle). Its cordon is what makes
 CNPG move each primary, so a kured reboot needs no promotion step. Expect the
 `lh-volume-degraded` alert for up to ~1 h afterwards while replicas rebuild.
+
+Expect the **ExternalSecret-backed apps to go `Degraded` for a few minutes** as well: the
+reboot drops the `ClusterSecretStore`'s connection to OpenBao, every `ExternalSecret` retries
+into `ClusterSecretStore "openbao" is not ready`, and ArgoCD's `ExternalSecret` health check
+turns those Applications red. It clears by itself — observed 2026-11-23: the store was
+`Ready=True` four minutes after the last node returned, and the fleet was back to 134
+`Healthy` within ~10 minutes. One still `False` *after* the store is `Ready` is only waiting
+out its retry backoff; `kubectl annotate externalsecret <name> force-sync=$(date +%s)
+--overwrite` proves it immediately.
 
 This procedure remains the way to reboot **big** or **pite** (kured does not manage them, and
 they hold no cluster-wide kubeconfig to gate on) and to reboot a control plane outside the
@@ -252,7 +306,10 @@ evicted pinned pod only goes Pending until the node returns; no data is lost.
 do not move back, which is fine.
 
 **`secu`** is the exception to everything above: reboot it only with its LUKS unlock USB
-inserted, or type the passphrase at its console (`nixos/modules/disko_secu.nix:26-27`).
+inserted, or type the passphrase at its console (`nixos/modules/disko_secu.nix:26-27`). Since
+`9153cef` the initrd also waits 10 s for `/dev/disk/by-partlabel/CRYPTKEY` and then falls back
+to that prompt (`keyFileTimeout`; the scripted-stage-1 `fallbackToPassword` is a removed option
+with no effect), so a missing stick is a prompt rather than a boot that never gets there.
 
 **`pite`** permanently carries the exclude-from-LB label; never remove it on return.
 
@@ -308,6 +365,14 @@ faults.
 
 `FAILED (switch)` on any other host is a real error: read the last 40 lines of `run.log`
 before rerunning.
+
+**A bumped `nixpkgs` can silently drop an option you still set.** `mkRemovedOptionModule` only
+throws when something *reads* the option; once the module that consumed it is gone, nothing
+does, so the definition stays, the build succeeds, and the setting is ignored.
+`boot.initrd.luks.devices.<name>.fallbackToPassword` and disko's `preLVM` are both in that
+state since the scripted stage 1 was removed. Read values back rather than trusting the file —
+`nix eval --json '.#nixosConfigurations.secu.config.boot.initrd.luks.devices.cryptroot'` failed
+on `preLVM` the moment it was asked, which is how this one was found.
 
 ## A LOCKED host (deadman)
 
