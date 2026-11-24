@@ -62,6 +62,7 @@
     btop
     tesseract
     inputs.agenix.packages.${pkgs.stdenv.hostPlatform.system}.default
+    (import ./rustdesk-tunnel.nix {inherit pkgs;})
   ];
 
   programs.fish.enable = true;
@@ -134,6 +135,9 @@
       "discord"
       "prismlauncher"
       "deskflow"
+      # Client only: `rd arch` / `rd office` (docs/remote-desktop.md). Decline its
+      # service install; nothing connects into the Mac.
+      "rustdesk"
     ];
     brews = [];
   };

@@ -273,7 +273,10 @@ in {
     ];
     xdgOpenUsePortal = true;
     config = {
-      Hyprland = {
+      # Lowercase on purpose: xdg-desktop-portal lowercases XDG_CURRENT_DESKTOP
+      # before looking for <desktop>-portals.conf, so a "Hyprland" key generates
+      # /etc/xdg/xdg-desktop-portal/Hyprland-portals.conf, which it never reads.
+      hyprland = {
         default = ["hyprland" "gtk"];
       };
     };
