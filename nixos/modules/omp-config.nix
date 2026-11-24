@@ -659,10 +659,14 @@ in
     # 18.18.2 — `grep -r ignorePatterns packages/` finds nothing — so the file
     # only produced migration noise.
 
-    # UI stats hook — timestamps, turn timing, and tokens/sec in the status bar.
-    # Purely observational (no blocking), loaded from extensions/ so it auto-loads
-    # with every `omp` invocation (no --hook needed). Reads token usage from
-    # turn_end and agent_end events and displays it via ctx.ui.setStatus.
+    # UI stats extension — local-time prompt stamp, turn timing, tokens/sec.
+    # Loaded from extensions/ so it auto-loads with every `omp` invocation (no
+    # --hook needed). It is NOT purely observational: the `input` hook rewrites
+    # each submitted prompt to start with `[YYYY-MM-DD HH:MM:SS ±HH:MM]` in local
+    # time (prompts led by /, !, ?, $, -> or => are left untouched so commands
+    # still parse, and print mode emits no `input` event so `-p` runs carry no
+    # stamp). Everything else only observes: turn_end and agent_end drive a
+    # widget via ctx.ui.setWidget and a tokens/sec status-line segment.
     ".omp/agent/extensions/ui-stats.ts".source = ../../.omp/agent/extensions/ui-stats.ts;
 
     # MCP servers: the whole config lives in agenix (secrets/omp-mcp.json.age,
