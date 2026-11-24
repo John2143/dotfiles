@@ -22,7 +22,7 @@ so one unreachable unit does not stop the other.
 | Path | Role |
 |---|---|
 | `nixos/modules/basestation.nix` | options, the `basestation` package, the service + timer |
-| `nixos/modules/basestation.sh` | the script body (`writeShellApplication`: strict mode, PINNED `PATH`, shellcheck) |
+| `nixos/modules/basestation.sh` | the script body (`writeShellApplication`: strict mode, `PATH` from `runtimeInputs`, shellcheck) |
 | `nixos/arch-configuration.nix` | `custom.basestation = { enable = true; standbyInterval = "30min"; }` |
 | `flake.nix` | module listed under `arch` only — no other host has stations |
 
