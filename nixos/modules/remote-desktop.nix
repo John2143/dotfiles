@@ -320,12 +320,24 @@ in {
     "d /tmp/RustDesk-1000 0700 john users -"
   ];
 
+  # RustDesk's direct listener binds [::]:21118 dual-stack and cannot be told to
+  # bind loopback only (src/rendezvous_mediator.rs:1343-1412), so the port has to
+  # be dropped for everything but the SSH tunnel on lo.
+  #
+  # The raw table, not the filter table: `-A INPUT -j ts-input` runs before the
+  # nixos-fw jump, and Tailscale's own `ts-input -i tailscale0 -j ACCEPT` accepts
+  # every tailnet packet first (verified on arch 2026-11-24: a nixos-fw DROP for
+  # 21118 stayed at 0 packets while office connected). raw/PREROUTING is touched
+  # by neither Tailscale nor k3s, so a drop there holds.
   networking.firewall.extraCommands = ''
-    # RustDesk's direct listener binds [::]:21118 dual-stack and cannot be told
-    # to bind loopback only (src/rendezvous_mediator.rs:1343-1412). Only the SSH
-    # tunnel, which arrives on lo, may reach it. Rule 1, because rule 1 of
-    # nixos-fw already accepts everything on tailscale0.
-    iptables -I nixos-fw 1 -p tcp -m tcp --dport 21118 ! -i lo -j DROP
-    ip6tables -I nixos-fw 1 -p tcp -m tcp --dport 21118 ! -i lo -j DROP
+    iptables -t raw -I PREROUTING 1 -p tcp -m tcp --dport 21118 ! -i lo -j DROP
+    ip6tables -t raw -I PREROUTING 1 -p tcp -m tcp --dport 21118 ! -i lo -j DROP
+  '';
+
+  # extraCommands stay behind when the firewall is stopped; these chains are
+  # flushed by NixOS, so remove ours by hand.
+  networking.firewall.extraStopCommands = ''
+    iptables -t raw -D PREROUTING -p tcp -m tcp --dport 21118 ! -i lo -j DROP 2>/dev/null || true
+    ip6tables -t raw -D PREROUTING -p tcp -m tcp --dport 21118 ! -i lo -j DROP 2>/dev/null || true
   '';
 }
