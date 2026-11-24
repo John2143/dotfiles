@@ -107,9 +107,12 @@ bug to chase.
 which wins the port and makes the unit fail with `status=5`. The working pattern is: configure in
 the GUI, **quit the GUI**, then `systemctl --user start deskflow`. The bar's `DF` widget reports
 whatever serves the port, regardless of who started it: black when nothing does, gray with no
-client, blue with a client over the LAN, Wi-Fi or tailnet, green with a client on the dedicated
-wire. Its tooltip shows the round-trip time to the client and a two-minute graph. A click toggles
-the unit; when the core belongs to the GUI it sends a notification instead.
+client, blue when any client arrives over the LAN, Wi-Fi or tailnet, green when every client is on
+the dedicated wire. Each connected client also gets a small pill of its own beside `DF`, named after
+the name its host answers for (`avahi-resolve`, or `tailscale` on the tailnet) and carrying that
+client's round-trip time; its tooltip shows the address, the path and a two-minute graph, and the
+`DF` tooltip sums every client up. The bar declares four slots, and a slot with no client is hidden.
+A click on `DF` toggles the unit; when the core belongs to the GUI it sends a notification instead.
 
 The server will not start at all until the GUI has saved a layout: it reads
 `~/.config/Deskflow/deskflow-server.conf`, and a layout with only the host screen in it means there
@@ -300,6 +303,7 @@ nmcli -t device status | grep enp0s20   # data iface on ipad-usb, private one un
 journalctl -b --since -1min | grep -c ipad-usb-attach   # 1-2, not dozens (a loop looks like dozens)
 ss -ltn | grep 24800             # Deskflow serving
 deskflow-ctl status | jq -r '.class, .tooltip'   # what the DF pill reports: stopped|idle|lan|wire, and its tooltip
+deskflow-ctl client 1 | jq -r '.text'            # the first per-client pill; slots are sorted by peer address
 ```
 
 ## Pitfalls seen in practice
@@ -311,3 +315,4 @@ deskflow-ctl status | jq -r '.class, .tooltip'   # what the DF pill reports: sto
 | iPad's Tailscale/Headscale says *failed to resolve* `net.john2143.com` on the cable | The link does advertise DNS (`10.77.0.1`) and dnsmasq answers that name with the public IP, but the iPad sends **zero** queries to `:53` — it resolves via encrypted DNS and never contacts the control server, so it fails while Wi-Fi works. Moonlight is unaffected; use Wi-Fi for the VPN until the device-side resolver is understood. |
 | Deskflow unit cycles every 3 s | No `deskflow-server.conf` yet (exit 4), or the GUI's core owns the port (exit 5). |
 | `DF` is blue although the Mac is cabled | The widget colours by the route to the client, so the Mac's Deskflow client is connected through the LAN address. Point it at `thunderbolt` (`10.99.0.1`). |
+| A client pill shows an IP instead of a name | The peer does not answer mDNS for that address (`avahi-resolve -a <ip>`); the bar falls back to the address. |

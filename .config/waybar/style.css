@@ -198,6 +198,10 @@ window#waybar > box {
 #custom-screenrec,
 #custom-ipad,
 #custom-deskflow,
+#custom-deskflow-1,
+#custom-deskflow-2,
+#custom-deskflow-3,
+#custom-deskflow-4,
 #custom-tailscale,
 #custom-temporal,
 #custom-theme,
@@ -354,7 +358,10 @@ window#waybar > box {
 
 /* ---- Deskflow ---- */
 /* stopped: nothing serves the port. idle: serving, no client. lan: a client
-   over the LAN, Wi-Fi or the tailnet. wire: a client on the dedicated cable. */
+   over the LAN, Wi-Fi or the tailnet. wire: a client on the dedicated cable.
+   The summary pill follows its weakest client; the per-client pills beside it
+   (custom/deskflow-N, one per deskflowSlots in nixos/modules/waybar.nix) are
+   coloured by their own route. */
 #custom-deskflow.stopped {
     background: #11111b;
     color: #6c7086;
@@ -366,6 +373,18 @@ window#waybar > box {
     color: @blue;
 }
 #custom-deskflow.wire {
+    color: @green;
+}
+#custom-deskflow-1.lan,
+#custom-deskflow-2.lan,
+#custom-deskflow-3.lan,
+#custom-deskflow-4.lan {
+    color: @blue;
+}
+#custom-deskflow-1.wire,
+#custom-deskflow-2.wire,
+#custom-deskflow-3.wire,
+#custom-deskflow-4.wire {
     color: @green;
 }
 
