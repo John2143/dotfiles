@@ -44,7 +44,8 @@ turned off.
 | Both ScreenCast and RemoteDesktop go to luminous | The Hyprland portal has no RemoteDesktop, and the portal frontend sends a RemoteDesktop session's source selection to the ScreenCast backend, so both must come from the same backend. InputCapture stays on Hyprland for the Deskflow server. |
 | RustDesk never runs with `--server` or `--service` | Without them it uses portal capture and portal input. With them it switches to uinput, which needs RustDesk's root service. It decides by grepping `ps` for the literal `rustdesk --server`, so never `pgrep`/`grep` for that joined string either. |
 | 30 s physical-input rule | Someone at the desk gets luminous's normal picker; nobody at the desk means the focused monitor is shared without a prompt. Only evdev input counts, so the remote session's own virtual input does not. |
-| Whitelist `127.0.0.1/32,::1/128` plus a firewall drop of 21118 outside `lo` | SSH is the gate. An empty whitelist means "allow everyone", so the value is re-pinned on every start. Never widen it to the tailnet: that restores password-only access from every tailnet node. |
+| Whitelist `127.0.0.1/32,::1/128` plus a drop of 21118 outside `lo` in the **raw** table | SSH is the gate. An empty whitelist means "allow everyone", so the value is re-pinned on every start. Never widen it to the tailnet: that restores password-only access from every tailnet node. The drop lives in `raw/PREROUTING` because Tailscale's `ts-input` chain accepts every tailnet packet before `nixos-fw` is reached, so a filter-table rule for 21118 never matches. |
+| `/etc/xdg` is first in `XDG_CONFIG_DIRS` | Setting that variable at all removes the implicit `/etc/xdg` default, and the portal routing file lives in `/etc/xdg/xdg-desktop-portal/`. Without it the frontend ignores the routing file entirely: ScreenCast stays on Hyprland and the RemoteDesktop portal is never exported. |
 | Rendezvous, relay and API servers on `127.0.0.1` ports 9, 10, 7 | They are unused. Ports under 1024 cannot be bound by another local uid, so nobody can impersonate them. The GUI's "not ready" status is therefore permanent and expected. |
 | 23 pinned options in `RustDesk2.toml`, 1 in `RustDesk_local.toml` | Terminal, TCP tunnel, camera, remote restart, recording, LAN discovery and remote config changes off; keyboard, clipboard, file transfer, file copy-paste and audio on; permanent password only; idle sessions end after 10 minutes; update check off. RustDesk's own setters need root, so the files are edited before each start instead. |
 | sshd `KbdInteractiveAuthentication = false` on every NixOS host | With `UsePAM yes`, keyboard-interactive accepts the account password even though `PasswordAuthentication` is off, which would make the gate only as strong as a login password. |
@@ -67,7 +68,9 @@ turned off.
 
 ## First-time setup
 
-On each of arch and office, after switching and logging out and back in:
+On each of arch and office, after switching **and logging out and back in** (the units are wanted
+by `graphical-session.target`, which is already active right after a switch, so they do not start
+by themselves, and the portal frontend only reads its routing at startup):
 
 1. RustDesk window opens at login. Do the following, then close the window with SUPER+Q (this
    hides it; the server keeps running):
@@ -109,10 +112,12 @@ Health checks (on the host):
 
 - Portal routing and units:
   `busctl --user introspect org.freedesktop.portal.Desktop /org/freedesktop/portal/desktop | grep -c 'org.freedesktop.portal.RemoteDesktop'`
-  prints ≥1; `systemctl --user is-active luminous-autopick rustdesk` prints `active` twice.
-- Port closed to the network: from another machine, `nc -vz -w3 <host IP> 21118` times out
-  (dropped, not refused). On the host, `sudo iptables -vnL nixos-fw | grep 21118` shows the
-  DROP rule as the first rule.
+  prints ≥1; `systemctl --user is-active luminous-autopick rustdesk xdg-desktop-portal-luminous`
+  prints `active` three times.
+- Port closed to the network: from another machine, `nc -vz -w3 <host tailnet IP> 21118` times
+  out (dropped, not refused). Testing from the host itself proves nothing: its own tailnet IP is
+  reached over `lo`, which the rule allows. On the host,
+  `sudo iptables -t raw -vnL PREROUTING | grep 21118` shows the DROP with a rising counter.
 - sshd is keys only: `sudo sshd -T | grep -i kbdinteractive` prints
   `kbdinteractiveauthentication no`;
   `ssh -o PubkeyAuthentication=no -o PreferredAuthentications=keyboard-interactive,password john@<host>`
@@ -127,6 +132,24 @@ Health checks (on the host):
 
 Failures:
 
+- **Portal routing ignored: no `org.freedesktop.portal.RemoteDesktop`, ScreenCast still on Hyprland.**
+  Check `tr '\0' '\n' < /proc/$(pgrep -f 'libexec/xdg-desktop-portal$')/environ | grep XDG_CONFIG_DIRS`:
+  it must start with `/etc/xdg:`. If it does not, the frontend never reads
+  `/etc/xdg/xdg-desktop-portal/hyprland-portals.conf`; fix the systemd `DefaultEnvironment` and
+  log out and back in. To see what a frontend resolves without touching the live one:
+  `dbus-run-session -- env XDG_CURRENT_DESKTOP=Hyprland G_MESSAGES_DEBUG=all /run/current-system/sw/libexec/xdg-desktop-portal 2>&1 | grep 'Using .*portal for'`
+  (the binary is wrapped and also lives under `/nix/store/*-xdg-desktop-portal-*/libexec/`).
+- **Cursor vanished and nothing responds to the pointer, but the keyboard still works.**
+  Deskflow had an `InputCapture` session open and the portal frontend that owned the session was
+  restarted, leaving Hyprland's pointer confined with nobody to release it. Recovery, in order:
+  `systemctl --user stop deskflow`, `systemctl --user restart xdg-desktop-portal-hyprland`, then
+  `systemctl --user restart xdg-desktop-portal`. If the pointer is still gone, the compositor
+  still holds the confinement: log out (the keyboard works) and back in.
+  **Never restart `xdg-desktop-portal` while Deskflow is running** — that is what causes it.
+- **The port answers from the tailnet although the rule exists.**
+  `sudo iptables -vnL nixos-fw | grep 21118` showing 0 packets while another host connects means
+  the drop is in the wrong table: `-A INPUT -j ts-input` runs first. Check
+  `sudo iptables -t raw -vnL PREROUTING`.
 - **Tunnel opens, RustDesk says connection refused.** The forward is fine; the host is not
   listening. `systemctl --user status rustdesk`, then `journalctl --user -u rustdesk`. A failed
   `ExecStartPre` means a RustDesk TOML was unparseable, and RustDesk deliberately did not start.

@@ -330,8 +330,12 @@ in {
   # 21118 stayed at 0 packets while office connected). raw/PREROUTING is touched
   # by neither Tailscale nor k3s, so a drop there holds.
   networking.firewall.extraCommands = ''
-    iptables -t raw -I PREROUTING 1 -p tcp -m tcp --dport 21118 ! -i lo -j DROP
-    ip6tables -t raw -I PREROUTING 1 -p tcp -m tcp --dport 21118 ! -i lo -j DROP
+    # -C first: this script runs on every firewall start, and raw/PREROUTING is
+    # not flushed by NixOS, so a bare -I would stack duplicates.
+    iptables -t raw -C PREROUTING -p tcp -m tcp --dport 21118 ! -i lo -j DROP 2>/dev/null ||
+      iptables -t raw -I PREROUTING 1 -p tcp -m tcp --dport 21118 ! -i lo -j DROP
+    ip6tables -t raw -C PREROUTING -p tcp -m tcp --dport 21118 ! -i lo -j DROP 2>/dev/null ||
+      ip6tables -t raw -I PREROUTING 1 -p tcp -m tcp --dport 21118 ! -i lo -j DROP
   '';
 
   # extraCommands stay behind when the firewall is stopped; these chains are
