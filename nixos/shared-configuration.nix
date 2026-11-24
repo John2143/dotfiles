@@ -289,7 +289,12 @@ in {
     DefaultEnvironment = [
       "PATH=/run/wrappers/bin:/etc/profiles/per-user/%u/bin:/run/current-system/sw/bin:/home/%u/.local/share/flatpak/exports/bin:/var/lib/flatpak/exports/bin"
       "XDG_DATA_DIRS=/home/%u/.local/share/flatpak/exports/share:/var/lib/flatpak/exports/share:/run/current-system/sw/share"
-      "XDG_CONFIG_DIRS=/home/%u/.local/share/flatpak/exports/etc/xdg:/var/lib/flatpak/exports/etc/xdg:/run/current-system/sw/etc/xdg"
+      # /etc/xdg first: setting this variable at all disables the implicit
+      # /etc/xdg default, and system-level configs live there — including
+      # /etc/xdg/xdg-desktop-portal/hyprland-portals.conf, without which the
+      # portal ignores its own routing and ScreenCast/RemoteDesktop never reach
+      # luminous (found 2026-11-24, remote-desktop.nix).
+      "XDG_CONFIG_DIRS=/etc/xdg:/home/%u/.local/share/flatpak/exports/etc/xdg:/var/lib/flatpak/exports/etc/xdg:/run/current-system/sw/etc/xdg"
       "XDG_RUNTIME_DIR=/run/user/%U"
     ];
     DefaultTimeoutStopSec = "30s";
