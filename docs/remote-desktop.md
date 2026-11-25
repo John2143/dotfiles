@@ -43,7 +43,7 @@ turned off.
 | Portal config key is `hyprland`, lowercase | xdg-desktop-portal lowercases `XDG_CURRENT_DESKTOP` before looking for `<desktop>-portals.conf`. A `Hyprland` key generates `Hyprland-portals.conf`, which is never read. |
 | Both ScreenCast and RemoteDesktop go to luminous | The Hyprland portal has no RemoteDesktop, and the portal frontend sends a RemoteDesktop session's source selection to the ScreenCast backend, so both must come from the same backend. InputCapture stays on Hyprland for the Deskflow server. |
 | RustDesk never runs with `--server` or `--service` | Without them it uses portal capture and portal input. With them it switches to uinput, which needs RustDesk's root service. It decides by grepping `ps` for the literal `rustdesk --server`, so never `pgrep`/`grep` for that joined string either. |
-| 30 s physical-input rule | Someone at the desk gets luminous's normal picker; nobody at the desk means the focused monitor is shared without a prompt. Only evdev input counts, so the remote session's own virtual input does not. |
+| 30 s physical-input rule | Someone at the desk gets luminous's normal picker; nobody at the desk means a monitor is shared without a prompt. Only evdev input counts, so the remote session's own virtual input does not. Away from the desk the choice is `~/.config/luminous-autopick/monitor` when that names a connected output, else the focused monitor — focus is worthless right after a reboot, which is why the file exists. |
 | Whitelist `127.0.0.1/32,::1/128` plus a drop of 21118 outside `lo` in the **raw** table | SSH is the gate. An empty whitelist means "allow everyone", so the value is re-pinned on every start. Never widen it to the tailnet: that restores password-only access from every tailnet node. The drop lives in `raw/PREROUTING` because Tailscale's `ts-input` chain accepts every tailnet packet before `nixos-fw` is reached, so a filter-table rule for 21118 never matches. |
 | `/etc/xdg` is first in `XDG_CONFIG_DIRS` | Setting that variable at all removes the implicit `/etc/xdg` default, and the portal routing file lives in `/etc/xdg/xdg-desktop-portal/`. Without it the frontend ignores the routing file entirely: ScreenCast stays on Hyprland and the RemoteDesktop portal is never exported. |
 | Rendezvous, relay and API servers on `127.0.0.1` ports 9, 10, 7 | They are unused. Ports under 1024 cannot be bound by another local uid, so nobody can impersonate them. The GUI's "not ready" status is therefore permanent and expected. |
@@ -62,8 +62,15 @@ turned off.
 - A host that is not in `rd`'s map:
   `ssh -N -f -o ExitOnForwardFailure=yes -L 127.0.0.1:<any free port>:127.0.0.1:21118 <host>`,
   then connect RustDesk to `127.0.0.1:<that port>`.
-- One monitor per session. To switch, focus the other monitor inside the session (SUPER+1 /
-  SUPER+SHIFT+1), disconnect and reconnect.
+- One monitor per session: luminous hands the portal a single monitor, so both desktops at once
+  is not possible with this backend. To switch, focus the other monitor inside the session
+  (SUPER+1 / SUPER+SHIFT+1), disconnect and reconnect.
+- Which monitor is shared while nobody is at the desk is pinned in
+  `~/.config/luminous-autopick/monitor` — one output name (`hyprctl monitors | grep Monitor`),
+  e.g. `HDMI-A-2`. Write it once and the choice survives reboots; it is re-read per connection,
+  so no restart is needed. Without it the focused monitor is used, which right after a reboot is
+  the first output rather than the one used last time. An output named there but not connected
+  is ignored, with a log line. At the desk, the picker still wins.
 - After a reboot, nothing is reachable until someone logs in at the host.
 
 ## First-time setup

@@ -11,7 +11,10 @@
 #   --service: that switches it to uinput, which needs its root service.
 # - Monitor picker: luminous-autopick answers luminous's picker with the focused
 #   monitor only after 30 s without physical input; at the desk, the person
-#   there picks.
+#   there picks. When ~/.config/luminous-autopick/monitor names a connected
+#   output, that monitor wins over focus, so the choice survives a reboot.
+#   Luminous hands the portal exactly one monitor per session, so "all desktops
+#   at once" is not possible with this backend.
 # - SSH is the gate. RustDesk's whitelist is loopback only and the firewall
 #   drops 21118 on every interface but lo, so the only way in is `rd <host>`
 #   (an ssh -L tunnel with a pinned host key). Never widen the whitelist to the
@@ -36,7 +39,10 @@
       of showing its own picker, but only while that file exists. This daemon creates
       the socket after IDLE_SECONDS without physical input and removes it on the next
       input, so at the desk luminous shows its normal picker and away from the desk
-      the focused monitor is shared automatically.
+      a monitor is shared automatically. That monitor is the one named in PREF_PATH
+      when it is set and still connected, otherwise the focused one, so a choice
+      survives a reboot: fresh from a reboot nothing holds focus and Hyprland has
+      settled on the first output, which is not necessarily the one used last time.
       """
 
       import json
@@ -54,6 +60,11 @@
       HYPRCTL = "${pkgs.hyprland}/bin/hyprctl"
       IDLE_SECONDS = 30
       SOCK_PATH = os.path.join(os.environ.get("XDG_RUNTIME_DIR", "/tmp"), "luminus_selector.sock")
+      PREF_PATH = os.path.join(
+          os.environ.get("XDG_CONFIG_HOME") or os.path.expanduser("~/.config"),
+          "luminous-autopick",
+          "monitor",
+      )
 
 
       def log(msg):
@@ -90,6 +101,33 @@
           return 0
 
 
+      def preferred_index(monitors):
+          """Return the index of the monitor named in PREF_PATH, if it is connected.
+
+          One output name per file, nothing else in it. Re-read on every request so
+          the choice can be changed without restarting the unit, and ignored when the
+          named output is gone, so an unplugged monitor falls back to focus instead
+          of failing the share.
+          """
+          try:
+              with open(PREF_PATH, encoding="utf-8") as pref:
+                  name = pref.read().strip()
+          except OSError:
+              return None
+          if name in monitors:
+              return monitors.index(name)
+          log(f"{PREF_PATH} names {name!r}, not one of {monitors}; ignoring it")
+          return None
+
+
+      def chosen_index(monitors):
+          idx = preferred_index(monitors)
+          if idx is not None:
+              log(f"pinned choice: {monitors[idx]}")
+              return idx
+          return focused_index(monitors)
+
+
       def recv_exact(conn, n):
           buf = b""
           while len(buf) < n:
@@ -114,7 +152,7 @@
               if req.get("type") != "screen_share" or not monitors:
                   send(conn, {"type": "cancel"})
                   return
-              idx = focused_index(monitors)
+              idx = chosen_index(monitors)
               log(f"auto-selected {monitors[idx]} from {monitors}")
               send(conn, {"type": "success", "index": idx})
 
