@@ -110,11 +110,33 @@ in {
     services.openssh = {
       enable = true;
       settings.PasswordAuthentication = false;
+      # PAM's auth stack for sshd is deny-only, but the method is still
+      # advertised, so clients that prefer it get an auth failure path for
+      # free. Stop offering it at all.
+      settings.KbdInteractiveAuthentication = false;
       # nixos-anywhere, the phase-2 k3s bootstrap and every later block ssh as
       # root with a key.
       settings.PermitRootLogin = "prohibit-password";
     };
     services.qemuGuest.enable = true;
+
+    # No link-local name resolution on a public host: nothing on the platform
+    # uses LLMNR or mDNS, and both listeners otherwise answer on 5355/5353.
+    services.resolved.settings.Resolve = {
+      LLMNR = false;
+      MulticastDNS = false;
+    };
+
+    # A voter whose kernel panics reboots after 10 s instead of sitting dead
+    # until an operator notices. (Only panics: a hung k3s does not trigger it.)
+    boot.kernel.sysctl."kernel.panic" = 10;
+
+    # Keep the journal bounded: 1G used at most, and always leave 2G of the
+    # 100G root free for etcd's own writes.
+    services.journald.settings.Journal = {
+      SystemMaxUse = "1G";
+      SystemKeepFree = "2G";
+    };
 
     environment.systemPackages = with pkgs; [curl git jq];
   };
