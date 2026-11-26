@@ -109,7 +109,7 @@ Current action declarations:
 
 | Plugin | Entry | Actions |
 |---|---|---|
-| `john/deskflow` | `bar` | `right = "panel-toggle john/deskflow:panel"`, `middle = "none"` |
+| `john/deskflow` | `bar` | `left = "panel-toggle john/deskflow:panel"`, `right = "panel-toggle john/deskflow:panel"`, `middle = "none"` |
 | `john/dotfiles-bar` | `media` | `middle = "none"`, `back = "exec playerctl --all-players previous"`, `forward = "exec playerctl --all-players next"` |
 | `john/dotfiles-bar` | `autoclicker` | `middle = "none"` |
 | `john/dotfiles-bar` | `thermostat` | `middle = "none"` |
@@ -165,7 +165,7 @@ Rules:
 
 | Entry | Kind | File | Callbacks / actions |
 |---|---|---|---|
-| `bar` | widget | `widget.luau` | one summary pill for the server (`ui.row` + `ui.label` through `barWidget.render`, text `DF` before the first poll); no per-client pills. Left (`onPrimaryClick`) = `deskflow-ctl toggle` (start/stop); middle (`onMiddleClick`) = re-poll; right = manifest `panel-toggle`. Settings: `poll_ms` (default 2000, 500–30000). |
+| `bar` | widget | `widget.luau` | one summary pill for the server (`ui.row` + `ui.label` through `barWidget.render`, text `DF` before the first poll); no per-client pills. Left and right = manifest `panel-toggle` (start/stop is the panel's button, or IPC `toggle`); middle (`onMiddleClick`) = re-poll. Settings: `poll_ms` (default 2000, 500–30000). |
 | `panel` | panel | `panel.luau` | `onOpen`/`onToggle`/`onRefresh` poll; server start/stop; one row per client — transport pill, name + address, route, RTT, a `ui.graph` of that client's latency history (last two minutes, linear under an adaptive ceiling) and a `min / avg / max` caption with the ceiling. Fed by `deskflow-ctl status` + `deskflow-ctl clients`, and follows the widget's polls through `noctalia.state` (`state.set("deskflow", {summary, clients, error, updated_ms})`). |
 
 Both entries are thin: decoding, the class→role map, the graph series and the
