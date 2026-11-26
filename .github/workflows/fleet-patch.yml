@@ -81,6 +81,14 @@ jobs:
           GIT_AUTHOR_EMAIL: 41898282+github-actions[bot]@users.noreply.github.com
           GIT_COMMITTER_NAME: github-actions[bot]
           GIT_COMMITTER_EMAIL: 41898282+github-actions[bot]@users.noreply.github.com
+          # `nix flake update` resolves every unlocked `github:` input through
+          # api.github.com, and anonymous calls share a 60/hour bucket on this
+          # egress IP with the office and every runner — so the bump fails with
+          # HTTP 403 the moment that bucket is dry (seen 2026-11-26). The job
+          # token gives this workflow its own 1,000/hour budget. `access-tokens`
+          # (not `extra-access-tokens`) replaces the map, so CI never inherits a
+          # system-wide PAT and spends its quota.
+          NIX_CONFIG: "access-tokens = github.com=${{ github.token }}"
           DRY_RUN: ${{ inputs.dry_run && '1' || '0' }}
           BUMP: ${{ inputs.bump == false && '0' || '1' }}
           ONLY: ${{ inputs.only }}
