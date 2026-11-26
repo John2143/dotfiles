@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Adapt an OMP-authored SKILL.md for Claude Code, rewriting it in place.
+"""Adapt an OMP-authored SKILL.md for another harness, rewriting it in place.
 
 The skills in .claude/skills/ are written for OMP. Two things differ in
 Claude Code and are translated here:
@@ -12,9 +12,22 @@ Claude Code and are translated here:
 `tool-hints` is an OMP-only frontmatter key that Claude Code ignores, so its
 text moves into the body as a "## Tool hints" section instead of being lost.
 
-Usage: claude-skills.py <SKILL.md> [<SKILL.md> ...]
+`--agy ROOT` targets the Antigravity CLI instead, for skills installed under
+ROOT (one directory per skill). agy differs from Claude Code in three ways:
+
+* It parses frontmatter as strict YAML and silently skips a skill that fails,
+  so `argument-hint: [a] [b]` (two flow sequences) kills the skill. The
+  free-text values (description, argument-hint) are re-emitted as quoted
+  strings, and the result is checked with a YAML parser so a bad skill fails
+  the build instead of vanishing.
+* It requires `name`; OMP takes the folder name, so it is added.
+* It has no `allowed-tools` and no ${CLAUDE_SKILL_DIR}: the key is dropped and
+  a skill's references to its own files point at ROOT/<skill>/.
+
+Usage: convert-skills.py [--agy ROOT] <SKILL.md> [<SKILL.md> ...]
 """
 
+import json
 import re
 import sys
 from pathlib import Path
@@ -61,6 +74,10 @@ MCP_SERVERS = ("personal_diary_admin", "ai_tasks")
 # A tool name, optionally carrying a permission rule: Bash(git add *)
 TOKEN_RE = re.compile(r"[A-Za-z_][\w.:/-]*(?:\([^)]*\))?")
 
+# Free-text frontmatter values agy's strict YAML parser can trip on. Other keys
+# keep their YAML types (disable-model-invocation: true stays a boolean).
+QUOTED_KEYS = {"description", "argument-hint"}
+
 
 def convert_tool(name: str) -> str | None:
     if "(" in name:
@@ -90,7 +107,22 @@ def dedent_block(lines: list[str]) -> str:
     return "\n".join(line[cut:].rstrip() for line in lines).strip("\n")
 
 
-def rewrite_frontmatter(frontmatter: list[str]) -> tuple[list[str], str | None]:
+def quote_scalar(line: str) -> str:
+    """Re-emit a plain `key: value` line with its value as a quoted string.
+
+    Quoted values, block scalars (| and >) and empty values (a nested block
+    follows) are left alone. A JSON string is a valid YAML double-quoted one.
+    """
+    key, _, value = line.partition(":")
+    value = value.strip()
+    if not value or value[0] in "\"'|>":
+        return line
+    return f"{key}: {json.dumps(value, ensure_ascii=False)}"
+
+
+def rewrite_frontmatter(
+    frontmatter: list[str], agy: bool = False
+) -> tuple[list[str], str | None]:
     """Translate allowed-tools and lift tool-hints out of the frontmatter."""
     out: list[str] = []
     hints: str | None = None
@@ -106,7 +138,7 @@ def rewrite_frontmatter(frontmatter: list[str]) -> tuple[list[str], str | None]:
                 items.append(frontmatter[i].lstrip()[2:].strip())
                 i += 1
             converted = convert_tools(" ".join(items))
-            if converted:
+            if converted and not agy:
                 out.append(f"allowed-tools: {converted}")
             continue
         if key == "tool-hints":
@@ -119,6 +151,8 @@ def rewrite_frontmatter(frontmatter: list[str]) -> tuple[list[str], str | None]:
                 i += 1
             hints = dedent_block(block)
             continue
+        if agy and key in QUOTED_KEYS:
+            line = quote_scalar(line)
         out.append(line)
         i += 1
     return out, hints
@@ -132,21 +166,29 @@ def convert_uris(text: str) -> str:
     return text.replace("local://", "./")
 
 
-def convert_self_paths(text: str, skill: str) -> str:
-    """Point a skill's own asset references at ${CLAUDE_SKILL_DIR}.
+def convert_self_paths(text: str, skill: str, skill_dir: str) -> str:
+    """Point a skill's own asset references at where it is installed.
 
     `.claude/skills/<skill>/...` only resolves when the session happens to run
-    in a repo that has the skills checked out; the substitution variable works
-    from wherever the skill is installed.
+    in a repo that has the skills checked out; the install location works
+    from anywhere. For Claude Code that is the ${CLAUDE_SKILL_DIR} variable.
     """
     # Leading boundary keeps paths like `dotfiles/.claude/skills/...` intact.
     pattern = re.compile(
         rf"(?<![\w/.-])(?:~|\$HOME)?/?(?:\./)?\.claude/skills/{re.escape(skill)}/"
     )
-    return pattern.sub("${CLAUDE_SKILL_DIR}/", text)
+    return pattern.sub(lambda _: skill_dir, text)
 
 
-def convert(text: str, skill: str) -> str:
+def check_yaml(frontmatter: list[str], skill: str) -> None:
+    import yaml
+
+    data = yaml.safe_load("\n".join(frontmatter))
+    if not isinstance(data, dict) or not data.get("description"):
+        raise SystemExit(f"{skill}: frontmatter has no description")
+
+
+def convert(text: str, skill: str, agy_root: str | None = None) -> str:
     lines = text.splitlines()
     if not lines or lines[0].strip() != "---":
         return text
@@ -155,23 +197,35 @@ def convert(text: str, skill: str) -> str:
     except StopIteration:
         return text
 
-    frontmatter, hints = rewrite_frontmatter(lines[1:end])
-    body = convert_self_paths(convert_uris("\n".join(lines[end + 1 :])), skill)
+    agy = agy_root is not None
+    skill_dir = f"{agy_root}/{skill}/" if agy else "${CLAUDE_SKILL_DIR}/"
+    frontmatter, hints = rewrite_frontmatter(lines[1:end], agy)
+    body = convert_self_paths(
+        convert_uris("\n".join(lines[end + 1 :])), skill, skill_dir
+    )
+    frontmatter = [convert_uris(line) for line in frontmatter]
+    if agy:
+        if not any(line.startswith("name:") for line in frontmatter):
+            frontmatter.insert(0, f"name: {skill}")
+        check_yaml(frontmatter, skill)
 
-    parts = ["---", *(convert_uris(line) for line in frontmatter), "---", ""]
+    parts = ["---", *frontmatter, "---", ""]
     if hints:
-        parts += ["## Tool hints", "", convert_self_paths(hints, skill), ""]
+        parts += ["## Tool hints", "", convert_self_paths(hints, skill, skill_dir), ""]
     parts.append(body.strip("\n"))
     return "\n".join(parts) + "\n"
 
 
-def main(paths: list[str]) -> int:
-    if not paths:
+def main(args: list[str]) -> int:
+    agy_root = None
+    if args[:1] == ["--agy"] and len(args) > 1:
+        agy_root, args = args[1].rstrip("/"), args[2:]
+    if not args:
         print(__doc__, file=sys.stderr)
         return 2
-    for arg in paths:
+    for arg in args:
         path = Path(arg)
-        path.write_text(convert(path.read_text(), path.parent.name))
+        path.write_text(convert(path.read_text(), path.parent.name, agy_root))
     return 0
 
 
