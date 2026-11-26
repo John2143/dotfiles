@@ -190,24 +190,6 @@
     border=@mauve@ff
   '';
 
-  dunstConf = ''
-    [global]
-        frame_color = "#@mauve@"
-
-    [urgency_low]
-        background = "#@mantle@"
-        foreground = "#@subtext0@"
-
-    [urgency_normal]
-        background = "#@base@"
-        foreground = "#@text@"
-
-    [urgency_critical]
-        background = "#@peach@"
-        foreground = "#@base@"
-        frame_color = "#@peach@"
-  '';
-
   # hyprlock has no `source` directive (hyprlang 0.6.8 has no such keyword), so
   # the whole file is rendered here and selected with `-c` by hyprlock-theme.
   hyprlockTemplate = builtins.readFile ../../.config/hypr/hyprlock.conf;
@@ -242,7 +224,6 @@
     "alacritty.toml" = subst p alacrittyToml;
     "wofi.css" = subst p wofiCss;
     "fuzzel.ini" = subst p fuzzelIni;
-    "dunst.conf" = subst p dunstConf;
     "hyprlock.conf" = subst p hyprlockTemplate;
     "hyprland.lua" = subst p hyprlandLua;
     "waybar.css" = lib.concatMapStrings (n: "@define-color ${n} #${p.${n}};\n") (lib.attrNames p);
@@ -282,75 +263,85 @@
 
   theme-switch = pkgs.writeShellApplication {
     name = "theme-switch";
-    runtimeInputs = [
-      pkgs.coreutils
-      pkgs.util-linux # flock
-      pkgs.dconf
-      pkgs.jq
-      pkgs.gawk
-      pkgs.systemd
-      pkgs.tmux
-      config.wayland.windowManager.hyprland.finalPackage # hyprctl
-      config.programs.eww.package
-      config.services.dunst.package # dunstctl
-    ];
+    runtimeInputs =
+      [
+        pkgs.coreutils
+        pkgs.util-linux # flock
+        pkgs.dconf
+        pkgs.jq
+        pkgs.gawk
+        pkgs.systemd
+        pkgs.tmux
+        config.wayland.windowManager.hyprland.finalPackage # hyprctl
+        config.programs.eww.package
+      ]
+      ++ lib.optional (config.programs.noctalia.enable && config.programs.noctalia.package != null) config.programs.noctalia.package;
     runtimeEnv = {
       THEME_ASSETS = "${assets}";
     };
     text = builtins.readFile ../theme-switch.sh;
   };
 in {
-  home.packages = [
-    theme-switch
-    hyprlock-theme
-    # GTK3 theme pair written to gtk-3.0/settings.ini by theme-switch.
-    pkgs.adw-gtk3
-    # BreezeLight/BreezeDark .colors schemes, picked up through the portal hint.
-    pkgs.kdePackages.breeze
-  ];
-
-  # Qt apps resolve their colours from the settings portal (theme-switch writes
-  # org.gnome.desktop.interface color-scheme, xdg-desktop-portal-gtk serves it).
-  systemd.user.sessionVariables.QT_QPA_PLATFORMTHEME = "xdgdesktopportal";
-
-  # Re-apply the saved mode on every rebuild: the runtime files are not store
-  # links, so without this a palette edit would wait for the next toggle.
-  home.activation.themeRefresh = lib.hm.dag.entryBetween ["onFilesChange"] ["linkGeneration"] ''
-    run ${theme-switch}/bin/theme-switch refresh
-  '';
-
-  xdg.configFile = {
-    # Only for a manual `hyprlock`; the binds run hyprlock-theme, which prefers
-    # the state file.
-    "hypr/hyprlock.conf".source = config.lib.file.mkOutOfStoreSymlink "${assets}/dark/hyprlock.conf";
-    "wofi/style.css".source = config.lib.file.mkOutOfStoreSymlink "${stateDir}/current/wofi.css";
-    "fuzzel/fuzzel.ini".source = config.lib.file.mkOutOfStoreSymlink "${stateDir}/current/fuzzel.ini";
-    "eww/theme.scss".source = config.lib.file.mkOutOfStoreSymlink "${stateDir}/current/eww.scss";
-    "dunst/dunstrc.d/50-theme.conf".source = config.lib.file.mkOutOfStoreSymlink "${stateDir}/current/dunst.conf";
+  options.myTheme.palettes = lib.mkOption {
+    type = lib.types.attrsOf (lib.types.attrsOf lib.types.str);
+    readOnly = true;
+    description = "Catppuccin palettes (dark = Mocha, light = Latte), 6-hex strings without leading '#'.";
   };
 
-  # home-manager's services.hyprpaper writes a static ~/.config/hypr/hyprpaper.conf,
-  # so the daemon is run here with -c pointing at the theme state instead.
-  systemd.user.services.hyprpaper = {
-    Unit = {
-      Description = "hyprpaper wallpaper daemon (theme-aware)";
-      PartOf = [config.wayland.systemd.target];
-      After = [config.wayland.systemd.target];
-    };
-    Service = {
-      ExecStart = "${pkgs.hyprpaper}/bin/hyprpaper -c ${stateDir}/current/hyprpaper.conf";
-      Restart = "on-failure";
-    };
-    Install.WantedBy = [config.wayland.systemd.target];
-  };
+  config = {
+    myTheme.palettes = palettes;
 
-  # Border colours cannot come from `settings` (they are static), and hyprctl
-  # reload re-runs this file, so the colours survive a reload.
-  wayland.windowManager.hyprland.extraConfig = ''
-    -- theme-switch: border colours live in ~/.local/state/theme/current/hyprland.lua
-    do
-      local ok, theme = pcall(dofile, "${stateDir}/current/hyprland.lua")
-      if ok and type(theme) == "table" then hl.config(theme) end
-    end
-  '';
+    home.packages = [
+      theme-switch
+      hyprlock-theme
+      # GTK3 theme pair written to gtk-3.0/settings.ini by theme-switch.
+      pkgs.adw-gtk3
+      # BreezeLight/BreezeDark .colors schemes, picked up through the portal hint.
+      pkgs.kdePackages.breeze
+    ];
+
+    # Qt apps resolve their colours from the settings portal (theme-switch writes
+    # org.gnome.desktop.interface color-scheme, xdg-desktop-portal-gtk serves it).
+    systemd.user.sessionVariables.QT_QPA_PLATFORMTHEME = "xdgdesktopportal";
+
+    # Re-apply the saved mode on every rebuild: the runtime files are not store
+    # links, so without this a palette edit would wait for the next toggle.
+    home.activation.themeRefresh = lib.hm.dag.entryBetween ["onFilesChange"] ["linkGeneration"] ''
+      run ${theme-switch}/bin/theme-switch refresh
+    '';
+
+    xdg.configFile = {
+      # Only for a manual `hyprlock`; the binds run hyprlock-theme, which prefers
+      # the state file.
+      "hypr/hyprlock.conf".source = config.lib.file.mkOutOfStoreSymlink "${assets}/dark/hyprlock.conf";
+      "wofi/style.css".source = config.lib.file.mkOutOfStoreSymlink "${stateDir}/current/wofi.css";
+      "fuzzel/fuzzel.ini".source = config.lib.file.mkOutOfStoreSymlink "${stateDir}/current/fuzzel.ini";
+      "eww/theme.scss".source = config.lib.file.mkOutOfStoreSymlink "${stateDir}/current/eww.scss";
+    };
+
+    # home-manager's services.hyprpaper writes a static ~/.config/hypr/hyprpaper.conf,
+    # so the daemon is run here with -c pointing at the theme state instead.
+    systemd.user.services.hyprpaper = {
+      Unit = {
+        Description = "hyprpaper wallpaper daemon (theme-aware)";
+        PartOf = [config.wayland.systemd.target];
+        After = [config.wayland.systemd.target];
+      };
+      Service = {
+        ExecStart = "${pkgs.hyprpaper}/bin/hyprpaper -c ${stateDir}/current/hyprpaper.conf";
+        Restart = "on-failure";
+      };
+      Install.WantedBy = [config.wayland.systemd.target];
+    };
+
+    # Border colours cannot come from `settings` (they are static), and hyprctl
+    # reload re-runs this file, so the colours survive a reload.
+    wayland.windowManager.hyprland.extraConfig = ''
+      -- theme-switch: border colours live in ~/.local/state/theme/current/hyprland.lua
+      do
+        local ok, theme = pcall(dofile, "${stateDir}/current/hyprland.lua")
+        if ok and type(theme) == "table" then hl.config(theme) end
+      end
+    '';
+  };
 }

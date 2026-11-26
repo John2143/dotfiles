@@ -36,7 +36,7 @@ rewritten file does.
 | wallpaper | own `hyprpaper.service` with `-c …/current/hyprpaper.conf` |
 | waybar | generated `style.css` begins with `@import url("file://…/current/waybar.css")`; `theme-switch` reloads the unit |
 | eww | `@import "theme"` in `eww/eww.scss`, resolved by grass against `$XDG_CONFIG_HOME/eww` |
-| dunst | `dunstrc.d/50-theme.conf` drop-in; `services.dunst.configFile` stays null because `-config` disables drop-ins |
+| notifications | Noctalia, not dunst: a 16-role palette JSON built from `myTheme.palettes`, switched with `noctalia msg theme-mode-set` (see `docs/noctalia-notifications.md`) |
 | wofi, fuzzel | `~/.config/{wofi/style.css,fuzzel/fuzzel.ini}` → `mkOutOfStoreSymlink` of the state file |
 | GTK3 | `~/.config/gtk-3.0/settings.ini`, written by `theme-switch` |
 | GTK4 / libadwaita, Qt | dconf `org.gnome.desktop.interface color-scheme` → `xdg-desktop-portal-gtk`; Qt also needs `QT_QPA_PLATFORMTHEME=xdgdesktopportal` (set in `home.nix`) |

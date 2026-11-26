@@ -64,7 +64,7 @@ apply() {
   timeout 10 systemctl --user try-reload-or-restart waybar.service >/dev/null 2>&1 || true
   timeout 10 systemctl --user try-restart hyprpaper.service >/dev/null 2>&1 || true
   timeout 5 eww reload >/dev/null 2>&1 || true
-  timeout 5 dunstctl reload >/dev/null 2>&1 || true
+  if command -v noctalia >/dev/null 2>&1; then timeout 5 noctalia msg theme-mode-set "$mode" >/dev/null 2>&1 || true; fi
 
   if timeout 5 tmux has-session >/dev/null 2>&1; then
     # catppuccin sets the @thm_* options with `set -ogq`, which keeps the value
