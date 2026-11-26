@@ -240,6 +240,30 @@ error instead of a blank panel.
    daemonised instance's log, and `QS_NO_RELOAD_POPUP=1` (set by the unit) keeps
    the reload toast away.
 
+### Two traps that only show up in a lint run
+
+- **Do not use `JsonAdapter` outside a `Singleton`.** Quickshell 0.3.2 does not
+  export `FileViewAdapter` to qmllint, so a nested `JsonAdapter` produces
+  `[unresolved-type]` plus a cascade of `[unqualified]` warnings on its id, and
+  nesting is not fixed by `pragma ComponentBehavior: Bound`. `PrefsStore.qml`
+  therefore keeps `Scope` + `FileView` and parses with
+  `JSON.parse(prefsFile.text())` / `prefsFile.setText(...)`, the same pattern
+  `Theme.qml` uses for `palette.json`. Keep the gate at zero warnings; a real
+  `[unqualified]` is an id that will resolve differently from where you expect.
+- **New `.qml` files must be git-tracked before linting.** `nix build` copies
+  only tracked files into the flake store path, so an untracked `Pill.qml` makes
+  the whole gate fail with `Pill was not found ... [import]`. `git add` (or
+  `git add -N`) first; the error is about the source snapshot, not the import.
+
+### Formatting scope
+
+`nix fmt -- --check` is clean for `flake.nix`, `nix/checks/quickshell-notifs.nix`,
+`nixos/modules/quickshell-notifs.nix` and `nixos/modules/theme.nix`.
+`nixos/home.nix` is **not** alejandra-clean on `master` and never was; the
+`custom.notificationDaemon` block added there is conformant, and reformatting the
+whole file would bury the change under roughly 700 unrelated lines. Leave it
+alone unless you are deliberately formatting the file on its own branch.
+
 ## First deploy
 
 ```sh
