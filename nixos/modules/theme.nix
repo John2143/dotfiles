@@ -247,6 +247,12 @@
     "hyprland.lua" = subst p hyprlandLua;
     "waybar.css" = lib.concatMapStrings (n: "@define-color ${n} #${p.${n}};\n") (lib.attrNames p);
     "eww.scss" = lib.concatMapStrings (n: "\$${n}: #${p.${n}};\n") (lib.attrNames p);
+    # Read by the Quickshell notification centre (Theme.qml, watchChanges) so a
+    # switch re-colours live toasts without a restart.
+    "palette.json" = builtins.toJSON {
+      flavor = mode;
+      colors = lib.mapAttrs (_: v: "#${v}") p;
+    };
     "tmux.conf" = "set -g @catppuccin_flavor ${
       if mode == "light"
       then "latte"
@@ -292,7 +298,11 @@
       pkgs.tmux
       config.wayland.windowManager.hyprland.finalPackage # hyprctl
       config.programs.eww.package
-      config.services.dunst.package # dunstctl
+    ]
+    # Reload hook for whichever notification daemon this host runs.
+    ++ lib.optionals config.services.dunst.enable [config.services.dunst.package] # dunstctl
+    ++ lib.optionals (config.programs.quickshell.enable && config.programs.quickshell.package != null) [
+      config.programs.quickshell.package # qs
     ];
     runtimeEnv = {
       THEME_ASSETS = "${assets}";
@@ -326,7 +336,11 @@ in {
     "wofi/style.css".source = config.lib.file.mkOutOfStoreSymlink "${stateDir}/current/wofi.css";
     "fuzzel/fuzzel.ini".source = config.lib.file.mkOutOfStoreSymlink "${stateDir}/current/fuzzel.ini";
     "eww/theme.scss".source = config.lib.file.mkOutOfStoreSymlink "${stateDir}/current/eww.scss";
-    "dunst/dunstrc.d/50-theme.conf".source = config.lib.file.mkOutOfStoreSymlink "${stateDir}/current/dunst.conf";
+    # Only while dunst is the notification daemon; quickshell reads
+    # `current/palette.json` itself (nixos/modules/quickshell-notifs.nix).
+    "dunst/dunstrc.d/50-theme.conf" = lib.mkIf config.services.dunst.enable {
+      source = config.lib.file.mkOutOfStoreSymlink "${stateDir}/current/dunst.conf";
+    };
   };
 
   # home-manager's services.hyprpaper writes a static ~/.config/hypr/hyprpaper.conf,

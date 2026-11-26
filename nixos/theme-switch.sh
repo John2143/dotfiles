@@ -64,7 +64,15 @@ apply() {
   timeout 10 systemctl --user try-reload-or-restart waybar.service >/dev/null 2>&1 || true
   timeout 10 systemctl --user try-restart hyprpaper.service >/dev/null 2>&1 || true
   timeout 5 eww reload >/dev/null 2>&1 || true
-  timeout 5 dunstctl reload >/dev/null 2>&1 || true
+  # Whichever notification daemon this host runs — dunst or quickshell (see
+  # nixos/modules/quickshell-notifs.nix) — re-reads the palette from
+  # ~/.local/state/theme/current. Only one of the two is ever installed.
+  if command -v dunstctl >/dev/null 2>&1; then
+    timeout 5 dunstctl reload >/dev/null 2>&1 || true
+  fi
+  if command -v qs >/dev/null 2>&1; then
+    timeout 5 qs ipc --any-display -c notifs call theme refresh >/dev/null 2>&1 || true
+  fi
 
   if timeout 5 tmux has-session >/dev/null 2>&1; then
     # catppuccin sets the @thm_* options with `set -ogq`, which keeps the value
