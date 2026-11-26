@@ -199,6 +199,9 @@ in {
   "rclone-private.env.age".publicKeys = [office arch nas];
   "rclone-volumes.env.age".publicKeys = [office arch nas];
 
+  "rots-render-env.age".publicKeys = [office arch];
+  "rots-render-registry.age".publicKeys = [office arch];
+
   # Read-only Home Assistant account for the home-assistant-engineer skill.
   "ha-aiuser.age".publicKeys = [office arch];
 }
