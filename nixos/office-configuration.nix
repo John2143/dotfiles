@@ -49,6 +49,30 @@
     dockerCompat = true;
   };
 
+  # The ROTS render worker (rots4's nixosModules.render): a Temporal pull worker that renders a
+  # recorded game to MP4 in a rootless podman container with this machine's GPU.
+  age.secrets.rots-render-env = {
+    # ROTS_S3_ACCESS_KEY / ROTS_S3_SECRET_KEY for bucket rots4-replays. systemd reads this as
+    # root before dropping to `User`, so root ownership is enough.
+    file = ../secrets/rots-render-env.age;
+    mode = "0400";
+    owner = "root";
+    group = "root";
+  };
+  age.secrets.rots-render-registry = {
+    # The zot login podman uses (REGISTRY_AUTH_FILE) to pull rots4's render-* images. podman runs
+    # as john, so this one has to be readable by john.
+    file = ../secrets/rots-render-registry.age;
+    mode = "0400";
+    owner = "john";
+  };
+  services.rots-render = {
+    enable = true;
+    user = "john";
+    environmentFile = config.age.secrets.rots-render-env.path;
+    registryAuthFile = config.age.secrets.rots-render-registry.path;
+  };
+
   networking.hostName = "office"; # Define your hostname.
   networking.networkmanager.enable = true; # Easiest to use and most distros use this by default.
   # The k3s API VIP (192.168.5.10) is announced by MetalLB over BGP only, so a

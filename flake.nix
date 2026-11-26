@@ -26,6 +26,13 @@
       url = "github:numtide/llm-agents.nix";
     };
 
+    # The ROTS render worker's module (services.rots-render). The repo is private, so ssh; and
+    # deliberately no `inputs.nixpkgs.follows` - the worker is built against rots4's own pinned
+    # nixpkgs, and following this flake's would rebuild it on a set it was never tested on.
+    rots4 = {
+      url = "git+ssh://git@github.com/2143-Labs/rots4";
+    };
+
     oh-my-pi = {
       url = "github:John2143/oh-my-pi/john";
       inputs.nixpkgs.follows = "nixpkgs";
@@ -185,6 +192,8 @@
           ./nixos/platform/base.nix
           ./nixos/cluster/modules/disko.nix
           ./nixos/cluster/modules/ssh.nix
+          # Provenance for the generation: same expression mkHost uses.
+          {system.configurationRevision = inputs.self.rev or inputs.self.dirtyRev or null;}
           {custom.platform = node;}
         ];
       };
@@ -202,6 +211,7 @@
           ./nixos/shared-configuration.nix
           ./nixos/shared-games-configuration.nix
           ./nixos/office-configuration.nix
+          inputs.rots4.nixosModules.render
           ./nixos/modules/ipad-display.nix
           ./nixos/modules/deskflow.nix
           ./nixos/modules/remote-desktop.nix
