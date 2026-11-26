@@ -45,6 +45,16 @@ apply() {
     install -m 0644 "$f" "$state/current/.$name.tmp"
     mv -f "$state/current/.$name.tmp" "$state/current/$name"
   done
+  # Drop renders left behind by shells that are no longer shipped (waybar/eww/dunst/
+  # hyprlock/hyprpaper/wofi). The variant directory is the only source of truth, so
+  # anything in current/ that it no longer provides is stale.
+  for f in "$state/current"/*; do
+    [ -e "$f" ] || continue
+    name="$(basename "$f")"
+    if [ ! -e "$THEME_ASSETS/$mode/$name" ]; then
+      rm -f -- "$f"
+    fi
+  done
   printf '%s\n' "$mode" > "$state/.mode.tmp"
   mv -f "$state/.mode.tmp" "$mode_file"
 

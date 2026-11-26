@@ -271,6 +271,21 @@ in {
     package = pkgs.hyprland;
     xwayland.enable = true;
     systemd.enable = true;
+    # `systemd.variables` replaces the module default (it is a plain `default`), so the
+    # whole list is repeated here. XDG_SESSION_ID is what Noctalia uses to find the
+    # logind session for its unit: it resolves $XDG_SESSION_ID first and only then falls
+    # back to SessionForPID, which fails because the unit lives in
+    # user@1000.service/app.slice rather than session-c1.scope. Without it the lock
+    # signal monitor is disabled (`loginctl lock-session` never reaches the shell) and
+    # the brightness service logs NoSessionForPID on every run.
+    systemd.variables = [
+      "DISPLAY"
+      "HYPRLAND_INSTANCE_SIGNATURE"
+      "WAYLAND_DISPLAY"
+      "XDG_CURRENT_DESKTOP"
+      "XDG_SESSION_TYPE"
+      "XDG_SESSION_ID"
+    ];
     configType = "lua";
 
     settings = {
@@ -687,7 +702,10 @@ in {
   # idle timer, no 5-min auto-lock and no DPMS-off listener (the documented AMD crash path,
   # hyprwm/hyprlock#953). Lock = CTRL+ALT+L / macropad x (`noctalia msg session lock`);
   # blank = CTRL+ALT+M. `loginctl lock-session` reaches Noctalia through logind's Lock
-  # signal, but it takes the idle path — bind the IPC verb instead.
+  # signal, but it takes the idle path — bind the IPC verb instead. That logind path
+  # depends on XDG_SESSION_ID reaching noctalia.service (see hyprland.systemd.variables
+  # above): without it the unit cannot resolve its session (NoSessionForPID) and the lock
+  # monitor stays disabled.
 
   # Aggressive stop timeout for the user service that can block home-manager
   # activation (sd-switch hangs waiting for it to stop).
