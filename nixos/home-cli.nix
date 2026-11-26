@@ -103,7 +103,7 @@ in {
       bind # network utilities
       k3s
       distrobox
-      lxqt.lxqt-policykit
+      # polkit agent comes from Noctalia (nixos/modules/noctalia.nix)
       # add python3 to basically everything with omp on it
       python3
     ]

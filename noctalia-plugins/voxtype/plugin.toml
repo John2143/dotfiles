@@ -1,0 +1,31 @@
+# Voxtype push-to-talk status widget (replacement for the Waybar
+# "custom/voxtype" module). The widget streams `voxtype status --follow
+# --format json` and mirrors the reported class onto the bar.
+id          = "john/voxtype"
+name        = "Voxtype"
+version     = "1.0.0"
+plugin_api  = 43
+author      = "john"
+license     = "MIT"
+icon        = "microphone"
+description = "Voxtype push-to-talk status: idle, recording and transcribing, with a click to toggle recording."
+tags        = ["voxtype", "audio", "speech", "status"]
+dependencies = ["voxtype"]
+
+[[widget]]
+id    = "bar"
+entry = "widget.luau"
+
+  [[widget.setting]]
+  key             = "hide_when_idle"
+  type            = "bool"
+  label_key       = "settings.hide_when_idle.label"
+  description_key = "settings.hide_when_idle.description"
+  default         = false
+
+  [[widget.setting]]
+  key             = "show_label"
+  type            = "bool"
+  label_key       = "settings.show_label.label"
+  description_key = "settings.show_label.description"
+  default         = true

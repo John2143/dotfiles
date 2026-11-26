@@ -145,39 +145,6 @@
     '';
   };
 
-  weather-status = pkgs.writeShellApplication {
-    name = "weather-status";
-    runtimeInputs = [pkgs.curl pkgs.jq];
-    text = ''
-      response=$(curl -sf "wttr.in/?format=j1") || {
-        echo '{"text": "\u26a0", "class": "error", "tooltip": "Weather unavailable"}'
-        exit 0
-      }
-
-      echo "$response" | jq -ce '
-        .current_condition[0] as $cc |
-        .weather as $w |
-        ($cc.temp_F // "?") as $temp |
-        if $temp == "?" then
-          {text: "\u26a0", class: "error", tooltip: "Missing weather data"}
-        else
-          [
-            "<b>\($cc.weatherDesc[0].value // "Unknown")</b>  \($temp)°F (feels \($cc.FeelsLikeF // "?")°F)",
-            "Wind \($cc.windspeedMiles // "?") mph \($cc.winddir16Point // "?")  |  Humidity \($cc.humidity // "?")%",
-            "UV \($cc.uvIndex // "?")  |  Pressure \($cc.pressureInches // "?") in  |  Vis \($cc.visibilityMiles // "?") mi",
-            "",
-            ( $w | to_entries[] |
-              (if .key == 0 then "Today"
-               elif .key == 1 then "Tomorrow"
-               else .value.date end) as $label |
-              "<b>\($label)</b>: \(.value.hourly[4].weatherDesc[0].value // "?")  \u2191\(.value.maxtempF // "?")° \u2193\(.value.mintempF // "?")°  \u2600\(.value.sunHour // "?")h"
-            )
-          ] | join("\n") as $tooltip |
-          {text: "\($temp)°F", tooltip: $tooltip, class: "weather"}
-        end
-      ' || echo '{"text": "\u26a0", "class": "error", "tooltip": "Failed to parse weather data"}'
-    '';
-  };
   # The Intel controller (USB 8087:0aa7) is unused: every paired device lives on
   # the ASUS dongle. hciN numbering is not stable across boots, so look the
   # index up by MAC and power off that one.
@@ -337,11 +304,10 @@ in {
     withUWSM = true;
   };
 
-  # hyprlock authenticates against the PAM service named "hyprlock" (its own default). If
-  # /etc/pam.d/hyprlock is missing it silently falls back to /etc/pam.d/su. The empty attrset
-  # makes nixpkgs generate the complete default stack (auth/account/password/session, pam_unix,
-  # no pam_faillock) — the same shape as the generated /etc/pam.d/swaylock.
-  security.pam.services.hyprlock = {};
+  # No PAM service is declared here any more: Noctalia's lock screen authenticates through
+  # `noctalia-pam-helper`, which uses NixOS's built-in "login" PAM service. Declaring a
+  # "hyprlock" service is what hyprlock's own default needed — it fell back to
+  # /etc/pam.d/su when /etc/pam.d/hyprlock was absent.
   security.polkit.enable = true;
 
   # Secret Service (org.freedesktop.secrets) for libsecret clients: Chromium's
@@ -351,6 +317,11 @@ in {
   # all. nixpkgs' lemurs module already sets enableGnomeKeyring from this
   # option, so the login keyring is created and unlocked by the login password.
   services.gnome.gnome-keyring.enable = true;
+
+  # Noctalia reads battery state (and charge limits) over D-Bus from upower
+  # rather than sysfs, so the service has to exist; Waybar used to pull the
+  # package in transitively without ever enabling the daemon.
+  services.upower.enable = true;
 
   # games
   services.flatpak.enable = true;
@@ -453,5 +424,5 @@ in {
     })
   ];
 
-  environment.systemPackages = [pkgs.autoclicker vast-waybar-status vast-render-metrics weather-status pkgs.voxtype-osd-native];
+  environment.systemPackages = [pkgs.autoclicker vast-waybar-status vast-render-metrics pkgs.voxtype-osd-native];
 }

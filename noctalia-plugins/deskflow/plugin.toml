@@ -1,0 +1,47 @@
+id          = "john/deskflow"
+name        = "Deskflow"
+version     = "1.0.0"
+plugin_api  = 43
+author      = "john"
+license     = "MIT"
+icon        = "devices"
+description = "Deskflow server status: latency and route per client, with a start/stop control."
+tags        = ["deskflow", "kvm", "status", "network"]
+dependencies = ["deskflow-ctl"]
+
+[[widget]]
+id    = "bar"
+entry = "widget.luau"
+
+  [[widget.setting]]
+  key             = "poll_ms"
+  type            = "int"
+  label_key       = "settings.poll_ms.label"
+  description_key = "settings.poll_ms.description"
+  default         = 2000
+  min             = 500
+  max             = 30000
+  step            = 500
+
+  [[widget.setting]]
+  key             = "max_slots"
+  type            = "int"
+  label_key       = "settings.max_slots.label"
+  description_key = "settings.max_slots.description"
+  default         = 4
+  min             = 1
+  max             = 8
+
+  # Left stays unbound so onClick(): start/stop the server. Right opens the
+  # detail panel, middle is freed for onMiddleClick() (refresh now) instead of
+  # the built-in "open widget settings" binding.
+  [widget.actions]
+  right  = "panel-toggle john/deskflow:panel"
+  middle = "none"
+
+[[panel]]
+id         = "panel"
+entry      = "panel.luau"
+width      = 420
+height     = "content"
+max_height = 560

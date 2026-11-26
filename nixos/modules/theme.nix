@@ -165,15 +165,6 @@
     color = "#@rosewater@"
   '';
 
-  wofiCss = ''
-    window { background-color: #@base@; border: 2px solid #@mauve@; border-radius: 8px; font-family: "JetBrainsMono Nerd Font"; }
-    #input { background-color: #@surface0@; color: #@text@; border: none; margin: 6px; }
-    #inner-box, #outer-box, #scroll { background-color: transparent; }
-    #entry { padding: 4px 8px; }
-    #entry:selected { background-color: #@surface1@; }
-    #text { color: #@text@; }
-  '';
-
   fuzzelIni = ''
     [colors]
     background=@base@ee
@@ -189,40 +180,6 @@
     counter=@overlay1@ff
     border=@mauve@ff
   '';
-
-  dunstConf = ''
-    [global]
-        frame_color = "#@mauve@"
-
-    [urgency_low]
-        background = "#@mantle@"
-        foreground = "#@subtext0@"
-
-    [urgency_normal]
-        background = "#@base@"
-        foreground = "#@text@"
-
-    [urgency_critical]
-        background = "#@peach@"
-        foreground = "#@base@"
-        frame_color = "#@peach@"
-  '';
-
-  # hyprlock has no `source` directive (hyprlang 0.6.8 has no such keyword), so
-  # the whole file is rendered here and selected with `-c` by hyprlock-theme.
-  hyprlockTemplate = builtins.readFile ../../.config/hypr/hyprlock.conf;
-
-  # Picks the themed lock config, and falls back to the dark asset (always present
-  # in the store) if the state file is missing: a lock screen must never fail open.
-  hyprlock-theme = pkgs.writeShellApplication {
-    name = "hyprlock-theme";
-    runtimeInputs = [pkgs.hyprlock];
-    text = ''
-      conf="${stateDir}/current/hyprlock.conf"
-      [ -r "$conf" ] || conf="${assets}/dark/hyprlock.conf"
-      exec hyprlock --config "$conf" "$@"
-    '';
-  };
 
   hyprlandLua = ''
     -- Written by theme-switch from nixos/modules/theme.nix; dofile'd by hyprland.lua.
@@ -240,26 +197,15 @@
     p = palettes.${mode};
   in {
     "alacritty.toml" = subst p alacrittyToml;
-    "wofi.css" = subst p wofiCss;
     "fuzzel.ini" = subst p fuzzelIni;
-    "dunst.conf" = subst p dunstConf;
-    "hyprlock.conf" = subst p hyprlockTemplate;
     "hyprland.lua" = subst p hyprlandLua;
-    "waybar.css" = lib.concatMapStrings (n: "@define-color ${n} #${p.${n}};\n") (lib.attrNames p);
-    "eww.scss" = lib.concatMapStrings (n: "\$${n}: #${p.${n}};\n") (lib.attrNames p);
     "tmux.conf" = "set -g @catppuccin_flavor ${
       if mode == "light"
       then "latte"
       else "mocha"
     }\n";
-    "hyprpaper.conf" = ''
-      splash = false
-      wallpaper {
-          monitor =
-          path = ${wallpapers.${mode}}
-          fit_mode = cover
-      }
-    '';
+    # Absolute path of this mode's wallpaper; theme-switch hands it to noctalia.
+    "wallpaper-path" = "${wallpapers.${mode}}\n";
   };
 
   modeDir = mode:
@@ -291,8 +237,7 @@
       pkgs.systemd
       pkgs.tmux
       config.wayland.windowManager.hyprland.finalPackage # hyprctl
-      config.programs.eww.package
-      config.services.dunst.package # dunstctl
+      pkgs.noctalia
     ];
     runtimeEnv = {
       THEME_ASSETS = "${assets}";
@@ -302,7 +247,6 @@
 in {
   home.packages = [
     theme-switch
-    hyprlock-theme
     # GTK3 theme pair written to gtk-3.0/settings.ini by theme-switch.
     pkgs.adw-gtk3
     # BreezeLight/BreezeDark .colors schemes, picked up through the portal hint.
@@ -320,28 +264,7 @@ in {
   '';
 
   xdg.configFile = {
-    # Only for a manual `hyprlock`; the binds run hyprlock-theme, which prefers
-    # the state file.
-    "hypr/hyprlock.conf".source = config.lib.file.mkOutOfStoreSymlink "${assets}/dark/hyprlock.conf";
-    "wofi/style.css".source = config.lib.file.mkOutOfStoreSymlink "${stateDir}/current/wofi.css";
     "fuzzel/fuzzel.ini".source = config.lib.file.mkOutOfStoreSymlink "${stateDir}/current/fuzzel.ini";
-    "eww/theme.scss".source = config.lib.file.mkOutOfStoreSymlink "${stateDir}/current/eww.scss";
-    "dunst/dunstrc.d/50-theme.conf".source = config.lib.file.mkOutOfStoreSymlink "${stateDir}/current/dunst.conf";
-  };
-
-  # home-manager's services.hyprpaper writes a static ~/.config/hypr/hyprpaper.conf,
-  # so the daemon is run here with -c pointing at the theme state instead.
-  systemd.user.services.hyprpaper = {
-    Unit = {
-      Description = "hyprpaper wallpaper daemon (theme-aware)";
-      PartOf = [config.wayland.systemd.target];
-      After = [config.wayland.systemd.target];
-    };
-    Service = {
-      ExecStart = "${pkgs.hyprpaper}/bin/hyprpaper -c ${stateDir}/current/hyprpaper.conf";
-      Restart = "on-failure";
-    };
-    Install.WantedBy = [config.wayland.systemd.target];
   };
 
   # Border colours cannot come from `settings` (they are static), and hyprctl

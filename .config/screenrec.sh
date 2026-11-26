@@ -21,7 +21,7 @@ supervisor=0
 mkdir -p "$state" "$persist" "$clips"
 
 # note <urgency> <timeout> <icon> <summary> [body] [pct]
-# Reuses one dunst notification id so the same slot morphs through the stages.
+# Reuses one notification id so the same slot morphs through the stages.
 note() {
     local args=(-a screenrec -p -u "$1" -t "$2" -i "$3")
     if [ -s "$persist/notify_id" ]; then
@@ -30,7 +30,9 @@ note() {
     if [ -n "${6:-}" ]; then
         args+=(-h "int:value:$6")
     fi
-    dunstify "${args[@]}" "$4" "${5:-}" >"$persist/notify_id" 2>/dev/null || true
+    # `--` so a summary or body beginning with "-" is not parsed as an option
+    # (recording paths and pasted text can start with a dash).
+    notify-send "${args[@]}" -- "$4" "${5:-}" >"$persist/notify_id" 2>/dev/null || true
 }
 
 # put_status <phase> <pct> <text> — atomic, single writer (the supervisor).
