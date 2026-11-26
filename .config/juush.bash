@@ -84,7 +84,7 @@ fi
 
 echoerr "Starting upload"
 # JUUSH_QUIET=1 suppresses the chatty start/finish notifications (used by screenrec).
-if [[ -z ${JUUSH_QUIET:-} ]]; then dunstify "Starting upload"; fi
+if [[ -z ${JUUSH_QUIET:-} ]]; then notify-send "Starting upload"; fi
 URL=`curl -k -X POST -F "$JUUSH_KEY=@$FILE;type=$MIME_TYPE" $REMOTE`
 echo -n "$URL" | xclip -selection clipboard
 if [[ -z ${JUUSH_QUIET:-} ]]; then notify-send "Got Url: $URL"; fi

@@ -39,12 +39,13 @@ keybind.
 
 | Path | Role |
 |---|---|
-| `nixos/modules/noctalia-notifications.nix` | options (`enable`, `package`, `storageKeyFile`, `historyRetentionHours`, `extraSettings`), the declarative `config.toml` baseline, the Catppuccin palette JSON, the dunst-exclusivity assertion, the Hyprland layer rules, the unit stop timeout |
+| `nixos/modules/noctalia-notifications.nix` | options (`enable`, `storageKeyFile`, `historyRetentionHours`), `noctalia-sync-settings` `ExecStartPre`, the declarative `config.toml` baseline, the Catppuccin palette JSON, dunst + swaync exclusivity assertions, the Hyprland layer rule, the unit stop timeout |
 | `nixos/modules/theme.nix` | `myTheme.palettes` (the single palette source), `theme-switch`'s `runtimeInputs` now include the Noctalia package; the dunst render and theme drop-in are gone |
 | `nixos/theme-switch.sh` | `apply` calls `noctalia msg theme-mode-set "$mode"` where it used to call `dunstctl reload` |
 | `nixos/home.nix` | module import, the two notification binds, `services.noctalia-notifications.enable = true`, removal of the `dunst/dunstrc` symlink and the dunst unit timeout |
+| `.config/juush.bash` | switched line 87 from `dunstify` to `notify-send` (matching line 90; `pkgs.dunst` is no longer on interactive `PATH`) |
 | `.config/dunst/dunstrc` | historical reference only — no longer linked into `~/.config` |
-| `.config/screenrec.sh` | unchanged; still drives `dunstify` as a plain D-Bus client |
+| `.config/screenrec.sh` | unchanged; still drives `dunstify` (via its own `runtimeInputs`) as a plain D-Bus client |
 | `docs/noctalia-notifications.md` | this file |
 
 ## Architecture and decision log
@@ -58,7 +59,7 @@ each has to be turned off explicitly. A key that is merely absent from our
 | Subsystem | Default | Here | Why |
 |---|---|---|---|
 | `bar.default` | `enabled = true` | off | Waybar owns the bar; a second bar claims the same layer edges |
-| `lockscreen` (`enabled`, `lock_before_suspend`) | both `true` | both off | `nixos/home.nix:697` locks manually only, deliberately (no idle lock, no DPMS listener). `lock_before_suspend` would add a second lock path |
+| `lockscreen` (`enabled`, `lock_before_suspend`) | both `true` | both off | `nixos/home.nix:699-702` locks manually only, deliberately (no idle lock, no DPMS listener). `lock_before_suspend` would add a second, suspend-triggered lock path |
 | `wallpaper` | `true` | off | hyprpaper is started by `theme.nix` with the themed config; Noctalia would repaint over it |
 | `desktop_widgets` | `true` | off | eww owns the desktop surface |
 | `osd` | `true` | off | Noctalia would only show it for its own volume/brightness commands; the keys call `pamixer` directly, and voxtype already owns a native OSD at bottom-centre |
@@ -75,8 +76,8 @@ each has to be turned off explicitly. A key that is merely absent from our
 | `shell.offline_mode` | false | `true` | No network calls for weather/wallpaper/marketplace |
 | `theme.templates.*` | both `true` | both off | See below — a template would append to the Hyprland config, which is a read-only HM symlink |
 | `plugins.auto_update` | `"all"` | `"none"` | Updates would rewrite the store-provided plugin set at runtime; valid enum: `all`, `official`, `none` |
-| `plugins.enabled` | — | `[]` | No plugins |
-| `control_center` other tabs | visible | hidden | The panel exists only to show notifications: `sidebar = "compact"`, `width = 600`, `show_session_button = false`, and `hidden_tabs` hides media, audio, monitor, system, network, bluetooth, weather, calendar, screen-time and power |
+| `plugins.enabled`, `plugins.source` | `[]`, default git repos (`official`, `community`) | `[]`, `[]` | No plugins and no upstream git plugin repos (`shell.offline_mode = true` only blocks HTTP, not git fetches; explicit `source = []` stops Noctalia from seeding default repos) |
+| `control_center` other tabs | visible | hidden (except Home) | The panel exists only to show notifications: `sidebar = "compact"`, `width = 600`, `show_session_button = false`, and `hidden_tabs` hides media, audio, monitor, system, network, bluetooth, weather, calendar, screen-time and power (Noctalia 5.6.0 does not allow hiding the Home tab) |
 
 The Control Center is `floating` at `center` on the `overlay` layer
 (`shell.panel.control_center_placement/position/floating_layer`). With the bar off there
@@ -113,13 +114,15 @@ appends `require("noctalia").apply_theme()` to `~/.config/hypr/hyprland.lua`, an
 path is a home-manager store symlink — the write fails, and if it ever succeeded it
 would give Noctalia and `theme.nix` two writers for one file.
 
-`theme.mode` starts at `dark` (`source = "custom"`, `custom_palette = "Catppuccin"`), but
-`theme-switch` still owns the mode: it flips the state file, reloads its apps, and then
-calls `noctalia msg theme-mode-set <mode>` as one more best-effort reload.
+`theme.mode` defaults to `dark` in `config.toml` (`source = "custom"`,
+`custom_palette = "Catppuccin"`), while `theme-switch` remains the source of truth:
+`noctalia-sync-settings` (`ExecStartPre`) seeds `~/.local/state/noctalia/settings.toml`
+from `~/.local/state/theme/mode` before `noctalia` launches, and `theme-switch` updates
+a running daemon live with `noctalia msg theme-mode-set <mode>`.
 
 ### Notification baseline
 
-The toast surface mirrors the old dunst geometry, so nothing moves on screen:
+The toast surface loosely mirrors the old dunst geometry (width widens from 300 to 360 px):
 
 | Setting | Value | Was |
 |---|---|---|
@@ -133,30 +136,45 @@ The toast surface mirrors the old dunst geometry, so nothing moves on screen:
 | `newest_on_edge`, `collapse_on_dismiss`, `group_by_app` | `true` | dunst sorted by urgency (`sort = yes`) with no app grouping and no collapsed dismissals |
 | `keep_dismissed_in_history` | `true` | dunst kept history except where a rule set `history_ignore` |
 | `background_opacity` | `0.97` | — |
-| `layer` | `top` | — |
+| `layer` | `overlay` | dunst default (`overlay`; keeps alerts visible over fullscreen windows) |
 
 ### Filter chain
 
-First match wins, so the order is load-bearing and is pinned by `filter_order`:
+First match wins, so the order is load-bearing. Both `filter_order` and `filter` are
+derived from a single ordered `filterDefs` list so they cannot drift:
 
 | Order | Filter | Effect | Why here |
 |---|---|---|---|
-| 1 | `base-stations` | `match_content = "^LHB-"`: `show_toast = false`, `save_history = false` | Blueman announces every base-station connect/disconnect. This must precede the catch-alls or they toast it first |
-| 2 | `critical-bypass-dnd` | `allowed_urgencies = ["critical"]`, `show_toast = true`, `bypass_dnd = true` | UPS (`nixos/modules/nut-ups.nix`) and babysit failures must break through DND. Before the catch-all, or `silent-default` swallows them |
-| 3 | `silent-default` | `.*`, toast + history | Catch-all |
+| 1 | `base-stations` | `match_content = "^LHB-"`: `show_toast = false`, `save_history = false` | Blueman announces every base-station connect/disconnect. Must precede the catch-all or it gets toasted |
+| 2 | `ups` | `match_content = "^UPS$"`: `bypass_dnd = true`, `override_duration = 0` | `nixos/modules/nut-ups.nix` power/battery alerts break through DND and stay sticky until dismissed |
+| 3 | `babysit` | `match_content = "^BABYSIT:"`: `bypass_dnd = true`, `override_duration = 0` | Blocking alerts from `.claude/skills/babysit/SKILL.md` break through DND and stay sticky |
+| 4 | `silent-default` | `match_content = ".*"`: toast + history | Catch-all |
 
 Every filter sets `play_sound = false`. Noctalia's per-filter default is `true`, so
-without it both catch-alls would ping on every notification — dunst never did, because
-it had no sound configured.
+without it the catch-all would ping on every notification — dunst never did, because it
+had no sound configured.
+
+**Do not set `allowed_urgencies` on a catch-all filter.** In Noctalia 5.6.0
+(`src/notification/notification_filter.cpp`, `notification_manager.cpp:846-852`),
+`resolveNotificationFilter()` selects the first filter matching `match`/`match_content`
+without checking urgency, and `NotificationManager` then suppresses any non-matching
+urgency with `fullySuppress = true` (no fallthrough to later filters). A catch-all with
+`allowed_urgencies = ["critical"]` silently drops all `low` and `normal` notifications
+even when DND is off. Because Noctalia also applies a uniform 6 s default timeout
+(`kDefaultNotificationTimeout = 6000`) regardless of urgency, DND-bypass and sticky
+duration are scoped to explicit sender filters (`ups`, `babysit`); ad-hoc critical
+callers (`notify-send -u critical`) auto-dismiss after 6 s unless they pass `-t 0` or
+are added as a sender filter.
 
 ### Daemon exclusivity: assertion, not `mkForce`
 
-`services.noctalia-notifications` asserts `!config.services.dunst.enable`. `mkForce`
-would have "worked" too, but it would silently discard an explicit `services.dunst.enable
-= true` somewhere else in the tree, and the resulting failure (two processes claiming
-`org.freedesktop.Notifications`, the second one losing the name) appears at runtime as
-missing notifications. The assertion fails the build with a sentence that names the cause.
-`nixos/home.nix` therefore no longer sets `services.dunst` at all.
+`services.noctalia-notifications` asserts both `!config.services.dunst.enable` and
+`!config.services.swaync.enable`. `mkForce` would have "worked" too, but it would
+silently discard an explicit enable somewhere else in the tree, and the resulting
+failure (two processes claiming `org.freedesktop.Notifications`, the second one losing
+the name) appears at runtime as missing notifications. The assertions fail the build
+with a sentence that names the cause. `nixos/home.nix` therefore no longer sets
+`services.dunst` at all.
 
 The daemon enforces single-instance itself with `flock` on
 `$XDG_RUNTIME_DIR/noctalia-$WAYLAND_DISPLAY.lock`, so a stray manual start exits instead
@@ -177,29 +195,39 @@ Noctalia merges, in order: built-in defaults → `/etc/xdg` → `~/.config/nocta
 → `~/.local/state/noctalia/settings.toml`. The last one wins, and it is written by the
 running shell.
 
-Our declarative file lands at `~/.config/noctalia/config.toml`, so anything the Settings
-GUI changes (and anything `noctalia msg` persists) overrides the module. That is
-intended for exactly one key: `theme.mode`, which `theme-switch` moves with
-`noctalia msg theme-mode-set`. Pointing `settings.toml` at `/dev/null` — the usual trick
-for pinning a mutable config — would break the runtime light/dark toggle, so it stays
-writable. If other keys drift, delete `~/.local/state/noctalia/settings.toml` and run
-`theme-switch refresh`.
+Our declarative file lands at `~/.config/noctalia/config.toml`, while `theme-switch`
+persists `[theme].mode` into `settings.toml` at runtime via
+`noctalia msg theme-mode-set`. Pointing `settings.toml` at `/dev/null` would break live
+mode toggling; leaving it unmanaged would both start in `dark` mode on a `light`-mode
+boot (because `home.activation.themeRefresh` runs before `noctalia.service` starts) and
+let accidental Settings GUI or CLI edits override pinned keys (like `lockscreen.*` or
+`plugins.*`) across restarts.
 
-The generated `config.toml` is built with home-manager's `checkConfig = true`, which runs
-`noctalia config validate` at build time; a bad key fails the build instead of the
-session.
+`systemd.user.services.noctalia.Service.ExecStartPre` therefore runs
+`noctalia-sync-settings`, which reads `~/.local/state/theme/mode` (defaulting to `dark`)
+and atomically rewrites `~/.local/state/noctalia/settings.toml` (mode `0600`) to contain
+only `[theme]\nmode = "<mode>"` before Noctalia launches. Every daemon start and HM
+rebuild (`X-Restart-Triggers`) boots directly in the active theme and wipes any non-theme
+drift.
+
+Upstream Home Manager sets `programs.noctalia.checkConfig = true` by default, which runs
+`noctalia config validate` at build time. Note a Noctalia 5.6.0 caveat:
+`noctalia config validate` exits non-zero **only on TOML syntax errors**; unknown
+sections/keys, wrong types, and invalid enum values print warnings and still exit `0`.
+Check the validator's text output for `warning` (and diff `noctalia config export full`)
+when editing settings or upgrading Noctalia.
 
 ### Hyprland layer rules
 
-Two `hl.layer_rule` blocks match `^noctalia-(notification|panel)$`: `no_anim = true`, and
-blur with `ignore_alpha = 0.5` + `blur_popups = true`. They are declared as
+One `hl.layer_rule` block matches `^noctalia-(notification|panel)$` with `no_anim = true`,
+`blur = true`, `blur_popups = true`, and `ignore_alpha = 0.5`. It is declared via
 `wayland.windowManager.hyprland.settings.layer_rule`, which the HM module turns into
 `hl.layer_rule(...)` in the generated `hyprland.lua`.
 
 Note that the pre-existing layer rule at `nixos/home.nix:370` (`"blur,waybar"`,
 `"ignorezero,waybar"`) sits inside `settings.config`, i.e. it is emitted as
 `hl.config({ layerrule = [...] })` — a config key Hyprland 0.57 does not have, so it is
-probably inert. That is pre-existing and unrelated; the new rules use the correct API.
+probably inert. That is pre-existing and unrelated; the new rule uses the correct API.
 
 ### No waybar unread-count module
 
@@ -231,7 +259,8 @@ longer symlinked into `~/.config`.
 Facts that matter when debugging the Notifications tab:
 
 - Encrypted at rest in `~/.local/state/noctalia/notification_history.enc` (mode `0600`),
-  with 96 px WebP previews in `notification_history_assets/` (mode `0700`).
+  with AEAD-encrypted 96 px WebP/RGBA previews (`.webp.enc`/`.rgba.enc`) in
+  `notification_history_assets/` (mode `0700`).
 - Hard cap of **100 entries**. Upstream constant
   `kNotificationHistoryMaxEntries = 100` (`src/notification/notification_history_store.h:12`);
   not documented in the user docs.
@@ -242,6 +271,8 @@ Facts that matter when debugging the Notifications tab:
   on unlock/retry.
 - Opening the Notifications tab marks history seen and clears the unread marker.
 - Dismissing a toast keeps it in history and unread (`keep_dismissed_in_history = true`).
+- `Urgency::Low` and transient notifications are unconditionally excluded from history
+  (`shouldTrackHistory()` in `src/notification/notification_manager.cpp:78-80`).
 - **DND is not persisted.** It is a bool in `NotificationManager`; after a restart or
   reboot DND is off again.
 
@@ -277,20 +308,21 @@ Ported without visible change:
 
 | dunst | Noctalia |
 |---|---|
-| top-right, `offset = 10x40`, 2 px frame, 360 px | `notification.position/offset_*/border_width/width` |
+| top-right, `offset = 10x40`, 2 px frame, `overlay` layer (300 -> 360 px) | `notification.position/offset_*/border_width/layer/width` |
 | `follow = keyboard` | `follow_focused_output = true` |
 | `notification_limit = 20` | `max_visible = 20` |
 | `[base-station-connect] skip_display/history_ignore` | `base-stations` filter |
 | urgency-silent notifications | `silent-default` + `play_sound = false` |
-| critical urgency breaking DND | `critical-bypass-dnd` (`allowed_urgencies`, `bypass_dnd`) |
+| UPS and babysit alerts breaking DND + staying sticky | `ups` (`^UPS$`) and `babysit` (`^BABYSIT:`) filters (`bypass_dnd = true`, `override_duration = 0`) |
 | actions (`-A key=Label`) | `show_actions = true` |
-| `-i`/`string:image-path:` icons | supported (`nixos/modules/omp-config.nix:846`) |
-| `dunstify` (`screenrec`) | unchanged, still a D-Bus client |
+| `-i`/`string:image-path:` icons | supported |
+| `dunstify` (`screenrec`), `notify-send` (`juush`) | `screenrec` unchanged (`dunstify` D-Bus client); `.config/juush.bash:87` switched to `notify-send` |
 
 Regressions, in rough order of how much they matter:
 
 | Lost | Consequence |
 |---|---|
+| generic `notify-send -u critical` timeout & DND | Noctalia defaults to 6 s regardless of urgency and cannot filter-select by urgency without dropping lower urgencies; known critical senders (`ups`, `babysit`) have explicit filters, while ad-hoc callers must pass `-t 0` for sticky toasts |
 | `x-dunst-stack-tag:hass-$1` (`nixos/modules/keybind.nix:18`) | Rapid HASS macro presses no longer coalesce into one toast; each press adds a toast and a history entry. Standard `replaces_id` is the only coalescing mechanism Noctalia has |
 | markup (`markup = full`, `format = "<b>%s</b>\n%b"`) | Noctalia does not advertise `body-markup`; standard HTML tags are stripped (`<br>` becomes a newline), so app-formatted bodies lose bold/links |
 | `screenrec`'s `-h int:value:<pct>` (`.config/screenrec.sh:25-34`) | No percentage bar; Noctalia's progress bar is the timeout countdown. `-r <id>` maps to plain `replaces_id` and should still morph one toast, but was not exercised live here |
@@ -298,13 +330,16 @@ Regressions, in rough order of how much they matter:
 | `mouse_right_click = close_all` | Right click dismisses one toast; use `noctalia msg notification-clear-active` for all |
 | per-urgency colours (`theme.nix` had peach critical background, mantle low) | Noctalia uses palette roles plus a red critical border; urgency no longer changes the background |
 | DND survives nothing | See history store: DND resets on restart |
-| unlimited history | Hard cap of 100 entries |
+| unlimited history | Hard cap of 100 entries (`Urgency::Low` and transient notifications excluded) |
 
 ## Persistent encrypted history (optional)
 
 `storageKeyFile = null` is enough on a normal desktop session. Provision the agenix
 secret only if history must also work while gnome-keyring is locked (or if you do not
 want the key in the login keyring at all). Six steps, from the repo root:
+
+The commands below use POSIX/bash syntax (from fish, run steps 1 and 3 inside `bash` or
+translate `KEY=...` / `unset KEY` to `set -l KEY ...` / `set -e KEY`):
 
 ```sh
 # 1. generate a 64-character lowercase hex key (32 bytes)
@@ -313,8 +348,9 @@ KEY=$(openssl rand -hex 32)
 # 2. add it to secrets/agenix-rules.nix
 #    "noctalia-notifications-key.age".publicKeys = [arch office];
 
-# 3. encrypt it
-(cd secrets && printf '%s' "$KEY" | agenix -e noctalia-notifications-key.age -i ~/.ssh/age)
+# 3. encrypt it (TMPDIR=/dev/shm keeps the plaintext temp file off the root fs)
+(cd secrets && printf '%s' "$KEY" | TMPDIR=/dev/shm agenix -e noctalia-notifications-key.age -i ~/.ssh/age)
+unset KEY
 
 # 4. declare the secret in nixos/shared-cli-configuration.nix
 #    age.secrets."noctalia-notifications-key" =
@@ -326,7 +362,8 @@ KEY=$(openssl rand -hex 32)
 #      };
 
 # 5. point the module at it — nixos/home.nix, services.noctalia-notifications
-#    storageKeyFile = "/run/agenix/noctalia-notifications-key";
+#    (gated to hosts that have the agenix secret, so secu stays on secret-service)
+#    storageKeyFile = lib.mkIf (builtins.elem compName ["arch" "office"]) "/run/agenix/noctalia-notifications-key";
 
 # 6. git add the .age file and rebuild
 ```
@@ -342,31 +379,36 @@ up the `.age` file, and treat rotating the key as a history reset
 
 ## Verification performed and post-switch smoke tests
 
-Checked on 2026-11-25 against pinned nixpkgs `93a9ed0a8660`, Noctalia 5.6.0 and Hyprland
+Checked on 2026-11-26 against pinned nixpkgs `93a9ed0a8660`, Noctalia 5.6.0 and Hyprland
 0.57.2. No `nixos-rebuild switch` was run and Noctalia was never started, so everything
 below is eval/build evidence, not runtime evidence.
 
 | Check | Result |
 |---|---|
-| `nixosConfigurations.{arch,office}.config.home-manager.users.john.services.noctalia-notifications.enable` | `true` |
-| `…services.dunst.enable` | `false` |
-| failing assertions (both hosts) | `[]` |
+| `nixosConfigurations.{arch,office,secu}.config.home-manager.users.john.services.noctalia-notifications.enable` | `true` |
+| `…services.dunst.enable`, `…services.swaync.enable` (all 3 hosts) | `false`, `false` |
+| failing assertions (all 3 hosts) | `0` |
 | stale `dunst` `xdg.configFile` entries | `[]` |
-| build of `xdg.configFile."noctalia/config.toml".source` with HM `checkConfig = true` | succeeded — build-time `noctalia config validate` passed |
-| `noctalia config validate` on that file alone, then on the directory with `Catppuccin.json` added | `✓ Config is valid` (0 errors, 0 warnings) |
+| build of `xdg.configFile."noctalia/config.toml".source` (upstream `checkConfig = true`) | succeeded |
+| `noctalia config validate` on rendered `config.toml` + `Catppuccin.json` | exact `✓ Config is valid` (0 errors, 0 warnings) |
+| `noctalia config export full` | `[notification]` shows `layer = "overlay"`, `filter_order = ["base-stations", "ups", "babysit", "silent-default"]`, `allowed_urgencies = []` on all filters, `bypass_dnd = true` + `override_duration = 0` on `ups`/`babysit`; `[plugins]` shows `source = []` |
+| `noctalia-sync-settings` against temp `XDG_STATE_HOME` | strips rogue `[lockscreen]`/`[plugins]` from `settings.toml`, writes mode `0600` `[theme]\nmode = "light"` (or `"dark"` when `theme/mode` is absent); `noctalia config export full` reflects synced mode and keeps `lockscreen.enabled = false` |
+| `storageKeyFile.type.check` | rejects `""` and `"relative/path"`, accepts `null` and `"/run/agenix/x"` |
 | `noctalia theme --theme-json <Catppuccin-palette.json> --both` | exit `0` |
-| `theme-switch` built through `pkgs.writeShellApplication` | succeeded (ShellCheck 0.11.0) |
+| `theme-switch` + `noctalia-sync-settings` built through `pkgs.writeShellApplication` | succeeded (ShellCheck) |
+| `bash -n .config/juush.bash` + grep `dunstify` | exit `0`, zero `dunstify` matches |
 | `alejandra --check nixos/modules/noctalia-notifications.nix nixos/modules/theme.nix` | pass (`nixos/home.nix` is not pre-formatted on HEAD, so its unrelated lines were left untouched) |
-| generated `hyprland.lua` | contains both binds (`SUPER + SHIFT + N`, `SUPER + CTRL + SHIFT + N`) and both `hl.layer_rule` blocks |
-| `systemd.user.services.noctalia` | `WantedBy`/`After graphical-session.target`, `TimeoutStopSec = 10`, `X-Restart-Triggers` on `noctalia-config.toml` and `Catppuccin-palette.json` |
+| generated `hyprland.lua` | contains both binds (`SUPER + SHIFT + N`, `SUPER + CTRL + SHIFT + N`) and one merged `hl.layer_rule` block |
+| `systemd.user.services.noctalia` | `WantedBy`/`After graphical-session.target`, `ExecStartPre = noctalia-sync-settings`, `TimeoutStopSec = 10`, `X-Restart-Triggers` on `noctalia-config.toml` and `Catppuccin-palette.json` |
 
 After switching, run these in the session:
 
 ```sh
 systemctl --user status noctalia            # active (running), no restart loop
-notify-send "smoke" "toast"                 # top-right, 360 px, 2 px border
+notify-send "smoke" "toast"                 # top-right, 360 px, 2 px border, overlay layer
 SUPER+SHIFT+N                               # Control Center opens on Notifications, floating, centred
-SUPER+CTRL+SHIFT+N                          # DND toggles; a normal toast is suppressed, a critical one is not
+SUPER+CTRL+SHIFT+N                          # DND toggles; normal toast suppressed, UPS alert breaks through + stays sticky:
+notify-send -u critical "UPS" "smoke test"  # exercises ups filter (bypass_dnd + override_duration = 0)
 theme-switch toggle                         # toasts/panel follow Latte <-> Mocha
 notify-send "test" "LHB-TEST should not appear"   # base-stations filter
 screenrec                                   # one toast morphs through the stages; check the progress area
@@ -388,22 +430,25 @@ flag by hand is **not** sufficient, because dunst's support was removed in three
    `systemd.user.services.dunst.Service.TimeoutStopSec = 10;`
 2. restore the two `dunst` symlinks (`dunst/dunstrc` in `home.nix`, the
    `dunstrc.d/50-theme.conf` drop-in in `theme.nix`)
-3. restore `dunstConf` and its `render` entry in `nixos/modules/theme.nix`, and
+3. restore `dunstConf`, its `render` entry, and `config.services.dunst.package` in
+   `theme-switch`'s `runtimeInputs` in `nixos/modules/theme.nix`, and restore
    `dunstctl reload` in `nixos/theme-switch.sh`
 
 ## Maintenance
 
-- `settings.toml` drift: delete `~/.local/state/noctalia/settings.toml`, then
-  `theme-switch refresh`. Keep the file writable — `theme.mode` lives there.
+- `settings.toml` drift: `systemctl --user restart noctalia` runs `noctalia-sync-settings`
+  (`ExecStartPre`), which rewrites `~/.local/state/noctalia/settings.toml` to only
+  `[theme]\nmode = "<mode>"` from `~/.local/state/theme/mode`. Keep the file writable —
+  `theme-switch` updates `theme.mode` there live.
 - On every Noctalia upgrade, run `noctalia config export full` and diff it against the
   baseline in the module: a subsystem that flips to `enabled = true` upstream is
   **not** disabled by our file, because our `config.toml` only sets keys it knows about.
-  Then run `noctalia config validate` (the build's `checkConfig = true` already does).
+  Then run `noctalia config validate` and verify **zero warnings** in its output
+  (upstream's `checkConfig = true` only fails builds on TOML syntax errors, not schema
+  warnings).
 - If a palette edit looks ignored, activation runs `theme-switch refresh`, which re-runs
   `noctalia msg theme-mode-set`; a running shell that ignored it can be restarted with
   `systemctl --user restart noctalia`.
-- Stale references left alone on purpose: `docs/basestation-standby.md:119`
-  (`dunstctl reload`) and `docs/cpu-priority.md:17,123` (dunst in the `app.slice` table).
 
 ## Open questions
 

@@ -95,7 +95,7 @@
     wl-clipboard-x11 # clipboard compatibility for some apps
     libnotify # notifications cli
     #swaynotificationcenter # DISABLED: gitlab.gnome.org 503 for blueprint-compiler — re-enable when upstream recovers
-    fuzzel # dmenu replacement for dunst actions
+    fuzzel # dmenu / launcher
     gammastep # redshift / f.lux / night light
     #spotifyd # play to spotify device if needed
 
@@ -707,7 +707,7 @@ in {
   services.noctalia-notifications = {
     enable = true;
     # Uncomment after provisioning the agenix secret (docs/noctalia-notifications.md):
-    # storageKeyFile = "/run/agenix/noctalia-notifications-key";
+    # storageKeyFile = lib.mkIf (builtins.elem compName ["arch" "office"]) "/run/agenix/noctalia-notifications-key";
   };
 
   # Aggressive stop timeouts for user services that block home-manager

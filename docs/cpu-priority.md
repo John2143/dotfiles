@@ -14,7 +14,7 @@ throttled; the numbers only decide who waits when every thread is runnable.
 |---|---|---|---|
 | 1 | `session-c1.scope` (default, untouched) | 100 | Hyprland, Xwayland, tmux, terminals |
 | — | `session.slice` (inside `user@1000.service`, default 100) | 100 | `xdg-desktop-portal*`, `dbus-broker`, permission store |
-| 2 | `app.slice` | 60 | waybar, hyprpaper, dunst, eww, TeamSpeak proxy, Steam client |
+| 2 | `app.slice` | 60 | waybar, hyprpaper, noctalia, eww, TeamSpeak proxy, Steam client |
 | 3 | `discord.slice` | 30 | Discord — empty in practice, see below |
 | 4 | `games.slice` | 10 | the game, firefox — empty in practice, see below |
 
@@ -120,7 +120,7 @@ The per-app tiers (3 and 4) are inert because of the self-adoption above. What
 this module actually delivers is **compositor above everything**, with firefox
 genuinely last (it is a plain `exec` and does not self-adopt). To get
 `compositor > services > discord/game`, invert the design instead of moving the
-apps: put the plain units (waybar, hyprpaper, dunst, eww, TeamSpeak proxy — they
+apps: put the plain units (waybar, hyprpaper, noctalia, eww, TeamSpeak proxy — they
 never self-adopt) in a `services.slice` weighted above `app.slice`, and let
 `app.slice` be the low catch-all that self-adopting apps land in. Portals need no
 moving: they are already in `session.slice` at 100. Separating Discord from the

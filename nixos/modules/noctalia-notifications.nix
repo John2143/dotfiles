@@ -11,7 +11,7 @@
 #   wallpaper       hyprpaper (theme.nix)     noctalia would repaint over the themed wallpaper
 #   lockscreen      hyprlock (theme.nix)      home.nix locks manually only; noctalia's
 #                                             lock_before_suspend would add a second,
-#                                             idle-triggered lock path
+#                                             suspend-triggered lock path
 #   clipboard       cliphist + wofi           noctalia history would duplicate cliphist's store
 #   osd             none (pamixer / voxtype)  avoids unrequested volume/media popups
 #   weather/system monitor/desktop widgets
@@ -28,6 +28,7 @@
   ...
 }: let
   cfg = config.services.noctalia-notifications;
+  paletteName = "Catppuccin";
 
   # Palette JSON role names -> Catppuccin keys from theme.nix (which stores bare
   # hex; noctalia wants CSS strings, hence the '#' in front).
@@ -53,6 +54,86 @@
     on_hover = c "text";
   };
 
+  # Rewrites ~/.local/state/noctalia/settings.toml before noctalia starts so it
+  # boots directly in the mode recorded by `theme-switch` (solving the first-boot
+  # light-mode race) and strips any accidental GUI/CLI drift in settings.toml
+  # (including security pins like lockscreen.* or plugins.*) on every restart.
+  noctalia-sync-settings = pkgs.writeShellApplication {
+    name = "noctalia-sync-settings";
+    runtimeInputs = [pkgs.coreutils];
+    text = ''
+      state_root="''${XDG_STATE_HOME:-${config.xdg.stateHome}}"
+      mode_file="$state_root/theme/mode"
+      state_dir="$state_root/noctalia"
+      settings_file="$state_dir/settings.toml"
+      mode="dark"
+      if [ -r "$mode_file" ] && [ "$(head -n1 "$mode_file")" = "light" ]; then
+        mode="light"
+      fi
+      install -d -m 0700 "$state_dir"
+      tmp="$(mktemp "$state_dir/.settings.toml.XXXXXX")"
+      chmod 0600 "$tmp"
+      printf '[theme]\nmode = "%s"\n' "$mode" > "$tmp"
+      mv -f "$tmp" "$settings_file"
+    '';
+  };
+
+  # Single ordered list so `filter_order` and `filter` cannot drift.
+  # First matching filter wins, so order is load-bearing:
+  #   base-stations   LHB-* standby chatter is dropped completely (no toast,
+  #                   no history); must come before the catch-all.
+  #   ups             nut-ups.nix power/battery alerts bypass DND and stay
+  #                   sticky (override_duration = 0).
+  #   babysit         babysit skill blocking alerts bypass DND and stay sticky.
+  #   silent-default  catch-all last.
+  # Never set `allowed_urgencies` on a catch-all filter: in Noctalia 5.6.0,
+  # resolveNotificationFilter() does not fall through on urgency mismatch — it
+  # sets fullySuppress = true and drops non-matching urgencies even with DND off.
+  # Every filter sets play_sound = false because Noctalia's per-filter default
+  # is true.
+  filterDefs = [
+    {
+      name = "base-stations";
+      enabled = true;
+      match = "";
+      match_content = "^LHB-";
+      show_toast = false;
+      save_history = false;
+      play_sound = false;
+    }
+    {
+      name = "ups";
+      enabled = true;
+      match = "";
+      match_content = "^UPS$";
+      show_toast = true;
+      save_history = true;
+      play_sound = false;
+      bypass_dnd = true;
+      override_duration = 0;
+    }
+    {
+      name = "babysit";
+      enabled = true;
+      match = "";
+      match_content = "^BABYSIT:";
+      show_toast = true;
+      save_history = true;
+      play_sound = false;
+      bypass_dnd = true;
+      override_duration = 0;
+    }
+    {
+      name = "silent-default";
+      enabled = true;
+      match = "";
+      match_content = ".*";
+      show_toast = true;
+      save_history = true;
+      play_sound = false;
+    }
+  ];
+
   baseSettings = {
     # `null` keeps the master key in the Secret Service (gnome-keyring), which
     # is what a logged-in session has. Set it to
@@ -70,11 +151,12 @@
       };
 
     theme = {
-      # Starting mode; `theme-switch` moves it at runtime with
-      # `noctalia msg theme-mode-set`.
+      # Default fallback mode; `noctalia-sync-settings` seeds settings.toml from
+      # `~/.local/state/theme/mode` on startup and `theme-switch` updates it
+      # live with `noctalia msg theme-mode-set`.
       mode = "dark";
       source = "custom";
-      custom_palette = "Catppuccin";
+      custom_palette = paletteName;
       templates = {
         builtin_ids = [];
         community_ids = [];
@@ -101,6 +183,7 @@
     plugins = {
       auto_update = "none";
       enabled = [];
+      source = [];
     };
 
     shell = {
@@ -144,7 +227,7 @@
       show_actions = true;
       show_progress_bar = true;
       position = "top_right";
-      layer = "top";
+      layer = "overlay";
       width = 360;
       background_opacity = 0.97;
       border = true;
@@ -160,58 +243,18 @@
       max_visible = 20;
       history_retention_hours = cfg.historyRetentionHours;
 
-      # First matching filter wins, so order is load-bearing:
-      #   base-stations        LHB-* standby chatter is dropped to history only;
-      #                        it must be first or a catch-all would toast it.
-      #   critical-bypass-dnd  before silent-default, otherwise critical alerts
-      #                        would fall into the catch-all and stop bypassing DND.
-      #   silent-default       catch-all last.
-      # Every filter sets play_sound = false because noctalia's per-filter default
-      # is true: without it both catch-alls would ping on every notification,
-      # which dunst did not do (theme-switch reloads dunstctl-style silence).
-      filter_order = [
-        "base-stations"
-        "critical-bypass-dnd"
-        "silent-default"
-      ];
-      filter = {
-        base-stations = {
-          enabled = true;
-          match = "";
-          match_content = "^LHB-";
-          show_toast = false;
-          save_history = false;
-          play_sound = false;
-        };
-        critical-bypass-dnd = {
-          enabled = true;
-          match = "";
-          match_content = ".*";
-          allowed_urgencies = ["critical"];
-          show_toast = true;
-          save_history = true;
-          play_sound = false;
-          bypass_dnd = true;
-        };
-        silent-default = {
-          enabled = true;
-          match = "";
-          match_content = ".*";
-          show_toast = true;
-          save_history = true;
-          play_sound = false;
-        };
-      };
+      filter_order = map (f: f.name) filterDefs;
+      filter = builtins.listToAttrs (map (f: lib.nameValuePair f.name (removeAttrs f ["name"])) filterDefs);
     };
   };
 in {
+  imports = [./theme.nix];
+
   options.services.noctalia-notifications = {
     enable = lib.mkEnableOption "Noctalia as the Wayland notification daemon (toasts + Control Center notifications tab only)";
 
-    package = lib.mkPackageOption pkgs "noctalia" {};
-
     storageKeyFile = lib.mkOption {
-      type = lib.types.nullOr lib.types.str;
+      type = lib.types.nullOr (lib.types.strMatching "/.+");
       default = null;
       example = "/run/agenix/noctalia-notifications-key";
       description = ''
@@ -225,16 +268,7 @@ in {
     historyRetentionHours = lib.mkOption {
       type = lib.types.ints.between 0 8760;
       default = 0;
-      description = "Delete stored notification history older than this many hours; 0 keeps it indefinitely.";
-    };
-
-    extraSettings = lib.mkOption {
-      type = lib.types.attrs;
-      default = {};
-      description = ''
-        Extra noctalia `config.toml` settings, recursively merged on top of this
-        module's notification-layer baseline (later wins per key).
-      '';
+      description = "Delete stored notification history older than this many hours; 0 keeps notification bodies (potentially including OTPs/reset links) indefinitely up to Noctalia's 100-entry hard cap.";
     };
   };
 
@@ -244,51 +278,50 @@ in {
         assertion = !config.services.dunst.enable;
         message = "services.noctalia-notifications cannot be enabled while services.dunst.enable is true: only one process may own org.freedesktop.Notifications on Wayland.";
       }
+      {
+        assertion = !config.services.swaync.enable;
+        message = "services.noctalia-notifications cannot be enabled alongside services.swaync (both claim org.freedesktop.Notifications)";
+      }
     ];
 
     programs.noctalia = {
       enable = true;
-      package = cfg.package;
       systemd.enable = true;
-      checkConfig = true;
+      # checkConfig defaults to true upstream (validates TOML syntax at build time).
 
       # Palette JSON format 2: role names as keys, plus `base` so the picker
       # groups custom and built-in Catppuccin together. No `terminal` block —
       # alacritty is themed by theme.nix and templates are disabled.
-      customPalettes.Catppuccin = {
+      customPalettes.${paletteName} = {
         version = 2;
-        base = "Catppuccin";
+        base = paletteName;
         dark = paletteFor "dark";
         light = paletteFor "light";
       };
 
-      # Rendered to ~/.config/noctalia/config.toml. `theme-switch` calls
-      # `noctalia msg theme-mode-set`, which persists `[theme].mode` into
-      # `settings.toml` at runtime — so never point that file at /dev/null: the
-      # mode toggle would have nowhere to write and the two would disagree about
-      # the current mode. If the shell rewrites config.toml in place, the next
-      # home-manager activation restores the declarative copy.
-      settings = lib.recursiveUpdate baseSettings cfg.extraSettings;
+      # Rendered to ~/.config/noctalia/config.toml. Assigned directly (never via
+      # lib.mkDefault, which would drop the whole attrset under types.oneOf) so
+      # additional keys merge cleanly while overriding pinned security keys
+      # requires an explicit lib.mkForce.
+      # `theme-switch` calls `noctalia msg theme-mode-set`, persisting `[theme].mode`
+      # into settings.toml at runtime; `noctalia-sync-settings` resets settings.toml
+      # to just `[theme].mode` on every daemon start.
+      settings = baseSettings;
     };
 
-    systemd.user.services.noctalia.Service.TimeoutStopSec = 10;
+    systemd.user.services.noctalia.Service = {
+      ExecStartPre = ["${lib.getExe noctalia-sync-settings}"];
+      TimeoutStopSec = 10;
+    };
 
     wayland.windowManager.hyprland.settings.layer_rule = [
       {
-        name = "noctalia-notification-no-anim";
-        match = {
-          namespace = "^noctalia-(notification|panel)$";
-        };
+        name = "noctalia-notification";
+        match.namespace = "^noctalia-(notification|panel)$";
         no_anim = true;
-      }
-      {
-        name = "noctalia-notification-blur";
-        match = {
-          namespace = "^noctalia-(notification|panel)$";
-        };
-        ignore_alpha = 0.5;
         blur = true;
         blur_popups = true;
+        ignore_alpha = 0.5;
       }
     ];
   };

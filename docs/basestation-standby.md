@@ -104,8 +104,12 @@ Blueman's `ConnectionNotifier` applet plugin raises a notification for every dev
 `Connected` property changes — there is no per-device filter in it. Left alone, the 30-minute
 leg means four popups an hour (connect and disconnect, two stations).
 
-The fix is at the daemon, not in Blueman: a dunst rule keyed on the station name. It drops
-only `LHB-*`, so phones, tablets and headphones keep their notifications.
+The fix is at the daemon, not in Blueman: a filter keyed on the station name. It drops
+only `LHB-*`, so phones, tablets and headphones keep their notifications. On the
+Noctalia notification branch (`agent-n/noctalia-notifications`), `services.dunst` is
+replaced by the `base-stations` filter (`match_content = "^LHB-"`, `show_toast = false`,
+`save_history = false`) in `nixos/modules/noctalia-notifications.nix`; the legacy dunst
+rule below is retained for reference:
 
 ```ini
 # .config/dunst/dunstrc
