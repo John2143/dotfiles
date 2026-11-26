@@ -128,6 +128,14 @@
   services.macbookLink.interfaces = ["eno1" "enp7s0" "enp2s0f1"];
   networking.networkmanager.enable = true; # Easiest to use and most distros use this by default.
 
+  # No tailnet subnet route from this desktop. k3s-server.nix advertises the LAN
+  # and MetalLB subnets from every k3s server, and headscale makes the online,
+  # approved router with the lowest node ID the primary on each restart. arch is
+  # node 1, so it kept winning that election, and a host-level exit node on arch
+  # then cut the rest of the tailnet off from both subnets. closet is the
+  # primary, nas the standby; arch is not a router.
+  services.tailscale.extraSetFlags = lib.mkForce [];
+
   # mDNS on the stable links only. Left to itself avahi joins every interface,
   # including each k3s pod's ephemeral veth pair; the pod churn makes it
   # re-probe the host name, and five conflicts on 2026-11-19 left it calling
