@@ -33,7 +33,7 @@ New composition: `[bar.default]` in `nixos/modules/noctalia.nix` with
 
 ### 1.1 Left zone
 
-`start = ["workspaces" "newworkspace"] ++ optional bluetooth ++ ["active_window"]`
+`start = ["workspaces" "newworkspace"] ++ optional ["bluetooth"] ++ ["active_window" "media_custom"]`
 
 | Old module (line) | Renders | New target | Config / entry | Behaviour delta |
 |---|---|---|---|---|
@@ -44,15 +44,19 @@ New composition: `[bar.default]` in `nixos/modules/noctalia.nix` with
 
 ### 1.2 Center zone
 
-`center = ["media_custom"]`
+`center = []`
+
+The zone is empty: media moved to the end of `start` (§1.1), because a centred
+widget is positioned independently of its neighbours, so a long title ran
+underneath the end section.
 
 | Old module (line) | Renders | New target | Config / entry | Behaviour delta |
 |---|---|---|---|---|
-| `custom/media` (`waybar.nix:553-570`) | `▶/⏸/♫ <Player>: <artist> - <title> <vol%>`; left play/pause, right Eww media-picker, back/forward track skip, middle focus player window, scroll ±5% volume | **`john/dotfiles-bar:media`** + **`john/dotfiles-bar:media-panel`** | `[widget.media_custom] type = "john/dotfiles-bar:media"`; its manifest actions keep `middle = "none"`, `back = "exec playerctl --all-players previous"`, `forward = "exec playerctl --all-players next"` | The multi-player/Firefox-tab tooltip list moves into the panel. Pin selection (`/tmp/media-player-selected`) survives. Back/forward are action-only because no Luau callback exists for thumb buttons. Scroll volume stays 5% (old `media-player volume 0.05`). Focus-player middle-click is preserved (`media-player focus`). |
+| `custom/media` (`waybar.nix:553-570`) | `▶/⏸/♫ <Player>: <artist> - <title> <vol%>`; left play/pause, right Eww media-picker, back/forward track skip, middle focus player window, scroll ±5% volume | **`john/dotfiles-bar:media`** + **`john/dotfiles-bar:media-panel`** | `[widget.media_custom] type = "john/dotfiles-bar:media"`; its manifest actions keep `middle = "none"`, `back = "exec playerctl --all-players previous"`, `forward = "exec playerctl --all-players next"` | The multi-player/Firefox-tab tooltip list moves into the panel. Pin selection (`/tmp/media-player-selected`) survives. Back/forward are action-only because no Luau callback exists for thumb buttons. Scroll volume stays 5% (old `media-player volume 0.05`). Focus-player middle-click is preserved (`media-player focus`). The capsule renders at the end of `start`, not in `center` (§1.2). |
 
 ### 1.3 Right zone
 
-`end = ["privacy" "screenrec"] ++ optional ["ipad"] ++ ["tailscale"] ++ optional ["deskflow"] ++ ["temporal" "voxtype" "group:hardware" "group:clock" "updates"] ++ optional arch ["thermostat"] ++ ["vast" "weather" "theme_toggle" "battery" "autoclicker" "tray" "volume" "notifications" "control-center"]`
+`end = ["privacy" "screenrec"] ++ optional ["ipad"] ++ ["tailscale"] ++ optional ["deskflow"] ++ ["voxtype" "group:hardware" "group:clock" "updates"] ++ optional arch ["thermostat"] ++ ["vast" "weather" "theme_toggle" "battery" "autoclicker" "tray" "volume" "notifications" "control-center"]`
 
 | Old module (line) | Renders | New target | Config / entry | Behaviour delta |
 |---|---|---|---|---|
@@ -60,13 +64,13 @@ New composition: `[bar.default]` in `nixos/modules/noctalia.nix` with
 | `custom/screenrec` (`waybar.nix:704-712`) | ●/⬆/⏳/✔/✖ + label; left toggle, right last | **`john/dotfiles-bar:screenrec`** | `[widget.screenrec] type = "john/dotfiles-bar:screenrec"`; `screenrec status --follow` stream | Same states/colors. Hides on the resting `{"text":"","class":"idle"}` object instead of showing an empty capsule. `--follow` stays a long-lived stream. |
 | `custom/ipad` (`waybar.nix:572-581`, isDesk) | `iPad <usb\|net> <●\|○>`; left recover, right create | **`john/dotfiles-bar:ipad`** | `[widget.ipad] type = "john/dotfiles-bar:ipad"`; `ipad-display status --waybar` | `colorForClass` applies the last class token, reproducing the old "link weight, state color" CSS. Helper installed only on `arch`/`office`. |
 | `custom/tailscale` (`waybar.nix:583-598`) | icon + state; left opened Eww panel, right wofi exit-node picker | **`john/dotfiles-bar:tailscale`** + **`john/dotfiles-bar:tailscale-panel`** | `[widget.tailscale]`; left `togglePanel("john/dotfiles-bar:tailscale-panel")`, right `tailscale-exit-node` | Panel replaces the Eww window; `tailscale-exit-node` now pipes into `noctalia dmenu` instead of `wofi --dmenu`. The bar's `connected`/`disconnected`/`needs-login` classes finally have colours (they had no CSS rules before). |
-| `custom/deskflow` (`waybar.nix:599-608`, isDesk) | `DF` summary pill; left start/stop; tooltip latency sparkline | **`john/deskflow:bar`** | `[widget.deskflow] type = "john/deskflow:bar"`; left on the server pill = `deskflow-ctl toggle`, left on a client pill opens `john/deskflow:panel`, middle refreshes, right = manifest `panel-toggle` | The single pill becomes a row: server pill + one pill per client (old `custom/deskflow-1..4`). Latency sparkline moves into the panel as per-client history. |
-| `custom/deskflow-1..4` (`waybar.nix:358-372`, generated) | per-client pill, empty when slot unused | **`john/deskflow:bar`** (client rows) | `max_slots` widget setting, default 4, range 1–8 | Slots are rendered in one composite widget via `barWidget.render(ui.row(...))`; clicking a client pill opens the panel. |
-| `custom/temporal` (`waybar.nix:610-618`) | `T`; left opens `https://temporal.ts.2143.me:8443` | **`john/dotfiles-bar:temporal`** | `[widget.temporal]`; `temporal-status` (TCP probe of `192.168.6.20:7233`) | Same probe and click. |
+| `custom/deskflow` (`waybar.nix:599-608`, isDesk) | `DF` summary pill; left start/stop; tooltip latency sparkline | **`john/deskflow:bar`** | `[widget.deskflow] type = "john/deskflow:bar"`; left = `deskflow-ctl toggle`, middle refreshes, right = manifest `panel-toggle` | Only the summary pill remains: no per-client pills on the bar. Its tooltip sparkline becomes a real graph per client in the panel (last two minutes, linear scale with an adaptive ceiling, `min / avg / max` caption). |
+| `custom/deskflow-1..4` (`waybar.nix:358-372`, generated) | per-client pill, empty when slot unused | **`john/deskflow:panel`** (client rows) | `deskflow-ctl clients` prints `[{name, ip, class, where, rtt, history}]`, `history` = milliseconds oldest-first (max 60 samples) | No bar counterpart, by decision: one panel row per connected client, each with a `ui.graph` over the last two minutes and a `min / avg / max` caption. The `max_slots` setting and its translation keys are gone; `poll_ms` (default 2000) remains. |
+| `custom/temporal` (`waybar.nix:610-618`) | `T`; left opens `https://temporal.ts.2143.me:8443` | **dropped** | — | Not ported by decision: `john/dotfiles-bar:temporal`, its `temporal.luau` entry, the `temporal_interval` setting and the `temporal-status` probe are removed. The pill was judged not useful enough to keep; the page is still reachable in a browser. |
 | `custom/voxtype` (`waybar.nix:620-626`) | recording/transcribing state, pulse animation | **`john/voxtype:bar`** | `[widget.voxtype]`; settings `hide_when_idle` (false), `show_label` (true); `voxtype status --follow --format json` | The stream restarts with a 15 s backoff and reconciles with a one-shot probe after 5 min of silence; Waybar simply died with the process. Click toggles recording. |
-| `cpu` (`waybar.nix:643-652`) | usage %, warning 70 / critical 90; left btop scratchpad | **native** `sysmon` (`hw_cpu`, member of the hardware capsule group) | `[widget.hw_cpu] type = "sysmon"`, `stat = "cpu_usage"`, `actions.left = "exec toggle-btop"` | The btop scratchpad is **kept** (`toggle-btop`). Thresholds are global under `[system.monitor]`. |
-| `memory` (`waybar.nix:654-662`) | used GB | **native** `sysmon` (`hw_ram`) | `[widget.hw_ram] stat = "ram_used"`, `actions.left = "exec toggle-btop"` | `{used}G` becomes the sysmon value with units. |
-| `temperature` (`waybar.nix:664-675`) | package temperature; hwmon path `coretemp.0`, critical 90 | **native** `sysmon` (`hw_temp`) | `[widget.hw_temp] stat = "cpu_temp"`, `actions.left = "exec toggle-btop"` | Sensor selection is automatic; `[system.monitor] cpu_temp_sensor_path` can pin a hwmon file. |
+| `cpu` (`waybar.nix:643-652`) | usage %, warning 70 / critical 90; left btop scratchpad | **native** `sysmon` (`hw_cpu`, member of the hardware capsule group) | `[widget.hw_cpu] type = "sysmon"`, `stat = "cpu_usage"`, `actions.left = "panel-toggle control-center system"`, `actions.middle = "exec toggle-btop"` | The btop scratchpad is **kept** on middle-click; left opens the control-center system tab, the way the clock opens the calendar tab. Thresholds are global under `[system.monitor]`. |
+| `memory` (`waybar.nix:654-662`) | used GB | **native** `sysmon` (`hw_ram`) | `[widget.hw_ram] stat = "ram_used"`, `actions.left = "panel-toggle control-center system"`, `actions.middle = "exec toggle-btop"` | `{used}G` becomes the sysmon value with units. Left = system tab, middle = btop, as on every hardware member. |
+| `temperature` (`waybar.nix:664-675`) | package temperature; hwmon path `coretemp.0`, critical 90 | **native** `sysmon` (`hw_temp`) | `[widget.hw_temp] stat = "cpu_temp"`, `actions.left = "panel-toggle control-center system"`, `actions.middle = "exec toggle-btop"` | Sensor selection is automatic; `[system.monitor] cpu_temp_sensor_path` can pin a hwmon file. Left = system tab, middle = btop. |
 | `clock` (`waybar.nix:538-544`) | `{:%H:%M:%S}`; left alacritty `cal -3`, right copies the date | **native** `clock` | `[widget.clock] format = "{:%H:%M:%S}"`, `actions.left = "panel-toggle control-center calendar"`, `actions.middle = "exec toggle-calendar"`, `actions.right = "exec copy-date"` | Seconds preserved. Calendar is both a control-center tab (left) and the old Alacritty scratchpad (middle). |
 | `custom/clock-date` (`waybar.nix:546-551`) | `%A, %e %B %Y`, revealed by the clock drawer; right copy | **native** second `clock` (`clock_date`) in the clock capsule group; **kept** `copy-date` | `[widget.clock_date] type = "clock"`, `format = "{:%A, %e %B %Y}"`, `actions.right = "exec copy-date"` | Drawer reveal becomes an accordion group expansion. |
 | `custom/updates` (`waybar.nix:677-684`) | `󰚰` when `~/dotfiles/flake.lock` is older than 24 h; left runs `nix flake update` in Alacritty | **`john/dotfiles-bar:updates`** | `[widget.updates]`; click runs `nix flake update` in a terminal | Terminal chosen by `noctalia.runInTerminal` (`$TERMINAL`, else first on PATH); pin it with the plugin's `terminal` setting. |
@@ -89,7 +93,7 @@ DND) and `control-center` (left opens the home tab). Waybar had no equivalent.
 | Old group (line) | Renders | New target | Delta |
 |---|---|---|---|
 | `group/clock` (`waybar.nix:524-536`) with `clock` + `custom/clock-date` | hover drawer, 300 ms, `children-class = hidden-ck` | **native** capsule group `clock` with `members = ["clock" "clock_date"]`, `accordion = true`, `accordion_direction = "start"` | Expansion is Noctalia's accordion chip; no 300 ms `children-class` transition or per-group CSS. |
-| `group/hardware` (`waybar.nix:628-641`) with `cpu`/`memory`/`temperature` | hover drawer, 300 ms, `children-class = hidden-hw` | **native** capsule group `hardware` with `members = ["hw_cpu" "hw_ram" "hw_temp"]`, `accordion = true` | Same three values; btop is still reachable by left-clicking any member. |
+| `group/hardware` (`waybar.nix:628-641`) with `cpu`/`memory`/`temperature` | hover drawer, 300 ms, `children-class = hidden-hw` | **native** capsule group `hardware` with `members = ["hw_cpu" "hw_ram" "hw_temp"] ++ optional isDesk ["hw_gpu" "hw_vram" "hw_gpu_temp"]`, `accordion = true`, `accordion_direction = "start"` | Same three values on every host; `arch`/`office` add `gpu_usage`, `gpu_vram_used` and `gpu_temp`. GPU probes are refcounted per series in 5.6.0, so without a GPU widget the control-center system tab was their only consumer and its card lagged; a collapsed accordion shows only its first member, so the extra members cost no width. btop is on middle-click (left opens the system tab). |
 
 ---
 
@@ -261,8 +265,7 @@ first-party widget/panel implements `onIpc(event)` with `refresh` (deskflow adds
 | `tailscale-status` | `john/dotfiles-bar:tailscale` |
 | `tailscale-panel-data` | tailscale panel |
 | `tailscale-toggle`, `tailscale-exit-node` | tailscale panel connect/exit-node, bar right-click |
-| `deskflow-ctl` | `john/deskflow:bar`, `john/deskflow:panel`, isDesk only |
-| `temporal-status` | `john/dotfiles-bar:temporal` |
+| `deskflow-ctl` | `john/deskflow:bar` (`status`, `toggle`), `john/deskflow:panel` (`clients` array with per-client latency history); isDesk only |
 | `nix-update-status` | `john/dotfiles-bar:updates` |
 | `copy-date` | clock/date widget right-click |
 | `vast-waybar-status` (legacy path) | `john/dotfiles-bar:vast` (`/tmp/vast-waybar-status.json` cache) |
@@ -289,3 +292,5 @@ first-party widget/panel implements `onIpc(event)` with `refresh` (deskflow adds
 9. Waybar's two-stage battery states 30/15 — single Noctalia warning threshold.
 10. Waybar's `reload_style_on_change` / `SIGUSR2` live stylesheet reload — no
     stylesheet; theme changes come through `theme-mode-set`.
+11. `custom/temporal` pill — dropped, not ported: the glyph, the click-through
+    and the `temporal-status` TCP probe are gone.

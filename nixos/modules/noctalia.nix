@@ -290,9 +290,12 @@
       start =
         ["workspaces" "newworkspace"]
         ++ (lib.optionals (osConfig.hardware.bluetooth.enable or false) ["bluetooth"])
-        ++ ["active_window"];
+        # Media sits at the end of the start section rather than in the centre:
+        # a centred widget is positioned independently of its neighbours, so a
+        # long title ran underneath the end section.
+        ++ ["active_window" "media_custom"];
 
-      center = ["media_custom"];
+      center = [];
 
       end =
         ["privacy" "screenrec"]
@@ -300,7 +303,6 @@
         ++ ["tailscale"]
         ++ (lib.optionals isDesk ["deskflow"])
         ++ [
-          "temporal"
           "voxtype"
           "group:hardware"
           "group:clock"
@@ -322,7 +324,10 @@
       capsule_group = [
         {
           id = "hardware";
-          members = ["hw_cpu" "hw_ram" "hw_temp"];
+          # hw_cpu stays first: a collapsed accordion shows only its first member.
+          members =
+            ["hw_cpu" "hw_ram" "hw_temp"]
+            ++ lib.optionals isDesk ["hw_gpu" "hw_vram" "hw_gpu_temp"];
           accordion = true;
           accordion_direction = "start";
         }
@@ -371,26 +376,58 @@
 
       deskflow.type = "john/deskflow:bar";
 
-      temporal.type = "john/dotfiles-bar:temporal";
-
       voxtype.type = "john/voxtype:bar";
 
+      # Left opens Noctalia's own system monitor (control-center "system" tab),
+      # the same way the clock opens the calendar tab; btop stays on middle.
       hw_cpu = {
         type = "sysmon";
         stat = "cpu_usage";
-        actions.left = "exec toggle-btop";
+        actions.left = "panel-toggle control-center system";
+        actions.middle = "exec toggle-btop";
       };
 
       hw_ram = {
         type = "sysmon";
         stat = "ram_used";
-        actions.left = "exec toggle-btop";
+        actions.left = "panel-toggle control-center system";
+        actions.middle = "exec toggle-btop";
       };
 
       hw_temp = {
         type = "sysmon";
         stat = "cpu_temp";
-        actions.left = "exec toggle-btop";
+        actions.left = "panel-toggle control-center system";
+        actions.middle = "exec toggle-btop";
+      };
+
+      # Placed for their side effect as much as for display. GPU probes are
+      # refcounted per series and only run while a consumer holds a reference
+      # (system_monitor_service.cpp), so with no GPU widget on the bar the
+      # control-center system tab was the only consumer: its GPU card appeared a
+      # few seconds after opening and its history started empty every time. One
+      # widget per series the tab plots keeps the sampler and its history alive.
+      # Desk hosts only: an open NVML/ROCm session can hold a hybrid laptop's
+      # discrete GPU awake.
+      hw_gpu = {
+        type = "sysmon";
+        stat = "gpu_usage";
+        actions.left = "panel-toggle control-center system";
+        actions.middle = "exec toggle-btop";
+      };
+
+      hw_vram = {
+        type = "sysmon";
+        stat = "gpu_vram_used";
+        actions.left = "panel-toggle control-center system";
+        actions.middle = "exec toggle-btop";
+      };
+
+      hw_gpu_temp = {
+        type = "sysmon";
+        stat = "gpu_temp";
+        actions.left = "panel-toggle control-center system";
+        actions.middle = "exec toggle-btop";
       };
 
       clock = {

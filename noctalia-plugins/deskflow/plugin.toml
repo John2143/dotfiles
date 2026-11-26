@@ -5,7 +5,7 @@ plugin_api  = 43
 author      = "john"
 license     = "MIT"
 icon        = "devices"
-description = "Deskflow server status: latency and route per client, with a start/stop control."
+description = "Deskflow server status, with a latency graph per client in the panel and a start/stop control."
 tags        = ["deskflow", "kvm", "status", "network"]
 dependencies = ["deskflow-ctl"]
 
@@ -22,15 +22,6 @@ entry = "widget.luau"
   min             = 500
   max             = 30000
   step            = 500
-
-  [[widget.setting]]
-  key             = "max_slots"
-  type            = "int"
-  label_key       = "settings.max_slots.label"
-  description_key = "settings.max_slots.description"
-  default         = 4
-  min             = 1
-  max             = 8
 
   # Left stays unbound so onClick(): start/stop the server. Right opens the
   # detail panel, middle is freed for onMiddleClick() (refresh now) instead of

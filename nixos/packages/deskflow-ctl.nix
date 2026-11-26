@@ -6,9 +6,10 @@
 # touches the socket every few seconds, so that RTT stays current while the
 # pointer is idle.
 #
-# The server can serve several clients at once, so `status` summarises them and
-# `client N` reports the Nth one on its own — that is what the bar's per-client
-# slots run.
+# The server can serve several clients at once. `status` summarises them for the
+# bar pill; `clients` prints one JSON object per client — name, address, route
+# class, latency and the raw latency samples the panel graphs; `client N` keeps
+# reporting the Nth one on its own, as Waybar-shaped JSON.
 {
   lib,
   writeShellApplication,
@@ -42,8 +43,8 @@ writeShellApplication {
     hist_dir="$dir/clients"
     names="$dir/names"
     # The per-client pills the summary rendered on its last poll, one JSON
-    # object per line. Slots read this instead of re-running ss and the route
-    # lookups; a snapshot older than five seconds is ignored.
+    # object per line. `client N` reads this instead of re-running ss and the
+    # route lookups; a snapshot older than five seconds is ignored.
     slots_file="$dir/slots"
     snapshot_ttl=5
     # A peer's name comes from mDNS (avahi-resolve) or, on the tailnet, from
@@ -189,6 +190,50 @@ writeShellApplication {
           name=$(peer_name "$peer")
           printf '%s\t%s\t%s\t%s\t%s\n' "$name" "$rtt" "$kind" "$where" "$peer"
         done | sort -t $'\t' -k5,5 -V
+    }
+
+    history_json() {
+      # $1 = a client's history file. Prints the latency samples as a JSON array
+      # of milliseconds, oldest first. A sample taken before the socket had an
+      # RTT is a dash, and a graph point needs a number, so those are skipped.
+      local file=$1
+      if [ ! -f "$file" ]; then
+        printf '[]\n'
+        return 0
+      fi
+      awk '
+        BEGIN { printf "[" }
+        $2 ~ /^[0-9]/ { printf "%s%s", (n++ ? "," : ""), $2 }
+        END { print "]" }
+      ' "$file"
+    }
+
+    object_json() {
+      # $1 name, $2 rtt, $3 kind, $4 where, $5 ip — one client as the object
+      # `clients` prints, with the samples the panel graphs.
+      local name=$1 rtt=$2 kind=$3 where=$4 ip=$5 latency=null
+      case "$rtt" in
+        "" | -* | *[!0-9.]*) ;;
+        *) latency=$rtt ;;
+      esac
+      jq -nc --arg name "$name" --arg ip "$ip" --arg class "$kind" --arg where "$where" \
+        --argjson rtt "$latency" --argjson history "$(history_json "$(peer_file "$ip")")" \
+        '{name: $name, ip: $ip, class: $class, where: $where, rtt: $rtt, history: $history}'
+    }
+
+    list_clients() {
+      # Every connected client as JSON, in the same order as the slots:
+      #   [{ name, ip, class, where, rtt, history }, ...]
+      # `rtt` is null until the socket has one; `history` is milliseconds.
+      local rows name rtt kind where ip objects=""
+      lock
+      rows=$(clients)
+      sample_all "$rows"
+      while IFS=$'\t' read -r name rtt kind where ip; do
+        [ -n "$ip" ] || continue
+        objects+="$(object_json "$name" "$rtt" "$kind" "$where" "$ip")"$'\n'
+      done <<<"$rows"
+      printf '%s' "$objects" | jq -s '.'
     }
 
     sample_all() {
@@ -350,10 +395,11 @@ writeShellApplication {
 
     case "''${1:-status}" in
       status) status ;;
+      clients) list_clients ;;
       client) client "''${2:-}" ;;
       toggle) toggle ;;
       *)
-        printf 'usage: deskflow-ctl {status|client <slot>|toggle}\n' >&2
+        printf 'usage: deskflow-ctl {status|clients|client <slot>|toggle}\n' >&2
         exit 2
         ;;
     esac

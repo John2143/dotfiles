@@ -49,6 +49,7 @@ noctalia-plugins/
     plugin.toml
     widget.luau
     panel.luau
+    lib/deskflow.luau
     translations/en.json
   voxtype/
     plugin.toml
@@ -57,7 +58,7 @@ noctalia-plugins/
   dotfiles-bar/
     plugin.toml
     lib/waybar_json.luau
-    {media,screenrec,autoclicker,tailscale,ipad,temporal,thermostat,vast,updates}.luau
+    {media,screenrec,autoclicker,tailscale,ipad,thermostat,vast,updates}.luau
     {media_panel,tailscale_panel,autoclicker_panel}.luau
     translations/en.json
 ```
@@ -164,11 +165,19 @@ Rules:
 
 | Entry | Kind | File | Callbacks / actions |
 |---|---|---|---|
-| `bar` | widget | `widget.luau` | composite `ui.row`: server pill + one pill per client. Left on server pill (`onPrimaryClick`) = `deskflow-ctl toggle`; left on a client pill (`onClientClick`) opens the panel; middle (`onMiddleClick`) re-polls; right = manifest `panel-toggle`. Settings: `poll_ms` (default 2000, 500–30000), `max_slots` (default 4, 1–8). |
-| `panel` | panel | `panel.luau` | `onOpen`/`onToggle`/`onRefresh` poll; server start/stop; per-client route/address/latency rows. Reads the same `deskflow-ctl status` + `deskflow-ctl client N` JSON as the widget, and mirrors the widget's polls through `noctalia.state` (`state.set("deskflow", …)`). |
+| `bar` | widget | `widget.luau` | one summary pill for the server (`ui.row` + `ui.label` through `barWidget.render`, text `DF` before the first poll); no per-client pills. Left (`onPrimaryClick`) = `deskflow-ctl toggle` (start/stop); middle (`onMiddleClick`) = re-poll; right = manifest `panel-toggle`. Settings: `poll_ms` (default 2000, 500–30000). |
+| `panel` | panel | `panel.luau` | `onOpen`/`onToggle`/`onRefresh` poll; server start/stop; one row per client — transport pill, name + address, route, RTT, a `ui.graph` of that client's latency history (last two minutes, linear under an adaptive ceiling) and a `min / avg / max` caption with the ceiling. Fed by `deskflow-ctl status` + `deskflow-ctl clients`, and follows the widget's polls through `noctalia.state` (`state.set("deskflow", {summary, clients, error, updated_ms})`). |
+
+Both entries are thin: decoding, the class→role map, the graph series and the
+poller live in `lib/deskflow.luau`, required as
+`require("./lib/deskflow.luau")` from each entry. `deskflow-ctl clients` prints
+the client array `[{name, ip, class, where, rtt, history}]` where `history` is
+milliseconds, oldest first, at most 60 samples (one per 2 s poll). `poll_ms` is
+read in `widget.luau` only, because a widget-level setting is in scope only in
+the entry that declares it.
 
 `deskflow-ctl` and the widget are installed only on `arch`/`office`
-(`status-helpers.nix:625-628`); on other hosts the entry would poll a missing
+(`status-helpers.nix:611-614`); on other hosts the entry would poll a missing
 binary.
 
 ### 4.2 `john/voxtype`
@@ -184,7 +193,7 @@ without a line the widget reconciles with a one-shot
 
 ### 4.3 `john/dotfiles-bar`
 
-Nine widgets and three panels, all thin adapters over a helper binary that
+Eight widgets and three panels, all thin adapters over a helper binary that
 already prints Waybar JSON.
 
 | Entry | Kind | Helper / stream | Left | Right | Middle | Scroll |
@@ -194,7 +203,6 @@ already prints Waybar JSON.
 | `autoclicker` | widget | `autoclicker watch` (stream) | `autoclicker toggle` | open `autoclicker-panel` | `autoclicker cycle` | — |
 | `tailscale` | widget | `tailscale-status` (poll) | open `tailscale-panel` | `tailscale-exit-node` | — | — |
 | `ipad` | widget | `ipad-display status --waybar` (poll) | `ipad-display recover` | `ipad-display create` | — | — |
-| `temporal` | widget | `temporal-status` (poll) | `xdg-open https://temporal.ts.2143.me:8443` | — | — | — |
 | `thermostat` | widget | `hass-thermostat-status` (poll) | — (no click) | `hass-macro ac-toggle` | `hass-macro thermostat-toggle` | vertical → setpoint up/down |
 | `vast` | widget | `vast-waybar-status` (poll) | clear cache + re-poll | — | — | — |
 | `updates` | widget | `nix-update-status` (poll) | `nix flake update` in a terminal | — | — | — |
@@ -204,7 +212,7 @@ already prints Waybar JSON.
 
 Plugin-level settings (all `int` milliseconds, plus `terminal` string):
 `media_interval` 2000, `tailscale_interval` 20000, `ipad_interval` 5000,
-`temporal_interval` 30000, `thermostat_interval` 30000, `vast_interval` 60000,
+`thermostat_interval` 30000, `vast_interval` 60000,
 `updates_interval` 3600000, `terminal` `""`.
 
 Panels have no settings. `media-panel`, `tailscale-panel` and
@@ -292,7 +300,6 @@ noctalia msg plugin <author/plugin:entry> <target> <event> [payload]
 | `john/dotfiles-bar:autoclicker` | `refresh` (re-applies last object) |
 | `john/dotfiles-bar:tailscale` | `refresh` |
 | `john/dotfiles-bar:ipad` | `refresh` |
-| `john/dotfiles-bar:temporal` | `refresh` |
 | `john/dotfiles-bar:thermostat` | `refresh` |
 | `john/dotfiles-bar:vast` | `refresh` |
 | `john/dotfiles-bar:updates` | `refresh` |
@@ -312,7 +319,6 @@ noctalia msg plugin john/dotfiles-bar:screenrec all refresh
 noctalia msg plugin john/dotfiles-bar:autoclicker all refresh
 noctalia msg plugin john/dotfiles-bar:tailscale all refresh
 noctalia msg plugin john/dotfiles-bar:ipad all refresh
-noctalia msg plugin john/dotfiles-bar:temporal all refresh
 noctalia msg plugin john/dotfiles-bar:thermostat all refresh
 noctalia msg plugin john/dotfiles-bar:vast all refresh
 noctalia msg plugin john/dotfiles-bar:updates all refresh
@@ -362,9 +368,11 @@ in-process (the widgets do) rather than shelling out to `noctalia msg`.
 - `/tmp/vast-waybar-status.json` is the 55 s VAST cache; the widget deletes it
   on click.
 - `noctalia.state` is the in-memory per-plugin channel. Deskflow uses it to
-  push snapshots from the widget to the panel (`state.set("deskflow", …)` /
-  `state.watch`). It is cleared when the plugin stops, so the panel polls on
-  open.
+  push snapshots from the widget to the panel: the widget publishes
+  `{summary, clients, error, updated_ms}` under key `deskflow` after every poll
+  and the panel (`state.watch`, `applySnapshot`) only takes a snapshot newer
+  than the one it polled itself. It is cleared when the plugin stops, so the
+  panel polls on open.
 - Anything durable must go to `noctalia.pluginDataDir()` (owner-only, survives
   updates). None of these plugins currently persist anything.
 
@@ -447,6 +455,7 @@ journalctl --user -u noctalia -f    # plugin load errors and getConfig warnings
 |---|---|---|
 | Widget does nothing on middle click | built-in `middle` = open settings shadows `onMiddleClick` | add `middle = "none"` to `[widget.actions]` |
 | `getConfig` returns `nil` + warning | key not declared, or declared at plugin level while read as widget-level (or typo) | declare it in the right table; run `noctalia plugins lint` |
+| `noctalia plugins lint` reports `reads undeclared setting` for a shared `lib/` module | the linter attributes `noctalia.getConfig` to the file it is written in, and a widget-level setting is only in scope in that widget's entry file | read the setting in the entry file and pass the value into the lib (deskflow does this: `deskflow.clampPollMs(noctalia.getConfig("poll_ms"))`) |
 | Widget never updates after a helper action | no `refresh` IPC sent | add `refreshPlugin "<entry>"` to the helper |
 | Tooltip shows raw `<span>` text | Noctalia tooltips are plain text | strip markup in the helper |
 | Widget shows the empty capsule | `hideEmpty` not passed / resting class not listed | pass `true` or `{classes={"idle"}, empty=true}` |
