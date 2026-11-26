@@ -288,22 +288,23 @@
 
   theme-switch = pkgs.writeShellApplication {
     name = "theme-switch";
-    runtimeInputs = [
-      pkgs.coreutils
-      pkgs.util-linux # flock
-      pkgs.dconf
-      pkgs.jq
-      pkgs.gawk
-      pkgs.systemd
-      pkgs.tmux
-      config.wayland.windowManager.hyprland.finalPackage # hyprctl
-      config.programs.eww.package
-    ]
-    # Reload hook for whichever notification daemon this host runs.
-    ++ lib.optionals config.services.dunst.enable [config.services.dunst.package] # dunstctl
-    ++ lib.optionals (config.programs.quickshell.enable && config.programs.quickshell.package != null) [
-      config.programs.quickshell.package # qs
-    ];
+    runtimeInputs =
+      [
+        pkgs.coreutils
+        pkgs.util-linux # flock
+        pkgs.dconf
+        pkgs.jq
+        pkgs.gawk
+        pkgs.systemd
+        pkgs.tmux
+        config.wayland.windowManager.hyprland.finalPackage # hyprctl
+        config.programs.eww.package
+      ]
+      # Reload hook for whichever notification daemon this host runs.
+      ++ lib.optionals (config.custom.notificationDaemon == "dunst") [config.services.dunst.package] # dunstctl
+      ++ lib.optionals (config.custom.notificationDaemon == "quickshell" && config.programs.quickshell.package != null) [
+        config.programs.quickshell.package # qs
+      ];
     runtimeEnv = {
       THEME_ASSETS = "${assets}";
     };
@@ -338,7 +339,7 @@ in {
     "eww/theme.scss".source = config.lib.file.mkOutOfStoreSymlink "${stateDir}/current/eww.scss";
     # Only while dunst is the notification daemon; quickshell reads
     # `current/palette.json` itself (nixos/modules/quickshell-notifs.nix).
-    "dunst/dunstrc.d/50-theme.conf" = lib.mkIf config.services.dunst.enable {
+    "dunst/dunstrc.d/50-theme.conf" = lib.mkIf (config.custom.notificationDaemon == "dunst") {
       source = config.lib.file.mkOutOfStoreSymlink "${stateDir}/current/dunst.conf";
     };
   };

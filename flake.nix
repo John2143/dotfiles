@@ -168,12 +168,11 @@
     # Offline qmllint gate for the Quickshell notification config
     # (.config/quickshell/notifs). Builds nothing of the system: only
     # quickshell + qtdeclarative, both from cache.
-    checks.x86_64-linux.quickshell-notifs =
-      import ./nix/checks/quickshell-notifs.nix {
-        pkgs = nixpkgs.legacyPackages.${system};
-        quickshell = nixpkgs.legacyPackages.${system}.quickshell;
-        configDir = ./.config/quickshell/notifs;
-      };
+    checks.x86_64-linux.quickshell-notifs = import ./nix/checks/quickshell-notifs.nix {
+      pkgs = nixpkgs.legacyPackages.${system};
+      configDir = ./.config/quickshell/notifs;
+      themeFile = ./nixos/modules/theme.nix;
+    };
 
     nixosConfigurations =
       (mkHost {
