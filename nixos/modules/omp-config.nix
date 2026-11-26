@@ -5,7 +5,7 @@ let
   # travel with the skill. OMP reads the raw files as a native provider
   # (~/.omp/agent/skills/, priority 100); Claude Code reads a copy rewritten for
   # its own tool vocabulary and /name invocation — see
-  # nixos/scripts/claude-skills.py.
+  # nixos/scripts/convert-skills.py. agy gets its own copy: agy-config.nix.
   skillsDir = ../../.claude/skills;
   skillFiles = lib.filesystem.listFilesRecursive skillsDir;
   rel = file: lib.removePrefix (toString skillsDir + "/") (toString file);
@@ -15,7 +15,7 @@ let
   } ''
     cp -r ${skillsDir} $out
     chmod -R u+w $out
-    find $out -name SKILL.md -exec python3 ${../scripts/claude-skills.py} {} \;
+    find $out -name SKILL.md -exec python3 ${../scripts/convert-skills.py} {} \;
   '';
 
   linkSkillFiles = root: mkSource:
