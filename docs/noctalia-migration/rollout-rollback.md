@@ -119,15 +119,15 @@ compName != "arch"`, with coordinates in `[location]`.
 
 ---
 
-## 3. Post-switch verification (15 checks)
+## 3. Post-switch verification (16 checks)
 
 Run these in order. Each has a concrete expected result; a failure note points
 at the likely cause.
 
 | # | Check | Command / action | Expected |
 |---|---|---|---|
-| 1 | **Bar layout** | `noctalia msg status`; look at the top edge | `barVisible: true`; start = workspaces, `✚` newworkspace, optional bluetooth, active window; centre = media; end = privacy, screenrec, optional iPad, tailscale, optional Deskflow, temporal, voxtype, hardware capsule group (cpu/ram/temp), clock capsule group (clock/date), updates, optional thermostat, vast, weather, theme, battery, autoclicker, tray, volume, notifications, control-center. Plugin capsules render text, not blank; exactly one tray. |
-| 2 | **Deskflow toggle + panel** (arch/office) | Left-click the `DF` pill; right-click it | Left runs `deskflow-ctl toggle` and the pill changes class; right opens the Deskflow panel with one row per connected client, route/address and latency. `deskflow-ctl status` agrees with the pill. |
+| 1 | **Bar layout** | `noctalia msg status`; look at the top edge | `barVisible: true`; start = workspaces, `✚` newworkspace, optional bluetooth, active window, media; centre = empty; end = privacy, screenrec, optional iPad, tailscale, optional Deskflow, voxtype, hardware capsule group (cpu/ram/temp, plus gpu/vram/gpu-temp on arch/office), clock capsule group (clock/date), updates, optional thermostat, vast, weather, theme, battery, autoclicker, tray, volume, notifications, control-center. Plugin capsules render text, not blank; exactly one tray. |
+| 2 | **Deskflow toggle + panel** (arch/office) | Left-click the `DF` pill; right-click it; middle-click it | Left runs `deskflow-ctl toggle` and the pill changes class; middle re-polls on the spot. Right opens the Deskflow panel, which has one row per connected client with route/address, its latency and a graph of the last two minutes plus a `min / avg / max` caption. There are no per-client pills on the bar. `deskflow-ctl status` agrees with the pill, `deskflow-ctl clients` with the panel. |
 | 3 | **Voxtype stream** | Hold `SUPER+A`, speak, release; watch the mic capsule | `recording` while held, `transcribing` after release, then back to idle. `voxtype status --format json` reports the same state. If the capsule never changes, the `--follow` stream died: `noctalia msg plugin john/voxtype:bar focused refresh`. |
 | 4 | **Notifications, history, LHB filter** | `notify-send "Noctalia test" "hello"`; then `noctalia msg panel-toggle control-center notifications` | A toast appears top-right; the notification tab lists it in history; `noctalia msg notification-dnd-toggle` suppresses **toasts** while history keeps filling; toggle DND back off. For the LHB filter, connect/pair an `LHB-*` basestation: `[notification.filter.base_station_connect]` (`match = "blueman"`, `match_content = "^LHB-"`, `show_toast = save_history = play_sound = false`) must keep the pairing popup out of both toast and history. A non-LHB Bluetooth notification still shows. |
 | 5 | **Lock screen + `hypr-blank` guard** | `CTRL+ALT+L`; unlock with the password; then lock again and press `CTRL+ALT+M` | The Noctalia lock surface appears on every output and unlocks through PAM (`login` service). While locked, `hypr-blank` refuses with "session is locked (LockedHint=yes, noctalia=true)" instead of DPMS-off. No auto-lock occurs after idling, and `systemctl suspend` does not lock (`lock_before_suspend = false`). |
@@ -141,11 +141,12 @@ at the likely cause.
 | 13 | **Tailscale panel** | Left-click the Tailscale capsule; use connect and exit-node | The panel shows tailnet, self node, peers (online/total) and the current exit node; connect/disconnect works through `/run/wrappers/bin/sudo`; the exit-node picker is a `noctalia dmenu`. |
 | 14 | **Autoclicker panel** | Right-click the autoclicker capsule; change mode, interval, button, target | The daemon follows immediately (`autoclicker status` agrees), the `autoclicker watch` capsule updates, and "Pick with mouse" runs slurp. |
 | 15 | **TeamSpeak SNI tray** | Start TeamSpeak; inspect the tray widget and its menu | The TeamSpeak icon appears in Noctalia's tray (it owns `org.kde.StatusNotifierItem-5-1`), left-click opens its window/menu, and the tray context menu renders. Other SNI apps (tailscale, voxtype if any) also appear. |
+| 16 | **GPU card in the control-center system tab** (arch/office) | Left-click any hardware pill, or `noctalia msg panel-toggle control-center system` | The CPU, RAM, temperature and GPU cards are all there immediately, and the GPU card no longer appears a few seconds late. Its history is in-memory, so it starts empty at every shell start and fills over ~4 minutes (120 slots x 2 s); an empty graph right after login is expected, a missing card is not. A missing card means `hw_gpu`/`hw_vram`/`hw_gpu_temp` are gone from the bar — their probes are refcounted per series and the system tab is the only other consumer. |
 
 Optional extras if the host has them: iPad status/recover/create (arch/office),
-Temporal pill reachability, VAST pill hidden when no instance, `updates` pill
-hidden until `flake.lock` is older than 24 h, thermostat right/middle/scroll
-against Home Assistant.
+VAST pill hidden when no instance, `updates` pill hidden until
+`flake.lock` is older than 24 h, thermostat right/middle/scroll against Home
+Assistant.
 
 ### If a check fails
 

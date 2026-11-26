@@ -275,8 +275,7 @@ Hyprland (Lua config)
   │                                                            │                          ▼
   │                                                            │                    status-helpers binaries
   │                                                            │                    (media-player, tailscale-*,
-  │                                                            │                     deskflow-ctl, ipad-display,
-  │                                                            │                     temporal-status, …)
+  │                                                            │                     deskflow-ctl, ipad-display, …)
   │                                                            ├─ notification daemon (org.freedesktop.Notifications)
   │                                                            ├─ lock screen (ext-session-lock-v1, PAM)
   │                                                            ├─ wallpaper (wlr-layer-shell + screencopy)
@@ -306,11 +305,11 @@ fails with `error: noctalia is not running`.
 
 | Path | Purpose |
 |---|---|
-| `nixos/modules/noctalia.nix` | Declarative Noctalia config (452 lines): `settings` = `[shell]`, `[storage]`, `[theme]` (custom palette `CatppuccinDotfiles`), `[location]`, `[nightlight]`, `[weather]`, `[lockscreen]`, `[wallpaper]`, `[dock]`, `[notification]` + LHB filter, `[osd]`, `[plugins]`, `[bar.default]` (start/center/end + capsule groups) and `[widget.*]` instances. Generates the palette JSON via `customPalettes`; enables `programs.noctalia` with `systemd.enable`, `checkConfig`; adds `TimeoutStopSec = 10` and a pinned unit `PATH`. |
+| `nixos/modules/noctalia.nix` | Declarative Noctalia config (499 lines): `settings` = `[shell]`, `[storage]`, `[theme]` (custom palette `CatppuccinDotfiles`), `[location]`, `[nightlight]`, `[weather]`, `[lockscreen]`, `[wallpaper]`, `[dock]`, `[notification]` + LHB filter, `[osd]`, `[plugins]`, `[bar.default]` (start/center/end + capsule groups) and `[widget.*]` instances. Generates the palette JSON via `customPalettes`; enables `programs.noctalia` with `systemd.enable`, `checkConfig`; adds `TimeoutStopSec = 10` and a pinned unit `PATH`. |
 | `nixos/modules/status-helpers.nix` | One binary per legacy helper. See the table below. |
-| `noctalia-plugins/deskflow/` | `plugin.toml`, `widget.luau` (`bar`), `panel.luau` (`panel`), `translations/en.json`. |
+| `noctalia-plugins/deskflow/` | `plugin.toml`, `widget.luau` (`bar`), `panel.luau` (`panel`), `lib/deskflow.luau` (shared poller + latency graph maths), `translations/en.json`. |
 | `noctalia-plugins/voxtype/` | `plugin.toml`, `widget.luau` (`bar`), `translations/en.json`. |
-| `noctalia-plugins/dotfiles-bar/` | `plugin.toml`, `lib/waybar_json.luau`, 9 widgets, 3 panels, `translations/en.json`. |
+| `noctalia-plugins/dotfiles-bar/` | `plugin.toml`, `lib/waybar_json.luau`, 8 widgets, 3 panels, `translations/en.json`. |
 | `docs/noctalia-migration/` | This documentation plus `research/`. |
 
 `status-helpers.nix` entry points (line numbers in that file):
@@ -326,12 +325,11 @@ fails with `error: noctalia is not running`.
 | `tailscale-panel-data` | 482 | Eww `tailscale-eww-update` (`eww.nix:5-73`) |
 | `tailscale-toggle` | 547 | Eww connect/disconnect (`eww.nix:75-88`) |
 | `tailscale-exit-node` | 565 | Eww/wofi exit-node picker (`waybar.nix:327-361`) |
-| `temporal-status` | 589 | Waybar `custom/temporal` |
-| `ipad-display` | 603 | `nixos/packages/ipad-display.nix` (isDesk only) |
-| `deskflow-ctl` | 606 | `nixos/packages/deskflow-ctl.nix` (isDesk only) |
+| `ipad-display` | 590 | `nixos/packages/ipad-display.nix` (isDesk only) |
+| `deskflow-ctl` | 593 | `nixos/packages/deskflow-ctl.nix` (isDesk only) |
 
 `ipad-display` and `deskflow-ctl` are only installed when `compName` is `arch`
-or `office` (`status-helpers.nix:625-628`).
+or `office` (`status-helpers.nix:611-614`).
 
 `nixos/modules/noctalia.nix` section index (line numbers):
 
@@ -348,12 +346,12 @@ or `office` (`status-helpers.nix:625-628`).
 | `settings.weather` | 203 |
 | `settings.lockscreen` | 209 |
 | `settings.wallpaper` / `settings.dock` | 220 / 222 |
-| `settings.notification` (incl. LHB filter at 234) | 224 |
-| `settings.osd` | 244 |
-| `settings.plugins` | 249 |
-| `settings.bar.default` (start/center/end, capsule groups at 312) | 266 |
-| `settings.widget` | 328 |
-| `programs.noctalia` (enable, systemd, checkConfig, customPalettes) | 434 |
+| `settings.notification` (incl. LHB filter at 244) | 224 |
+| `settings.osd` | 254 |
+| `settings.plugins` | 259 |
+| `settings.bar.default` (start/center/end, capsule groups at 324) | 276 |
+| `settings.widget` | 343 |
+| `programs.noctalia` (enable, systemd, checkConfig, customPalettes) | 481 |
 
 ### Modified
 
@@ -449,15 +447,29 @@ equivalent is a **capsule group with `accordion = true`**:
 ```toml
 [[bar.default.capsule_group]]
 id = "hardware"
-members = ["hw_cpu", "hw_ram", "hw_temp"]
+members = ["hw_cpu", "hw_ram", "hw_temp"]   # ++ hw_gpu, hw_vram, hw_gpu_temp on arch/office
 accordion = true
 accordion_direction = "start"
 ```
 
 The members are `hw_cpu` (`sysmon cpu_usage`), `hw_ram` (`ram_used`) and
-`hw_temp` (`cpu_temp`); `clock` + `clock_date` form the second group. The
-expansion is Noctalia's accordion chip, not a GTK drawer, so the 300 ms
-`children-class` transition and the separate `#group-*` styling are gone.
+`hw_temp` (`cpu_temp`) — plus `hw_gpu` (`gpu_usage`), `hw_vram`
+(`gpu_vram_used`) and `hw_gpu_temp` (`gpu_temp`) on `arch`/`office`; `clock` +
+`clock_date` form the second group. The expansion is Noctalia's accordion chip,
+not a GTK drawer, so the 300 ms `children-class` transition and the separate
+`#group-*` styling are gone.
+
+The GPU members are there for their side effect as much as for the display: in
+5.6.0 GPU probes are refcounted per series and run only while a consumer holds
+a reference (`src/system/system_monitor_service.cpp`), so with no GPU widget on
+the bar the control center's system tab was the only consumer — its GPU card
+appeared a few seconds after opening and its history started empty. No config
+key keeps GPU polling on, so a widget per plotted series is the only way to hold
+the sampler; a collapsed accordion shows only its first member (`hw_cpu` stays
+first), which is why the extra members cost no collapsed width. They are gated
+to the desk hosts because an open NVML/ROCm session can keep a hybrid laptop's
+discrete GPU awake. The history itself is in memory, so it is empty after every
+shell start and refills over about four minutes (120 slots × 2 s).
 
 The workspace **hover taskbar** (window icons revealed from the workspace pill)
 has no equivalent: there is no `taskbar` widget in this bar. If the window list
@@ -484,7 +496,8 @@ involved.
 (`nixos/modules/waybar-popup.nix:47-57`) still exist and are bound to widget
 actions:
 
-- hardware group members — left click → `exec toggle-btop`;
+- hardware group members — left click → Control Center → System (Noctalia's
+  system monitor, like the clock's Calendar), middle click → `exec toggle-btop`;
 - clock — middle click → `exec toggle-calendar`, left click → Control Center →
   Calendar;
 - weather — right click → `exec toggle-weather`.
