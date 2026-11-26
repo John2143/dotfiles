@@ -18,14 +18,16 @@ let
       notify-send -h "string:x-dunst-stack-tag:hass-$1" "$2" "$3" || true
     }
 
-    signal_waybar() {
-      pkill -RTMIN+8 waybar || true
+    # Nudges the bar widget instead of signalling waybar: the thermostat plugin
+    # re-reads Home Assistant when it receives "refresh".
+    signal_bar() {
+      noctalia msg plugin john/dotfiles-bar:thermostat all refresh >/dev/null 2>&1 || true
     }
   '';
 
   hass-macro = pkgs.writeShellApplication {
     name = "hass-macro";
-    runtimeInputs = [ pkgs.curl pkgs.jq pkgs.bc pkgs.libnotify pkgs.procps ];
+    runtimeInputs = [ pkgs.curl pkgs.jq pkgs.bc pkgs.libnotify pkgs.noctalia ];
     text = ''
       ${hass-lib}
 
@@ -40,7 +42,7 @@ let
           fi
           hass_post climate/set_temperature \
             "{\"entity_id\":\"climate.john_bedroom\",\"temperature\":$new}"
-          signal_waybar
+          signal_bar
           hass_notify thermostat "Thermostat" "Set to ''${new}°"
           ;;
         thermostat-toggle)
@@ -48,55 +50,55 @@ let
             | jq -r '.state')
           if [ "$state" = "off" ]; then
             hass_post climate/turn_on '{"entity_id":"climate.john_bedroom"}'
-            signal_waybar
+            signal_bar
             hass_notify thermostat "Thermostat" "Turned on"
           else
             hass_post climate/turn_off '{"entity_id":"climate.john_bedroom"}'
-            signal_waybar
+            signal_bar
             hass_notify thermostat "Thermostat" "Turned off"
           fi
 
           ;;
         ac-toggle)
           hass_post fan/toggle '{"entity_id":"fan.john_ac_combo_fans"}'
-          signal_waybar
+          signal_bar
           hass_notify ac "AC" "Toggled"
           ;;
         fan-toggle)
           hass_post fan/toggle '{"entity_id":"fan.plug_upstairs_desktop_computer_switch"}'
-          signal_waybar
+          signal_bar
           hass_notify fan "Fan" "Toggled"
           ;;
         light-lamp)
           hass_post light/toggle '{"entity_id":"light.john_bedroom_lamp"}'
-          signal_waybar
+          signal_bar
           hass_notify lamp "Lamp" "Toggled"
           ;;
 
         light-dresser)
           hass_post light/toggle '{"entity_id":"light.plug_bedroom_superbright"}'
-          signal_waybar
+          signal_bar
           hass_notify dresser "Dresser Light" "Toggled"
           ;;
         light-ac)
           hass_post light/toggle '{"entity_id":"light.plug_bedroom_ac_and_fan_switch"}'
-          signal_waybar
+          signal_bar
           hass_notify ac-light "AC Light" "Toggled"
           ;;
 
         light-bedroom)
           hass_post light/toggle '{"entity_id":"light.john_bedroom_light"}'
-          signal_waybar
+          signal_bar
           hass_notify bedroom-light "Bedroom Light" "Toggled"
           ;;
         dyson-fan)
           hass_post fan/toggle '{"entity_id":"fan.k3b_us_pga0539a"}'
-          signal_waybar
+          signal_bar
           hass_notify dyson-fan "Dyson Fan" "Toggled"
           ;;
         desk-light)
           hass_post light/toggle '{"entity_id":"light.wiz_color_strip"}'
-          signal_waybar
+          signal_bar
           hass_notify desk-light "Desk Light" "Toggled"
           ;;
         *)
@@ -110,7 +112,7 @@ let
         # 2. Add a keyd mapping in services.keyd below (physical key → F-key).
         # 3. Add the Hyprland bind below (F-key → hass-macro <name>).
         #    Pattern: name) hass_post <domain>/toggle '{"entity_id":"<domain>.<entity>"}';;
-        #    Always include signal_waybar and hass_notify.
+        #    Always include signal_bar and hass_notify.
         # ─────────────────────────────────────────────────────────────────
     '';
   };
@@ -180,7 +182,7 @@ in {
         # Requires `fkeys:basic_13-24` in hyprland kb_options.
         q   = "f20";      # monitors on
         w   = "C-f20";    # monitors off
-        x   = "M-f20";    # lock (hyprlock)
+        x   = "M-f20";    # lock (noctalia msg session lock)
         e   = "C-f18";    # light: dresser (light-dresser)
         r   = "A-f18";    # light: window AC (light-ac)
         y   = "f18";      # light: lamp (light-lamp)
@@ -227,7 +229,7 @@ in {
     { _args = ["F20" (mkLua ''hl.dsp.dpms({ action = "enable" })'')]; }
     { _args = ["CTRL + F20" (mkLua ''hl.dsp.exec_cmd([[hypr-blank]])'')]; }
     # locked = true so it also works while the session is locked (stale-lock recovery)
-    { _args = ["SUPER + F20" (mkLua ''hl.dsp.exec_cmd([[hyprlock-theme]])'') { locked = true; }]; }
+    { _args = ["SUPER + F20" (mkLua ''hl.dsp.exec_cmd([[noctalia msg session lock]])'') { locked = true; }]; }
 
     # Macro pad F21 group — Home Assistant toggles
     { _args = ["F21" (mkLua ''hl.dsp.exec_cmd("hass-macro dyson-fan")'')]; }

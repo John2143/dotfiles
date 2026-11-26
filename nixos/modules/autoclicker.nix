@@ -15,22 +15,13 @@
     then [ "046d:c08b" ]
     else [];
 
+  # The panel is a Noctalia plugin panel; Noctalia resolves its output from the focus
+  # source, so the old "which monitor is the cursor on" probe is gone.
   autoclicker-menu-toggle = pkgs.writeShellApplication {
     name = "autoclicker-menu-toggle";
-    runtimeInputs = with pkgs; [jq coreutils];
+    runtimeInputs = [pkgs.noctalia];
     text = ''
-      cursor=$(hyprctl cursorpos -j 2>/dev/null || true)
-      screen=$(hyprctl monitors -j 2>/dev/null | jq -r --arg c "$cursor" '
-        ($c | fromjson? // {x: -1, y: -1}) as $cur
-        | map(select(.x <= $cur.x and $cur.x < (.x + .width) and .y <= $cur.y and $cur.y < (.y + .height)))
-        | if length > 0 then .[0].name else "" end' 2>/dev/null || true)
-
-      if [ -n "$screen" ]; then
-        eww open autoclicker-menu --toggle --screen "$screen"
-      else
-        eww open autoclicker-menu --toggle
-      fi
-      eww poll ac_tick >/dev/null 2>&1 || true
+      noctalia msg panel-toggle john/dotfiles-bar:autoclicker-panel
     '';
   };
 
@@ -83,55 +74,6 @@
     '';
   };
 
-  autoclicker-eww-sync = pkgs.writeShellApplication {
-    name = "autoclicker-eww-sync";
-    runtimeInputs = with pkgs; [eww coreutils autoclicker];
-    text = ''
-      mode=$(autoclicker get mode 2>/dev/null) || mode="off"
-      button=$(autoclicker get button 2>/dev/null) || button="left"
-      interval=$(autoclicker get interval 2>/dev/null) || interval="500"
-      target=$(autoclicker get target 2>/dev/null) || target="any"
-
-      on="◉"
-      off="◎"
-      m_off=$off m_left=$off m_right=$off m_timer=$off
-      case "$mode" in
-        off) m_off=$on ;;
-        scroll-left) m_left=$on ;;
-        scroll-right) m_right=$on ;;
-        timer) m_timer=$on ;;
-      esac
-
-      i100=$off i250=$off i500=$off i1000=$off
-      case "$interval" in
-        100) i100=$on ;;
-        250) i250=$on ;;
-        500) i500=$on ;;
-        1000) i1000=$on ;;
-      esac
-
-      b_left=$off b_middle=$off b_right=$off
-      case "$button" in
-        left) b_left=$on ;;
-        middle) b_middle=$on ;;
-        right) b_right=$on ;;
-      esac
-
-      eww update \
-        ac_mark_off="$m_off" \
-        ac_mark_scroll_left="$m_left" \
-        ac_mark_scroll_right="$m_right" \
-        ac_mark_timer="$m_timer" \
-        ac_iv_100="$i100" \
-        ac_iv_250="$i250" \
-        ac_iv_500="$i500" \
-        ac_iv_1000="$i1000" \
-        ac_btn_left="$b_left" \
-        ac_btn_middle="$b_middle" \
-        ac_btn_right="$b_right" \
-        ac_details="Target: $target" >/dev/null 2>&1 || true
-    '';
-  };
 in {
   # The daemon always starts in mode "off": the mode is deliberately not persisted, so a
   # relogin can never leave the wheel converted to clicks.
@@ -152,6 +94,5 @@ in {
   home.packages = [
     autoclicker-menu-toggle
     autoclicker-target
-    autoclicker-eww-sync
   ];
 }

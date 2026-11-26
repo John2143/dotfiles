@@ -1,0 +1,18 @@
+{
+  "settings.media_interval.label": "Media poll interval",
+  "settings.media_interval.description": "How often the media widget asks media-player for its state, in milliseconds.",
+  "settings.tailscale_interval.label": "Tailscale poll interval",
+  "settings.tailscale_interval.description": "How often the Tailscale widget asks tailscale-status for its state, in milliseconds.",
+  "settings.ipad_interval.label": "iPad poll interval",
+  "settings.ipad_interval.description": "How often the iPad widget asks ipad-display for its state, in milliseconds.",
+  "settings.temporal_interval.label": "Temporal poll interval",
+  "settings.temporal_interval.description": "How often the Temporal widget probes 192.168.6.20:7233, in milliseconds.",
+  "settings.thermostat_interval.label": "Thermostat poll interval",
+  "settings.thermostat_interval.description": "How often the thermostat widget asks Home Assistant for the bedroom climate state, in milliseconds.",
+  "settings.vast_interval.label": "VAST poll interval",
+  "settings.vast_interval.description": "How often the VAST widget refreshes its instance, tunnel and vLLM state, in milliseconds.",
+  "settings.updates_interval.label": "flake.lock poll interval",
+  "settings.updates_interval.description": "How often the updates widget checks the age of ~/dotfiles/flake.lock, in milliseconds.",
+  "settings.terminal.label": "Terminal for nix flake update",
+  "settings.terminal.description": "Terminal command to run the update in. Empty lets Noctalia pick one ($TERMINAL, then the first terminal found on PATH)."
+}

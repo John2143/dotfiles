@@ -9,16 +9,19 @@
 }: let
   # Blank the monitors on demand, but never while the session is locked: DPMS off with a
   # locker up is the documented crash path (hyprwm/hyprlock#953 issues 1+2, #434, #480).
-  # LockedHint catches the stale-lock case where no locker process is left to grep for.
+  # LockedHint catches the stale-lock case where no locker process is left to grep for;
+  # Noctalia's own lock state (`noctalia msg status`) catches a lock whose PAM session
+  # has not been updated yet.
   hypr-blank = pkgs.writeShellApplication {
     name = "hypr-blank";
-    runtimeInputs = [ pkgs.coreutils pkgs.procps pkgs.systemd pkgs.hyprland pkgs.libnotify ];
+    runtimeInputs = [ pkgs.coreutils pkgs.systemd pkgs.hyprland pkgs.libnotify pkgs.jq pkgs.noctalia ];
     text = ''
       sid="''${XDG_SESSION_ID:-}"
       [ -n "$sid" ] || sid="$(loginctl show-user "''${USER:-$(id -un)}" -p Display --value 2>/dev/null || true)"
       hint="$(loginctl show-session "''${sid:-0}" -p LockedHint --value 2>/dev/null || true)"
-      if pgrep -x hyprlock > /dev/null || [ "$hint" = "yes" ]; then
-        notify-send -u low "Screen blank skipped" "session is locked (LockedHint=$hint) — DPMS off while locked is a known crash path"
+      noctalia_locked="$(noctalia msg status 2>/dev/null | jq -r '.locked // false' 2>/dev/null || true)"
+      if [ "$hint" = "yes" ] || [ "$noctalia_locked" = "true" ]; then
+        notify-send -u low "Screen blank skipped" "session is locked (LockedHint=$hint, noctalia=$noctalia_locked) — DPMS off while locked is a known crash path"
         exit 0
       fi
       hyprctl dispatch 'hl.dsp.dpms({ action = "disable" })'
@@ -38,7 +41,7 @@
       pkgs.jq
       pkgs.curl
       pkgs.slurp
-      pkgs.dunst # dunstify
+      pkgs.libnotify # notify-send
       pkgs.fuzzel
       pkgs.wl-clipboard
       pkgs.trash-cli
@@ -83,7 +86,6 @@
 
     # desktop tools (bars, clipbaords, notifications, etc)
     pulseaudio # pactl (audio)
-    wofi # "start menu" / program browser
     kdePackages.dolphin # file browser
     thunar # file browser 2
     wl-clipboard # copy-paste via cli
@@ -91,15 +93,11 @@
     alacritty # terminal
     pwvucontrol # volume control
     pkgs-stable.pamixer # volume control
-    cliphist # clipboard history
     wl-clipboard-x11 # clipboard compatibility for some apps
     libnotify # notifications cli
-    #swaynotificationcenter # DISABLED: gitlab.gnome.org 503 for blueprint-compiler — re-enable when upstream recovers
-    fuzzel # dmenu replacement for dunst actions
-    gammastep # redshift / f.lux / night light
+    fuzzel # dmenu-style picker (screenrec clip menu)
     #spotifyd # play to spotify device if needed
 
-    hyprlock # screen locker (manual only — see the hypridle note at the end of this file)
     hypr-blank # blank the monitors; refuses while the session is locked
     screenrec # region capture -> upload; CTRL+SHIFT+9 / 6 / 0 / 8
 
@@ -123,7 +121,6 @@
     #@ betaflight-configurator
     lshw
     #@ darktable
-    hyprpaper
     # kubernetes-helm
 
     gparted
@@ -151,8 +148,6 @@
 
     winetricks
     slurp # use mouse to get a point on screen
-    grim # minimal screenshot program
-    #swappy # screenshot editor
     pkgs-stable.wf-recorder # screen recording
     pkgs-stable.normcap # OCR screen recognition
     hyprpicker # color picker
@@ -228,10 +223,9 @@ in {
   imports = [
     ./home-cli.nix
     ./modules/theme.nix
-    ./modules/waybar.nix
-    ./modules/eww.nix
+    ./modules/status-helpers.nix
+    ./modules/noctalia.nix
     ./modules/autoclicker.nix
-    #./modules/swaync.nix  # DISABLED: gitlab.gnome.org 503 — re-enable when upstream recovers
   ];
 
   home.pointerCursor = {
@@ -268,7 +262,10 @@ in {
       # MOONLIGHT (the iPad's headless output, modules/ipad-display.nix).
       ip1 = "16"; ip2 = "17";
     };
-    wsRule = name: monitor: { workspace = ws.${name}; default_name = name; monitor = mkLua monitor; default = true; };
+    # persistent keeps every fixed workspace alive (and therefore in Noctalia's
+    # `workspaces` widget) even while empty — being called "default" for a monitor is
+    # not enough once a named workspace has been focused elsewhere.
+    wsRule = name: monitor: { workspace = ws.${name}; default_name = name; monitor = mkLua monitor; default = true; persistent = true; };
   in {
     enable = true;
     package = pkgs.hyprland;
@@ -280,7 +277,7 @@ in {
       # ---- Locals (Lua variables) ----
       terminal = { _var = "alacritty"; };
       fileManager = { _var = "dolphin"; };
-      menu = { _var = ''fish -c "mkdir -p ~/drun_logs/ ; wofi --show drun > ~/drun_logs/(date)"''; };
+      menu = { _var = "noctalia msg panel-toggle launcher"; };
       mainMod = { _var = "SUPER"; };
       MONITOR_LEFT = { _var = if compName == "office" then "DP-2" else "DP-3"; };
       MONITOR_RIGHT = { _var = if compName == "office" then "DP-1" else "HDMI-A-2"; };
@@ -345,7 +342,7 @@ in {
         misc = {
           disable_splash_rendering = true;
           force_default_wallpaper = 0;
-          # lets a fresh hyprlock take over a lock whose owner died — without it Hyprland
+          # lets a fresh Noctalia lock take over a lock whose owner died — without it Hyprland
           # refuses every re-lock and the session is stuck locked with no prompt (2026-09-17)
           allow_session_lock_restore = true;
         };
@@ -366,10 +363,6 @@ in {
           sensitivity = 0;
           accel_profile = "flat";
         };
-        layerrule = [
-          "blur,waybar"
-          "ignorezero,waybar"
-        ];
       };
 
       # ---- Workspace rules ----
@@ -396,8 +389,18 @@ in {
         { workspace = ws.ip1; default_name = "ip1"; monitor = mkLua ''"MOONLIGHT"''; default = true; }
         { workspace = ws.ip2; default_name = "ip2"; monitor = mkLua ''"MOONLIGHT"''; }
       ];
+      # ---- Layer rules (Noctalia surfaces) ----
+      # Noctalia animates its own surfaces; Hyprland's layersIn/out fights that and tears.
+      # The second rule adds the blur the removed waybar rule used to provide.
+      layer_rule = [
+        { name = "noctalia-no-anim"; match = { namespace = "^noctalia-(bar-.+|notification|dock|panel|attached-panel|osd|window-switcher)$"; }; no_anim = true; }
+        { name = "noctalia-blur"; match = { namespace = "^noctalia-(bar-.+|notification|dock|panel|attached-panel|osd|window-switcher)$"; }; ignore_alpha = 0.5; blur = true; blur_popups = true; }
+      ];
       # ---- Window rules ----
       window_rule = [
+        # Noctalia's Settings window is the only xdg-toplevel it creates; everything else
+        # is a layer surface. 9:16-ish portrait panel, floating.
+        { match = { class = "^dev\\.noctalia\\.Noctalia$"; }; float = true; size = "monitor_w*0.5625 monitor_h*0.85"; }
         # steam
         { match = { class = "^[Ss]team$"; }; workspace = ws.steam; no_initial_focus = true; }
         # TeamSpeak + qpwgraph
@@ -425,7 +428,7 @@ in {
         { _args = [(mkLua ''mainMod .. " + CTRL + Space"'') (mkLua "hl.dsp.exec_cmd(fileManager)")]; }
         { _args = [(mkLua ''mainMod .. " + E"'') (mkLua "hl.dsp.exec_cmd(fileManager)")]; }
         { _args = [(mkLua ''mainMod .. " + Q"'') (mkLua "hl.dsp.window.close()")]; }
-        # Light/dark toggle (also the waybar button and `theme-switch toggle`).
+        # Light/dark toggle (also Noctalia's theme control and `theme-switch toggle`).
         { _args = [(mkLua ''mainMod .. " + SHIFT + T"'') (mkLua ''hl.dsp.exec_cmd([[theme-switch toggle]])'')]; }
 
         # bspwm-like
@@ -435,15 +438,22 @@ in {
         { _args = [(mkLua ''mainMod .. " + SHIFT + S"'') (mkLua ''hl.dsp.layout("togglesplit")'')]; }
 
         # Clipboard
-        { _args = ["SUPER + V" (mkLua ''hl.dsp.exec_cmd([[cliphist list | wofi --dmenu | cliphist decode | wl-copy]])'')]; }
+        { _args = ["SUPER + V" (mkLua ''hl.dsp.exec_cmd([[noctalia msg panel-toggle clipboard]])'')]; }
+        # Control center (notifications tab), settings, and the Noctalia window switcher
+        # (hold semantics: the overlay stays up while ALT+Tab is held).
+        { _args = ["SUPER + SHIFT + N" (mkLua ''hl.dsp.exec_cmd([[noctalia msg panel-toggle control-center notifications]])'')]; }
+        { _args = ["SUPER + comma" (mkLua ''hl.dsp.exec_cmd([[noctalia msg settings-toggle]])'')]; }
+        { _args = ["ALT + Tab" (mkLua ''hl.dsp.exec_cmd([[noctalia msg window-switcher hold]])'')]; }
+        { _args = ["ALT + SHIFT + Tab" (mkLua ''hl.dsp.exec_cmd([[noctalia msg window-switcher hold reverse]])'')]; }
 
-        # Screenshots
-        { _args = ["CTRL + SHIFT + 1" (mkLua ''hl.dsp.exec_cmd([[fish -c 'grim -g (slurp) - | wl-copy']])'')]; }
-        { _args = ["CTRL + SHIFT + ALT + 1" (mkLua ''hl.dsp.exec_cmd([[fish -c 'grim -g (slurp) - | wl-copy']])'')]; }
-        { _args = ["CTRL + SHIFT + 2" (mkLua ''hl.dsp.exec_cmd([[fish -c 'set loc (screenshot_location); grim -g (slurp) - | swappy -f - -o "$loc"; juush $loc']])'')]; }
-        { _args = ["CTRL + SHIFT + 3" (mkLua ''hl.dsp.exec_cmd([[fish -c 'set loc (screenshot_location); set ll (slurp) ; sleep 1 ; grim -g $ll $loc; juush $loc']])'')]; }
-        { _args = ["CTRL + SHIFT + ALT + 4" (mkLua ''hl.dsp.exec_cmd([[fish -c 'set loc (screenshot_location); grim -g (slurp) $loc; juush $loc']])'')]; }
-        { _args = ["CTRL + SHIFT + 4" (mkLua ''hl.dsp.exec_cmd([[fish -c 'set loc (screenshot_location); grim -g (slurp) $loc; juush $loc']])'')]; }
+        # Screenshots — Noctalia's built-in region capture replaces grim/slurp/swappy.
+        # The juush uploads take the PNG on stdin and write it to screenshot_location.
+        { _args = ["CTRL + SHIFT + 1" (mkLua ''hl.dsp.exec_cmd([[noctalia msg screenshot-region --copy-to-clipboard --no-save-to-file]])'')]; }
+        { _args = ["CTRL + SHIFT + ALT + 1" (mkLua ''hl.dsp.exec_cmd([[noctalia msg screenshot-region --copy-to-clipboard --no-save-to-file]])'')]; }
+        { _args = ["CTRL + SHIFT + 2" (mkLua ''hl.dsp.exec_cmd([[noctalia msg screenshot-region --annotate --no-save-to-file --no-copy-to-clipboard --pipe-to-command --pipe-command "fish -c 'set loc (screenshot_location); cat > \$loc; juush \$loc'"]])'')]; }
+        { _args = ["CTRL + SHIFT + 3" (mkLua ''hl.dsp.exec_cmd([[sleep 1; noctalia msg screenshot-region --no-save-to-file --no-copy-to-clipboard --pipe-to-command --pipe-command "fish -c 'set loc (screenshot_location); cat > \$loc; juush \$loc'"]])'')]; }
+        { _args = ["CTRL + SHIFT + ALT + 4" (mkLua ''hl.dsp.exec_cmd([[noctalia msg screenshot-region --no-save-to-file --no-copy-to-clipboard --pipe-to-command --pipe-command "fish -c 'set loc (screenshot_location); cat > \$loc; juush \$loc'"]])'')]; }
+        { _args = ["CTRL + SHIFT + 4" (mkLua ''hl.dsp.exec_cmd([[noctalia msg screenshot-region --no-save-to-file --no-copy-to-clipboard --pipe-to-command --pipe-command "fish -c 'set loc (screenshot_location); cat > \$loc; juush \$loc'"]])'')]; }
         { _args = ["CTRL + SHIFT + 5" (mkLua ''hl.dsp.exec_cmd([[fish -c 'wl-paste > ~/screenshots/clipboard.txt; juush ~/screenshots/clipboard.txt']])'')]; }
         # Screen recording: start (asks for a region), start reusing the last region,
         # stop, one-key toggle, and the last-clip menu.
@@ -509,9 +519,9 @@ in {
 
         # Sleep / wake / quit
         # locked = true: this key must fire while the session IS locked, otherwise a stale lock
-        # leaves only the TTY escape. Bare hyprlock (no pidof guard) so it can take over a lock
-        # whose owner died — that refusal is what bricked the session on 2026-09-17.
-        { _args = ["CTRL + ALT + L" (mkLua ''hl.dsp.exec_cmd([[hyprlock-theme]])'') { locked = true; }]; }
+        # leaves only the TTY escape. `session lock` is a request to Noctalia, which takes over
+        # a lock whose owner died — that refusal is what bricked the session on 2026-09-17.
+        { _args = ["CTRL + ALT + L" (mkLua ''hl.dsp.exec_cmd([[noctalia msg session lock]])'') { locked = true; }]; }
         { _args = ["CTRL + ALT + M" (mkLua ''hl.dsp.exec_cmd([[hypr-blank]])'')]; }
         { _args = ["Print" (mkLua ''hl.dsp.dpms({ action = "enable" })'')]; }
         { _args = [(mkLua ''mainMod .. " + SHIFT + M"'') (mkLua "hl.dsp.exit()")]; }
@@ -521,8 +531,8 @@ in {
         { _args = [(mkLua ''mainMod .. " + A"'') (mkLua ''hl.dsp.exec_cmd([[voxtype record stop]])'') { release = true; }]; }
 
         # Media keys
-        { _args = ["XF86AudioRaiseVolume" (mkLua ''hl.dsp.exec_cmd([[fish -c "pamixer -i 5"]])'')]; }
-        { _args = ["XF86AudioLowerVolume" (mkLua ''hl.dsp.exec_cmd([[fish -c "pamixer -d 5"]])'')]; }
+        { _args = ["XF86AudioRaiseVolume" (mkLua ''hl.dsp.exec_cmd([[noctalia msg volume-up]])'')]; }
+        { _args = ["XF86AudioLowerVolume" (mkLua ''hl.dsp.exec_cmd([[noctalia msg volume-down]])'')]; }
         { _args = [(mkLua ''mainMod .. " + XF86AudioRaiseVolume"'') (mkLua ''hl.dsp.exec_cmd([[fish -c "~/.config/focussed-vol-adjust.sh 0.05+"]])'')]; }
         { _args = [(mkLua ''mainMod .. " + XF86AudioLowerVolume"'') (mkLua ''hl.dsp.exec_cmd([[fish -c "~/.config/focussed-vol-adjust.sh 0.05-"]])'')]; }
         { _args = [(mkLua ''mainMod .. " + XF86AudioMute"'') (mkLua ''hl.dsp.exec_cmd([[fish -c "~/.config/focussed-vol-adjust.sh toggle"]])'')]; }
@@ -569,28 +579,14 @@ in {
         { _args = ["hyprland.start" (mkLua (''
           function()
             hl.exec_cmd("tmux setenv -g HYPRLAND_INSTANCE_SIGNATURE " .. os.getenv("HYPRLAND_INSTANCE_SIGNATURE"))
-            hl.exec_cmd("lxqt-policykit-agent")
         '' + ''
             hl.exec_cmd("fish -c \"if test -f ~/dotfiles/.config/startup.fish; tmux new-session -d; sleep 1; fish ~/dotfiles/.config/startup.fish; end\"")
         '' + ''
             hl.exec_cmd("fish ~/.xprofile.fish")
-            hl.exec_cmd("wl-paste --type text --watch cliphist store")
-            hl.exec_cmd("wl-paste --type image --watch cliphist store")
             hl.exec_cmd("voxtype daemon")
           end
         ''))]; }
       ];
-    };
-  };
-
-  services.gammastep = lib.mkIf (compName != "secu" && compName != "arch") {
-    enable = true;
-    # New york
-    longitude = -74.0060;
-    latitude = 40.7128;
-    temperature = {
-      day = 6500;
-      night = 3500;
     };
   };
 
@@ -608,11 +604,6 @@ in {
 
   xdg.configFile = {
     "alacritty/alacritty.toml".source = config.lib.file.mkOutOfStoreSymlink ../.config/alacritty/alacritty.toml;
-    "dunst/dunstrc".source = config.lib.file.mkOutOfStoreSymlink "${config.home.homeDirectory}/dotfiles/.config/dunst/dunstrc";
-    # hypr/hyprpaper.conf is generated by nixos/modules/theme.nix (the daemon is
-    # started from there with -c ~/.local/state/theme/current/hyprpaper.conf).
-    # "waybar".source = config.lib.file.mkOutOfStoreSymlink ../.config/waybar;
-
     #"get_mullvad.fish".source = config.lib.file.mkOutOfStoreSymlink ../.config/get_mullvad.fish;
 
     "focussed-vol-adjust.sh".source =
@@ -694,21 +685,11 @@ in {
 
   # hypridle intentionally NOT enabled (2026-09-18): locking is manual-only, so there is no
   # idle timer, no 5-min auto-lock and no DPMS-off listener (the documented AMD crash path,
-  # hyprwm/hyprlock#953). Lock = CTRL+ALT+L / macropad x; blank = CTRL+ALT+M. Note that
-  # `loginctl lock-session` now has no handler at all — never bind it, always run hyprlock.
+  # hyprwm/hyprlock#953). Lock = CTRL+ALT+L / macropad x (`noctalia msg session lock`);
+  # blank = CTRL+ALT+M. `loginctl lock-session` reaches Noctalia through logind's Lock
+  # signal, but it takes the idle path — bind the IPC verb instead.
 
-  # No configFile: `-config` disables dunst's drop-ins, and the theme lives in
-  # dunstrc.d/50-theme.conf (nixos/modules/theme.nix).
-  services.dunst = {
-    enable = true;
-  };
-
-  # Aggressive stop timeouts for user services that block home-manager
-  # activation (sd-switch hangs waiting for them to stop).
-  systemd.user.services.dunst.Service.TimeoutStopSec = 10;
+  # Aggressive stop timeout for the user service that can block home-manager
+  # activation (sd-switch hangs waiting for it to stop).
   systemd.user.services.udiskie.Service.TimeoutStopSec = 10;
-  # Fix eww systemd service: clean stale sockets on startup
-  systemd.user.services.eww.Service.ExecStartPre = [
-    "${pkgs.coreutils}/bin/rm -f /run/user/%U/eww-server_*"
-  ];
 }

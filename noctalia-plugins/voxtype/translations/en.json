@@ -1,0 +1,16 @@
+{
+  "title": "Voxtype",
+  "settings.hide_when_idle.label": "Hide when idle",
+  "settings.hide_when_idle.description": "Hide the widget while Voxtype is idle, so the bar only shows it while recording or transcribing.",
+  "settings.show_label.label": "Show label",
+  "settings.show_label.description": "Show the REC / ... text next to the microphone glyph. Turn off for a glyph-only widget.",
+  "tooltip.unknown": "Voxtype status unknown",
+  "tooltip.not_running": "Voxtype daemon is not running - click to start it",
+  "tooltip.missing": "voxtype was not found on PATH",
+  "tooltip.starting": "Starting the Voxtype daemon...",
+  "notify.missing": "The voxtype command was not found on PATH.",
+  "notify.start_failed": "Could not start the Voxtype daemon.",
+  "notify.toggle_failed": "Could not tell Voxtype to toggle recording.",
+  "notify.hide_idle_on": "The widget now hides itself while idle (this session only).",
+  "notify.hide_idle_off": "The widget is visible while idle again (this session only)."
+}

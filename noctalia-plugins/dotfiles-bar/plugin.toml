@@ -1,0 +1,196 @@
+# Bar widgets and panels carried over from the Waybar + Eww setup.
+#
+# Every widget here wraps a shell helper that already printed Waybar JSON
+# ({"text", "class", "tooltip"}); lib/waybar_json.luau turns that into the
+# barWidget presentation calls, so the helpers stay the single source of truth
+# for what each widget means.
+id          = "john/dotfiles-bar"
+name        = "Dotfiles bar"
+version     = "1.0.0"
+plugin_api  = 43
+author      = "john"
+license     = "MIT"
+icon        = "apps"
+description = "The dotfiles bar widgets and the media, Tailscale and autoclicker panels."
+tags        = ["bar", "media", "tailscale", "autoclicker", "waybar"]
+dependencies = [
+  "autoclicker",
+  "hass-macro",
+  "hass-thermostat-status",
+  "ipad-display",
+  "media-player",
+  "media-picker-action",
+  "media-picker-data",
+  "nix-update-status",
+  "playerctl",
+  "screenrec",
+  "tailscale",
+  "tailscale-exit-node",
+  "temporal-status",
+  "vast-waybar-status",
+]
+
+# ─── Settings ────────────────────────────────────────────────
+# Poll cadences are per plugin rather than per widget so the intervals the
+# Waybar modules used stay configurable in one place.
+
+[[setting]]
+key             = "media_interval"
+type            = "int"
+label_key       = "settings.media_interval.label"
+description_key = "settings.media_interval.description"
+default         = 2000
+min             = 250
+max             = 60000
+step            = 250
+
+[[setting]]
+key             = "tailscale_interval"
+type            = "int"
+label_key       = "settings.tailscale_interval.label"
+description_key = "settings.tailscale_interval.description"
+default         = 20000
+min             = 1000
+max             = 300000
+step            = 1000
+
+[[setting]]
+key             = "ipad_interval"
+type            = "int"
+label_key       = "settings.ipad_interval.label"
+description_key = "settings.ipad_interval.description"
+default         = 5000
+min             = 1000
+max             = 120000
+step            = 1000
+
+[[setting]]
+key             = "temporal_interval"
+type            = "int"
+label_key       = "settings.temporal_interval.label"
+description_key = "settings.temporal_interval.description"
+default         = 30000
+min             = 5000
+max             = 600000
+step            = 5000
+
+[[setting]]
+key             = "thermostat_interval"
+type            = "int"
+label_key       = "settings.thermostat_interval.label"
+description_key = "settings.thermostat_interval.description"
+default         = 30000
+min             = 5000
+max             = 600000
+step            = 5000
+
+[[setting]]
+key             = "vast_interval"
+type            = "int"
+label_key       = "settings.vast_interval.label"
+description_key = "settings.vast_interval.description"
+default         = 60000
+min             = 10000
+max             = 900000
+step            = 10000
+
+[[setting]]
+key             = "updates_interval"
+type            = "int"
+label_key       = "settings.updates_interval.label"
+description_key = "settings.updates_interval.description"
+default         = 3600000
+min             = 60000
+max             = 86400000
+step            = 60000
+
+# Empty means noctalia.runInTerminal() picks the terminal itself ($TERMINAL,
+# then the first one found on PATH). Set it to e.g. "alacritty" to pin one.
+[[setting]]
+key             = "terminal"
+type            = "string"
+label_key       = "settings.terminal.label"
+description_key = "settings.terminal.description"
+default         = ""
+
+# ─── Bar widgets ─────────────────────────────────────────────
+
+[[widget]]
+id    = "media"
+entry = "widgets/media.luau"
+
+  # Back/forward are action-only gestures (no Luau callback exists for them), so
+  # the track skip lives here; the 2 s poll picks the new track up.
+  [widget.actions]
+  middle  = "none"
+  back    = "exec playerctl --all-players previous"
+  forward = "exec playerctl --all-players next"
+
+[[widget]]
+id    = "screenrec"
+entry = "widgets/screenrec.luau"
+
+[[widget]]
+id    = "autoclicker"
+entry = "widgets/autoclicker.luau"
+
+  # middle = none frees the middle button for autoclicker cycle.
+  [widget.actions]
+  middle = "none"
+
+[[widget]]
+id    = "tailscale"
+entry = "widgets/tailscale.luau"
+
+[[widget]]
+id    = "ipad"
+entry = "widgets/ipad.luau"
+
+[[widget]]
+id    = "temporal"
+entry = "widgets/temporal.luau"
+
+[[widget]]
+id    = "thermostat"
+entry = "widgets/thermostat.luau"
+
+  # middle = none frees the middle button for the thermostat toggle.
+  [widget.actions]
+  middle = "none"
+
+[[widget]]
+id    = "vast"
+entry = "widgets/vast.luau"
+
+[[widget]]
+id    = "updates"
+entry = "widgets/updates.luau"
+
+# ─── Panels (replacements for the Eww windows) ───────────────
+
+[[panel]]
+id              = "media-panel"
+entry           = "panels/media_panel.luau"
+width           = 520
+height          = "content"
+max_height      = 680
+placement       = "attached"
+open_near_click = true
+
+[[panel]]
+id              = "tailscale-panel"
+entry           = "panels/tailscale_panel.luau"
+width           = 400
+height          = "content"
+max_height      = 680
+placement       = "attached"
+open_near_click = true
+
+[[panel]]
+id              = "autoclicker-panel"
+entry           = "panels/autoclicker_panel.luau"
+width           = 440
+height          = "content"
+max_height      = 680
+placement       = "attached"
+open_near_click = true

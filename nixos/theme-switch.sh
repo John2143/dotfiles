@@ -35,7 +35,7 @@ write_gtk_settings() {
 }
 
 apply() {
-  local mode="$1" f name scheme gtk_name sock
+  local mode="$1" f name scheme gtk_name sock wall
   mkdir -p "$state/current"
   exec 9>"$state/.lock"
   flock -w 10 9
@@ -61,10 +61,14 @@ apply() {
       timeout 5 hyprctl -i "$inst" reload config-only >/dev/null 2>&1 || true
     done || true
   fi
-  timeout 10 systemctl --user try-reload-or-restart waybar.service >/dev/null 2>&1 || true
-  timeout 10 systemctl --user try-restart hyprpaper.service >/dev/null 2>&1 || true
-  timeout 5 eww reload >/dev/null 2>&1 || true
-  timeout 5 dunstctl reload >/dev/null 2>&1 || true
+  # Noctalia owns the bar, notifications, launcher, lock and wallpaper now.
+  timeout 5 noctalia msg theme-mode-set "$mode" >/dev/null 2>&1 || true
+  if [ -r "$state/current/wallpaper-path" ]; then
+    wall="$(head -n1 "$state/current/wallpaper-path")"
+    if [ -n "$wall" ] && [ -f "$wall" ]; then
+      timeout 5 noctalia msg wallpaper-set "$wall" >/dev/null 2>&1 || true
+    fi
+  fi
 
   if timeout 5 tmux has-session >/dev/null 2>&1; then
     # catppuccin sets the @thm_* options with `set -ogq`, which keeps the value
