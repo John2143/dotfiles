@@ -161,6 +161,33 @@
           modules = base.modules ++ [vmOverride];
         });
     };
+
+    # A voter of the US platform cluster (plan: us-platform-cluster-plan.md).
+    # Servers, not workstations: no home-manager, no tailscale, no GPU and no
+    # `vm-` variant (mkHost's variant adds a `john` user that these hosts do
+    # not have, and a VM cannot be disko-installed anyway). nixos-anywhere
+    # installs them onto a real disk in phase 1.
+    mkPlatformHost = name: let
+      node =
+        (import ./nixos/platform/nodes.nix).${name}
+        or (throw "unknown platform host: ${name} (see nixos/platform/nodes.nix)");
+    in
+      nixpkgs.lib.nixosSystem {
+        inherit system;
+        specialArgs = {
+          inherit inputs;
+          compName = name;
+          sshKeys = my-keys;
+        };
+        modules = [
+          agenix.nixosModules.default
+          inputs.disko.nixosModules.default
+          ./nixos/platform/base.nix
+          ./nixos/cluster/modules/disko.nix
+          ./nixos/cluster/modules/ssh.nix
+          {custom.platform = node;}
+        ];
+      };
   in rec {
     formatter.x86_64-linux = nixpkgs.legacyPackages.${system}.alejandra;
     formatter.aarch64-darwin = nixpkgs.legacyPackages.aarch64-darwin.alejandra;
@@ -461,6 +488,11 @@
           }
         ];
       })
+      // {
+        plat-bos = mkPlatformHost "plat-bos";
+        plat-home = mkPlatformHost "plat-home";
+        plat-nyc = mkPlatformHost "plat-nyc";
+      }
       // {
         installer = nixpkgs.lib.nixosSystem {
           inherit system;
