@@ -17,13 +17,29 @@ Singleton {
         if (xdg && String(xdg).length > 0)
             return String(xdg);
         const home = Quickshell.env("HOME");
-        return (home ? String(home) : "/tmp") + "/.local/state";
+        if (home && String(home).length > 0)
+            return String(home) + "/.local/state";
+        console.warn("Theme: neither XDG_STATE_HOME nor HOME is set");
+        return "";
     }
 
-    readonly property string palettePath: root.stateHome + "/theme/current/palette.json"
+    readonly property string palettePath: root.stateHome !== "" ? root.stateHome + "/theme/current/palette.json" : ""
 
     readonly property string fontFamily: "JetBrainsMono Nerd Font"
     readonly property int fontSize: 11
+    readonly property int fontSmall: Math.max(8, fontSize - 1)
+    readonly property int fontTiny: Math.max(8, fontSize - 2)
+
+    readonly property int toastWidth: 300
+    readonly property int panelWidth: 440
+    readonly property int marginTop: 40
+    readonly property int marginRight: 10
+    readonly property int marginBottom: 12
+    readonly property int toastGap: 8
+
+    readonly property string accentRole: "mauve"
+    readonly property string criticalRole: "peach"
+    readonly property string mutedRole: "overlay0"
 
     // Catppuccin Mocha, used until the first theme-switch run has produced a
     // palette file (or if it is unreadable).
@@ -84,6 +100,13 @@ Singleton {
     function alpha(name: string, a: real): color {
         const c = root.col(name);
         return Qt.rgba(c.r, c.g, c.b, a);
+    }
+    function urgencyRole(urgency: int): string {
+        if (urgency >= 2)
+            return root.criticalRole;
+        if (urgency <= 0)
+            return root.mutedRole;
+        return root.accentRole;
     }
 
     function reload(): void {

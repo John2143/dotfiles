@@ -9,14 +9,15 @@ import qs.components
 ShellRoot {
     id: root
 
-    // Touching both singletons at startup instantiates them before the first
-    // notification arrives, so NotificationServer claims the bus name and the
-    // palette is loaded before any card is drawn.
-    readonly property int _unread: Notifs.unreadCount
-    readonly property bool _dark: Theme.dark
-
+    // Instantiating both singletons at startup means NotificationServer claims
+    // org.freedesktop.Notifications and the palette is loaded before the first
+    // notification arrives (or any card is drawn).
     Component.onCompleted: {
         Quickshell.inhibitReloadPopup();
+        if (Theme.flavor.length === 0)
+            Theme.reload();
+        if (Notifs.panelOpen)
+            Notifs.closePanel();
     }
 
     ToastStack {}

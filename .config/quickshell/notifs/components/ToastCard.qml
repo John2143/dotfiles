@@ -1,3 +1,5 @@
+pragma ComponentBehavior: Bound
+
 // ToastCard.qml — one notification card.
 //
 // Shared by the toast stack (compact: false) and the history centre
@@ -5,8 +7,8 @@
 // Theme singleton, so light/dark switches are picked up live.
 import QtQuick
 import QtQuick.Layouts
-import Quickshell
 import qs.services
+import qs.components
 
 Rectangle {
     id: card
@@ -19,9 +21,6 @@ Rectangle {
 
     // Selection highlight (history centre keyboard navigation).
     property bool selected: false
-
-    // Bumped by the history centre so relative ages refresh while it is open.
-    property int tick: 0
 
     readonly property int pad: compact ? 8 : 10
 
@@ -51,19 +50,19 @@ Rectangle {
     }
     readonly property bool hasActions: liveNotif !== null && liveNotif !== undefined && actions.length > 0
 
-    readonly property bool isCritical: urgency >= 2
-    readonly property bool isLow: urgency === 0
+    readonly property bool isCritical: Notifs.isCritical(card.urgency)
+    readonly property bool isLow: Notifs.isLow(card.urgency)
 
     // ---- colours ------------------------------------------------------------
 
-    readonly property string accentName: isCritical ? "peach" : (isLow ? "overlay0" : "mauve")
-    readonly property color accentColor: Theme.col(accentName)
+    readonly property string accentName: Theme.urgencyRole(card.urgency)
+    readonly property color accentColor: Theme.col(card.accentName)
 
     readonly property color bgColor: {
         if (compact)
             return selected ? Theme.col("surface1") : Theme.col("surface0");
         if (isCritical)
-            return Theme.col("peach");
+            return Theme.col(Theme.criticalRole);
         if (isLow)
             return Theme.col("mantle");
         return Theme.col("base");
@@ -71,7 +70,7 @@ Rectangle {
 
     readonly property color fgColor: {
         if (compact)
-            return isCritical ? Theme.col("peach") : (isLow ? Theme.col("subtext0") : Theme.col("text"));
+            return isCritical ? Theme.col(Theme.criticalRole) : (isLow ? Theme.col("subtext0") : Theme.col("text"));
         if (isCritical)
             return Theme.col("base");
         if (isLow)
@@ -111,34 +110,15 @@ Rectangle {
 
     readonly property color fillColor: {
         if (compact)
-            return Theme.col("mauve");
-        return isCritical ? Theme.col("base") : Theme.col("mauve");
+            return Theme.col(Theme.accentRole);
+        return isCritical ? Theme.col("base") : Theme.col(Theme.accentRole);
     }
 
     // ---- text helpers -------------------------------------------------------
 
-    // Returns the relative age of a notification ("now", "5m", "3h", "2d").
-    function ageLabel(milliseconds) {
-        var helper = Notifs ? Notifs["formatAge"] : null;
-        if (typeof helper === "function")
-            return String(helper.call(Notifs, milliseconds));
-        if (!milliseconds || milliseconds <= 0)
-            return "";
-        var seconds = Math.max(0, Date.now() - milliseconds) / 1000;
-        if (seconds < 60)
-            return "now";
-        if (seconds < 3600)
-            return Math.floor(seconds / 60) + "m";
-        if (seconds < 86400)
-            return Math.floor(seconds / 3600) + "h";
-        return Math.floor(seconds / 86400) + "d";
-    }
-
-    // Keeps ages live while a card stays on screen (see the `tick` property).
-    readonly property string ageText: {
-        card.tick;
-        return card.ageLabel(card.timestamp);
-    }
+    // Relative age of the notification ("now", "5m", "3h", "2d"), kept live by
+    // Notifs' clock so cards refresh without a per-card timer.
+    readonly property string ageText: card.timestamp > 0 ? Notifs.formatAge(card.timestamp) : ""
 
     readonly property string metaLabel: {
         var age = card.ageText;
@@ -150,21 +130,18 @@ Rectangle {
     readonly property string summaryText: card.summary !== "" ? card.summary : (card.appName !== "" ? card.appName : "Notification")
 
     // Icon shown at the left of the card (client image first, then app icon).
-    readonly property string iconSource: {
-        if (card.image !== "")
-            return card.image;
-        if (card.appIcon !== "")
-            return Quickshell.iconPath(card.appIcon, true);
-        return "";
-    }
+    // Both fields were validated by Notifs._sanitizeImage/_sanitizeAppIcon.
+    readonly property string iconSource: card.image !== "" ? card.image : card.appIcon
 
-    readonly property bool hasImage: card.image !== ""
+    // Full-width client pixmaps are rendered large; icons stay in a small box.
+    readonly property bool hasImage: card.image !== "" && card.image.indexOf("image://icon/") !== 0
 
     // ---- markup sanitising --------------------------------------------------
 
-    // Preserve the tags libnotify clients actually send (b, i, u, a, br) and
-    // escape every other angle bracket so malformed markup cannot break the
-    // StyledText renderer.
+    // Preserve the tags libnotify clients actually send (b, i, u, s, small, big,
+    // tt, br and a-with-http/mailto-href) and escape everything else, so
+    // malformed markup can neither break the StyledText renderer nor smuggle a
+    // `file://` / `javascript:` link at xdg-open.
     function safeMarkup(text) {
         if (text === null || text === undefined)
             return "";
@@ -181,10 +158,7 @@ Rectangle {
                     continue;
                 }
                 var tag = input.substring(index + 1, end);
-                if (/^\/?\s*(b|i|u|br|a)\b/i.test(tag))
-                    output += input.substring(index, end + 1);
-                else
-                    output += "&lt;" + tag + "&gt;";
+                output += card.sanitizeTag(tag);
                 index = end + 1;
             } else if (ch === ">") {
                 output += "&gt;";
@@ -195,6 +169,33 @@ Rectangle {
             }
         }
         return output;
+    }
+
+    // Canonical, attribute-free markup for a single `<...>` tag body.
+    function sanitizeTag(tag) {
+        if (/^\/\s*a\s*$/i.test(tag))
+            return "</a>";
+        var allowed = tag.match(/^(\/)?\s*(b|i|u|s|small|big|tt|br)\s*(\/)?$/i);
+        if (allowed) {
+            var name = allowed[2].toLowerCase();
+            if (name === "br")
+                return "<br/>";
+            return allowed[1] ? "</" + name + ">" : "<" + name + ">";
+        }
+        var anchor = tag.match(/^a\s+([\s\S]+)$/i);
+        if (anchor) {
+            var attrs = anchor[1];
+            var hrefMatch = attrs.match(/\bhref\s*=\s*(?:"([^"]*)"|'([^']*)')/i);
+            var href = hrefMatch === null ? "" : (hrefMatch[1] !== undefined ? hrefMatch[1] : hrefMatch[2]);
+            href = String(href).trim();
+            if (href === "" || /[\x00-\x1f\x7f]/.test(href) || !/^(https?:\/\/|mailto:)/i.test(href))
+                return "&lt;" + tag + "&gt;";
+            // Escape the html-hostile characters without double-encoding
+            // entities the client already wrote (e.g. `?a=1&amp;b=2`).
+            var escaped = href.replace(/&(?!(?:amp|lt|gt|quot|apos|nbsp);|#\d+;|#x[0-9a-fA-F]+;)/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+            return '<a href="' + escaped + '">';
+        }
+        return "&lt;" + tag + "&gt;";
     }
 
     // Identifier used for a plain left click: the default action when the
@@ -216,8 +217,14 @@ Rectangle {
     color: card.bgColor
     border.width: card.compact ? 1 : 2
     border.color: card.borderColor
-    implicitWidth: 300
+    implicitWidth: Theme.toastWidth
     implicitHeight: layout.implicitHeight + 2 * card.pad
+
+    // A delegate rebuilt mid-hover must not leave the watcher paused forever.
+    Component.onDestruction: {
+        if (!card.compact && cardMouse.containsMouse)
+            Notifs.resumeToast(card.uid);
+    }
 
     // Urgency accent bar, only drawn for the compact history cards.
     Rectangle {
@@ -311,9 +318,9 @@ Rectangle {
                         font.pointSize: Theme.fontSize
                         font.bold: true
                         textFormat: Text.PlainText
-                        wrapMode: Text.NoWrap
-                        elide: Text.ElideMiddle
-                        maximumLineCount: 1
+                        wrapMode: card.compact ? Text.NoWrap : Text.Wrap
+                        maximumLineCount: card.compact ? 1 : 2
+                        elide: Text.ElideRight
                     }
 
                     Rectangle {
@@ -330,7 +337,7 @@ Rectangle {
                             text: "x" + card.duplicateCount
                             color: card.metaColor
                             font.family: Theme.fontFamily
-                            font.pointSize: Math.max(8, Theme.fontSize - 2)
+                            font.pointSize: Theme.fontTiny
                             font.bold: true
                         }
                     }
@@ -341,37 +348,22 @@ Rectangle {
                         text: card.metaLabel
                         color: card.metaColor
                         font.family: Theme.fontFamily
-                        font.pointSize: Math.max(8, Theme.fontSize - 2)
+                        font.pointSize: Theme.fontTiny
                         elide: Text.ElideRight
                         maximumLineCount: 1
                     }
 
-                    Rectangle {
+                    IconButton {
                         Layout.alignment: Qt.AlignVCenter
-                        Layout.preferredWidth: 18
-                        Layout.preferredHeight: 18
-                        radius: 9
-                        color: closeMouse.containsMouse ? Theme.alpha("surface2", 0.6) : "transparent"
-
-                        Text {
-                            anchors.centerIn: parent
-                            text: "✕"
-                            color: card.metaColor
-                            font.family: Theme.fontFamily
-                            font.pointSize: Math.max(8, Theme.fontSize - 1)
-                        }
-
-                        MouseArea {
-                            id: closeMouse
-                            anchors.fill: parent
-                            hoverEnabled: true
-                            cursorShape: Qt.PointingHandCursor
-                            onClicked: {
-                                if (card.compact)
-                                    Notifs.removeHistory(card.uid);
-                                else
-                                    Notifs.hideToast(card.uid);
-                            }
+                        buttonSize: 18
+                        fontPointSize: Theme.fontSmall
+                        glyphColor: card.metaColor
+                        hoverColor: Theme.alpha("surface2", 0.6)
+                        onClicked: {
+                            if (card.compact)
+                                Notifs.removeHistory(card.uid);
+                            else
+                                Notifs.hideToast(card.uid);
                         }
                     }
                 }
@@ -382,12 +374,14 @@ Rectangle {
                     text: card.safeMarkup(card.body)
                     textFormat: Text.StyledText
                     wrapMode: Text.Wrap
+                    maximumLineCount: card.compact ? 4 : 8
+                    elide: Text.ElideRight
                     color: card.fgColor
                     font.family: Theme.fontFamily
                     font.pointSize: Theme.fontSize
                     linkColor: card.isCritical && !card.compact ? Theme.col("base") : Theme.col("blue")
                     onLinkActivated: function (link) {
-                        Quickshell.execDetached(["xdg-open", link]);
+                        Notifs.openUrl(link);
                     }
                 }
             }
@@ -420,7 +414,7 @@ Rectangle {
                     id: actionButton
                     required property var modelData
 
-                    readonly property string actionId: modelData && modelData.identifier !== undefined && modelData.identifier !== null ? String(modelData.identifier) : ""
+                    readonly property string actionId: actionButton.modelData && actionButton.modelData.identifier !== undefined && actionButton.modelData.identifier !== null ? String(actionButton.modelData.identifier) : ""
 
                     radius: 8
                     implicitWidth: actionLabel.implicitWidth + 20
@@ -432,10 +426,10 @@ Rectangle {
                     Text {
                         id: actionLabel
                         anchors.centerIn: parent
-                        text: modelData && modelData.text !== undefined && modelData.text !== null && String(modelData.text) !== "" ? String(modelData.text) : "Open"
+                        text: actionButton.modelData && actionButton.modelData.text !== undefined && actionButton.modelData.text !== null && String(actionButton.modelData.text) !== "" ? String(actionButton.modelData.text) : "Open"
                         color: card.fgColor
                         font.family: Theme.fontFamily
-                        font.pointSize: Math.max(8, Theme.fontSize - 1)
+                        font.pointSize: Theme.fontSmall
                         font.bold: true
                     }
 

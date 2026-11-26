@@ -1,3 +1,5 @@
+pragma ComponentBehavior: Bound
+
 // HistoryPanel.qml — the wider right-anchored notification centre.
 //
 // 440 px card on the focused Hyprland monitor, opened with SUPER+SHIFT+N
@@ -21,15 +23,10 @@ Item {
         // qmllint disable uncreatable-type
         delegate: PanelWindow {
             id: panelWindow
-            property var modelData
+            required property ShellScreen modelData
 
             // Same focused-monitor rule as the toast stack.
-            readonly property bool isTargetScreen: {
-                var focused = Hyprland.focusedMonitor;
-                if (focused !== null && focused !== undefined && focused.name !== undefined)
-                    return modelData.name === focused.name;
-                return Quickshell.screens.length > 0 && modelData === Quickshell.screens[0];
-            }
+            readonly property bool isTargetScreen: Notifs.isFocusedScreen(panelWindow.modelData)
 
             readonly property int historyCount: {
                 var history = Notifs.history;
@@ -41,9 +38,6 @@ Item {
             property var collapsedApps: []
 
             property int selectedIndex: -1
-
-            // Bumped periodically so relative ages in the cards stay fresh.
-            property int ageTick: 0
 
             // [{ key, entries, latest }], newest group first.
             readonly property var groups: {
@@ -91,9 +85,9 @@ Item {
                         output.push(history[i]);
                     return output;
                 }
-                var groupList = groups;
+                var groupList = panelWindow.groups;
                 for (var g = 0; g < groupList.length; g++) {
-                    if (collapsedApps.indexOf(groupList[g].key) !== -1)
+                    if (panelWindow.collapsedApps.indexOf(groupList[g].key) !== -1)
                         continue;
                     var entries = groupList[g].entries;
                     for (var k = 0; k < entries.length; k++)
@@ -103,10 +97,10 @@ Item {
             }
 
             readonly property string selectedUid: {
-                var list = visibleEntries;
-                if (selectedIndex < 0 || selectedIndex >= list.length)
+                var list = panelWindow.visibleEntries;
+                if (panelWindow.selectedIndex < 0 || panelWindow.selectedIndex >= list.length)
                     return "";
-                return entryUid(list[selectedIndex]);
+                return panelWindow.entryUid(list[panelWindow.selectedIndex]);
             }
 
             function entryUid(item) {
@@ -116,71 +110,73 @@ Item {
             }
 
             function isSelected(item) {
-                var uid = entryUid(item);
-                return uid !== "" && uid === selectedUid;
+                var uid = panelWindow.entryUid(item);
+                return uid !== "" && uid === panelWindow.selectedUid;
             }
 
             function toggleGroup(key) {
-                var next = collapsedApps.slice();
+                var next = panelWindow.collapsedApps.slice();
                 var at = next.indexOf(key);
                 if (at === -1)
                     next.push(key);
                 else
                     next.splice(at, 1);
-                collapsedApps = next;
+                panelWindow.collapsedApps = next;
             }
 
             function clearGroup(entries) {
                 if (!entries)
                     return;
                 for (var i = 0; i < entries.length; i++) {
-                    var uid = entryUid(entries[i]);
+                    var uid = panelWindow.entryUid(entries[i]);
                     if (uid !== "")
                         Notifs.removeHistory(uid);
                 }
-                selectedIndex = -1;
+                panelWindow.selectedIndex = -1;
             }
 
             function moveSelection(delta) {
-                var list = visibleEntries;
+                var list = panelWindow.visibleEntries;
                 if (list.length === 0) {
-                    selectedIndex = -1;
+                    panelWindow.selectedIndex = -1;
                     return;
                 }
-                var next = selectedIndex < 0 ? (delta > 0 ? 0 : list.length - 1) : selectedIndex + delta;
+                var next = panelWindow.selectedIndex < 0 ? (delta > 0 ? 0 : list.length - 1) : panelWindow.selectedIndex + delta;
                 if (next < 0)
                     next = 0;
                 if (next > list.length - 1)
                     next = list.length - 1;
-                selectedIndex = next;
+                panelWindow.selectedIndex = next;
             }
 
+            // Enter on a live notification runs its default action; an inert
+            // history row falls back to opening the first URL in its text.
             function activateSelected() {
-                var list = visibleEntries;
-                if (selectedIndex < 0 || selectedIndex >= list.length)
+                var list = panelWindow.visibleEntries;
+                if (panelWindow.selectedIndex < 0 || panelWindow.selectedIndex >= list.length)
                     return;
-                var item = list[selectedIndex];
-                var uid = entryUid(item);
+                var item = list[panelWindow.selectedIndex];
+                var uid = panelWindow.entryUid(item);
                 if (uid === "")
                     return;
-                if (item.liveNotif !== undefined && item.liveNotif !== null)
+                if (item.liveNotif !== undefined && item.liveNotif !== null && item.actions !== undefined && item.actions !== null && item.actions.length > 0)
                     Notifs.invokeAction(uid, "");
                 else
                     Notifs.openFirstUrl(uid);
             }
 
             function removeSelected() {
-                var uid = selectedUid;
+                var uid = panelWindow.selectedUid;
                 if (uid === "")
                     return;
                 Notifs.removeHistory(uid);
-                var list = visibleEntries;
-                if (selectedIndex > list.length - 1)
-                    selectedIndex = list.length - 1;
+                var list = panelWindow.visibleEntries;
+                if (panelWindow.selectedIndex > list.length - 1)
+                    panelWindow.selectedIndex = list.length - 1;
             }
 
-            screen: modelData
-            visible: isTargetScreen && Notifs.panelOpen
+            screen: panelWindow.modelData
+            visible: panelWindow.isTargetScreen && Notifs.panelOpen
 
             anchors {
                 top: true
@@ -191,13 +187,13 @@ Item {
             // (fields live in quickshell-core.qmltypes), so qmllint flags top/bottom/right.
             // qmllint disable missing-property
             margins {
-                top: 40
-                bottom: 12
-                right: 10
+                top: Theme.marginTop
+                bottom: Theme.marginBottom
+                right: Theme.marginRight
             }
             // qmllint enable missing-property
 
-            implicitWidth: 440
+            implicitWidth: Theme.panelWidth
             color: "transparent"
             exclusionMode: ExclusionMode.Ignore
             focusable: true
@@ -207,8 +203,8 @@ Item {
             WlrLayershell.keyboardFocus: Notifs.panelOpen ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None
 
             onVisibleChanged: {
-                if (!visible)
-                    selectedIndex = -1;
+                if (!panelWindow.visible)
+                    panelWindow.selectedIndex = -1;
             }
 
             HyprlandFocusGrab {
@@ -216,13 +212,6 @@ Item {
                 windows: [panelWindow]
                 active: panelWindow.visible
                 onCleared: Notifs.closePanel()
-            }
-
-            Timer {
-                interval: 30000
-                repeat: true
-                running: panelWindow.visible
-                onTriggered: panelWindow.ageTick += 1
             }
 
             FocusScope {
@@ -281,7 +270,7 @@ Item {
                     radius: 12
                     color: Theme.col("base")
                     border.width: 2
-                    border.color: Theme.col("mauve")
+                    border.color: Theme.col(Theme.accentRole)
 
                     // ---- header -------------------------------------------------
                     Rectangle {
@@ -328,15 +317,15 @@ Item {
                                 radius: 8
                                 implicitWidth: countLabel.implicitWidth + 12
                                 implicitHeight: 18
-                                color: Theme.alpha("mauve", 0.2)
+                                color: Theme.alpha(Theme.accentRole, 0.2)
 
                                 Text {
                                     id: countLabel
                                     anchors.centerIn: parent
                                     text: String(panelWindow.historyCount)
-                                    color: Theme.col("mauve")
+                                    color: Theme.col(Theme.accentRole)
                                     font.family: Theme.fontFamily
-                                    font.pointSize: Math.max(8, Theme.fontSize - 2)
+                                    font.pointSize: Theme.fontTiny
                                     font.bold: true
                                 }
                             }
@@ -346,118 +335,45 @@ Item {
                             }
 
                             // Do-not-disturb pill
-                            Rectangle {
-                                id: dndPill
+                            Pill {
                                 Layout.alignment: Qt.AlignVCenter
-                                Layout.preferredWidth: dndLabel.implicitWidth + 16
-                                Layout.preferredHeight: 22
-                                radius: 11
-                                color: Notifs.dnd ? Theme.alpha("peach", 0.2) : Theme.col("surface0")
-                                border.width: 1
-                                border.color: Notifs.dnd ? Theme.col("peach") : Theme.col("surface1")
-
-                                Text {
-                                    id: dndLabel
-                                    anchors.centerIn: parent
-                                    text: "DND"
-                                    color: Notifs.dnd ? Theme.col("peach") : Theme.col("overlay1")
-                                    font.family: Theme.fontFamily
-                                    font.pointSize: Math.max(8, Theme.fontSize - 2)
-                                    font.bold: Notifs.dnd
-                                }
-
-                                MouseArea {
-                                    anchors.fill: parent
-                                    cursorShape: Qt.PointingHandCursor
-                                    onClicked: Notifs.toggleDnd()
-                                }
+                                label: "DND"
+                                active: Notifs.dnd
+                                accentRole: Theme.criticalRole
+                                onClicked: Notifs.toggleDnd()
                             }
 
                             // Grouped / flat pill
-                            Rectangle {
-                                id: groupPill
+                            Pill {
                                 Layout.alignment: Qt.AlignVCenter
-                                Layout.preferredWidth: groupLabel.implicitWidth + 16
-                                Layout.preferredHeight: 22
-                                radius: 11
-                                color: Notifs.grouped ? Theme.alpha("mauve", 0.2) : Theme.col("surface0")
-                                border.width: 1
-                                border.color: Notifs.grouped ? Theme.col("mauve") : Theme.col("surface1")
-
-                                Text {
-                                    id: groupLabel
-                                    anchors.centerIn: parent
-                                    text: Notifs.grouped ? "Grouped" : "Flat"
-                                    color: Notifs.grouped ? Theme.col("mauve") : Theme.col("overlay1")
-                                    font.family: Theme.fontFamily
-                                    font.pointSize: Math.max(8, Theme.fontSize - 2)
-                                    font.bold: Notifs.grouped
-                                }
-
-                                MouseArea {
-                                    anchors.fill: parent
-                                    cursorShape: Qt.PointingHandCursor
-                                    onClicked: {
-                                        Notifs.grouped = !Notifs.grouped;
-                                        panelWindow.selectedIndex = -1;
-                                    }
+                                label: Notifs.grouped ? "Grouped" : "Flat"
+                                active: Notifs.grouped
+                                accentRole: Theme.accentRole
+                                onClicked: {
+                                    Notifs.grouped = !Notifs.grouped;
+                                    panelWindow.selectedIndex = -1;
                                 }
                             }
 
                             // Clear all
-                            Rectangle {
+                            Pill {
                                 Layout.alignment: Qt.AlignVCenter
-                                Layout.preferredWidth: clearLabel.implicitWidth + 16
-                                Layout.preferredHeight: 22
-                                radius: 11
-                                color: clearMouse.containsMouse ? Theme.alpha("surface2", 0.9) : "transparent"
-                                border.width: 1
-                                border.color: Theme.col("surface1")
-
-                                Text {
-                                    id: clearLabel
-                                    anchors.centerIn: parent
-                                    text: "Clear All"
-                                    color: Theme.col("subtext0")
-                                    font.family: Theme.fontFamily
-                                    font.pointSize: Math.max(8, Theme.fontSize - 2)
-                                }
-
-                                MouseArea {
-                                    id: clearMouse
-                                    anchors.fill: parent
-                                    hoverEnabled: true
-                                    cursorShape: Qt.PointingHandCursor
-                                    onClicked: {
-                                        Notifs.clearHistory();
-                                        panelWindow.selectedIndex = -1;
-                                    }
+                                label: "Clear All"
+                                toggleStyle: false
+                                onClicked: {
+                                    Notifs.clearHistory();
+                                    panelWindow.selectedIndex = -1;
                                 }
                             }
 
                             // Close
-                            Rectangle {
+                            IconButton {
                                 Layout.alignment: Qt.AlignVCenter
-                                Layout.preferredWidth: 22
-                                Layout.preferredHeight: 22
-                                radius: 11
-                                color: closeMouse.containsMouse ? Theme.alpha("red", 0.25) : "transparent"
-
-                                Text {
-                                    anchors.centerIn: parent
-                                    text: "✕"
-                                    color: Theme.col("overlay2")
-                                    font.family: Theme.fontFamily
-                                    font.pointSize: Theme.fontSize
-                                }
-
-                                MouseArea {
-                                    id: closeMouse
-                                    anchors.fill: parent
-                                    hoverEnabled: true
-                                    cursorShape: Qt.PointingHandCursor
-                                    onClicked: Notifs.closePanel()
-                                }
+                                buttonSize: 22
+                                fontPointSize: Theme.fontSize
+                                glyphColor: Theme.col("overlay2")
+                                hoverColor: Theme.alpha("red", 0.25)
+                                onClicked: Notifs.closePanel()
                             }
                         }
                     }
@@ -499,8 +415,8 @@ Item {
                                         id: groupBlock
                                         required property var modelData
 
-                                        readonly property var groupData: modelData
-                                        readonly property bool collapsed: panelWindow.collapsedApps.indexOf(groupData.key) !== -1
+                                        readonly property var groupData: groupBlock.modelData
+                                        readonly property bool collapsed: panelWindow.collapsedApps.indexOf(groupBlock.groupData.key) !== -1
 
                                         width: groupedColumn.width
                                         spacing: 4
@@ -529,7 +445,7 @@ Item {
                                                     text: groupBlock.collapsed ? "▸" : "▾"
                                                     color: Theme.col("overlay1")
                                                     font.family: Theme.fontFamily
-                                                    font.pointSize: Math.max(8, Theme.fontSize - 1)
+                                                    font.pointSize: Theme.fontSmall
                                                 }
 
                                                 Text {
@@ -538,34 +454,19 @@ Item {
                                                     text: groupBlock.groupData.key + "  ·  " + groupBlock.groupData.entries.length
                                                     color: Theme.col("subtext0")
                                                     font.family: Theme.fontFamily
-                                                    font.pointSize: Math.max(8, Theme.fontSize - 1)
+                                                    font.pointSize: Theme.fontSmall
                                                     font.bold: true
                                                     elide: Text.ElideRight
                                                     maximumLineCount: 1
                                                 }
 
-                                                Rectangle {
+                                                IconButton {
                                                     Layout.alignment: Qt.AlignVCenter
-                                                    Layout.preferredWidth: 18
-                                                    Layout.preferredHeight: 18
-                                                    radius: 9
-                                                    color: groupClearMouse.containsMouse ? Theme.alpha("surface2", 0.9) : "transparent"
-
-                                                    Text {
-                                                        anchors.centerIn: parent
-                                                        text: "✕"
-                                                        color: Theme.col("overlay1")
-                                                        font.family: Theme.fontFamily
-                                                        font.pointSize: Math.max(8, Theme.fontSize - 2)
-                                                    }
-
-                                                    MouseArea {
-                                                        id: groupClearMouse
-                                                        anchors.fill: parent
-                                                        hoverEnabled: true
-                                                        cursorShape: Qt.PointingHandCursor
-                                                        onClicked: panelWindow.clearGroup(groupBlock.groupData.entries)
-                                                    }
+                                                    buttonSize: 18
+                                                    fontPointSize: Theme.fontTiny
+                                                    glyphColor: Theme.col("overlay1")
+                                                    hoverColor: Theme.alpha("surface2", 0.9)
+                                                    onClicked: panelWindow.clearGroup(groupBlock.groupData.entries)
                                                 }
                                             }
                                         }
@@ -579,13 +480,13 @@ Item {
                                                 model: groupBlock.groupData.entries
 
                                                 delegate: ToastCard {
+                                                    id: groupedCard
                                                     required property var modelData
 
                                                     width: groupBlock.width
                                                     compact: true
-                                                    entry: modelData
-                                                    selected: panelWindow.isSelected(modelData)
-                                                    tick: panelWindow.ageTick
+                                                    entry: groupedCard.modelData
+                                                    selected: panelWindow.isSelected(groupedCard.modelData)
                                                 }
                                             }
                                         }
@@ -604,13 +505,13 @@ Item {
                                     model: Notifs.history
 
                                     delegate: ToastCard {
+                                        id: flatCard
                                         required property var modelData
 
                                         width: flatColumn.width
                                         compact: true
-                                        entry: modelData
-                                        selected: panelWindow.isSelected(modelData)
-                                        tick: panelWindow.ageTick
+                                        entry: flatCard.modelData
+                                        selected: panelWindow.isSelected(flatCard.modelData)
                                     }
                                 }
                             }
@@ -657,10 +558,10 @@ Item {
                             anchors.centerIn: parent
                             width: parent.width - 20
                             horizontalAlignment: Text.AlignHCenter
-                            text: "j/k nav · Enter action · x del · d DND · g group · C clear · Esc close"
+                            text: "j/k nav · ↵ act · x del · d DND · g grp · ⇧C clr · Esc"
                             color: Theme.col("overlay1")
                             font.family: Theme.fontFamily
-                            font.pointSize: 9
+                            font.pointSize: Theme.fontTiny
                             elide: Text.ElideRight
                         }
                     }

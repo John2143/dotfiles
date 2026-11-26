@@ -2,15 +2,23 @@ pragma Singleton
 
 import QtQuick
 import Quickshell
-import Quickshell.Io
 import Quickshell.Services.Notifications
+import Quickshell.Hyprland
+import qs.services
 
-// Notification daemon + history store.
+// Notification daemon + RAM-only history.
 //
 // One NotificationServer owns org.freedesktop.Notifications. Live notifications
-// are held by tracked Notification objects (so `replaces_id` updates flow in
-// place); the history list is an inert JSON record set that is flushed to
-// $XDG_STATE_HOME/quickshell-notifs/history.json with a 1 s debounce.
+// are held by tracked Notification objects, so a `replaces_id` Notify() arrives
+// as property changes on the existing object instead of a second card. History
+// lives in memory only (dunst parity); the sole thing that survives a restart
+// is the dnd/grouped pair persisted by PrefsStore.
+//
+// The D-Bus lifecycle also mirrors dunst: a timed-out notification is closed
+// with expire() (NotificationClosed reason 1), a hidden or evicted toast is
+// closed with dismiss() (reason 2). Both land in _onLiveClosed(), which strips
+// the live handle from the history row and destroys its LiveWatcher, so no
+// tracked notification leaks and `notify-send --wait` never hangs.
 Singleton {
     id: root
 
@@ -25,20 +33,23 @@ Singleton {
     property list<var> toasts: []
     property list<var> history: []
 
-    readonly property string stateHome: {
-        const xdg = Quickshell.env("XDG_STATE_HOME");
-        if (xdg && String(xdg).length > 0)
-            return String(xdg);
-        const home = Quickshell.env("HOME");
-        return (home ? String(home) : "/tmp") + "/.local/state";
-    }
+    // ---------------------------------------------------------------------
+    // Tunables
+    // ---------------------------------------------------------------------
 
-    readonly property string stateDir: root.stateHome + "/quickshell-notifs"
+    readonly property int defaultTimeoutMs: 10000
+    readonly property int duplicateWindowMs: 10000
+    readonly property int maxToasts: 20
+    readonly property int maxHistory: 200
+    readonly property int maxLiveWatchers: 50
+    readonly property int maxSummaryLen: 512
+    readonly property int maxBodyLen: 4096
+    readonly property int maxAppNameLen: 128
 
-    // Internal bookkeeping (not persisted).
-    property bool _loaded: false
+    // Internal bookkeeping (never persisted).
     property int _seq: 0
     property var _watchers: ({})
+    property var _watcherOrder: []
     property var _dismissQueue: []
     property int _dismissIndex: 0
 
@@ -46,9 +57,9 @@ Singleton {
         if (root.panelOpen)
             root.unreadCount = 0;
     }
-    onHistoryChanged: root._scheduleSave()
-    onDndChanged: root._scheduleSave()
-    onGroupedChanged: root._scheduleSave()
+
+    onDndChanged: prefs.scheduleSave(root.dnd, root.grouped)
+    onGroupedChanged: prefs.scheduleSave(root.dnd, root.grouped)
 
     // ---------------------------------------------------------------------
     // Contract API
@@ -59,8 +70,8 @@ Singleton {
     }
 
     function openPanel(): void {
+        // unreadCount is cleared by onPanelOpenChanged.
         root.panelOpen = true;
-        root.unreadCount = 0;
     }
 
     function closePanel(): void {
@@ -76,54 +87,54 @@ Singleton {
     }
 
     function hideToast(uid: string): void {
-        const watcher = root._watchers[uid];
-        if (watcher)
-            watcher.stopTimer();
         root._removeToast(uid);
+        const notif = root._liveNotifOf(uid);
+        if (notif)
+            notif.dismiss();
+        else
+            root._destroyWatcher(uid);
     }
 
     function hideAllToasts(): void {
         const arr = root._asArray(root.toasts);
+        const notifs = [];
         for (let i = 0; i < arr.length; i++) {
-            const watcher = root._watchers[arr[i].uid];
-            if (watcher)
-                watcher.stopTimer();
+            const notif = root._liveNotifOf(arr[i].uid);
+            if (notif)
+                notifs.push(notif);
+            else
+                root._destroyWatcher(arr[i].uid);
         }
         root.toasts = [];
+        root._enqueueDismiss(notifs);
     }
 
     function dismissEntry(uid: string): void {
-        const notif = root._liveNotifOf(uid);
-        if (notif)
-            notif.dismiss();
-        root._removeToast(uid);
+        root.hideToast(uid);
     }
 
     function removeHistory(uid: string): void {
-        root.dismissEntry(uid);
+        root.hideToast(uid);
         root._removeHistory(uid);
-        root._scheduleSave();
     }
 
     function clearHistory(): void {
         const queue = [];
-        for (const uid in root._watchers) {
-            const watcher = root._watchers[uid];
+        const uids = Object.keys(root._watchers);
+        for (let i = 0; i < uids.length; i++) {
+            const watcher = root._watchers[uids[i]];
             if (watcher && watcher.notif)
                 queue.push(watcher.notif);
-            root._destroyWatcher(uid);
+            root._destroyWatcher(uids[i]);
         }
 
         root.history = [];
         root.toasts = [];
         root.unreadCount = 0;
 
-        // Dismissing a few hundred notifications synchronously would block the
-        // UI thread; the timer drains one per tick.
-        root._dismissQueue = queue;
-        root._dismissIndex = 0;
-        if (queue.length > 0)
-            dismissBatchTimer.restart();
+        // Dismissing hundreds of notifications synchronously would block the UI
+        // thread; the batch timer drains them one per tick.
+        root._enqueueDismiss(queue);
     }
 
     function invokeAction(uid: string, identifier: string): void {
@@ -131,35 +142,56 @@ Singleton {
         if (!notif)
             return;
 
-        const want = identifier.length === 0 ? "default" : identifier;
         const actions = notif.actions;
-        if (!actions)
+        if (!actions || actions.length === 0)
             return;
 
+        if (identifier.length > 0) {
+            for (let i = 0; i < actions.length; i++) {
+                if (String(actions[i].identifier) === identifier) {
+                    actions[i].invoke();
+                    return;
+                }
+            }
+            return;
+        }
+
+        // No explicit identifier: prefer the spec's default action, then the
+        // "no identifier" action, then the first one offered.
         for (let i = 0; i < actions.length; i++) {
-            const action = actions[i];
-            if (String(action.identifier) === want) {
-                action.invoke();
+            const id = String(actions[i].identifier);
+            if (id === "default" || id === "") {
+                actions[i].invoke();
                 return;
             }
         }
+        actions[0].invoke();
     }
 
     function openFirstUrl(uid: string): void {
-        const entry = root._entryOf(uid);
+        const entry = root._findEntry(uid);
         if (!entry)
             return;
 
         const text = String(entry.body || "") + "\n" + String(entry.summary || "");
         const match = text.match(/https?:\/\/[^\s<>"')\]]+/);
         if (match)
-            Quickshell.execDetached(["xdg-open", match[0]]);
+            root.openUrl(match[0]);
     }
 
-    function openUrl(url: string): void {
-        if (url.length === 0)
-            return;
-        Quickshell.execDetached(["xdg-open", url]);
+    // Only http(s)/mailto ever reach xdg-open: a notification is untrusted
+    // input, and `file://` or `javascript:` would be a live local file read or
+    // handler hijack.
+    function openUrl(url: string): bool {
+        const trimmed = String(url || "").trim();
+        if (trimmed.length === 0)
+            return false;
+        if (/[\x00-\x1f\x7f]/.test(trimmed))
+            return false;
+        if (!/^(https?:\/\/|mailto:)/i.test(trimmed))
+            return false;
+        Quickshell.execDetached(["xdg-open", trimmed]);
+        return true;
     }
 
     function pauseToast(uid: string): void {
@@ -190,6 +222,29 @@ Singleton {
     }
 
     // ---------------------------------------------------------------------
+    // Shared view helpers
+    // ---------------------------------------------------------------------
+
+    // dunst's `follow = keyboard`: toasts/panel only exist on the focused
+    // monitor, falling back to the first screen when Hyprland has no answer.
+    function isFocusedScreen(screen: ShellScreen): bool {
+        const focused = Hyprland.focusedMonitor;
+        if (screen && focused && focused.name !== undefined)
+            return String(screen.name) === String(focused.name);
+        const screens = Quickshell.screens;
+        return screens !== null && screens !== undefined
+                && screens.length > 0 && screen === screens[0];
+    }
+
+    function isCritical(urgency: int): bool {
+        return urgency >= NotificationUrgency.Critical;
+    }
+
+    function isLow(urgency: int): bool {
+        return urgency <= NotificationUrgency.Low;
+    }
+
+    // ---------------------------------------------------------------------
     // Notification server
     // ---------------------------------------------------------------------
 
@@ -208,7 +263,7 @@ Singleton {
         inlineReplySupported: false
         extraHints: ["x-dunst-stack-tag"]
 
-        onNotification: n => {
+        onNotification: function (n): void {
             root._ingest(n);
         }
     }
@@ -221,10 +276,9 @@ Singleton {
         if (!n)
             return;
 
-        const summary = String(n.summary || "");
         // Bastion "base station connected" notifications (dunstrc skip_display
         // + history_ignore) are dropped before anything else happens.
-        if (/^LHB-/.test(summary)) {
+        if (/^LHB-/.test(String(n.summary || ""))) {
             n.dismiss();
             return;
         }
@@ -234,24 +288,27 @@ Singleton {
         n.tracked = true;
 
         const stackTag = root._stackTagOf(n);
-        const appName = String(n.appName || "");
-        const body = String(n.body || "");
+        const appName = root._truncate(n.appName, root.maxAppNameLen);
+        const summary = root._truncate(n.summary, root.maxSummaryLen);
+        const body = root._truncate(n.body, root.maxBodyLen);
         const urgency = Number(n.urgency);
 
         // x-dunst-stack-tag coalescing: replace the prior card/history slot.
+        // The tag is matched together with the app name so two different
+        // applications cannot spoof each other's slot.
         if (stackTag.length > 0) {
-            const uids = root._asArray(root.toasts);
             let uid = "";
-            for (let i = 0; i < uids.length; i++) {
-                if (uids[i].stackTag === stackTag) {
-                    uid = uids[i].uid;
+            const toasts = root._asArray(root.toasts);
+            for (let i = 0; i < toasts.length; i++) {
+                if (toasts[i].stackTag === stackTag && toasts[i].appName === appName) {
+                    uid = toasts[i].uid;
                     break;
                 }
             }
             if (uid.length === 0) {
                 const records = root._asArray(root.history);
                 for (let i = 0; i < records.length; i++) {
-                    if (records[i].stackTag === stackTag) {
+                    if (records[i].stackTag === stackTag && records[i].appName === appName) {
                         uid = records[i].uid;
                         break;
                     }
@@ -259,81 +316,76 @@ Singleton {
             }
 
             if (uid.length > 0) {
+                const existing = root._findEntry(uid);
                 const oldNotif = root._liveNotifOf(uid);
                 root._destroyWatcher(uid);
                 if (oldNotif && oldNotif !== n)
                     oldNotif.dismiss();
 
-                const entry = root._makeEntry(n, uid);
-                const record = root._makeEntry(n, uid);
-                const existing = root._findEntry(uid);
+                // One entry feeds both lists so their duplicateCount and
+                // timestamp can never drift apart.
+                const entry = root._buildEntry(n, uid, existing);
+                entry.timestamp = Date.now();
+
+                if (!entry.transient) {
+                    // A refreshed stack slot is the newest event in history, so
+                    // it moves to the front instead of keeping the old index.
+                    const rest = root._removeByUid(root.history, uid);
+                    root.history = root._upsertByUid(rest, Object.assign({}, entry)).slice(0, root.maxHistory);
+                }
 
                 if (root._shouldShowToast(urgency))
-                    root._putToast(entry);
+                    root._putToast(Object.assign({}, entry));
                 else
                     root._removeToast(uid);
 
-                if (!record.transient) {
-                    if (existing)
-                        record.duplicateCount = Math.max(1, Number(existing.duplicateCount) || 1);
-                    root._putHistoryRecord(record);
-                }
-
                 root._attachWatcher(uid, n);
-                if (!root.panelOpen && !record.transient)
-                    root.unreadCount += 1;
-                root._scheduleSave();
                 return;
             }
         }
 
-        // idempotent duplicate stacking (same app/summary/body within 10 s)
+        // Idempotent duplicate stacking (same app/summary/body within 10 s).
         const candidates = root._asArray(root.toasts);
         for (let i = 0; i < candidates.length; i++) {
-            const t = candidates[i];
-            if (t.appName === appName && t.summary === summary && t.body === body
-                    && Number(t.urgency) === urgency && (Date.now() - Number(t.timestamp)) < 10000) {
-                const bumped = root._asArray(root.toasts).slice();
-                const toast = bumped[i];
-                toast.duplicateCount = Math.max(1, Number(toast.duplicateCount) || 1) + 1;
-                bumped[i] = toast;
-                root.toasts = bumped;
+            const toast = candidates[i];
+            if (toast.appName === appName && toast.summary === summary && toast.body === body
+                    && Number(toast.urgency) === urgency
+                    && (Date.now() - Number(toast.timestamp)) < root.duplicateWindowMs) {
+                const nextCount = Math.max(1, Number(toast.duplicateCount) || 1) + 1;
 
-                const recordIndex = root._historyIndex(toast.uid);
+                const toastsNow = root._asArray(root.toasts).slice();
+                toastsNow[i] = Object.assign({}, toastsNow[i], { "duplicateCount": nextCount });
+                root.toasts = toastsNow;
+
+                const recordIndex = root._indexOfUid(root.history, toast.uid);
                 if (recordIndex >= 0) {
                     const records = root._asArray(root.history).slice();
-                    const record = records[recordIndex];
-                    record.duplicateCount = toast.duplicateCount;
-                    records[recordIndex] = record;
+                    records[recordIndex] = Object.assign({}, records[recordIndex], { "duplicateCount": nextCount });
                     root.history = records;
                 }
 
                 const watcher = root._watchers[toast.uid];
                 if (watcher)
-                    watcher.startTimer(root._timeoutMs(n));
+                    watcher.resetTimer(root._timeoutMs(n));
 
-                if (!root.panelOpen)
-                    root.unreadCount += 1;
                 n.dismiss();
-                root._scheduleSave();
                 return;
             }
         }
 
         // Fresh notification.
         const uid = root._nextUid();
-        const entry = root._makeEntry(n, uid);
-        const record = root._makeEntry(n, uid);
+        const entry = root._buildEntry(n, uid, null);
 
-        if (!record.transient)
-            root._putHistoryRecord(record);
+        if (!entry.transient)
+            root._putHistoryRecord(Object.assign({}, entry));
         if (root._shouldShowToast(urgency))
-            root._putToast(entry);
+            root._putToast(Object.assign({}, entry));
 
         root._attachWatcher(uid, n);
-        if (!root.panelOpen && !record.transient)
+
+        if (!root.panelOpen && !entry.transient)
             root.unreadCount += 1;
-        root._scheduleSave();
     }
 
     function _shouldShowToast(urgency: int): bool {
@@ -342,8 +394,13 @@ Singleton {
         return urgency >= NotificationUrgency.Critical;
     }
 
+    // ---------------------------------------------------------------------
+    // Live watcher lifecycle (dunst parity, FIFO capped)
+    // ---------------------------------------------------------------------
+
     function _attachWatcher(uid: string, n): void {
         root._destroyWatcher(uid);
+
         const watcher = liveWatcherComponent.createObject(root, {
                 "uid": uid,
                 "notif": n,
@@ -351,30 +408,130 @@ Singleton {
             });
         if (!watcher)
             return;
+
         root._watchers[uid] = watcher;
+        if (root._watcherOrder.indexOf(uid) === -1)
+            root._watcherOrder = root._asArray(root._watcherOrder).concat([uid]);
+
         watcher.startTimer(root._timeoutMs(n));
+        root._enforceWatcherCap();
     }
 
     function _destroyWatcher(uid: string): void {
+        const order = root._asArray(root._watcherOrder);
+        if (order.indexOf(uid) !== -1)
+            root._watcherOrder = order.filter(item => item !== uid);
+
         const watcher = root._watchers[uid];
         if (!watcher)
             return;
-        watcher.stopTimer();
-        if (watcher.conn)
-            watcher.conn.enabled = false;
+
+        watcher.teardown();
         delete root._watchers[uid];
         watcher.destroy();
+    }
+
+    // Tracked notifications are retained by the server until they are closed,
+    // so the live set is bounded: the oldest handle is expired and its history
+    // row goes inert.
+    function _enforceWatcherCap(): void {
+        while (root._watcherOrder.length > root.maxLiveWatchers) {
+            const uid = String(root._watcherOrder[0]);
+            root._watcherOrder = root._watcherOrder.slice(1);
+
+            const watcher = root._watchers[uid];
+            const notif = watcher && watcher.notif ? watcher.notif : null;
+
+            root._markHistoryInert(uid);
+            root._removeToast(uid);
+            root._destroyWatcher(uid);
+            if (notif)
+                notif.expire();
+        }
+    }
+
+    // Replace a history row with an inert clone: no live handle, no D-Bus id,
+    // no actions, and no pixmap URI (those only exist while tracked).
+    function _markHistoryInert(uid: string): void {
+        const index = root._indexOfUid(root.history, uid);
+        if (index < 0)
+            return;
+
+        const records = root._asArray(root.history).slice();
+        const record = records[index];
+        const image = typeof record.image === "string"
+                && record.image.indexOf("image://qsimage/") === 0 ? "" : record.image;
+        records[index] = Object.assign({}, record, {
+                "liveNotif": null,
+                "dbusId": 0,
+                "actions": [],
+                "image": image
+            });
+        root.history = records;
+    }
+
+    function _handleExpiry(uid: string): void {
+        root._removeToast(uid);
+
+        const watcher = root._watchers[uid];
+        if (!watcher)
+            return;
+
+        if (watcher.notif) {
+            // Both transient and non-transient notifications are closed on the
+            // bus; onClosed then marks the history row inert.
+            watcher.notif.expire();
+            return;
+        }
+
+        root._markHistoryInert(uid);
+        root._destroyWatcher(uid);
+    }
+
+    function _onLiveClosed(uid: string): void {
+        const watcher = root._watchers[uid];
+        if (!watcher)
+            return;
+
+        // Pick up anything the notification changed just before closing, then
+        // strip the live handle so the row stays a pure history record.
+        const notif = watcher.notif;
+        if (notif)
+            root._syncFromNotif(uid, notif);
+
+        root._markHistoryInert(uid);
+        root._removeToast(uid);
+        root._destroyWatcher(uid);
+    }
+
+    // The server (and once-cancelled notify-send --wait) must see a close for
+    // everything we drop, so dismissals are queued instead of dropped or run
+    // in one blocking burst.
+    function _enqueueDismiss(notifs): void {
+        const items = root._asArray(notifs);
+        const queue = [];
+        for (let i = 0; i < items.length; i++) {
+            if (items[i])
+                queue.push(items[i]);
+        }
+        if (queue.length === 0)
+            return;
+
+        root._dismissQueue = root._asArray(root._dismissQueue).concat(queue);
+        if (!dismissBatchTimer.running)
+            dismissBatchTimer.start();
     }
 
     // ---------------------------------------------------------------------
     // Live notification changes (replaces_id lands here, not in _ingest)
     // ---------------------------------------------------------------------
 
-    function _syncLive(uid: string): void {
+    function _onNotifUpdated(uid: string): void {
         const watcher = root._watchers[uid];
         if (!watcher || !watcher.notif)
             return;
         root._syncFromNotif(uid, watcher.notif);
+        watcher.resetTimer(root._timeoutMs(watcher.notif));
     }
 
     function _syncFromNotif(uid: string, n): void {
@@ -383,9 +540,7 @@ Singleton {
         for (let i = 0; i < toasts.length; i++) {
             if (toasts[i].uid !== uid)
                 continue;
-            const entry = toasts[i];
-            root._applyNotif(entry, n);
-            toasts[i] = entry;
+            toasts[i] = root._buildEntry(n, uid, toasts[i]);
             toastChanged = true;
         }
         if (toastChanged)
@@ -396,116 +551,120 @@ Singleton {
         for (let i = 0; i < records.length; i++) {
             if (records[i].uid !== uid)
                 continue;
-            const record = records[i];
-            root._applyNotif(record, n);
-            records[i] = record;
+            records[i] = root._buildEntry(n, uid, records[i]);
             historyChanged = true;
         }
         if (historyChanged)
             root.history = records;
-
-        root._scheduleSave();
-    }
-
-    function _onLiveClosed(uid: string): void {
-        const watcher = root._watchers[uid];
-        if (!watcher)
-            return;
-
-        const n = watcher.notif;
-        if (n)
-            root._syncFromNotif(uid, n);
-
-        root._removeToast(uid);
-
-        const index = root._historyIndex(uid);
-        if (index >= 0) {
-            const records = root._asArray(root.history).slice();
-            const record = records[index];
-            record.liveNotif = null;
-            record.dbusId = 0;
-            record.actions = [];
-            if (typeof record.image === "string" && record.image.indexOf("image://qsimage") === 0)
-                record.image = "";
-            records[index] = record;
-            root.history = records;
-        }
-
-        if (watcher.conn)
-            watcher.conn.enabled = false;
-        watcher.stopTimer();
-        delete root._watchers[uid];
-        watcher.destroy();
-        root._scheduleSave();
-    }
-
-    function _handleExpiry(uid: string): void {
-        const watcher = root._watchers[uid];
-        if (!watcher)
-            return;
-
-        const index = root._toastIndex(uid);
-        const entry = index >= 0 ? root._asArray(root.toasts)[index] : root._findEntry(uid);
-        const transient = entry ? entry.transient === true
-                                : (watcher.notif ? watcher.notif.transient === true : false);
-
-        if (transient) {
-            // Transient notifications are never persisted; let the server tell
-            // the client it expired.
-            root._removeToast(uid);
-            if (watcher.notif)
-                watcher.notif.expire();
-            return;
-        }
-
-        // Timeout only hides the popup. The notification stays tracked so the
-        // history row keeps its live actions; D4 forbids dismiss() here.
-        root._removeToast(uid);
-    }
-
-    function _resetTimer(uid: string): void {
-        const watcher = root._watchers[uid];
-        if (!watcher || !watcher.notif)
-            return;
-        watcher.startTimer(root._timeoutMs(watcher.notif));
     }
 
     // ---------------------------------------------------------------------
-    // Entry helpers
+    // Entry construction / sanitizing
     // ---------------------------------------------------------------------
 
-    function _makeEntry(n, uid: string): var {
+    function _buildEntry(n, uid: string, prev): var {
         return {
             "uid": uid,
             "dbusId": Number(n.id) || 0,
             "stackTag": root._stackTagOf(n),
-            "appName": String(n.appName || ""),
-            "appIcon": String(n.appIcon || ""),
-            "image": String(n.image || ""),
-            "summary": String(n.summary || ""),
-            "body": String(n.body || ""),
+            "appName": root._truncate(n.appName, root.maxAppNameLen),
+            "appIcon": root._sanitizeAppIcon(n.appIcon),
+            "image": root._sanitizeImage(n.image),
+            "summary": root._truncate(n.summary, root.maxSummaryLen),
+            "body": root._truncate(n.body, root.maxBodyLen),
             "urgency": Number(n.urgency),
             "progress": root._progressOf(n),
-            "timestamp": Date.now(),
-            "duplicateCount": 1,
+            "timestamp": prev && prev.timestamp ? Number(prev.timestamp) : Date.now(),
+            "duplicateCount": prev ? Math.max(1, Number(prev.duplicateCount) || 1) : 1,
             "transient": n.transient === true,
             "actions": root._actionsOf(n),
             "liveNotif": n
         };
     }
 
-    function _applyNotif(entry, n): void {
-        entry.dbusId = Number(n.id) || 0;
-        entry.stackTag = root._stackTagOf(n);
-        entry.appName = String(n.appName || "");
-        entry.appIcon = String(n.appIcon || "");
-        entry.image = String(n.image || "");
-        entry.summary = String(n.summary || "");
-        entry.body = String(n.body || "");
-        entry.urgency = Number(n.urgency);
-        entry.progress = root._progressOf(n);
-        entry.transient = n.transient === true;
-        entry.actions = root._actionsOf(n);
+    function _truncate(value, maxLen: int): string {
+        return String(value || "").slice(0, maxLen);
+    }
+
+    // Only a small set of browser-side paths may ever be handed to the image
+    // loader: pixmaps from the bus arrive as image://qsimage/, icons are looked
+    // up through Quickshell.iconPath(), and a file:// URL must point at a
+    // scratch/cache/store location with no traversal.
+    function _isSafeLocalFile(url: string): bool {
+        const s = String(url || "");
+        if (s.indexOf("file://") !== 0)
+            return false;
+
+        let path = "";
+        try {
+            path = decodeURIComponent(s.slice("file://".length));
+        } catch (e) {
+            return false;
+        }
+
+        if (/[\x00-\x1f\x7f]/.test(path))
+            return false;
+        if (path.indexOf("/../") !== -1 || path.slice(-3) === "/.." || path === "..")
+            return false;
+
+        const prefixes = ["/tmp/", "/run/user/", "/nix/store/", "/usr/share/", "/run/current-system/sw/share/"];
+        const home = String(Quickshell.env("HOME") || "");
+        const xdgCache = String(Quickshell.env("XDG_CACHE_HOME") || "");
+        if (home.length > 0)
+            prefixes.push(home + "/.cache/");
+        if (xdgCache.length > 0)
+            prefixes.push(xdgCache + "/");
+
+        for (let i = 0; i < prefixes.length; i++) {
+            if (path.indexOf(prefixes[i]) === 0)
+                return true;
+        }
+        return false;
+    }
+
+    function _sanitizeImage(raw): string {
+        const s = String(raw || "");
+        if (s.length === 0)
+            return "";
+
+        // Live D-Bus pixmap; valid only while the notification is tracked.
+        if (s.indexOf("image://qsimage/") === 0)
+            return s;
+
+        // An image://icon/?path=/etc/... URL is a file-read vector, and a name
+        // that resolves to nothing renders as the magenta/black checkerboard.
+        if (s.indexOf("image://icon/") === 0) {
+            const name = s.slice("image://icon/".length);
+            if (name.length === 0 || name.indexOf("?") !== -1
+                    || name.indexOf("/") !== -1 || name.indexOf("..") !== -1)
+                return "";
+            return String(Quickshell.iconPath(name, true) || "");
+        }
+
+        if (s.indexOf("file://") === 0)
+            return root._isSafeLocalFile(s) ? s : "";
+
+        if (s.indexOf("?") !== -1 || s.indexOf("/") !== -1 || s.indexOf("..") !== -1)
+            return "";
+        return String(Quickshell.iconPath(s, true) || "");
+    }
+
+    function _sanitizeAppIcon(raw): string {
+        const s = String(raw || "");
+        if (s.length === 0)
+            return "";
+
+        if (s.indexOf("file://") === 0)
+            return root._isSafeLocalFile(s) ? s : "";
+
+        if (s.charAt(0) === "/") {
+            const url = "file://" + s;
+            return root._isSafeLocalFile(url) ? url : "";
+        }
+
+        if (s.indexOf("?") !== -1 || s.indexOf("..") !== -1)
+            return "";
+        return String(Quickshell.iconPath(s, true) || "");
     }
 
     function _actionsOf(n): var {
@@ -551,7 +710,7 @@ Singleton {
     function _timeoutMs(n): int {
         const timeout = Number(n.expireTimeout);
         if (timeout < 0)
-            return Number(n.urgency) === NotificationUrgency.Critical ? 0 : 10000;
+            return root.isCritical(Number(n.urgency)) ? 0 : root.defaultTimeoutMs;
         if (timeout === 0)
             return 0;
         return Math.max(0, Math.round(timeout));
@@ -561,6 +720,10 @@ Singleton {
         root._seq += 1;
         return "n" + Date.now().toString(36) + "-" + root._seq;
     }
+
+    // ---------------------------------------------------------------------
+    // List helpers
+    // ---------------------------------------------------------------------
 
     function _asArray(value): var {
         if (!value)
@@ -573,6 +736,55 @@ Singleton {
         return out;
     }
 
+    function _indexOfUid(arr, uid: string): int {
+        const items = root._asArray(arr);
+        for (let i = 0; i < items.length; i++) {
+            if (items[i].uid === uid)
+                return i;
+        }
+        return -1;
+    }
+
+    function _removeByUid(arr, uid: string): var {
+        const items = root._asArray(arr);
+        const out = [];
+        for (let i = 0; i < items.length; i++) {
+            if (items[i].uid !== uid)
+                out.push(items[i]);
+        }
+        return out;
+    }
+
+    function _upsertByUid(arr, item): var {
+        const items = root._asArray(arr).slice();
+        if (!item)
+            return items;
+        const index = root._indexOfUid(items, item.uid);
+        if (index >= 0)
+            items[index] = item;
+        else
+            items.unshift(item);
+        return items;
+    }
+
+    function _findEntry(uid: string): var {
+        let index = root._indexOfUid(root.toasts, uid);
+        if (index >= 0)
+            return root._asArray(root.toasts)[index];
+        index = root._indexOfUid(root.history, uid);
+        if (index >= 0)
+            return root._asArray(root.history)[index];
+        return null;
+    }
+
+    function _liveNotifOf(uid: string): var {
+        const watcher = root._watchers[uid];
+        if (watcher && watcher.notif)
+            return watcher.notif;
+        const entry = root._findEntry(uid);
+        return entry && entry.liveNotif ? entry.liveNotif : null;
+    }
+
     function _sortToasts(list): var {
         const sorted = root._asArray(list).slice();
         sorted.sort((a, b) => {
@@ -582,211 +794,60 @@ Singleton {
                 return ub - ua;
             return Number(b.timestamp) - Number(a.timestamp);
         });
-        return sorted.slice(0, 20);
-    }
 
-    function _toastIndex(uid: string): int {
-        const arr = root._asArray(root.toasts);
-        for (let i = 0; i < arr.length; i++) {
-            if (arr[i].uid === uid)
-                return i;
+        if (sorted.length <= root.maxToasts)
+            return sorted;
+
+        // Overflow is dismissed, not silently dropped: each evicted card closes
+        // its notification on the bus, which also makes its history row inert.
+        const evicted = sorted.slice(root.maxToasts);
+        const notifs = [];
+        for (let i = 0; i < evicted.length; i++) {
+            const notif = root._liveNotifOf(evicted[i].uid);
+            if (notif)
+                notifs.push(notif);
+            else
+                root._destroyWatcher(evicted[i].uid);
         }
-        return -1;
-    }
-
-    function _historyIndex(uid: string): int {
-        const arr = root._asArray(root.history);
-        for (let i = 0; i < arr.length; i++) {
-            if (arr[i].uid === uid)
-                return i;
-        }
-        return -1;
-    }
-
-    function _findEntry(uid: string): var {
-        let index = root._toastIndex(uid);
-        if (index >= 0)
-            return root._asArray(root.toasts)[index];
-        index = root._historyIndex(uid);
-        if (index >= 0)
-            return root._asArray(root.history)[index];
-        return null;
-    }
-
-    function _entryOf(uid: string): var {
-        return root._findEntry(uid);
-    }
-
-    function _liveNotifOf(uid: string): var {
-        const watcher = root._watchers[uid];
-        if (watcher && watcher.notif)
-            return watcher.notif;
-        const entry = root._findEntry(uid);
-        return entry ? entry.liveNotif : null;
+        root._enqueueDismiss(notifs);
+        return sorted.slice(0, root.maxToasts);
     }
 
     function _putToast(entry): void {
-        const arr = root._asArray(root.toasts).slice();
-        let replaced = false;
-        for (let i = 0; i < arr.length; i++) {
-            if (arr[i].uid === entry.uid) {
-                arr[i] = entry;
-                replaced = true;
-                break;
-            }
-        }
-        if (!replaced)
-            arr.unshift(entry);
-        root.toasts = root._sortToasts(arr);
+        root.toasts = root._sortToasts(root._upsertByUid(root.toasts, entry));
     }
 
     function _putHistoryRecord(record): void {
-        const arr = root._asArray(root.history).slice();
-        let replaced = false;
-        for (let i = 0; i < arr.length; i++) {
-            if (arr[i].uid === record.uid) {
-                arr[i] = record;
-                replaced = true;
-                break;
-            }
-        }
-        if (!replaced)
-            arr.unshift(record);
-        root.history = arr.slice(0, 200);
+        root.history = root._upsertByUid(root.history, record).slice(0, root.maxHistory);
     }
 
     function _removeToast(uid: string): void {
-        const arr = root._asArray(root.toasts);
-        const filtered = arr.filter(entry => entry.uid !== uid);
-        if (filtered.length !== arr.length)
-            root.toasts = filtered;
+        if (root._indexOfUid(root.toasts, uid) < 0)
+            return;
+        root.toasts = root._removeByUid(root.toasts, uid);
     }
 
     function _removeHistory(uid: string): void {
-        const arr = root._asArray(root.history);
-        const filtered = arr.filter(record => record.uid !== uid);
-        if (filtered.length !== arr.length)
-            root.history = filtered;
-    }
-
-    // ---------------------------------------------------------------------
-    // Persistence
-    // ---------------------------------------------------------------------
-
-    function _scheduleSave(): void {
-        if (!root._loaded)
+        if (root._indexOfUid(root.history, uid) < 0)
             return;
-        saveTimer.restart();
-    }
-
-    function _persist(): void {
-        if (!root._loaded)
-            return;
-
-        stateAdapter.dnd = root.dnd;
-        stateAdapter.grouped = root.grouped;
-        stateAdapter.entries = root._asArray(root.history).slice(0, 200).map(record => ({
-                "uid": String(record.uid),
-                "dbusId": 0,
-                "stackTag": String(record.stackTag || ""),
-                "appName": String(record.appName || ""),
-                "appIcon": String(record.appIcon || ""),
-                "image": (typeof record.image === "string"
-                    && record.image.indexOf("image://qsimage") !== 0) ? record.image : "",
-                "summary": String(record.summary || ""),
-                "body": String(record.body || ""),
-                "urgency": Number(record.urgency) || 0,
-                "progress": typeof record.progress === "number" ? record.progress : -1,
-                "timestamp": Number(record.timestamp) || Date.now(),
-                "duplicateCount": Math.max(1, Number(record.duplicateCount) || 1),
-                "transient": false,
-                "actions": []
-            }));
-        stateFile.writeAdapter();
-    }
-
-    function _restore(): void {
-        const cutoff = Date.now() - 14 * 24 * 60 * 60 * 1000;
-        const records = root._asArray(stateAdapter.entries);
-        const live = root._asArray(root.history);
-        const restored = [];
-        const seen = new Set(live.map(record => record.uid));
-
-        for (let i = 0; i < records.length; i++) {
-            const raw = records[i];
-            if (!raw || typeof raw !== "object")
-                continue;
-            const timestamp = Number(raw.timestamp);
-            if (!isFinite(timestamp) || timestamp < cutoff)
-                continue;
-            const uid = raw.uid ? String(raw.uid) : root._nextUid();
-            if (seen.has(uid))
-                continue;
-            seen.add(uid);
-            restored.push({
-                    "uid": uid,
-                    "dbusId": 0,
-                    "stackTag": String(raw.stackTag || ""),
-                    "appName": String(raw.appName || ""),
-                    "appIcon": String(raw.appIcon || ""),
-                    "image": (typeof raw.image === "string"
-                        && raw.image.indexOf("image://qsimage") !== 0) ? raw.image : "",
-                    "summary": String(raw.summary || ""),
-                    "body": String(raw.body || ""),
-                    "urgency": Number(raw.urgency) || 0,
-                    "progress": typeof raw.progress === "number" ? raw.progress : -1,
-                    "timestamp": timestamp,
-                    "duplicateCount": Math.max(1, Number(raw.duplicateCount) || 1),
-                    "transient": false,
-                    "actions": [],
-                    "liveNotif": null
-                });
-        }
-
-        restored.sort((a, b) => b.timestamp - a.timestamp);
-        root.history = live.concat(restored).slice(0, 200);
-        root.dnd = stateAdapter.dnd === true;
-        root.grouped = stateAdapter.grouped !== false;
-        root._loaded = true;
-        root._scheduleSave();
-    }
-
-    function _onLoadFailed(): void {
-        root._loaded = true;
-        root._scheduleSave();
+        root.history = root._removeByUid(root.history, uid);
     }
 
     // ---------------------------------------------------------------------
     // Children
     // ---------------------------------------------------------------------
 
-    SystemClock {
-        id: clock
-        precision: SystemClock.Minutes
-    }
-
-    FileView {
-        id: stateFile
-        path: root.stateDir + "/history.json"
-        blockLoading: true
-        watchChanges: false
-        printErrors: false
-        onLoaded: root._restore()
-        onLoadFailed: root._onLoadFailed()
-
-        JsonAdapter {
-            id: stateAdapter
-            property bool dnd: false
-            property bool grouped: true
-            property var entries: []
+    PrefsStore {
+        id: prefs
+        onRestored: function (savedDnd, savedGrouped) {
+            root.dnd = savedDnd;
+            root.grouped = savedGrouped;
         }
     }
 
-    Timer {
-        id: saveTimer
-        interval: 1000
-        repeat: false
-        onTriggered: root._persist()
+    SystemClock {
+        id: clock
+        precision: SystemClock.Minutes
     }
 
     Timer {
@@ -815,123 +876,6 @@ Singleton {
     Component {
         id: liveWatcherComponent
 
-        QtObject {
-            id: watcher
-
-            property string uid: ""
-            property Notification notif
-            property var controller: null
-            property real deadline: 0
-            property real remaining: 0
-            property bool paused: false
-
-            readonly property Timer expiryTimer: Timer {
-                interval: 1000
-                repeat: false
-                onTriggered: {
-                    if (watcher.controller)
-                        watcher.controller._handleExpiry(watcher.uid);
-                }
-            }
-
-            readonly property Connections conn: Connections {
-                target: watcher.notif
-
-                function onSummaryChanged(): void {
-                    if (watcher.controller)
-                        watcher.controller._syncLive(watcher.uid);
-                }
-                function onBodyChanged(): void {
-                    if (watcher.controller)
-                        watcher.controller._syncLive(watcher.uid);
-                }
-                function onAppNameChanged(): void {
-                    if (watcher.controller)
-                        watcher.controller._syncLive(watcher.uid);
-                }
-                function onAppIconChanged(): void {
-                    if (watcher.controller)
-                        watcher.controller._syncLive(watcher.uid);
-                }
-                function onImageChanged(): void {
-                    if (watcher.controller)
-                        watcher.controller._syncLive(watcher.uid);
-                }
-                function onUrgencyChanged(): void {
-                    if (watcher.controller)
-                        watcher.controller._syncLive(watcher.uid);
-                }
-                function onHintsChanged(): void {
-                    if (watcher.controller)
-                        watcher.controller._syncLive(watcher.uid);
-                }
-                function onActionsChanged(): void {
-                    if (watcher.controller)
-                        watcher.controller._syncLive(watcher.uid);
-                }
-                function onExpireTimeoutChanged(): void {
-                    if (watcher.controller) {
-                        watcher.controller._syncLive(watcher.uid);
-                        watcher.controller._resetTimer(watcher.uid);
-                    }
-                }
-                function onClosed(): void {
-                    if (watcher.controller)
-                        watcher.controller._onLiveClosed(watcher.uid);
-                }
-            }
-
-            function startTimer(ms: real): void {
-                if (ms <= 0) {
-                    paused = false;
-                    deadline = 0;
-                    remaining = 0;
-                    expiryTimer.stop();
-                    return;
-                }
-
-                const duration = Math.max(1, Math.round(ms));
-                paused = false;
-                deadline = Date.now() + duration;
-                remaining = duration;
-                expiryTimer.interval = duration;
-                expiryTimer.restart();
-            }
-
-            function stopTimer(): void {
-                expiryTimer.stop();
-                paused = false;
-                deadline = 0;
-                remaining = 0;
-            }
-
-            function pause(): void {
-                if (paused || deadline <= 0)
-                    return;
-                remaining = Math.max(0, deadline - Date.now());
-                expiryTimer.stop();
-                paused = true;
-            }
-
-            function resume(): void {
-                if (!paused)
-                    return;
-                paused = false;
-                if (remaining <= 0) {
-                    if (watcher.controller)
-                        watcher.controller._handleExpiry(watcher.uid);
-                    return;
-                }
-                deadline = Date.now() + remaining;
-                expiryTimer.interval = Math.max(1, Math.round(remaining));
-                expiryTimer.restart();
-            }
-        }
-    }
-
-    Component.onCompleted: {
-        // FileView also creates parents on write; doing it up front keeps the
-        // first save from racing a writable-path check.
-        Quickshell.execDetached(["mkdir", "-p", root.stateDir]);
+        LiveWatcher {}
     }
 }
