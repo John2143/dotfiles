@@ -69,8 +69,12 @@ turned off.
   `~/.config/luminous-autopick/monitor` — one output name (`hyprctl monitors | grep Monitor`),
   e.g. `HDMI-A-2`. Write it once and the choice survives reboots; it is re-read per connection,
   so no restart is needed. Without it the focused monitor is used, which right after a reboot is
-  the first output rather than the one used last time. An output named there but not connected
-  is ignored, with a log line. At the desk, the picker still wins.
+  the first output rather than the one used last time. At the desk, the picker still wins.
+  Current picks: office `DP-2` (LG ULTRAGEAR+, 2560x1440, on the left; the right-hand output
+  there is `DP-1`, BenQ 1920x1080) and arch `DP-3` (LG ULTRAGEAR+, 2560x1440, left; the
+  right-hand output is `HDMI-A-2`, Samsung 2560x1440). A name that matches no connected output
+  is only logged (`monitor names 'DP-3', not one of ['DP-1', 'DP-2']; ignoring it`) and falls
+  through to focus, so a pin copied from the other host silently does nothing.
 - After a reboot, nothing is reachable until someone logs in at the host.
 
 ## First-time setup
@@ -79,11 +83,21 @@ On each of arch and office, after switching **and logging out and back in** (the
 by `graphical-session.target`, which is already active right after a switch, so they do not start
 by themselves, and the portal frontend only reads its routing at startup):
 
+Where logging out is inconvenient (office, 2026-11-26), the same state without a logout:
+`systemctl --user start rustdesk luminous-autopick`, then `systemctl --user restart
+xdg-desktop-portal` — allowed only while Deskflow is inactive — and confirm both portal
+interfaces are exported before blaming anything else.
+
 1. RustDesk window opens at login. Do the following, then close the window with SUPER+Q (this
    hides it; the server keeps running):
    - Settings → Security → unlock → set a permanent password: 40 random characters, unique per
      host, kept in the password manager. It is now the second factor and the only thing
-     standing between a local `john`-level process and the session.
+     standing between a local `john`-level process and the session. The GUI is the only setter:
+     `sudo rustdesk --password` cannot work here. Root's CLI routes to the user's instance only
+     when some process runs as `rustdesk --server` or logind reports an active `seat0` session,
+     and this setup has neither — no `--server` by design, and office's sessions carry no seat
+     at all — so it fails with "No --server process found for user main IPC" before it dials
+     `/tmp/RustDesk-1000/ipc`.
    - Settings → General: the update check must already be off. If the GUI shows it on, the pin
      script did not run; check `journalctl --user -u rustdesk`.
    - Confirm Security shows "Enable direct IP access" checked and the whitelist exactly
@@ -133,6 +147,11 @@ Health checks (on the host):
   `sleep 35; ls -l "$XDG_RUNTIME_DIR/luminus_selector.sock"` shows a socket with mode
   `srw-------`; after moving the mouse it is gone. `journalctl --user -u luminous-autopick -b`
   alternates `idle: answering the picker automatically` and `input seen: picker is interactive`.
+  To exercise the choice logic without disturbing the live responder, note that the script ends
+  with an unconditional `main()`: importing it to call `chosen_index()` also starts a second
+  responder, which unlinks the unit's socket. Strip the trailing `main()` line first, `exec` the
+  rest, and pass the real `hyprctl monitors` order in — then confirm `pgrep -c -f
+  bin/luminous-autopick` prints `1` and restart the unit if a second one ever ran.
 - Policy cannot be weakened and stay weakened: `rustdesk --option enable-terminal Y` as john
   prints an administrative-privileges error; any edit to `~/.config/rustdesk/RustDesk2.toml` is
   undone by `systemctl --user restart rustdesk`.
@@ -143,7 +162,8 @@ Failures:
   Check `tr '\0' '\n' < /proc/$(pgrep -f 'libexec/xdg-desktop-portal$')/environ | grep XDG_CONFIG_DIRS`:
   it must start with `/etc/xdg:`. If it does not, the frontend never reads
   `/etc/xdg/xdg-desktop-portal/hyprland-portals.conf`; fix the systemd `DefaultEnvironment` and
-  log out and back in. To see what a frontend resolves without touching the live one:
+  restart the frontend (`systemctl --user restart xdg-desktop-portal`, safe only while Deskflow
+  is inactive), or log out and back in. To see what a frontend resolves without touching the live one:
   `dbus-run-session -- env XDG_CURRENT_DESKTOP=Hyprland G_MESSAGES_DEBUG=all /run/current-system/sw/libexec/xdg-desktop-portal 2>&1 | grep 'Using .*portal for'`
   (the binary is wrapped and also lives under `/nix/store/*-xdg-desktop-portal-*/libexec/`).
 - **Cursor vanished and nothing responds to the pointer, but the keyboard still works.**
