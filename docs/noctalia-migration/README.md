@@ -510,8 +510,24 @@ Consequences:
   `theme.mode` override.
 - Never symlink `settings.toml` to a store/Home-Manager path: Noctalia writes
   through a symlink to its target.
-- Reconcile with `noctalia msg config-get <path>` and by deleting the offending
-  key (or the file) from `~/.local/state/noctalia/settings.toml`.
+- The file is **not only an override layer** — it holds app-owned state. On a
+  full-shell install it carries `config_version` plus per-widget layout such as
+  `[lockscreen_widgets]` with the login-box placement for each output. Deleting
+  the whole file resets that layout, so prefer deleting the single offending key.
+- Do **not** add a "reset `settings.toml` on every start" step. The
+  `noctalia-sync-settings` ExecStartPre prototyped in PR #32 fixes first-boot
+  theme-mode drift by rewriting the file to just `[theme] mode`, which throws
+  away the state above on every restart. That prototype was for a
+  notification-layer-only install and was deliberately not ported.
+- Security pins to check first when the lockscreen misbehaves: a GUI change to
+  `[lockscreen].lock_before_suspend` re-enables lock-on-suspend and with it the
+  AMD DPMS-while-locked crash path that `lock_before_suspend = false` plus
+  `hypr-blank` exist to avoid, and `[plugins]` / `[plugins.source]` could point
+  the shell at a different plugin tree.
+- Reconcile with `noctalia msg config-get <path>` (prints the effective merged
+  value, including defaults) and by deleting the offending key from
+  `~/.local/state/noctalia/settings.toml` — e.g.
+  `noctalia msg config-get lockscreen.lock_before_suspend`.
 
 ### 5.7 `noctalia dmenu` requires a running shell
 
