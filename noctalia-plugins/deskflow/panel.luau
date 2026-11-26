@@ -1,166 +1,74 @@
 --!nonstrict
 -- Deskflow detail panel: server state, start/stop, and one row per connected
--- client with its route, address and latency history.
+-- client with its route, address, latency and a graph of the last two minutes.
 --
--- The data comes from the same `deskflow-ctl` JSON the bar widget reads, so the
--- panel is useful even when the widget has never polled (it refreshes on open)
--- and follows the widget's later polls through `noctalia.state`.
+-- The data comes from the same poller as the bar widget (lib/deskflow.luau), so
+-- the panel is useful even when the widget has never polled (it refreshes on
+-- open) and follows the widget's later polls through `noctalia.state`.
 --
 -- IPC: `noctalia msg plugin john/deskflow:panel all refresh|toggle`.
 
-local MAX_SLOTS = 8
+local deskflow = require("./lib/deskflow.luau")
 
-local ROLE_BY_CLASS = {
-  wire = "tertiary",
-  lan = "primary",
-  idle = "on_surface_variant",
-  stopped = "outline_variant",
-}
+-- The panel is 420 wide (plugin.toml) with 16 padding, and a row adds 10 more;
+-- a graph has to be told its width, so this is what fits inside a row.
+local GRAPH_WIDTH = 360
+local GRAPH_HEIGHT = 34
 
-local summary = nil
-local clients = {}
-local updatedMs = nil
 local isOpen = false
-local busy = false
-local pending = false
-local lastError = nil
-
 local render
-local poll
+local poller = deskflow.newPoller(function(state)
+  if isOpen then
+    render(state)
+  end
+end)
 
-local function roleFor(class)
-  return ROLE_BY_CLASS[class] or ROLE_BY_CLASS.stopped
-end
-
-local function splitLines(text)
-  local lines = {}
-  if type(text) ~= "string" then
-    return lines
-  end
-  for line in string.gmatch(text .. "\n", "([^\n]*)\n") do
-    table.insert(lines, line)
-  end
-  return lines
-end
-
-local function decodePill(value)
-  if type(value) ~= "table" then
-    return nil
-  end
-  return {
-    text = type(value.text) == "string" and value.text or "",
-    class = type(value.class) == "string" and value.class or "",
-    tooltip = type(value.tooltip) == "string" and value.tooltip or "",
-  }
-end
-
-local function decodeResult(result)
-  if result == nil or result.timedOut or result.exitCode ~= 0 then
-    return nil
-  end
-  local raw = result.stdout
-  if type(raw) ~= "string" or raw == "" then
-    return nil
-  end
-  return decodePill(noctalia.json.decode(raw))
-end
-
--- The tooltip's last line is the server description ("unit active on host");
--- the header shows it as the subtitle.
-local function serverLine()
-  if summary == nil then
-    return nil
-  end
-  for _, line in ipairs(splitLines(summary.tooltip)) do
-    local value = string.match(line, "^server:%s*(.+)$")
-    if value ~= nil and value ~= "" then
-      return value
-    end
-  end
-  return nil
-end
-
-local function headline()
-  if summary == nil then
-    if lastError ~= nil then
+local function headline(state)
+  if state.summary == nil then
+    if state.error ~= nil then
       return noctalia.tr("panel.unknown")
     end
     return noctalia.tr("panel.checking")
   end
-  local count = #clients
+  local count = #state.clients
   if count > 0 then
     return noctalia.trp("panel.client_count", count)
   end
-  if summary.class == "stopped" then
+  if state.summary.class == "stopped" then
     return noctalia.tr("panel.stopped")
   end
   return noctalia.tr("panel.idle")
 end
 
-local function clientName(client)
-  local first = splitLines(client.tooltip)[1]
-  if first ~= nil then
-    local name = string.match(first, "^Deskflow client:%s*(.+)$")
-    if name ~= nil and name ~= "" then
-      return name
-    end
-  end
-  -- Fallback: "<label> <latency> ms", where the label is truncated upstream.
-  local label = string.match(client.text, "^(.-)%s+%S+ ms$")
-  return label or client.text
-end
+local function clientRow(index, client)
+  local tone = deskflow.roleFor(client.class)
+  local transport = client.class ~= "" and string.upper(client.class) or "?"
+  local name = client.name ~= "" and client.name or client.ip
 
-local function clientLatency(client)
-  for _, line in ipairs(splitLines(client.tooltip)) do
-    local value = string.match(line, "^latency:%s*(.+)$")
-    if value ~= nil and value ~= "" then
-      return value
-    end
+  -- The address sits beside the name instead of in the detail line: at this
+  -- width "path · address" used to truncate mid-address. A client whose name
+  -- never resolved already shows its address as the name.
+  local titleChildren = {
+    ui.label({ text = name, fontSize = 13, fontWeight = "bold" }),
+  }
+  if client.ip ~= "" and client.ip ~= name then
+    table.insert(titleChildren, ui.label({ text = client.ip, fontSize = 11, color = "on_surface_variant" }))
   end
-  local rtt = string.match(client.text, "(%S+ ms)$")
-  return rtt or ""
-end
 
--- Everything the tooltip knows except the name (row title), the latency (row
--- value) and the server line (header subtitle): address, route and the
--- two-minute sparkline.
-local function clientDetail(client)
-  local parts = {}
-  for index, line in ipairs(splitLines(client.tooltip)) do
-    if index > 1 and line ~= "" and string.match(line, "^latency:") == nil and string.match(line, "^server:") == nil then
-      table.insert(parts, noctalia.string.trim(line))
-    end
+  local titleChildrenColumn = {
+    ui.row({ gap = 8, align = "center" }, titleChildren),
+  }
+  if client.where ~= "" then
+    table.insert(titleChildrenColumn, ui.label({
+      text = client.where,
+      fontSize = 11,
+      color = "on_surface_variant",
+      maxLines = 1,
+    }))
   end
-  return table.concat(parts, "  ·  ")
-end
 
-local function clientRows()
-  local rows = {}
-  for index, client in ipairs(clients) do
-    local tone = roleFor(client.class)
-    local transport = client.class ~= "" and string.upper(client.class) or "?"
-    local detail = clientDetail(client)
-    local titleChildren = {
-      ui.label({ text = clientName(client), fontSize = 13, fontWeight = "bold" }),
-    }
-    if detail ~= "" then
-      table.insert(titleChildren, ui.label({
-        text = detail,
-        fontSize = 11,
-        color = "on_surface_variant",
-        maxLines = 1,
-      }))
-    end
-    table.insert(rows, ui.row({
-      key = "deskflow-client-" .. tostring(index),
-      fill = "surface_container",
-      radius = 8,
-      paddingH = 10,
-      paddingV = 8,
-      gap = 10,
-      align = "center",
-      tooltip = client.tooltip,
-    }, {
+  local children = {
+    ui.row({ gap = 10, align = "center" }, {
       ui.row({
         fill = tone .. "/0.18",
         radius = 6,
@@ -171,27 +79,73 @@ local function clientRows()
       }, {
         ui.label({ text = transport, fontSize = 10, fontWeight = "bold", color = tone }),
       }),
-      ui.column({ gap = 2, flexGrow = 1 }, titleChildren),
-      ui.label({ text = clientLatency(client), fontSize = 12, fontWeight = "bold", color = tone }),
+      ui.column({ gap = 2, flexGrow = 1 }, titleChildrenColumn),
+      ui.label({ text = deskflow.formatLatency(client.rtt), fontSize = 12, fontWeight = "bold", color = tone }),
+    }),
+  }
+
+  -- A single sample is not a line, and a client that just connected has none
+  -- yet; the row then stands on its own without a graph or its caption.
+  local values, ceiling = deskflow.graphSeries(client.history)
+  if #values >= 2 then
+    table.insert(children, ui.graph({
+      values = values,
+      color = tone,
+      lineWidth = 1.5,
+      fillOpacity = 0.18,
+      width = GRAPH_WIDTH,
+      height = GRAPH_HEIGHT,
     }))
+    -- The min/avg/max summary the tooltip used to carry, plus the scale the
+    -- linear graph is drawn against.
+    table.insert(children, ui.row({ align = "center" }, {
+      ui.label({
+        text = deskflow.latencySummary(client.history) or "",
+        fontSize = 10,
+        color = "on_surface_variant",
+      }),
+      ui.spacer({ flexGrow = 1 }),
+      ui.label({
+        text = string.format("0–%d ms", ceiling),
+        fontSize = 10,
+        color = "on_surface_variant",
+      }),
+    }))
+  end
+
+  return ui.column({
+    key = "deskflow-client-" .. tostring(index),
+    fill = "surface_container",
+    radius = 8,
+    paddingH = 10,
+    paddingV = 8,
+    gap = 6,
+  }, children)
+end
+
+local function clientRows(state)
+  local rows = {}
+  for index, client in ipairs(state.clients) do
+    table.insert(rows, clientRow(index, client))
   end
   return rows
 end
 
-render = function()
+render = function(state)
   if not isOpen then
     return
   end
 
+  local summary = state.summary
   local class = (summary ~= nil and summary.class ~= "") and summary.class or "stopped"
-  local tone = roleFor(class)
+  local tone = deskflow.roleFor(class)
   local running = summary ~= nil and class ~= "stopped"
 
   local header = ui.row({ gap = 10, align = "center" }, {
     ui.column({ gap = 2, flexGrow = 1 }, {
       ui.label({ text = noctalia.tr("panel.title"), fontSize = 17, fontWeight = "bold" }),
       ui.label({
-        text = serverLine() or noctalia.tr("panel.unknown"),
+        text = (summary ~= nil and deskflow.serverLine(summary.tooltip)) or noctalia.tr("panel.unknown"),
         fontSize = 11,
         color = "on_surface_variant",
         maxLines = 1,
@@ -206,7 +160,7 @@ render = function()
       justify = "center",
       tooltip = (summary ~= nil and summary.tooltip ~= "") and summary.tooltip or nil,
     }, {
-      ui.label({ text = headline(), fontSize = 12, fontWeight = "bold", color = tone }),
+      ui.label({ text = headline(state), fontSize = 12, fontWeight = "bold", color = tone }),
     }),
   })
 
@@ -224,10 +178,10 @@ render = function()
       onClick = "onRefresh",
     }),
   }
-  if updatedMs ~= nil then
+  if state.updated_ms ~= nil then
     table.insert(actionChildren, ui.spacer({ flexGrow = 1 }))
     table.insert(actionChildren, ui.label({
-      text = os.date("%H:%M:%S", math.floor(updatedMs / 1000)),
+      text = os.date("%H:%M:%S", math.floor(state.updated_ms / 1000)),
       fontSize = 11,
       color = "on_surface_variant",
     }))
@@ -241,7 +195,7 @@ render = function()
       color = "on_surface_variant",
     }),
   }
-  local rows = clientRows()
+  local rows = clientRows(state)
   if #rows == 0 then
     table.insert(sectionChildren, ui.label({
       text = noctalia.tr("panel.no_clients"),
@@ -260,138 +214,25 @@ render = function()
     ui.row({ gap = 8, align = "center" }, actionChildren),
     ui.column({ gap = 8 }, sectionChildren),
   }
-  if lastError ~= nil then
-    table.insert(children, ui.label({ text = lastError, fontSize = 11, color = "error", maxLines = 2 }))
+  if state.error ~= nil then
+    table.insert(children, ui.label({ text = state.error, fontSize = 11, color = "error", maxLines = 2 }))
   end
 
   panel.render(ui.column({ gap = 14, padding = 16 }, children))
 end
 
-local function finishPoll()
-  busy = false
-  updatedMs = noctalia.nowMs()
-  render()
-  if pending then
-    pending = false
-    poll()
+-- The widget publishes { summary, clients, updated_ms, error }; only a newer
+-- snapshot replaces what this panel fetched itself.
+noctalia.state.watch("deskflow", function(value)
+  if deskflow.applySnapshot(poller, value) and isOpen then
+    render(poller)
   end
-end
+end)
 
-local function pollClients()
-  local slots = {}
-  local remaining = MAX_SLOTS
-
-  local function finish()
-    remaining -= 1
-    if remaining > 0 then
-      return
-    end
-    local compact = {}
-    for slot = 1, MAX_SLOTS do
-      local pill = slots[slot]
-      if pill ~= nil and pill.text ~= "" then
-        table.insert(compact, pill)
-      end
-    end
-    clients = compact
-    finishPoll()
-  end
-
-  for slot = 1, MAX_SLOTS do
-    local index = slot
-    local accepted = noctalia.runAsync({ "deskflow-ctl", "client", tostring(index) }, function(result)
-      local pill = decodeResult(result)
-      if pill ~= nil then
-        pill.slot = index
-        slots[index] = pill
-      end
-      finish()
-    end)
-    if not accepted then
-      finish()
-    end
-  end
-end
-
-poll = function()
-  if busy then
-    pending = true
-    return
-  end
-  busy = true
-  pending = false
-  lastError = nil
-
-  if not noctalia.commandExists("deskflow-ctl") then
-    summary = nil
-    clients = {}
-    lastError = "Deskflow: deskflow-ctl is not on PATH"
-    finishPoll()
-    return
-  end
-
-  local accepted = noctalia.runAsync({ "deskflow-ctl", "status" }, function(result)
-    local pill = decodeResult(result)
-    if pill ~= nil then
-      summary = pill
-    else
-      summary = nil
-      lastError = "Deskflow: could not read the server status"
-    end
-    pollClients()
-  end)
-
-  if not accepted then
-    summary = nil
-    clients = {}
-    lastError = "Deskflow: could not run deskflow-ctl"
-    finishPoll()
-  end
-end
-
-local function toggleServer()
-  noctalia.runAsync({ "deskflow-ctl", "toggle" })
-  -- The switch takes a moment, so look once immediately and once after
-  -- systemctl has settled.
-  poll()
-  noctalia.runAsync("sleep 0.6", function()
-    poll()
-  end)
-end
-
--- The widget publishes { summary, clients, updated_ms }; only a newer snapshot
--- replaces what this panel fetched itself.
-local function applySnapshot(value)
-  if type(value) ~= "table" then
-    return
-  end
-  local incoming = tonumber(value.updated_ms) or 0
-  if updatedMs ~= nil and incoming <= updatedMs then
-    return
-  end
-
-  summary = decodePill(value.summary)
-  clients = {}
-  if type(value.clients) == "table" then
-    for index, client in ipairs(value.clients) do
-      local pill = decodePill(client)
-      if pill ~= nil and pill.text ~= "" then
-        pill.slot = tonumber(client.slot) or index
-        table.insert(clients, pill)
-      end
-    end
-  end
-  updatedMs = incoming
-  lastError = type(value.error) == "string" and value.error or nil
-  render()
-end
-
-noctalia.state.watch("deskflow", applySnapshot)
-
-function onOpen(_context)
+function onOpen()
   isOpen = true
-  render()
-  poll()
+  render(poller)
+  poller.poll()
 end
 
 function onClose()
@@ -399,17 +240,17 @@ function onClose()
 end
 
 function onToggle()
-  toggleServer()
+  poller.toggle()
 end
 
 function onRefresh()
-  poll()
+  poller.poll()
 end
 
 function onIpc(event)
   if event == "refresh" then
-    poll()
+    poller.poll()
   elseif event == "toggle" then
-    toggleServer()
+    poller.toggle()
   end
 end

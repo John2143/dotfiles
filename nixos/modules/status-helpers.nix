@@ -585,19 +585,6 @@
     '';
   };
 
-  temporal-status = pkgs.writeShellApplication {
-    name = "temporal-status";
-    runtimeInputs = with pkgs; [bash coreutils jq];
-    text = ''
-      addr=192.168.6.20:7233
-      if timeout 1 bash -c "exec 3<>/dev/tcp/''${addr%:*}/''${addr#*:}" 2>/dev/null; then
-        jq -nc --arg a "$addr" '{text: "T", class: "connected", tooltip: ("Temporal: connected (" + $a + ")")}'
-      else
-        jq -nc --arg a "$addr" '{text: "T", class: "disconnected", tooltip: ("Temporal: unreachable (" + $a + ")")}'
-      fi
-    '';
-  };
-
   # iPad second display helper. Built from the same expression as
   # modules/ipad-display.nix, so no overlay is needed here.
   ipad-display = pkgs.callPackage ../packages/ipad-display.nix {};
@@ -619,7 +606,6 @@ in {
       tailscale-panel-data
       tailscale-toggle
       tailscale-exit-node
-      temporal-status
       copy-date
     ]
     ++ lib.optionals isDesk [

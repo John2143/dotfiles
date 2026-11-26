@@ -5,8 +5,6 @@
   "settings.tailscale_interval.description": "How often the Tailscale widget asks tailscale-status for its state, in milliseconds.",
   "settings.ipad_interval.label": "iPad poll interval",
   "settings.ipad_interval.description": "How often the iPad widget asks ipad-display for its state, in milliseconds.",
-  "settings.temporal_interval.label": "Temporal poll interval",
-  "settings.temporal_interval.description": "How often the Temporal widget probes 192.168.6.20:7233, in milliseconds.",
   "settings.thermostat_interval.label": "Thermostat poll interval",
   "settings.thermostat_interval.description": "How often the thermostat widget asks Home Assistant for the bedroom climate state, in milliseconds.",
   "settings.vast_interval.label": "VAST poll interval",

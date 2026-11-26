@@ -1,8 +1,6 @@
 {
   "settings.poll_ms.label": "Poll interval",
   "settings.poll_ms.description": "How often deskflow-ctl is queried, in milliseconds.",
-  "settings.max_slots.label": "Client slots",
-  "settings.max_slots.description": "How many connected clients the bar shows as their own pill.",
   "panel.title": "Deskflow",
   "panel.start": "Start",
   "panel.stop": "Stop",
