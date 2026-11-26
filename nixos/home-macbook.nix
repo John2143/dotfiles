@@ -78,7 +78,7 @@ in {
       desec-dns
       pkgs-stable.yt-dlp
     ])
-    ++ [omp claude];
+    ++ [omp claude inputs.llm-agents.packages.${pkgs.stdenv.hostPlatform.system}.antigravity-cli];
 
   # Ollama runs as a per-user launchd agent on 127.0.0.1:11434; models live in
   # ~/.ollama, so they are outside the nix store and survive garbage collection.
