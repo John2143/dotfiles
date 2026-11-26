@@ -463,13 +463,8 @@
   # k3s server — join existing cluster via mDNS (bootstrap without tailscale dependency).
   # NAS runs k3s on ZFS — keep ZFS mounted until k3s drains Longhorn volumes.
   custom.k3sStorageAfter = ["zfs-mount.service"];
-  # Preserve the tailscale advertised routes + exit node on a future rebuild:
-  # mkForce overrides the shared k3s-server.nix route flag, which would otherwise
-  # silently drop nas's exit-node advertisement.
-  services.tailscale.extraUpFlags = lib.mkForce [
-    "--advertise-routes=192.168.6.0/24,192.168.5.0/24"
-    "--advertise-exit-node"
-  ];
+  # Subnet routes come from k3s-server.nix; nas also offers itself as an exit node.
+  services.tailscale.extraSetFlags = ["--advertise-exit-node"];
 
   # NAS reaches the cluster over bond0 (10G x2 + 1G, active-backup) at
   # 192.168.5.175; --node-ip stays pinned to that address and fd00:1::175.

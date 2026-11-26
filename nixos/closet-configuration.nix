@@ -254,10 +254,6 @@ data:
     }
 '';
   };
-  # Tailscale subnet route — advertises LAN + service subnets to the tailnet:
-  # 192.168.5.0/24 (MetalLB API VIP .10) and 192.168.6.0/24 (traefik LB .6.6).
-  # Approved in headscale per-node.
-  services.tailscale.extraUpFlags = [ "--advertise-routes=192.168.6.0/24,192.168.5.0/24" ];
   # Keep Longhorn data mount active during k3s shutdown so iSCSI can
   # logout cleanly before the filesystem unmounts.
   custom.k3sStorageAfter = ["mnt-longhorn.mount"];
