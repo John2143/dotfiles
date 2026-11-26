@@ -77,6 +77,50 @@ What already updates things:
 - **`fork-sync.yml`** in oh-my-pi rebases `john` onto upstream daily and opens an issue on
   failure. Its repair is the first goal this design absorbs.
 
+## What the measurement says (2026-11-26)
+
+The first measurement pass is done (board #530). It changes the emphasis of this design, so it is
+recorded here rather than left to the board.
+
+**The fleet is green.** Of 28 active repos, 21 have a `pull_request`-triggered CI gate, 4 have CI
+without a PR trigger (`dotfiles`, `site`, `cert-manager-webhook-desec`, and Dino-Dash's `ci.yml`),
+and 3 have none (`timestone-roadmap`, `timestone-lobby-watcher`, `sunspot`). The latest run on 26
+of them is a success; the only live failure is `Fork sync` on oh-my-pi.
+
+**The 90-day red counts were misleading.** Most of the volume is historical, and much sits in
+workflows that were since fixed or deleted: 57 of oh-my-pi's 85 reds are `Sync from upstream`, a
+workflow no longer in the repo, and `2143-Labs/argo` shows **zero** failures across roughly 400
+runs despite a first-pass report of 447. A token-less scrape of GitHub's HTML produced that
+number; authenticated `gh run list` refutes it.
+
+**So the gap is staleness, not breakage.** 27 of 28 repos have no dependency automation at all —
+only argo (Renovate, `custom.regex` managers only) and little_oil (Dependabot). The deterministic
+step is the product; the repair loop's real population is the failures that step induces.
+
+Consequences for the rest of this document: `deps-in-range` is the first playbook by a wide
+margin, the agent loop is scheduled behind it, and `fork-rebase` is the only playbook with a live
+target today.
+
+### Renovate is closer to viable than assumed
+
+Verified against source at the pinned tag `44.257.9` and by running the image:
+
+- The `nix` manager works and updates **one input at a time**, but it is beta, off by default, and
+  has no `updateDependency`, so a tag-pinned input never gets a PR.
+- `rangeStrategy` defaults to lockfile-only for Cargo/npm, but **majors are attempted**, not
+  skipped — in-range-only behaviour needs `"rangeStrategy": "in-range-only"` or majors disabled.
+- One grouped PR per repo per week is achievable (`config:semverAllWeekly`-shaped) but fights
+  four defaults: replacement updates, lockfile maintenance, preset group names, and grouping's
+  immortal PRs.
+- `minimumReleaseAge` must be nulled for `matchManagers: ["nix"]`: the `git-refs` datasource has
+  no release timestamps, so the default `timestamp-required` stalls every flake update forever.
+- **The pinned image ships neither `nix` nor `cargo`**, and `binarySource=install` fails under the
+  CronJob's `readOnlyRootFilesystem: true` (`EROFS: can't write to /opt/containerbase`). The
+  `-full` tag has `nix 2.36.0` and `cargo 1.100.0`, so the fix is one line at
+  `argo/workloads/renovate/cronjob.yaml:54`.
+- App-token PRs run `pull_request` workflows unattended; `GITHUB_TOKEN` PRs now sit in an
+  approval-required state. Either way, a purpose-built workflow needs an App token.
+
 ## Design rules
 
 These come from the research listed under [Sources](#sources). Each is enforced by structure, not
