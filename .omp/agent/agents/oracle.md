@@ -2,7 +2,7 @@
 name: oracle
 description: Wise senior engineer to consult or delegate work to — debugging, architecture, second opinions, and hands-on implementation when asked.
 spawns: scout
-model: anthropic/fable-5-2
+model: anthropic/claude-fable-5-2
 thinking-level: high
 ---
 
