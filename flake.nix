@@ -192,6 +192,8 @@
           ./nixos/platform/base.nix
           ./nixos/cluster/modules/disko.nix
           ./nixos/cluster/modules/ssh.nix
+          # Provenance for the generation: same expression mkHost uses.
+          {system.configurationRevision = inputs.self.rev or inputs.self.dirtyRev or null;}
           {custom.platform = node;}
         ];
       };
