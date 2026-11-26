@@ -62,6 +62,7 @@
       tesseract
       inputs.agenix.packages.${pkgs.stdenv.hostPlatform.system}.default
       inputs.claude-code-nix.packages.${pkgs.stdenv.hostPlatform.system}.default
+      inputs.llm-agents.packages.${pkgs.stdenv.hostPlatform.system}.antigravity-cli
       inputs.node-rally-tools.packages.${pkgs.stdenv.hostPlatform.system}.default
     ];
 

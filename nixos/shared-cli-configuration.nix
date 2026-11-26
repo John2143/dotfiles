@@ -61,6 +61,7 @@
       # without needing a writeShellScriptBin nix-store substitution.
       pkgs.uv
       pkgs.attic-client
+      inputs.llm-agents.packages.${pkgs.stdenv.hostPlatform.system}.antigravity-cli
       # omp wrapper: consumes the fork's own flake (John2143/oh-my-pi#omp).
       # `john` is rebased onto upstream/main daily by the fork's fork-sync
       # workflow; fleet-patch bumps this input weekly (`nix flake update
