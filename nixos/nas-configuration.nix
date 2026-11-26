@@ -1019,6 +1019,56 @@
     };
   };
 
+  # SeaweedFS keeps each collection in append-only volume files
+  # (<collection>_<id>.dat plus a small .idx) on tank/seaweedfs-data, a
+  # hostPath dataset, so those bytes are invisible to both the Longhorn mirror
+  # and the database dumps. `imagehost-files` is the john2143.com upload set —
+  # the largest customer-owned dataset in the estate, ~219 GiB in 46 volumes.
+  # The copy reads the newest ZFS snapshot rather than the live directory:
+  # SeaweedFS appends to these files, so a live copy can catch a torn tail,
+  # while .zfs/snapshot/ is point-in-time and lets rclone skip unchanged
+  # volumes by size and mtime on later runs.
+  systemd.services.offsite-seaweedfs = {
+    description = "Offsite: mirror SeaweedFS collections to B2";
+    restartIfChanged = false;
+    onFailure = ["notify-failure@%n.service"];
+    path = [pkgs.rclone pkgs.coreutils pkgs.findutils];
+    environment = {
+      RCLONE_STATS = "10m";
+      RCLONE_STATS_LOG_LEVEL = "NOTICE";
+      HOME = "/root";
+    };
+    serviceConfig = {
+      Type = "oneshot";
+      EnvironmentFile = config.age.secrets.rclone-volumes-env.path;
+    };
+    script = ''
+      set -euo pipefail
+      store=/tank/seaweedfs-data
+      collections="imagehost-files edge-tofu-state rots4-replays"
+      snap=$(ls -1d "$store"/.zfs/snapshot/autosnap_*_daily 2>/dev/null | sort | tail -1 || true)
+      if [ -z "$snap" ] || [ ! -d "$snap" ]; then
+        echo "offsite-seaweedfs: no daily snapshot under $store/.zfs/snapshot"; exit 1
+      fi
+      echo "offsite-seaweedfs: copying from $snap"
+      for c in $collections; do
+        if [ -z "$(find "$snap" -maxdepth 1 -name "''${c}_*.dat" -print -quit)" ]; then
+          echo "offsite-seaweedfs: no volume files for $c; skipping"; continue
+        fi
+        rclone copy "$snap" "hz:j2143-argo-volumes/seaweedfs/$c" \
+          --include "''${c}_*.dat" --include "''${c}_*.idx" \
+          --transfers 4 --checkers 8 --s3-chunk-size 32M
+      done
+    '';
+  };
+  systemd.timers.offsite-seaweedfs = {
+    wantedBy = ["timers.target"];
+    timerConfig = {
+      OnCalendar = "Sun *-*-* 07:00:00";
+      Persistent = true;
+    };
+  };
+
   # ntfy push for a failed unit (OnFailure=notify-failure@%n.service). Same
   # shape as modules/fleet-patching.nix, which this host does not import; the
   # root-owned secret is handed to the john-run unit as a credential.
