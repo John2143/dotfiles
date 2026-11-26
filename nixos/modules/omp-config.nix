@@ -524,13 +524,15 @@ in
         maxRetries: 3
         baseDelayMs: 2000
         fallbackChains:
-          # Search fallbacks when web/parallel errors. All three returned
-          # results in live tests (2026-11-25): keenable works anonymously,
-          # brave uses its key from the omp auth vault, startpage needs no key.
-          # Exa is left out because its keyless quota returned 429.
+          # Search fallbacks when web/parallel errors. Brave first: it is a
+          # keyed engine with its own independent index (key in the omp auth
+          # vault), so it is the closest match for what Parallel returns.
+          # Keenable is second and works anonymously; startpage needs no key.
+          # All three returned results in live tests (2026-11-25). Exa is left
+          # out because its keyless quota returned 429.
           web:
-            - "web/keenable"
             - "web/brave"
+            - "web/keenable"
             - "web/startpage"
           smol:
             - "litellm/deepseek/deepseek-flash:low"
