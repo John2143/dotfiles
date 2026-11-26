@@ -136,6 +136,18 @@ in
                   thinking:
                     type: enabled
 
+        # Parallel Search API key for the `web/parallel` engine (modelRoles.web
+        # in config.yml). Not a chat provider: an apiKey-only block just
+        # registers the credential that providers/parallel.ts resolves via
+        # authStorage. Same `!command` pattern as deepseek, so the key never
+        # enters omp's env. With the key, searches hit the paid API (fast
+        # mode); a missing/empty line makes web/parallel error and the
+        # fallback chain takes over (no silent anonymous fallback).
+        # Requires PARALLEL_API_KEY in /run/agenix/llm-runtime-keys.
+        # Get one: https://platform.parallel.ai/settings?tab=api-keys
+        parallel:
+          apiKey: "!sed -n 's/^PARALLEL_API_KEY=//p' /run/agenix/llm-runtime-keys"
+
         # Claude Max subscription via LiteLLM. OMP owns and refreshes the
         # Anthropic OAuth token; the proxy key is a separate header so LiteLLM
         # forwards the OAuth Authorization header upstream.
@@ -489,13 +501,12 @@ in
         # that advertises input: [text, image] (see models.yml anthropic
         # provider).
         vision: anthropic/claude-opus-5-5
-        # Web search became a model-kind role in 18.15; the old
-        # `providers.webSearch: brave` key is retired and auto-migrated into
-        # this role, then deleted. `web/brave` reads its key from the omp auth
-        # vault (~/.omp/agent/agent.db, loaded once per machine with
-        # `omp auth import`; nothing is exported to env). Swap to `web/deepseek` (DEEPSEEK_API_KEY,
-        # POST /v1/tools/search) to use DeepSeek's search API instead.
-        web: web/brave
+        # Web search is a model-kind role (18.15+; the old providers.webSearch
+        # key is auto-migrated here). Parallel tops the independent search
+        # boards (Artificial Analysis Search Index, Vals Web Search, Nov 2026)
+        # at the lowest per-task cost. Its key comes from the `parallel`
+        # provider block in models.yml. Fallbacks: retry.fallbackChains.web.
+        web: web/parallel
 
       modelProviderOrder:
         - vast-vllm
@@ -513,6 +524,14 @@ in
         maxRetries: 3
         baseDelayMs: 2000
         fallbackChains:
+          # Search fallbacks when web/parallel errors. All three returned
+          # results in live tests (2026-11-25): keenable works anonymously,
+          # brave uses its key from the omp auth vault, startpage needs no key.
+          # Exa is left out because its keyless quota returned 429.
+          web:
+            - "web/keenable"
+            - "web/brave"
+            - "web/startpage"
           smol:
             - "litellm/deepseek/deepseek-flash:low"
           default:
