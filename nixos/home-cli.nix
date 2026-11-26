@@ -84,6 +84,16 @@ in {
       pandoc # markdown → HTML/Typst/PDF conversion
       typst # modern LaTeX replacement for beautiful PDF rendering
       asciinema # terminal session recorder → terminals.john2143.com
+      just # command runner; ships its own fish completion
+      # fish completion for sunspot's HIL bench CLI (`hil`, on PATH through
+      # direnv in a sunspot checkout): hil.py answers through argcomplete, so
+      # this package only carries the hook, in the vendor_completions.d that
+      # fish already reads from the per-user profile
+      (runCommand "hil-fish-completion" { } ''
+        mkdir -p $out/share/fish/vendor_completions.d
+        ${python3Packages.argcomplete}/bin/register-python-argcomplete --shell fish hil \
+          > $out/share/fish/vendor_completions.d/hil.fish
+      '')
     ]
     ++ lib.optionals pkgs.stdenv.hostPlatform.isLinux [
       gocryptfs
