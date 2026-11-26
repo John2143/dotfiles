@@ -187,6 +187,13 @@ Build it through this flake, not the fork's own lock: the input follows dotfiles
 host asks for. After the first host rebuilds, confirm the upload with
 `nix path-info --store http://nas:8280/2143nix (nix eval --raw --impure --expr '(builtins.getFlake (toString ./.)).inputs.oh-my-pi.packages.x86_64-linux.omp.outPath')`.
 
+Not every input rides the weekly bump. `llm-agents` (numtide's flake; supplies `agy`, the
+Antigravity CLI, on office, arch, mac and macbook) stays at its locked revision until someone
+moves it: `nix flake update llm-agents`, then rebuild. `agy`'s built-in self-updater cannot
+replace the `/nix/store` binary, so an "update available" notice means this bump. The input
+deliberately has no `inputs.nixpkgs.follows`: following dotfiles' nixpkgs would change every
+derivation hash and miss numtide's binary cache.
+
 ## What a bump actually costs
 
 Measured on office, 2026-11-13: a single `nix flake update` that moved `nixpkgs`
