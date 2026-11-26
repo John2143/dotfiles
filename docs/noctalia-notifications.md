@@ -6,6 +6,11 @@ Control Center's **Notifications** tab. Nothing else changes owner. The branch i
 `agent-n/noctalia-notifications`; it is built against pinned nixpkgs `93a9ed0a8660`
 and Hyprland 0.57.2.
 
+Status: PR [#32](https://github.com/John2143/dotfiles/pull/32) (pushed 2026-11-26, rebased
+on `master`). It is one of three parallel comparison branches — `agent-q/quickshell` (custom
+Quickshell) and `noctalia-full-shell` (full Noctalia shell replacing Waybar) live in their own
+worktrees — so this branch exists to be evaluated against them before anything merges.
+
 Noctalia is capable of being a full desktop shell (bar, dock, wallpaper, lock screen,
 clipboard, OSD, widgets). Every one of those is disabled here, because each already has
 an owner on these hosts and two owners means two writers to the same surface.
