@@ -104,8 +104,16 @@ Blueman's `ConnectionNotifier` applet plugin raises a notification for every dev
 `Connected` property changes — there is no per-device filter in it. Left alone, the 30-minute
 leg means four popups an hour (connect and disconnect, two stations).
 
-The fix is at the daemon, not in Blueman: a dunst rule keyed on the station name. It drops
-only `LHB-*`, so phones, tablets and headphones keep their notifications.
+The fix is at the daemon, not in Blueman: drop `LHB-*` before it is displayed. Only
+`LHB-*` is filtered, so phones, tablets and headphones keep their notifications.
+
+On the Hyprland desktops the notification daemon is Quickshell: `.config/quickshell/notifs/services/Notifs.qml`
+matches `^LHB-` on ingest and calls `dismiss()` synchronously, so no card and no
+history row are ever created. The module that installs it is
+`nixos/modules/quickshell-notifs.nix`, and no extra rule is needed.
+
+On `vm-*` hosts `custom.notificationDaemon = "dunst"`, and the equivalent is a
+dunst rule keyed on the station name:
 
 ```ini
 # .config/dunst/dunstrc
@@ -115,17 +123,21 @@ only `LHB-*`, so phones, tablets and headphones keep their notifications.
     history_ignore = yes
 ```
 
-`~/.config/dunst/dunstrc` is an out-of-store symlink to the dotfiles copy, so
-`dunstctl reload` applies it without a rebuild. Verified 2026-11-24: a real
-`basestation status` run produced no displayed notification and no history entry, while a
-control notification from the same app did.
+There, `~/.config/dunst/dunstrc` is an out-of-store symlink to the dotfiles copy
+(created by `nixos/modules/quickshell-notifs.nix` when the dunst branch is
+active), so `dunstctl reload` applies it without a rebuild. Verified 2026-11-24
+against the dunst branch: a real `basestation status` run produced no displayed
+notification and no history entry, while a control notification from the same app
+did.
 
-The rule is the declarative option: the file lives in `dotfiles` and home-manager exposes it
-(`nixos/home.nix:612`), so a rebuild always reproduces it. Muting Blueman instead would mean
-disabling its `ConnectionNotifier` plugin through `org.blueman.general` `plugin-list`, which
-home-manager can also declare (`dconf.settings`, dconf is in use on this host; the list is
-currently empty). Prefer the dunst rule: `plugin-list` is one list holding every plugin
-toggle, so declaring it pins all of them and would silently revert any later change made in
+Both halves are declarative: the Quickshell filter lives in `dotfiles` under
+`.config/quickshell/notifs/`, and the `dunstrc` lives in `dotfiles` under
+`.config/dunst/dunstrc`, so a rebuild always reproduces whichever one is active.
+Muting Blueman instead would mean disabling its `ConnectionNotifier` plugin
+through `org.blueman.general` `plugin-list`, which home-manager can also declare
+(`dconf.settings`, dconf is in use on this host; the list is currently empty).
+Prefer the daemon filter: `plugin-list` is one list holding every plugin toggle, so
+declaring it pins all of them and would silently revert any later change made in
 Blueman's plugin dialog.
 
 ## Checks
