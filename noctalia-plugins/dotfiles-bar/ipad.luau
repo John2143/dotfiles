@@ -4,7 +4,7 @@
 -- "<link> <state>" ("usb streaming", "net clone", ...). colorForClass looks at
 -- every token and lets the state win, which is how the old CSS stack behaved
 -- (link = weight, state = color).
-local status = require("../lib/waybar_json.luau")
+local status = require("./lib/waybar_json.luau")
 
 local COLORS = {
   -- link: the cable is up, but that is not the interesting part

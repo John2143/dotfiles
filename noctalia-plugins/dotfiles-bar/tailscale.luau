@@ -2,7 +2,7 @@
 -- Tailscale indicator: the Waybar `custom/tailscale` module.
 -- Left opens the panel that replaced the Eww `tailscale` window; right keeps the
 -- old picker shortcut.
-local status = require("../lib/waybar_json.luau")
+local status = require("./lib/waybar_json.luau")
 
 local COLORS = {
   connected = "tertiary",

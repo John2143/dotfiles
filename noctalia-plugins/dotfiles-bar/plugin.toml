@@ -117,7 +117,7 @@ default         = ""
 
 [[widget]]
 id    = "media"
-entry = "widgets/media.luau"
+entry = "media.luau"
 
   # Back/forward are action-only gestures (no Luau callback exists for them), so
   # the track skip lives here; the 2 s poll picks the new track up.
@@ -128,11 +128,11 @@ entry = "widgets/media.luau"
 
 [[widget]]
 id    = "screenrec"
-entry = "widgets/screenrec.luau"
+entry = "screenrec.luau"
 
 [[widget]]
 id    = "autoclicker"
-entry = "widgets/autoclicker.luau"
+entry = "autoclicker.luau"
 
   # middle = none frees the middle button for autoclicker cycle.
   [widget.actions]
@@ -140,19 +140,19 @@ entry = "widgets/autoclicker.luau"
 
 [[widget]]
 id    = "tailscale"
-entry = "widgets/tailscale.luau"
+entry = "tailscale.luau"
 
 [[widget]]
 id    = "ipad"
-entry = "widgets/ipad.luau"
+entry = "ipad.luau"
 
 [[widget]]
 id    = "temporal"
-entry = "widgets/temporal.luau"
+entry = "temporal.luau"
 
 [[widget]]
 id    = "thermostat"
-entry = "widgets/thermostat.luau"
+entry = "thermostat.luau"
 
   # middle = none frees the middle button for the thermostat toggle.
   [widget.actions]
@@ -160,17 +160,17 @@ entry = "widgets/thermostat.luau"
 
 [[widget]]
 id    = "vast"
-entry = "widgets/vast.luau"
+entry = "vast.luau"
 
 [[widget]]
 id    = "updates"
-entry = "widgets/updates.luau"
+entry = "updates.luau"
 
 # ─── Panels (replacements for the Eww windows) ───────────────
 
 [[panel]]
 id              = "media-panel"
-entry           = "panels/media_panel.luau"
+entry           = "media_panel.luau"
 width           = 520
 height          = "content"
 max_height      = 680
@@ -179,7 +179,7 @@ open_near_click = true
 
 [[panel]]
 id              = "tailscale-panel"
-entry           = "panels/tailscale_panel.luau"
+entry           = "tailscale_panel.luau"
 width           = 400
 height          = "content"
 max_height      = 680
@@ -188,7 +188,7 @@ open_near_click = true
 
 [[panel]]
 id              = "autoclicker-panel"
-entry           = "panels/autoclicker_panel.luau"
+entry           = "autoclicker_panel.luau"
 width           = 440
 height          = "content"
 max_height      = 680

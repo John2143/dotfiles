@@ -3,7 +3,7 @@
 -- `nix-update-status` prints an empty text while the lockfile is fresh, so the
 -- widget is hidden most of the time and only appears once it is worth running
 -- `nix flake update`.
-local status = require("../lib/waybar_json.luau")
+local status = require("./lib/waybar_json.luau")
 
 local COLORS = {
   ["pending-updates"] = "secondary",

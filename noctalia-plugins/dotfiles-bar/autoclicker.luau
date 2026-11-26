@@ -3,7 +3,7 @@
 -- `autoclicker watch` streams one Waybar JSON line per state change (the daemon
 -- compares and emits on difference), and the text IS the mode glyph, so no bar
 -- glyph is set here.
-local status = require("../lib/waybar_json.luau")
+local status = require("./lib/waybar_json.luau")
 
 local COLORS = {
   ["autoclicker-off"] = "on_surface_variant",

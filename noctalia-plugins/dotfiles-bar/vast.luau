@@ -3,7 +3,7 @@
 -- `vast-waybar-status` caches its answer in /tmp/vast-waybar-status.json for 55s
 -- and prints nothing at all when there is no instance — empty output is the
 -- widget's "hidden" state, exactly as it was in Waybar.
-local status = require("../lib/waybar_json.luau")
+local status = require("./lib/waybar_json.luau")
 
 local CACHE = "/tmp/vast-waybar-status.json"
 

@@ -4,7 +4,7 @@
 -- active, else a fresh pick) as Waybar JSON, including the state icon at the
 -- front of `text`; the icon becomes the bar glyph here so the two never double
 -- up.
-local status = require("../lib/waybar_json.luau")
+local status = require("./lib/waybar_json.luau")
 
 -- playing (green), paused (yellow), stopped (dim) in the old bar.
 local COLORS = {

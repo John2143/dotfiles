@@ -318,6 +318,11 @@ in {
   # option, so the login keyring is created and unlocked by the login password.
   services.gnome.gnome-keyring.enable = true;
 
+  # Noctalia reads battery state (and charge limits) over D-Bus from upower
+  # rather than sysfs, so the service has to exist; Waybar used to pull the
+  # package in transitively without ever enabling the daemon.
+  services.upower.enable = true;
+
   # games
   services.flatpak.enable = true;
   programs.ydotool = {

@@ -3,7 +3,7 @@
 -- `screenrec status --follow` is long-lived and prints one Waybar JSON line per
 -- change, so this stays a stream rather than a poll; idle is a real object with
 -- an empty text, so the widget hides on it instead of showing an empty capsule.
-local status = require("../lib/waybar_json.luau")
+local status = require("./lib/waybar_json.luau")
 
 local COLORS = {
   recording = "error",

@@ -75,8 +75,15 @@ stalls the shell."
 
 Practical notes that follow from this:
 - Optional relative module imports, `plugin_api = 22`: `require("./lib/format.luau")`; argument must start with `./`
-  or `../` and end in `.luau`; lexical resolution relative to the calling file; per-entry module cache; circular
-  imports fail with the import chain.
+  or `../` and end in `.luau`; per-entry module cache; circular imports fail with the import chain.
+- **`require` base directory differs from what `plugins lint` checks.** `LuauHost::requireBaseDir` (v5.6.0
+  `src/scripting/luau_host.cpp`) resolves a *required module* against that module's own directory (recorded as
+  `kModuleDirKey` on its environment metatable) but resolves an **entry chunk** against `m_pluginDir` — the plugin's
+  root directory (the one holding `plugin.toml`), *not* the entry file's own subdirectory. `plugin_lint` instead
+  resolves each require against `sourceToScan.path.parent_path()` **and silently skips it when the target does not
+  exist** (`plugin_lint.cpp`, `canonicalRegularFile(...)` → `continue`), so a wrong path lints clean and only fails at
+  runtime with `require: cannot open '<path>'`. Keep every entry file at the plugin root (e.g. `media.luau`, not
+  `widgets/media.luau`) and write `require("./lib/helper.luau")`; only then do lint and runtime agree.
 - The official repo ships a `noctalia.d.luau` luau-lsp definition file and `.luaurc` with `languageMode =
   nonstrict`; every plugin file starts with `--!nonstrict`.
 - Translations are `translations/<lang>.json` with flattened dotted keys; `noctalia.tr` / `noctalia.trp`.

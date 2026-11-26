@@ -57,8 +57,8 @@ noctalia-plugins/
   dotfiles-bar/
     plugin.toml
     lib/waybar_json.luau
-    widgets/{media,screenrec,autoclicker,tailscale,ipad,temporal,thermostat,vast,updates}.luau
-    panels/{media_panel,tailscale_panel,autoclicker_panel}.luau
+    {media,screenrec,autoclicker,tailscale,ipad,temporal,thermostat,vast,updates}.luau
+    {media_panel,tailscale_panel,autoclicker_panel}.luau
     translations/en.json
 ```
 
@@ -153,7 +153,7 @@ Rules:
   block, the `label_key`/`description_key` strings, and a `getConfig` call.
   Lint checks the declaration↔read pair; it cannot check the JSON, so keep the
   keys in sync by hand.
-- Panel UI strings in `panels/*.luau` are currently literals; only settings and
+- Panel UI strings in `*_panel.luau` are currently literals; only settings and
   voxtype's `tooltip.*`/`notify.*` go through `tr`.
 
 ---
@@ -219,12 +219,18 @@ Panels have no settings. `media-panel`, `tailscale-panel` and
 Every `dotfiles-bar` widget starts with:
 
 ```lua
-local status = require("../lib/waybar_json.luau")
+local status = require("./lib/waybar_json.luau")
 ```
 
 `require` is API 22+: the argument must start with `./` or `../`, end in
-`.luau`, and resolves lexically from the calling file; each entry has its own
-module cache.
+`.luau`; each entry has its own module cache.
+
+Entry chunks resolve against the **plugin root** (`m_pluginDir`), not the
+entry file's own directory — that is why every entry file lives at the plugin
+root and requires `./lib/…`. Required modules resolve against their own
+directory. `noctalia plugins lint` resolves from the calling file instead and
+silently skips unresolvable paths, so a wrong require lints clean and only
+fails at runtime; see `research/plugins.md`.
 
 The contract it encodes:
 

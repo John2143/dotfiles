@@ -3,7 +3,7 @@
 -- Waybar refreshed it on SIGRTMIN+8 (the HA notify hook poked the bar); here the
 -- widget polls and also answers an explicit `refresh` IPC event, which is what
 -- the hook sends now.
-local status = require("../lib/waybar_json.luau")
+local status = require("./lib/waybar_json.luau")
 
 local COLORS = {
   heating = "secondary",

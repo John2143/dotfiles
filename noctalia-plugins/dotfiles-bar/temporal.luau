@@ -1,7 +1,7 @@
 --!nonstrict
 -- Temporal reachability indicator: the Waybar `custom/temporal` module.
 -- `temporal-status` probes 192.168.6.20:7233 over TCP and prints Waybar JSON.
-local status = require("../lib/waybar_json.luau")
+local status = require("./lib/waybar_json.luau")
 
 local COLORS = {
   connected = "tertiary",
