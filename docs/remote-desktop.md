@@ -166,6 +166,16 @@ Failures:
 - **Tunnel opens, RustDesk says connection refused.** The forward is fine; the host is not
   listening. `systemctl --user status rustdesk`, then `journalctl --user -u rustdesk`. A failed
   `ExecStartPre` means a RustDesk TOML was unparseable, and RustDesk deliberately did not start.
+- **Client says "reset by the peer" instead of asking for a password.** Nothing is listening on
+  21118: sshd accepts the forwarded connection, finds no backend and drops it. The usual cause is
+  a switch — any switch stops `rustdesk`, `luminous-autopick` and `xdg-desktop-portal-luminous`,
+  and because all three are wanted by `graphical-session.target` (already active) it does not
+  start them again. Confirm with `systemctl --user is-active rustdesk` (`inactive`) and
+  `ss -ltn | grep 21118` (empty), then `systemctl --user restart rustdesk luminous-autopick` or
+  log out and back in. The same symptom follows a switch from a checkout that does not contain
+  this change: it removes the units and the portal routing, so before blaming RustDesk check that
+  `ls /etc/xdg/xdg-desktop-portal/` shows `hyprland-portals.conf` (lowercase) and that
+  `command -v rd` succeeds.
 - **Tunnel does not open.** `ssh -v <host>.ts.2143.me`. It is an SSH fault (key, host key, or
   the host asleep), not a RustDesk one. Do not weaken the firewall to work around it.
 - **"Host key verification failed" from `rd`.** The host was reinstalled or its key rotated.
@@ -177,7 +187,15 @@ Failures:
   `nixos/rustdesk-tunnel.nix` so `rd` only prints the address, and connect from the GUI.
 - **Video works, input is dead.** `pgrep -fa 'rustdesk' | grep -cE -- '--(server|service)'` must
   print `0`. If a `--server` process exists, find what launched it and remove it. Never start
-  RustDesk's root service as a workaround.
+  RustDesk's root service as a workaround. One instance of this was never explained (2026-11-24):
+  the session came up, permission messages and `RdpInput keyboard created` / `RdpInput mouse
+  created` were logged, yet clicks and keys did nothing, and after a reboot and redeploy it
+  worked. Both halves of the input path fail silently — RustDesk discards the D-Bus error
+  (`let _ = notify_pointer_button(…)`) and luminous returns `Ok` for a session handle it does not
+  know. If it recurs, watch the bus while clicking, on the host:
+  `dbus-monitor --session "interface='org.freedesktop.impl.portal.RemoteDesktop'"`. Calls present
+  with a `session_handle` that luminous never issued, or `NotifyPointer*` replies carrying an
+  error, identify which side is wrong; no calls at all means the client never sent them.
 - **RemoteDesktop missing from the portal after relogin.**
   `journalctl --user -u xdg-desktop-portal -u xdg-desktop-portal-luminous -b`. If luminous failed
   to start or the frontend ignored it, roll back (below) and keep the log. Do not try other
