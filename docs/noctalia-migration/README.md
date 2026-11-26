@@ -362,7 +362,7 @@ or `office` (`status-helpers.nix:625-628`).
 | `nixos/home.nix` | Imports `./modules/noctalia.nix` + `./modules/status-helpers.nix` and drops `./modules/waybar.nix` / `./modules/eww.nix`; removes `wofi`, `cliphist`, `gammastep`, `hyprlock`, `hyprpaper`, `grim` (and the commented `swappy`) from the package list; removes `lxqt-policykit-agent` and both `wl-paste --watch cliphist` lines from the `hyprland.start` hook; `screenrec`'s runtime inputs switch from `pkgs.dunst` to `pkgs.libnotify`; `waybar` layer rules become the two Noctalia layer rules; `hypr-blank` gains the `noctalia msg status` lock check; adds `persistent = true` to every workspace rule; binds: `SUPER+Space` launcher, `SUPER+V` clipboard, `SUPER+SHIFT+N` notifications, `SUPER+comma` settings, `ALT+Tab` window switcher, screenshot binds, `CTRL+ALT+L` and `SUPER+F20` `session lock`, volume keys to `noctalia msg`; drops the dunst service block. |
 | `nixos/modules/theme.nix` | Removes the `wofi.css`, `dunst.conf`, `hyprlock.conf`, `waybar.css`, `eww.scss` and `hyprpaper.conf` render targets and their `xdg.configFile` links; removes `hyprlock-theme` and the `hyprpaper` unit; adds a `wallpaper-path` file (`theme.nix:208`) and puts `pkgs.noctalia` on `theme-switch`'s PATH (`theme.nix:240`). |
 | `nixos/theme-switch.sh` | Replaces the waybar/eww/dunst/hyprpaper reload block with `noctalia msg theme-mode-set "$mode"` and `noctalia msg wallpaper-set "$wall"` (`theme-switch.sh:64-70`). GTK/dconf/tmux/nvim/Hyprland reload still runs. |
-| `nixos/modules/keybind.nix` | `signal_waybar` is renamed `signal_bar` and calls `noctalia msg plugin john/dotfiles-bar:thermostat all refresh`; `SUPER+F20` becomes `noctalia msg session lock`; `hass-macro`'s runtime inputs swap `procps` for `noctalia`. `hass_notify`'s `x-dunst-stack-tag` hint stays (harmless) but no longer coalesces. |
+| `nixos/modules/keybind.nix` | `signal_waybar` is renamed `signal_bar` and calls `noctalia msg plugin john/dotfiles-bar:thermostat all refresh`; `SUPER+F20` becomes `noctalia msg session lock`; `hass-macro`'s runtime inputs swap `procps` for `noctalia`. `hass_notify` keeps its per-tag coalescing: it stores the returned notification id under `$XDG_RUNTIME_DIR/hass-notify-<tag>` and passes `-r`, so repeats replace the previous toast through the standard `replaces_id` field. |
 | `nixos/modules/autoclicker.nix` | `autoclicker-menu-toggle` keeps its name but now calls `noctalia msg panel-toggle john/dotfiles-bar:autoclicker-panel` instead of the Eww cursor-monitor probe; `autoclicker-eww-sync` is deleted; the daemon and `autoclicker watch` stream are unchanged. |
 | `nixos/shared-configuration.nix` | `weather-status` (wttr.in helper) removed; `security.pam.services.hyprlock` removed — Noctalia's helper uses the `login` PAM service, not a bespoke `hyprlock` one. |
 | `nixos/home-cli.nix` | `lxqt.lxqt-policykit` removed (Noctalia owns the agent). |
@@ -400,29 +400,33 @@ Package expressions removed from the module lists: `waybar`, `eww`, `dunst`,
 
 ## 5. Known behavioural changes and tradeoffs
 
-### 5.1 `x-dunst-stack-tag` coalescing is gone
+### 5.1 `x-dunst-stack-tag` is ignored, so coalescing moved to `replaces_id`
 
-`hass_notify` sends `notify-send -h "string:x-dunst-stack-tag:hass-$1" …`
-(`nixos/modules/keybind.nix:18`). That hint is a dunst extension;
-`org.freedesktop.Notifications` has no stack-tag concept, so Noctalia shows one
-toast per call instead of replacing the previous HASS toast. The hint is
-ignored silently, not rejected.
+`hass_notify` used to send `notify-send -h "string:x-dunst-stack-tag:hass-$1" …`.
+That hint is a dunst extension; `org.freedesktop.Notifications` has no stack-tag
+concept, so Noctalia ignores it silently and would show one toast per call.
 
-Mitigations, in order of preference:
+`nixos/modules/keybind.nix` now does the coalescing itself: it keeps the last
+notification id per tag in `$XDG_RUNTIME_DIR/hass-notify-<tag>` and passes
+`-r <id>` on the next call, so HASS updates morph the existing toast through the
+standard `replaces_id` field. Verified against the running daemon —
+`notify-send -p` then `notify-send -p -r <id>` returns the same id.
 
-1. `[notification] group_by_app = true` (set in `noctalia.nix`) groups toasts
-   per application, which visually collapses repeats.
-2. Replace repeated `notify-send` calls with `notify-send -r <id>` using a
-   stable id per request, which maps onto the standard `replaces_id` field.
-3. Use `noctalia msg notification-show` for Noctalia-internal toasts — but note
-   those are **toast-only and not stored in history**.
+Other things learned from the notification-layer prototypes, applied here:
 
-The one case that is handled explicitly is the LHB basestation pairing popup:
-`[notification.filter.base_station_connect]` matches `app = blueman` with
-`match_content = "^LHB-"` and sets `show_toast = false`, `save_history = false`,
-`play_sound = false`. The filter is listed in `filter_order`, so it runs before
-the toast/history pipeline. Add similar filters there rather than rewriting the
-producer.
+- `[notification] layer = "overlay"`. The default `top` puts toasts *below*
+  fullscreen windows, so alerts were invisible over a fullscreen game or video.
+- `[notification] follow_focused_output = true`, matching dunst's
+  `follow = keyboard` on a two-monitor desktop.
+- Never put `allowed_urgencies` on a catch-all filter: 5.6.0's
+  `resolveNotificationFilter()` does not fall through on an urgency mismatch, it
+  suppresses with `fullySuppress = true` and drops every `low`/`normal`
+  notification even with DND off. First match wins, so `filter_order` is
+  load-bearing, and `play_sound` defaults to `true` per filter.
+- `notify-send --wait` / `-A` do **not** hang: timed-out notifications are closed
+  on D-Bus by the daemon (verified live — a 3 s toast released `--wait` after 3 s).
+- Notification summaries/bodies are passed after `--` in `.config/screenrec.sh`
+  so text starting with `-` is not parsed as an option.
 
 ### 5.2 Tooltips are plain text, not Pango markup
 

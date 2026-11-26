@@ -14,8 +14,18 @@ let
         -d "$2" "$HA/api/services/$1" > /dev/null
     }
 
+    # Noctalia ignores dunst's string:x-dunst-stack-tag hint, so a HASS service
+    # that updates repeatedly would stack toasts instead of coalescing them.
+    # Keep the last notification id per tag and replace it, which is the same
+    # slot-morphing behaviour dunst gave us (and matches the old stack tag).
     hass_notify() {
-      notify-send -h "string:x-dunst-stack-tag:hass-$1" "$2" "$3" || true
+      local idf dir args=(-a hass -p)
+      dir="''${XDG_RUNTIME_DIR:-/tmp}"
+      idf="$dir/hass-notify-$1"
+      if [ -s "$idf" ]; then
+        args+=(-r "$(cat "$idf")")
+      fi
+      notify-send "''${args[@]}" "$2" "$3" >"$idf" 2>/dev/null || true
     }
 
     # Nudges the bar widget instead of signalling waybar: the thermostat plugin

@@ -224,11 +224,21 @@
     notification = {
       enable_daemon = true;
       position = "top_right";
-      layer = "top";
+      # "top" (the default) sits below fullscreen windows, so a toast during a
+      # fullscreen game/video is invisible; "overlay" keeps them on top.
+      layer = "overlay";
+      # Two outputs: put the toast stack on the monitor holding keyboard focus,
+      # which is what dunst's follow = keyboard did.
+      follow_focused_output = true;
       width = 360;
       keep_dismissed_in_history = true;
       group_by_app = true;
       history_retention_hours = 0;
+      # First matching filter wins. Never put `allowed_urgencies` on a catch-all:
+      # resolveNotificationFilter() does not fall through on an urgency mismatch,
+      # it suppresses with fullySuppress = true, which silently drops every
+      # low/normal notification even with DND off. Also note play_sound defaults
+      # to true per filter.
       filter_order = ["base_station_connect"];
       # Base-station pairing popups are noise: no toast, no history entry.
       filter.base_station_connect = {

@@ -30,7 +30,9 @@ note() {
     if [ -n "${6:-}" ]; then
         args+=(-h "int:value:$6")
     fi
-    notify-send "${args[@]}" "$4" "${5:-}" >"$persist/notify_id" 2>/dev/null || true
+    # `--` so a summary or body beginning with "-" is not parsed as an option
+    # (recording paths and pasted text can start with a dash).
+    notify-send "${args[@]}" -- "$4" "${5:-}" >"$persist/notify_id" 2>/dev/null || true
 }
 
 # put_status <phase> <pct> <text> — atomic, single writer (the supervisor).
