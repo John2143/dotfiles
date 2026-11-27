@@ -23,10 +23,11 @@ entry = "widget.luau"
   max             = 30000
   step            = 500
 
-  # Left stays unbound so onClick(): start/stop the server. Right opens the
-  # detail panel, middle is freed for onMiddleClick() (refresh now) instead of
-  # the built-in "open widget settings" binding.
+  # Left and right both open the detail panel, which holds the start/stop
+  # button. Middle is freed for onMiddleClick() (refresh now) instead of the
+  # built-in "open widget settings" binding.
   [widget.actions]
+  left   = "panel-toggle john/deskflow:panel"
   right  = "panel-toggle john/deskflow:panel"
   middle = "none"
 

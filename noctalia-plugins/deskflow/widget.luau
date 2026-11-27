@@ -2,7 +2,7 @@
 -- Deskflow server pill for the Noctalia bar.
 --
 -- Only the server summary is drawn here; the per-client rows, each with its
--- latency graph, live in the panel that right click opens. `deskflow-ctl`
+-- latency graph, live in the panel that left or right click opens. `deskflow-ctl`
 -- (nixos/packages/deskflow-ctl.nix) is the data source, and the poller in
 -- lib/ is shared with the panel: this entry publishes the whole poll result
 -- through `noctalia.state` key `deskflow`, so an open panel follows it.
@@ -46,7 +46,6 @@ render = function(state)
     align = "center",
     justify = "center",
     tooltip = tip,
-    onClick = "onPrimaryClick",
   }, {
     ui.label({
       text = (summary ~= nil and summary.text ~= "") and summary.text or "DF",
@@ -55,14 +54,6 @@ render = function(state)
       color = tone,
     }),
   }))
-end
-
-function onClick()
-  poller.toggle()
-end
-
-function onPrimaryClick()
-  poller.toggle()
 end
 
 function onMiddleClick()
