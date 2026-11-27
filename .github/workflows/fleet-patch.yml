@@ -24,6 +24,7 @@ on:
         default: true
 
 permissions:
+  actions: write
   contents: write
   id-token: write
 
@@ -74,6 +75,7 @@ jobs:
           esac
 
       - name: Run fleet patch
+        id: patch
         env:
           # The bump commit is made by `git commit` inside the script; the runner
           # has no git identity, so supply one (the frigate workflow does the same).
@@ -90,7 +92,7 @@ jobs:
           # system-wide PAT and spends its quota.
           NIX_CONFIG: "access-tokens = github.com=${{ github.token }}"
           DRY_RUN: ${{ inputs.dry_run && '1' || '0' }}
-          BUMP: ${{ inputs.bump == false && '0' || '1' }}
+          BUMP: ${{ (github.event_name == 'workflow_dispatch' && !inputs.bump) && '0' || '1' }}
           ONLY: ${{ inputs.only }}
           HOST_TIMEOUT: "1200"
           FLEET_STATE: ${{ runner.temp }}/state
@@ -104,6 +106,25 @@ jobs:
         # The runner service's PATH is a curated list with no ssh, and the job needs
         # it for every host; nix shell puts openssh in front for this one command.
         run: nix shell nixpkgs#openssh -c bash scripts/fleet-patch.sh
+
+      - name: Notify when the patch script never ran
+        # scripts/fleet-patch.sh sends its own ntfy from an EXIT trap. This covers a
+        # failure in checkout, the OpenBao login or the key read, where the topic
+        # file from OpenBao is not available either.
+        if: failure() && steps.patch.outcome == 'skipped'
+        env:
+          NTFY_TOPIC_URL: ${{ secrets.NTFY_TOPIC_URL }}
+        run: |
+          set -uo pipefail
+          url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          echo "fleet-patch failed before scripts/fleet-patch.sh started: ${url}" >> "$GITHUB_STEP_SUMMARY"
+          if [ -z "${NTFY_TOPIC_URL:-}" ]; then
+            echo "::warning::NTFY_TOPIC_URL secret is not set; no notification sent"
+            exit 0
+          fi
+          curl -fsS -m 20 -H "Title: fleet-patch: did not start" -H "Priority: high" -H "Tags: warning" \
+            -d "A step before scripts/fleet-patch.sh failed. ${url}" "$NTFY_TOPIC_URL" >/dev/null \
+            || echo "::warning::ntfy post failed"
 
       - name: Report
         if: always()
@@ -120,7 +141,7 @@ jobs:
               curl -sfS -X POST -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
                 -H "Accept: application/vnd.github+json" \
                 https://api.github.com/repos/John2143/dotfiles/actions/workflows/build-frigate-genai.yml/dispatches \
-                -d '{"ref":"master"}';;
+                -d '{"ref":"master"}' || echo "::warning::could not dispatch build-frigate-genai.yml";;
           esac
           curl -s -o /dev/null -X POST -H "X-Vault-Token: ${{ steps.bao.outputs.token }}" \
             "${BAO_ADDR}/v1/auth/token/revoke-self"
