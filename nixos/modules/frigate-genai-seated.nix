@@ -313,13 +313,14 @@
         sys.exit(main())
   '';
 
-  # The sampler runs in john's user manager, where it can see Hyprland; the
-  # textfile directory is created root-owned by nixos-metrics' activation
-  # script, so hand it (and the alert's cooldown state) to john here. A
-  # user-run sampler cannot chown it itself, and a `.prom` nobody can write is
-  # a gate that silently reads closed forever.
+  # The sampler runs in john's user manager, where it can see Hyprland, and a
+  # user-run process cannot write into a root-owned 0755 directory. Keep the
+  # directory root-owned — root's own textfile writers (nixos.prom, restic.prom)
+  # expect that — and make it group-writable instead: john's primary group is
+  # `users`, and files it drops are 0644, which node_exporter reads as root.
+  # The alert's cooldown state is a private directory and stays john-owned.
   tmpfilesRules = [
-    "d ${promDir} 0755 john users -"
+    "d ${promDir} 0775 root users -"
     "d ${alertStateDir} 0755 john users -"
   ];
 in {
