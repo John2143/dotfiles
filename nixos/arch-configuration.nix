@@ -99,9 +99,6 @@
   custom.crashCapture.enable = true;
   custom.crashCapture.ramoops.enable = true;
 
-  services.displayManager.lemurs = {
-    enable = true;
-  };
   services.seatd.enable = true;
 
   services.resolved = {

@@ -211,6 +211,7 @@
           ./nixos/shared-configuration.nix
           ./nixos/shared-games-configuration.nix
           ./nixos/office-configuration.nix
+          ./nixos/modules/greetd-login.nix
           inputs.rots4.nixosModules.render
           ./nixos/modules/ipad-display.nix
           ./nixos/modules/deskflow.nix
@@ -244,6 +245,7 @@
           ./nixos/shared-configuration.nix
           ./nixos/shared-games-configuration.nix
           ./nixos/arch-configuration.nix
+          ./nixos/modules/greetd-login.nix
           ./nixos/modules/ipad-display.nix
           ./nixos/modules/deskflow.nix
           ./nixos/modules/remote-desktop.nix
@@ -366,6 +368,7 @@
           ./nixos/shared-cli-configuration.nix
           ./nixos/shared-configuration.nix
           ./nixos/security-configuration.nix
+          ./nixos/modules/greetd-login.nix
           ./nixos/tailscale.nix
 
           ./nixos/modules/attic.nix
