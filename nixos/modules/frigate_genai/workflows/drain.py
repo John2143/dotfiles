@@ -93,25 +93,32 @@ class DrainWorkflow:
                     model = STRONG_MODEL
                     strong += 1
                 primary = scene["primary"]
-                handles.append(await workflow.start_child_workflow(
-                    GenAIWorkflow,
-                    {
-                        "event_id": primary["id"],
-                        "camera": scene["camera"],
-                        "label": primary.get("label", ""),
-                        "start_time": primary.get("start_time"),
-                        "end_time": primary.get("end_time"),
-                        "data_box": primary.get("data_box"),
-                        "prompts_path": prompts_path,
-                        "provider_path": provider_path,
-                        "scene": scene,
-                        "model": model,
-                    },
-                    id=f"genai-{scene['scene_id']}",
-                    task_queue=TASK_QUEUE,
-                    parent_close_policy=ParentClosePolicy.ABANDON,
-                ))
-                started += 1
+                try:
+                    handles.append(await workflow.start_child_workflow(
+                        GenAIWorkflow,
+                        {
+                            "event_id": primary["id"],
+                            "camera": scene["camera"],
+                            "label": primary.get("label", ""),
+                            "start_time": primary.get("start_time"),
+                            "end_time": primary.get("end_time"),
+                            "data_box": primary.get("data_box"),
+                            "prompts_path": prompts_path,
+                            "provider_path": provider_path,
+                            "scene": scene,
+                            "model": model,
+                        },
+                        id=f"genai-{scene['scene_id']}",
+                        task_queue=TASK_QUEUE,
+                        parent_close_policy=ParentClosePolicy.ABANDON,
+                    ))
+                    started += 1
+                except Exception as e:
+                    # A scene already described by an earlier drain (or a
+                    # started child whose done-index write never landed) is
+                    # skipped rather than aborting the whole drain.
+                    workflow.logger.warning("drain: scene %s not started: %s",
+                                            scene.get("scene_id"), e)
             await asyncio.gather(*handles, return_exceptions=True)
 
         summary = await workflow.execute_activity(
