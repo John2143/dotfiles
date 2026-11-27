@@ -8,6 +8,7 @@ Regression: SIGTERM drains Temporal workers instead of being ignored by PID 1
 
 import asyncio
 import os
+import re
 import signal
 import sys
 import unittest
@@ -52,6 +53,28 @@ class WorkerModeRegistrationTests(unittest.TestCase):
         for gone in ("genai-gemini", "AgentSessionWorkflow", "SubAgentWorkflow",
                      "run_genai_turn_activity", "init_agent_state_activity"):
             self.assertNotIn(gone, self.code)
+
+
+class DrainQueueRoutingTests(unittest.TestCase):
+    """A workflow's activities must be registered on a queue somebody polls.
+
+    Regression: DrainWorkflow moved to genai-dispatcher while its activities
+    were still scheduled on genai-tasks, so every drain failed with
+    "Activity function genai_paused is not registered on this worker".
+    """
+
+    def test_dispatcher_activities_use_the_dispatcher_queue(self):
+        source = (Path(__file__).parent.parent / "workflows" / "drain.py").read_text()
+        workflow_queue = [line.strip() for line in source.splitlines()
+                          if "task_queue=TASK_QUEUE" in line]
+        # Exactly one call — the scene child — may run on the GenAI queue.
+        self.assertEqual(len(workflow_queue), 1, workflow_queue)
+        self.assertIn("task_queue=DISPATCHER_TASK_QUEUE", source)
+
+    def test_scene_children_stay_on_the_workflow_queue(self):
+        source = (Path(__file__).parent.parent / "workflows" / "drain.py").read_text()
+        block = _block_after(source, "start_child_workflow(", 16)
+        self.assertIn("task_queue=TASK_QUEUE", block)
 
 
 def _block_after(code: str, marker: str, line_count: int) -> str:
