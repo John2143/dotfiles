@@ -65,13 +65,21 @@ Measured intake: ~234 scenes/day, 162 must-keep, worst day 294.
 ## The per-scene workflow (`GenAIWorkflow`)
 
 1. Model from the drain (12b by default, 26b when the card is free).
-2. Snapshot + ffmpeg frames in parallel (`skip_frames` for retries).
+2. ffmpeg frames from the recording (`skip_frames` for retries). No snapshot: the
+   event snapshot has the detector box and class burned in
+   (`snapshots.bounding_box` is true), which both leaks the answer and measured
+   worse than a clean record frame. No frames → `Skipped: no recording`.
 3. `pick_keyframes` — pixel-difference selection, max 8 frames.
 4. `crop_detection` — the detector box from `/api/events/<id>`, cropped from the
-   sharpest keyframe at quality 95; falls back to the centre 60% of the frame.
+   sharpest keyframe at quality 95, padded 0.6 (2.2× linear) and capped at 768 px
+   on the long side: one *context* crop is the whole measured crop gain, and a
+   second tighter crop adds nothing.
 5. `describe_scene` — one call, `temperature=0`, `max_tokens=500`,
    `response_format=json_schema` (scene / subjects / action / confidence /
-   needs_review). Two malformed replies degrade to `confidence=low,
+   needs_review). The prompt carries **Frigate's own facts as text** — label,
+   duration, detector score, zone, `sub_label` — which is the largest measured
+   win (dog recall 37→50 of 57, package 2→6 of 10, invented persons 5→1 of 19 for
+   +9% tokens). Two malformed replies degrade to `confidence=low,
    needs_review=true`; they never raise.
 6. `record_result` → `_state/results/<scene_id>.json`, **before** the Frigate
    write, then the description (retry 24×, 30 s → 30 min).
@@ -177,9 +185,13 @@ A healthy drain logs `collect_scenes: N events`, `drain: N scenes, M skips`, the
 cd nixos/modules && python3 -m unittest discover -s frigate_genai/tests -t . -v
 ```
 
-Quality regression set (24 real events, files under `scratch/LocalBenchDetectorAreas/`):
-**≥ 17/24 correct presence, ≤ 8 outputs with a clear invention, 100% schema-valid,
-≤ 3.5 s/event**. Baseline for the single-call path: 19/24, 5–6 inventions, 2.82 s.
+Quality set: 81 scenes under `scratch/T6GoldenSet/` (Frigate keeps clips 7 days —
+copy the frames to the NAS or the gate dies with the clips). Presence bars, judged
+on one-sided 90% lower bounds, are met by **person (62/62) only**; dog reaches
+50/58 with detector facts (0.79 lower bound, just under the 0.90 bar); cat (1/11)
+and package (6/10) do not clear it, and non-bird wildlife has n = 3. The owner's
+decision on those classes is still open: describe them anyway, or route them to
+label-only. Cost per scene: ~6 s, 1.8–2.2k prompt tokens on 12b.
 
 ## Known follow-ups
 
