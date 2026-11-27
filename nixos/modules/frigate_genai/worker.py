@@ -32,6 +32,7 @@ from temporalio.api.operatorservice.v1 import AddSearchAttributesRequest
 
 from frigate_genai.config import (
     TASK_QUEUE,
+    DISPATCHER_TASK_QUEUE,
     FFMPEG_TASK_QUEUE,
     LLM_TASK_QUEUE,
     DEPLOYMENT_NAME,
@@ -382,7 +383,7 @@ async def _start_drain(prompts_path: str, provider_path: str) -> None:
             DrainWorkflow,
             {"prompts_path": prompts_path, "provider_path": provider_path},
             id="drain-current",
-            task_queue=TASK_QUEUE,
+            task_queue=DISPATCHER_TASK_QUEUE,
             id_reuse_policy=WorkflowIDReusePolicy.ALLOW_DUPLICATE,
             execution_timeout=WORKFLOW_EXECUTION_TIMEOUT,
         )
@@ -508,7 +509,7 @@ async def async_main(prompts_path: str, provider_path: str, mode: str = "trigger
     elif mode == "dispatcher":
         workers = [Worker(
             _temporal_client,
-            task_queue=TASK_QUEUE,
+            task_queue=DISPATCHER_TASK_QUEUE,
             workflows=[DrainWorkflow],
             activities=[
                 collect_scenes_activity,

@@ -12,7 +12,7 @@ call** on the office GPU. Everything runs on-premises: no cloud LLM, no spend.
 ```
 Frigate ──MQTT──> mqtt-listener  (redo triggers only)
    │
-   └─/api/events──> dispatcher ──300 s──> DrainWorkflow (genai-tasks)
+   └─/api/events──> dispatcher ──300 s──> DrainWorkflow (genai-dispatcher)
                         │                     │
                         │ seat gate (Mimir)   ├─ collect: classify, merge, dedupe
                         │                     ├─ label skips: "Skipped: <reason>"
@@ -30,7 +30,7 @@ Frigate ──MQTT──> mqtt-listener  (redo triggers only)
 |---|---|---|---|
 | triggers | `--mode=triggers` | 1 | Runs `GenAIWorkflow`; owns `genai-tasks` activities |
 | ollama worker | `--mode=genai-ollama` | 0–1 (KEDA) | Runs `describe_scene`, `pick_keyframes`, `crop_detection` on `genai-tasks-ollama` |
-| dispatcher | `--mode=dispatcher` | 1 | Runs `DrainWorkflow` + intake; starts a drain every 300 s |
+| dispatcher | `--mode=dispatcher` | 1 | Runs `DrainWorkflow` + intake on `genai-dispatcher`; starts a drain every 300 s |
 | ffmpeg | `--mode=ffmpeg` | 1 | `transcode_into_parts` on `genai-tasks-ffmpeg` |
 | mqtt-listener | `--mode=mqtt-listener` | 1 | Rewrites an event description to `redo` and it is re-described |
 | dashboard | `--mode=dashboard` | 1 | Event table, pause toggles, reprocess; mutating endpoints need `GENAI_ADMIN_TOKEN` |

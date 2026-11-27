@@ -13,6 +13,10 @@ TASK_QUEUE = "genai-tasks"
 FFMPEG_TASK_QUEUE = "genai-tasks-ffmpeg"
 # Queue name kept from the Ollama-only era so no manifest/CI rename is needed.
 LLM_TASK_QUEUE = "genai-tasks-ollama"
+# Drains get their own queue: two worker deployments must never both advertise
+# workflow types on one queue, or a task can be routed to a deployment that
+# does not implement it.
+DISPATCHER_TASK_QUEUE = "genai-dispatcher"
 
 # ── ffmpeg ────────────────────────────────────────────────────────────
 # Unset, ffmpeg sizes its decode/filter/encode thread pools to the host CPU
