@@ -227,6 +227,7 @@ class Scene:
     members: list[dict] = field(default_factory=list)
     labels: frozenset[str] = frozenset()
     priority: str = Decision.LOW_PRIORITY.value
+    zone_polygons: dict[str, dict[str, list[tuple[float, float]]]] | None = None
 
     @property
     def primary(self) -> dict:
@@ -252,8 +253,11 @@ class Scene:
                     "label": m.get("label", ""),
                     "start_time": m.get("start_time"),
                     "end_time": m.get("end_time"),
-                    "top_score": _score(m),
+                    "duration": round(_duration(m), 1),
+                    "top_score": round(_score(m), 2),
+                    "sub_label": m.get("sub_label") or (m.get("data") or {}).get("sub_label"),
                     "entered_zones": sorted(_entered_zones(m)),
+                    "on_property": on_property(m, self.zone_polygons),
                 }
                 for m in self.members
             ],
@@ -320,6 +324,7 @@ def _build_scene(
         members=members,
         labels=labels,
         priority=priority.value,
+        zone_polygons=zone_polygons,
     )
 
 
