@@ -20,4 +20,9 @@ You may ask questions.
 
 Write a report on what you have done.
 
-Once there's nothing else... say "We are all done, exit"
+Then close on what the sweep actually found. The two endings are mutually exclusive — pick one:
+
+- Sweep came back empty: nothing uncommitted or stashed, no worktree, process, timer or todo of ours left running, every card this chat touched closed or carded as a follow-up, every decision written down. Only then say "We are all done, exit".
+- Sweep found something: a known bug left unfixed, a doc still contradicting reality, an open card, a process or worktree of ours still up, a decision not yet written down, anything you would call urgent or hand off. Then do not say "We are all done, exit". End with what remains, what it affects, what it would take to close it, and the decision or answer you need from the user.
+
+The exit line is a verdict on the sweep, not a sign-off at the end of a chat. Never say it in the same breath as a fault, an open card, or anything urgent still in play — if you are still reporting unfinished work, you are not all done.
