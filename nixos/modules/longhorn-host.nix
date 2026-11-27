@@ -65,4 +65,27 @@
       ExecStart = "${pkgs.openiscsi}/bin/iscsiadm -m node --logoutall=all";
     };
   };
+  # Sockets left in /var/lib/longhorn/unix-domain-socket by processes that did not
+  # survive the shutdown make the first replica start on each volume fail with
+  # EADDRINUSE and retry ~5.8 s later (16 of ~26 first starts, 2026-11-26). Only
+  # sockets are removed, and only while k3s is down: nixos-rebuild switch starts
+  # a newly added unit immediately, and deleting sockets under a running
+  # instance-manager would break the engine<->replica IPC it is serving.
+  systemd.services.longhorn-clear-stale-sockets = {
+    description = "Remove stale Longhorn engine sockets before k3s starts";
+    wantedBy = ["multi-user.target"];
+    before = ["k3s.service"];
+    serviceConfig = {
+      Type = "oneshot";
+      RemainAfterExit = true;
+    };
+    script = ''
+      if ${config.systemd.package}/bin/systemctl is-active --quiet k3s.service; then
+        echo "k3s is running; leaving Longhorn sockets alone"
+        exit 0
+      fi
+      ${pkgs.findutils}/bin/find /var/lib/longhorn/unix-domain-socket \
+        -maxdepth 1 -type s -name '*.sock' -delete 2>/dev/null || true
+    '';
+  };
 }
