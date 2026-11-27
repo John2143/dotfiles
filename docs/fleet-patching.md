@@ -241,6 +241,17 @@ Revert the merged Renovate PR on `main`; ArgoCD self-heals it. Never re-pin an i
 
 ## Rebooting a k3s node
 
+**Never start a reboot between 08:11Z and 10:15Z, and never reboot the same node twice in one day
+before the next 09:00Z checksum pass.** `nightly-backup` folds every volume into a new snapshot file at
+08:00Z, which invalidates every checksum on disk; the daily `snapshot-data-integrity` pass
+(`argo/apps/longhorn.yaml`) reaches full coverage at 10:15Z — measured 2026-11-26: 0% at 09:00, 38% at
+09:30, 67% at 10:00, 100% at 10:15. A reboot before coverage completes rebuilds by block comparison:
+630 s and 218 GB instead of 180 s and 8 GB.
+
+This binds manual reboots. kured does not read this rule and will take a queued reboot whenever it likes,
+so never leave a pending NixOS generation across that window: `nixos-rebuild switch` activates at once and
+leaves none, while `boot` queues one. Check `kured_reboot_required` before leaving the fleet unattended.
+
 Not needed for the weekly job (it never reboots). Since 2026-11-03 `kured` reboots `arch`,
 `closet` and `nas` one at a time, Wednesdays 12:00–17:00 America/New_York, and only when that
 node's own `deadman needs-reboot` gate says the cluster can absorb the loss (all nodes Ready,
