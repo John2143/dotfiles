@@ -24,6 +24,10 @@ let
         value.source = mkSource file;
       })
       skillFiles);
+
+  # Council agent definition: 15 agent files, model roles, fallback chains and
+  # request budgets, all from the roster block in that file.
+  council = import ./omp-council.nix {inherit lib;};
 in
 {
   home.file =
@@ -507,6 +511,8 @@ in
         # at the lowest per-task cost. Its key comes from the `parallel`
         # provider block in models.yml. Fallbacks: retry.fallbackChains.web.
         web: web/parallel
+        # Council agents (omp-council.nix): one role per agent so each owns its fallback chain.
+        ${council.modelRolesYaml}
 
       modelProviderOrder:
         - vast-vllm
@@ -541,25 +547,21 @@ in
           slow:
             - "litellm/anthropic/claude-opus-5-5"
             - "litellm/deepseek/deepseek-flash:high"
-          # Per-model keys, one Twin per Claude model: Max subscription first
-          # (the live model is the chain head), then the same model on the
-          # proxy's API-key lane, then the cheap DeepSeek tier. Model-selector
-          # keys outrank role keys (retry-fallback-chains.ts, step 1 before
-          # step 3) and a suffixless key matches any effort, so these — not
-          # `slow` — are what a Claude session actually walks, including
-          # oracle/subagents on Opus at xhigh. Spelled out per id rather than
-          # `litellm/anthropic/*`: the wildcard form rebuilds the candidate
-          # from the failing model's bare id, and a concrete id is both
-          # obvious to read and independent of that suffixing.
-          "anthropic/claude-opus-5-5":
+          # Same two rungs as `slow`, repeated so an Opus session lands on this
+          # chain whichever of the two roles it resolves through.
+          vision:
             - "litellm/anthropic/claude-opus-5-5"
             - "litellm/deepseek/deepseek-flash:high"
+          # Only Haiku keeps a per-model key. Opus and Fable have none: a
+          # model-selector key outranks every role chain and a suffixless key
+          # matches any effort, so an Opus or Fable key would also override the
+          # empty fallback chains of the council agents on those models. Opus
+          # sessions fall back through `slow`/`vision`, a Fable session through
+          # `default`, and oracle carries its own chain in its frontmatter.
           "anthropic/claude-haiku-5-5":
             - "litellm/anthropic/claude-haiku-5-5"
             - "litellm/deepseek/deepseek-flash:high"
-          "anthropic/claude-fable-5-2":
-            - "litellm/anthropic/claude-fable-5-2"
-            - "litellm/deepseek/deepseek-flash:high"
+          ${council.fallbackChainsYaml}
 
       # Context maintenance — two independent triggers, deliberately tuned
       # tighter than the defaults. Verified against omp 18.20.3:
@@ -646,15 +648,17 @@ in
       # Names must be nested mappings; dotted keys are silently ignored.
       checkpoint:
         enabled: true
-      # Subagents — one level deeper than the default 2, so the chain
-      # main (0) → web-research-orchestrator (1) → web-researcher (2) → scout (3)
-      # is permitted. At the cap omp strips `task` from the child entirely, so
-      # without this a researcher spawned by the orchestrator cannot delegate
-      # no matter what its frontmatter declares. GLOBAL: the bundled `task`
-      # agent carries an implicit `spawns: *`, so this also lets any generic
-      # task subagent spawn one level deeper.
+      # Subagents — recursion cap for the council chain: main (0) → council
+      # manager (1) → council member (2) → council_task_super_elite (3) →
+      # council_task_advanced (4) → council_task_basic (5). At the cap omp
+      # strips `task` from the child entirely, so council_task_basic cannot
+      # delegate further. GLOBAL: the bundled `task` agent carries an implicit
+      # `spawns: *`, so this also lets any generic task subagent spawn deeper.
+      # The default 200-request budget is raised to 1000 for the high-tier
+      # council members only (omp-council.nix); every other agent keeps 200.
       task:
-        maxRecursionDepth: 3
+        maxRecursionDepth: ${toString council.maxRecursionDepth}
+        agentSoftRequestBudget: ${council.agentSoftRequestBudgetJson}
       # Dropped as dead keys (no such setting in omp 18.18.2):
       #   calc.enabled           — no calc tool or setting exists.
       #   render_mermaid.enabled — real knob is tui.renderMermaid, on by default.
@@ -884,5 +888,5 @@ in
       source = ../../.omp/agent/agents/web-researcher.md;
       force = true;
     };
-  };
+  } // council.homeFiles;
 }
