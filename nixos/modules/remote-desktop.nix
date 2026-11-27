@@ -303,6 +303,17 @@ in {
     };
   };
 
+  # luminous is D-Bus activated with Restart=on-failure and the default 100 ms
+  # RestartSec. While the compositor restarts it panics with NoCompositor, uses up
+  # the default 5-starts-in-10 s limit in under a second and stays failed
+  # (2026-11-26 17:57:59). Retry every 3 s for about 30 s instead.
+  systemd.user.services.xdg-desktop-portal-luminous = {
+    overrideStrategy = "asDropin";
+    startLimitIntervalSec = 60;
+    startLimitBurst = 10;
+    serviceConfig.RestartSec = 3;
+  };
+
   # RustDesk runs unsandboxed, so its portal app id is empty and luminous cannot
   # whitelist it; with the check on, every connection would wait on a dialog
   # nobody is there to click. Monitor choice stays gated by luminous-autopick.
