@@ -107,7 +107,7 @@ jobs:
           ${ARGO_MANIFEST_DIR}/ffmpeg-workerdeployment.yaml
         sed -i "s|\(unsafeCustomBuildID: \"\)[^\"]*|\1${NEW_TAG}|g" \
           ${ARGO_MANIFEST_DIR}/ffmpeg-workerdeployment.yaml
-        for dep in gemini ollama triggers; do
+        for dep in dispatcher ollama triggers; do
           sed -i "s|\(image: ${GENAI_IMAGE}:\)[^ ]*|\1${NEW_TAG}|g" \
             ${ARGO_MANIFEST_DIR}/${dep}-workerdeployment.yaml
           sed -i "s|\(TEMPORAL_WORKER_BUILD_ID, value: \"\)[^\"]*|\1${NEW_TAG}|g" \
@@ -126,8 +126,8 @@ jobs:
       run: |
         grep -q "unsafeCustomBuildID: \"${NEW_TAG}\"" ${ARGO_MANIFEST_DIR}/ffmpeg-workerdeployment.yaml || \
           (echo "ERROR: ffmpeg unsafeCustomBuildID tag not found" && exit 1)
-        grep -q "unsafeCustomBuildID: \"${NEW_TAG}\"" ${ARGO_MANIFEST_DIR}/gemini-workerdeployment.yaml || \
-          (echo "ERROR: genai unsafeCustomBuildID tag not found" && exit 1)
+        grep -q "unsafeCustomBuildID: \"${NEW_TAG}\"" ${ARGO_MANIFEST_DIR}/dispatcher-workerdeployment.yaml || \
+          (echo "ERROR: dispatcher unsafeCustomBuildID tag not found" && exit 1)
         if [ -f ${ARGO_MANIFEST_DIR}/mqtt-listener-deployment.yaml ]; then
           grep -q "image: ${GENAI_IMAGE}:${NEW_TAG}" ${ARGO_MANIFEST_DIR}/mqtt-listener-deployment.yaml || \
             (echo "ERROR: mqtt-listener image tag not found" && exit 1)
@@ -185,7 +185,7 @@ jobs:
       run: |
         echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
         docker pull "${GENAI_IMAGE}:${NEW_TAG}"
-        for mode in triggers mqtt-listener dashboard; do
+        for mode in triggers dispatcher mqtt-listener dashboard; do
           echo "--- testing mode=${mode} ---"
           docker run --rm \
             "${GENAI_IMAGE}:${NEW_TAG}" \

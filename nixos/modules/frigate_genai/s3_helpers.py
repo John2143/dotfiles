@@ -98,18 +98,6 @@ def _s3_delete_prefix(prefix: str) -> int:
     return deleted
 
 
-def _s3_copy_key(src: str, dst: str) -> bool:
-    """Copy object within S3 bucket. Returns True if successful."""
-    try:
-        _s3_client().copy_object(
-            Bucket=_S3_BUCKET, Key=dst,
-            CopySource={"Bucket": _S3_BUCKET, "Key": src},
-        )
-        return True
-    except Exception:
-        return False
-
-
 def _s3_read_text(key: str) -> str | None:
     data = _s3_get(key)
     return data.decode("utf-8") if data else None
@@ -118,12 +106,6 @@ def _s3_read_text(key: str) -> str | None:
 def _s3_event_prefix(event_id: str) -> str:
     return f"events/{event_id}"
 
-
-def _s3_agent_prefix(event_id: str) -> str:
-    return f"events/{event_id}/agent"
-
-
-# ── State management ──────────────────────────────────────────────────
 
 def _atomic_write(path: str, data: dict) -> None:
     """Write JSON to S3 (if path starts with 'events/') or disk atomically."""
@@ -136,104 +118,9 @@ def _atomic_write(path: str, data: dict) -> None:
         os.replace(tmp, path)
 
 
-def _load_state(msg_path: str) -> tuple[dict, str]:
-    """Read messages.json from S3 or local disk. Returns (state, agent_dir)."""
-    if msg_path.startswith("events/"):
-        data = _s3_read_text(msg_path)
-        if data is None:
-            raise FileNotFoundError(f"State not found at {msg_path}")
-        state = json.loads(data)
-    else:
-        with open(msg_path) as f:
-            state = json.load(f)
-    return state, state["agent_dir"]
-
-
-def _find_tc_id(state: dict, tool_name: str) -> str | None:
-    """Find the tool_call_id in the most recent assistant message matching tool_name."""
-    msgs = state.get("messages", [])
-    if not msgs:
-        return None
-    assistant_msg = msgs[-1]
-    for tc in assistant_msg.get("tool_calls", []):
-        if tc.get("function", {}).get("name") == tool_name:
-            return tc.get("id")
-    return None
-
-
-def _deserialize_messages(messages: list, agent_dir: str) -> list:
-    """Convert [[filename]] refs in messages to base64 data URIs.
-    Reads image bytes from S3 (if agent_dir starts with 'events/') or disk.
-    Does NOT mutate — returns new list.
-    """
-    is_s3 = agent_dir.startswith("events/")
-    result = copy.deepcopy(messages)
-    for m in result:
-        content = m.get("content")
-        if isinstance(content, list):
-            for part in content:
-                if isinstance(part, dict) and part.get("type") == "image_url":
-                    url = part.get("image_url", {}).get("url", "")
-                    if url.startswith("[") and url.endswith("]]"):
-                        fname = url[2:-2]  # strip [[ and ]]
-                        base = agent_dir.rstrip("/")
-                        img_key = f"{base}/{fname}"
-                        if is_s3:
-                            raw = _s3_get(img_key)
-                        else:
-                            p = Path(agent_dir) / fname
-                            raw = p.read_bytes() if p.exists() else None
-                        if raw:
-                            b64 = base64.b64encode(raw).decode("ascii")
-                            part["image_url"]["url"] = f"data:image/jpeg;base64,{b64}"
-                        else:
-                            log.warning("Failed to load image %s from %s", fname, "S3" if is_s3 else "disk")
-    return result
-
-
-# ── Utilities ─────────────────────────────────────────────────────────
-
 def load_json(path: str) -> dict:
     with open(path) as f:
         return json.load(f)
-
-
-def _resolve_source_key(source: str, agent_dir: str, frames_dir: str) -> str | None:
-    """Resolve a source URI to its stored S3 key. Returns None for unknown/unstored."""
-    if source.startswith("frame://"):
-        spec = source[len("frame://"):]
-        try:
-            return f"{frames_dir}/frames/frame_{int(spec):03d}.jpg"
-        except ValueError:
-            return None
-    if source.startswith("crop://"):
-        try:
-            return f"{agent_dir}/crop_{int(source[len('crop://'):]):03d}.jpg"
-        except ValueError:
-            return None
-    if source.startswith("upscale://"):
-        try:
-            return f"{agent_dir}/upscale_{int(source[len('upscale://'):]):03d}.jpg"
-        except ValueError:
-            return None
-    if source.startswith("snapshot://") or source == "":
-        return f"{frames_dir}/snapshot.jpg"
-    return None
-
-
-def _build_image_tool_result(tc_id: str, summary: str,
-                             image_parts: list[dict], label: str = "") -> list[dict]:
-    """Build the two-message result for an image-bearing tool call: a tool-role
-    text receipt and a user-role message with the image parts. Gemini
-    functionResponse parts are text-only, so images must live in a user message.
-    `label` (optional) is appended as a trailing text part of the user message."""
-    user_parts = list(image_parts)
-    if label:
-        user_parts.append({"type": "text", "text": label})
-    return [
-        {"role": "tool", "tool_call_id": tc_id, "content": summary},
-        {"role": "user", "content": user_parts},
-    ]
 
 
 _stats: dict = {

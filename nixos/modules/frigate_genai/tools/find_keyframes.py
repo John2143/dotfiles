@@ -1,11 +1,11 @@
-"""find_keyframes and frame_diff tools — deterministic pixel-difference analysis.
+"""Keyframe selection — deterministic pixel-difference analysis.
 
 Algorithm: mean absolute pixel difference on mean-centered, Gaussian-blurred
 grayscale 160px thumbnails, weighted 0.7 toward the data_box ROI.
 Mean-centering cancels global lighting shifts; GaussianBlur(2) suppresses sensor noise.
 
-find_keyframes: picks the N most informative frames (opinionated).
-frame_diff: raw pairwise comparison data for the LLM to reason about.
+pick_keyframes returns the N most informative frame indices for the single
+describe call, plus the sharpest frame to crop the detector box from.
 """
 
 import io as _io_ff
@@ -25,6 +25,10 @@ except ImportError:
     activity = _FakeActivity()  # type: ignore[assignment]
 
 log = logging.getLogger("frigate-genai-sidecar")
+
+# Enough frames to see a sequence, few enough to stay under the model's
+# 8-image comfort zone alongside the detector crop.
+MAX_KEYFRAMES = 8
 
 
 # ── pixel difference helpers ──────────────────────────────────────────────
@@ -204,22 +208,19 @@ def _compute_differences(
 
 # ── activities ────────────────────────────────────────────────────────────
 
-@activity.defn(name="tool_find_keyframes")
-async def tool_find_keyframes_activity(arg: dict) -> dict:
-    """Find the most informative keyframes using pixel-difference analysis."""
-    msg_path = arg["msg_path"]
-    from frigate_genai.s3_helpers import _find_tc_id, _load_state, _s3_read_text
+@activity.defn(name="pick_keyframes")
+async def pick_keyframes_activity(arg: dict) -> dict:
+    """Pick the most informative keyframes with pixel-difference analysis."""
+    from frigate_genai.s3_helpers import _s3_read_text
     event_id = arg["event_id"]
-    max_frames = arg["max_frames"]
+    max_frames = arg.get("max_frames", 0)
     tool_args = arg.get("args", {})
 
-    count = min(tool_args.get("count", 5), 10)
+    count = min(tool_args.get("count", 8), MAX_KEYFRAMES)
     data_box = tool_args.get("data_box")
 
-    state, agent_dir = _load_state(msg_path)
+    agent_dir = f"events/{event_id}/agent"
     event_prefix = f"events/{event_id}"
-
-    tc_id = _find_tc_id(state, "find_keyframes")
 
     # Cache check
     cached_raw = _s3_read_text(f"{agent_dir}/differences.json")
@@ -247,11 +248,7 @@ async def tool_find_keyframes_activity(arg: dict) -> dict:
             "sharpest_frame": None,
             "crop_region": "",
             "total_frames": 0,
-            "messages": [{
-                "role": "tool",
-                "tool_call_id": tc_id or "",
-                "content": "No frames available for this event.",
-            }],
+            "content": "No frames available for this event.",
         }
 
     # 1 frame
@@ -264,11 +261,7 @@ async def tool_find_keyframes_activity(arg: dict) -> dict:
             "sharpest_frame": 0,
             "crop_region": crop_region,
             "total_frames": 1,
-            "messages": [{
-                "role": "tool",
-                "tool_call_id": tc_id or "",
-                "content": "Only 1 frame. Inspect it directly.",
-            }],
+            "content": "Only 1 frame.",
         }
 
     # 2+ frames: short-circuit for motionless clips
@@ -290,11 +283,7 @@ async def tool_find_keyframes_activity(arg: dict) -> dict:
             "sharpest_frame": sharpest,
             "crop_region": crop_region,
             "total_frames": total_frames,
-            "messages": [{
-                "role": "tool",
-                "tool_call_id": tc_id or "",
-                "content": "All frames are nearly identical — nothing moved significantly in this clip.",
-            }],
+            "content": "All frames are nearly identical — nothing moved significantly in this clip.",
         }
 
     # Find local maxima using weighted scores
@@ -376,193 +365,9 @@ async def tool_find_keyframes_activity(arg: dict) -> dict:
         "sharpest_frame": sharpest_frame,
         "crop_region": crop_region,
         "total_frames": total_frames,
-        "messages": [{
-            "role": "tool",
-            "tool_call_id": tc_id or "",
-            "content": content,
-        }],
+        "content": content,
     }
 
-
-@activity.defn(name="tool_frame_diff")
-async def tool_frame_diff_activity(arg: dict) -> dict:
-    """Compare two frames using pixel-difference analysis."""
-    msg_path = arg["msg_path"]
-    from frigate_genai.s3_helpers import _find_tc_id, _load_state, _s3_read_text, _s3_get, _atomic_write
-    event_id = arg["event_id"]
-    max_frames = arg.get("max_frames", 0)
-    tool_args = arg.get("args", {})
-
-    frame_a = tool_args["frame_a"]
-    frame_b = tool_args.get("frame_b")
-    data_box = tool_args.get("data_box")
-
-    state, agent_dir = _load_state(msg_path)
-    event_prefix = f"events/{event_id}"
-
-    tc_id = _find_tc_id(state, "frame_diff")
-
-    # Guard: range check
-    if frame_a < 0 or (max_frames > 0 and frame_a >= max_frames):
-        return {
-            "frame_a": frame_a, "frame_b": frame_b,
-            "distance": None, "full_distance": None, "roi_distance": None,
-            "interpretation": f"Frame {frame_a} out of range (0-{max_frames - 1}).",
-            "messages": [{"role": "tool", "tool_call_id": tc_id or "",
-                           "content": f"Error: frame {frame_a} out of range (0-{max_frames - 1})."}],
-        }
-    if frame_b is not None and (frame_b < 0 or (max_frames > 0 and frame_b >= max_frames)):
-        return {
-            "frame_a": frame_a, "frame_b": frame_b,
-            "distance": None, "full_distance": None, "roi_distance": None,
-            "interpretation": f"Frame {frame_b} out of range (0-{max_frames - 1}).",
-            "messages": [{"role": "tool", "tool_call_id": tc_id or "",
-                           "content": f"Error: frame {frame_b} out of range (0-{max_frames - 1})."}],
-        }
-
-    # Load or compute differences
-    cached_raw = _s3_read_text(f"{agent_dir}/differences.json")
-    cached = json.loads(cached_raw) if cached_raw else None
-    if cached is None:
-        if max_frames == 0:
-            return {
-                "frame_a": frame_a, "frame_b": frame_b,
-                "distance": None, "full_distance": None, "roi_distance": None,
-                "interpretation": "No frames available.",
-                "messages": [{"role": "tool", "tool_call_id": tc_id or "",
-                               "content": "Error: No frames available."}],
-            }
-        cached = _compute_differences(event_prefix, data_box, max_frames)
-
-    scores = cached["scores"]
-
-    if frame_b is not None:
-        # Both-frames mode
-        if abs(frame_a - frame_b) == 1:
-            # Adjacent: serve from cache
-            idx = min(frame_a, frame_b)
-            if idx < len(scores):
-                full, weighted = scores[idx]
-                roi_d = (weighted - 0.3 * full) / 0.7 if abs(weighted - full) > 1e-9 else None
-            else:
-                full, weighted = 0.0, 0.0
-                roi_d = None
-        else:
-            # Non-adjacent: load both frames and compute directly
-            try:
-                raw_a = _s3_get(f"{event_prefix}/frames/frame_{frame_a:03d}.jpg")
-                raw_b = _s3_get(f"{event_prefix}/frames/frame_{frame_b:03d}.jpg")
-                if not raw_a:
-                    return {
-                        "frame_a": frame_a, "frame_b": frame_b,
-                        "distance": None,
-                        "interpretation": f"Frame {frame_a} not found.",
-                        "messages": [{"role": "tool", "tool_call_id": tc_id or "",
-                                       "content": f"Error: Frame {frame_a} not found."}],
-                    }
-                if not raw_b:
-                    return {
-                        "frame_a": frame_a, "frame_b": frame_b,
-                        "distance": None,
-                        "interpretation": f"Frame {frame_b} not found.",
-                        "messages": [{"role": "tool", "tool_call_id": tc_id or "",
-                                       "content": f"Error: Frame {frame_b} not found."}],
-                    }
-
-                img_a = Image.open(_io_ff.BytesIO(raw_a))
-                img_b = Image.open(_io_ff.BytesIO(raw_b))
-                tw = 160
-                thumb_a = img_a.convert("L").resize(
-                    (tw, int(img_a.height * tw / img_a.width)), Image.LANCZOS
-                )
-                thumb_b = img_b.convert("L").resize(
-                    (tw, int(img_b.height * tw / img_b.width)), Image.LANCZOS
-                )
-
-                prep_a = _prep(thumb_a)
-                prep_b = _prep(thumb_b)
-
-                full = _pixel_distance(prep_a, prep_b)
-
-                # ROI from arg data_box (may differ from cached)
-                roi_d = None
-                weighted = full
-                if data_box and len(data_box) == 4:
-                    tw_img, th_img = thumb_a.size
-                    x1 = int(data_box[0] * tw_img)
-                    y1 = int(data_box[1] * th_img)
-                    x2 = int((data_box[0] + data_box[2]) * tw_img)
-                    y2 = int((data_box[1] + data_box[3]) * th_img)
-                    cx, cy = (x1 + x2) / 2, (y1 + y2) / 2
-                    half_w = (x2 - x1) * 0.75
-                    half_h = (y2 - y1) * 0.75
-                    rx1 = max(0, min(tw_img - 1, int(cx - half_w)))
-                    ry1 = max(0, min(th_img - 1, int(cy - half_h)))
-                    rx2 = max(0, min(tw_img - 1, int(cx + half_w)))
-                    ry2 = max(0, min(th_img - 1, int(cy + half_h)))
-                    if rx2 - rx1 >= 4 and ry2 - ry1 >= 4:
-                        roi_d = _pixel_distance(
-                            prep_a.crop((rx1, ry1, rx2, ry2)),
-                            prep_b.crop((rx1, ry1, rx2, ry2)),
-                        )
-                        weighted = 0.3 * full + 0.7 * roi_d
-            except Exception as e:
-                return {
-                    "frame_a": frame_a, "frame_b": frame_b,
-                    "distance": None,
-                    "interpretation": f"Failed to compare frames: {e}",
-                    "messages": [{"role": "tool", "tool_call_id": tc_id or "",
-                                   "content": f"Error comparing frames {frame_a} and {frame_b}: {e}"}],
-                }
-
-    else:
-        # Neighborhood mode: return weighted scores around frame_a
-        lo = max(0, frame_a - 5)
-        hi = min(len(scores) - 1, frame_a + 5)
-        neighbors = []
-        for i in range(lo, hi + 1):
-            w = scores[i][1]
-            neighbors.append(f"{i}->{i + 1}: {w:.3f}")
-        content = "Neighborhood:\n" + "\n".join(neighbors)
-        return {
-            "frame_a": frame_a, "frame_b": None,
-            "distance": None, "full_distance": None, "roi_distance": None,
-            "neighbors": neighbors,
-            "messages": [{
-                "role": "tool",
-                "tool_call_id": tc_id or "",
-                "content": content,
-            }],
-        }
-
-    # Percentile rank
-    percentile_str = ""
-    if scores and weighted > 0:
-        strictly_less = sum(1 for s in scores if s[1] < weighted)
-        pct = round(strictly_less / len(scores) * 100)
-        percentile_str = f" ({pct}th percentile for this clip)"
-
-    # Interpretation
-    interp = _interpret_distance(weighted)
-
-    content = f"{interp} — {weighted:.3f} distance{percentile_str}."
-
-    return {
-        "frame_a": frame_a,
-        "frame_b": frame_b,
-        "distance": round(weighted, 4),
-        "full_distance": round(full, 4),
-        "roi_distance": round(roi_d, 4) if roi_d is not None else None,
-        "interpretation": content,
-        "messages": [{
-            "role": "tool",
-            "tool_call_id": tc_id or "",
-            "content": content,
-        }],
-    }
-
-
-# ── helpers ───────────────────────────────────────────────────────────────
 
 def _crop_region_str(data_box: list[float]) -> str:
     """Format data_box as a crop coordinate string."""
@@ -570,16 +375,3 @@ def _crop_region_str(data_box: list[float]) -> str:
         f"x1={data_box[0]:.2f} y1={data_box[1]:.2f} "
         f"x2={data_box[0] + data_box[2]:.2f} y2={data_box[1] + data_box[3]:.2f}"
     )
-
-
-def _interpret_distance(d: float) -> str:
-    """Human-readable interpretation of a pixel-difference score."""
-    if d < 0.005:
-        return "Near-identical"
-    if d < 0.015:
-        return "Similar"
-    if d < 0.04:
-        return "Noticeable change"
-    if d < 0.10:
-        return "Significant change"
-    return "Major scene change"

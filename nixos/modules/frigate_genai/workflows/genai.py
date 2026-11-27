@@ -1,4 +1,9 @@
-"""GenAIWorkflow — orchestrates event processing: extract, genai, describe."""
+"""GenAIWorkflow — one scene in, one description out.
+
+Every scene is: extract frames, pick keyframes, crop the detected object,
+make one schema-constrained local LLM call, record the result, write it to
+Frigate. No tool loop, no child agent sessions.
+"""
 
 import asyncio
 from datetime import timedelta
@@ -8,355 +13,264 @@ from temporalio.common import SearchAttributePair
 from temporalio.workflow import ParentClosePolicy
 
 from frigate_genai.config import (
-    MAX_TURNS,
-    MAX_TURNS_QUICK,
-    QUICK_LABELS,
     TASK_QUEUE,
     FFMPEG_TASK_QUEUE,
-    GEMINI_TASK_QUEUE,
-    OLLAMA_TASK_QUEUE,
+    LLM_TASK_QUEUE,
     _ACTIVITY_RETRY,
+    _DESCRIPTION_RETRY,
     _EXTRACT_RETRY,
-    _SEARCH_CAMERA,
-    _SEARCH_LABEL,
+    _SEARCH_CONFIDENCE,
+    _SEARCH_COST,
     _SEARCH_DURATION,
     _SEARCH_MODEL,
-    _SEARCH_CONFIDENCE,
-    _SEARCH_TRANSCODE,
-    _SEARCH_TOOL_FAILURES,
 )
-from frigate_genai.activities.select_model import select_model_activity
+from frigate_genai.activities.select_model import DEFAULT_MODEL, select_model_activity
 from frigate_genai.activities.frame_extraction import transcode_into_parts_activity, fetch_snapshot_activity
-from frigate_genai.activities.lifecycle import (
-    update_description_activity,
-    cleanup_cancelled_activity,
-    save_agent_log_activity,
-    summarize_agent_activity,
-)
-from frigate_genai.activities.agent_state import init_agent_state_activity
-from frigate_genai.tools.find_keyframes import tool_find_keyframes_activity
-from frigate_genai.activities.tool_apply import apply_tool_messages_activity
-from frigate_genai.workflows.agent_session import AgentSessionWorkflow
+from frigate_genai.activities.records import record_result_activity
+from frigate_genai.activities.frames import crop_detection_activity
+from frigate_genai.activities.describe import run_describe_scene
+from frigate_genai.activities.lifecycle import update_description_activity, cleanup_cancelled_activity
+from frigate_genai.tools.find_keyframes import pick_keyframes_activity
+
+MUST_KEEP = "must_keep"
+STRONG_MODEL = "ollama/gemma4:26b"
+WEAK_CONFIDENCE = ("low", "nothing_found")
+
+
+def _scene_from_input(input_data: dict) -> dict:
+    """Return the scene dict, synthesising one for a bare event (manual
+    reprocess from the dashboard, or a redo trigger)."""
+    scene = input_data.get("scene")
+    if scene and scene.get("primary"):
+        return scene
+    start = float(input_data.get("start_time") or 0)
+    end = float(input_data.get("end_time") or start)
+    camera = input_data.get("camera", "")
+    label = input_data.get("label", "")
+    return {
+        "scene_id": f"{camera}-{int(start)}",
+        "camera": camera,
+        "start": start,
+        "end": end,
+        "labels": [label] if label else [],
+        "priority": MUST_KEEP,
+        "members": [
+            {"id": input_data["event_id"], "label": label, "start_time": start, "end_time": end},
+        ],
+        "primary": {
+            "id": input_data["event_id"],
+            "label": label,
+            "start_time": start,
+            "end_time": end,
+            "data_box": input_data.get("data_box"),
+        },
+    }
+
+
+def _is_weak(result: dict) -> bool:
+    return bool(result.get("needs_review")) or result.get("confidence") in WEAK_CONFIDENCE
 
 
 @workflow.defn
 class GenAIWorkflow:
-    """Orchestrates GenAI event processing: extract, genai, describe."""
+    """Describe one scene with a single local LLM call."""
 
     @workflow.run
     async def run(self, input_data: dict) -> None:
+        event_id = input_data["event_id"]
+        camera = input_data.get("camera", "")
+        label = input_data.get("label", "")
+        log_ctx = f"event={event_id} camera={camera} label={label}"
+        scene = _scene_from_input(input_data)
+        primary = scene["primary"]
+        primary_id = primary["id"]
+        labels = scene.get("labels") or ([label] if label else [])
+        retry_of = input_data.get("retry_of")
+
+        workflow.logger.info("GenAI workflow started: %s scene=%s labels=%s",
+                             log_ctx, scene.get("scene_id"), labels)
 
         try:
-            event_id = input_data["event_id"]
-            camera = input_data["camera"]
-            label = input_data["label"]
-            start_time = input_data["start_time"]
-            end_time = input_data["end_time"]
-
-            log_ctx = f"event={event_id} camera={camera} label={label}"
-
-            workflow.logger.info("GenAI workflow started: %s", log_ctx)
-
-            # Step 0: select model (manual override from dashboard "Reprocess w/ model" is in input_data already)
             model = input_data.get("model")
-            if model is None:
+            if not model:
                 model = await workflow.execute_activity(
                     select_model_activity,
                     input_data,
                     start_to_close_timeout=timedelta(seconds=10),
                     retry_policy=_ACTIVITY_RETRY,
                 )
-                input_data["model"] = model
-            # Publish model as search attribute for filtering
-            workflow.upsert_search_attributes([
-                SearchAttributePair(_SEARCH_MODEL, model),
-            ])
+            workflow.upsert_search_attributes([SearchAttributePair(_SEARCH_MODEL, model)])
             workflow.logger.info("model=%s", model)
 
-            skip_frames = input_data.get("skip_frames", False)
+            # Progress marker, so a long drain is visible in Frigate.
+            await workflow.execute_activity(
+                update_description_activity,
+                args=[primary_id, f"Processing {label} on {camera}..."],
+                start_to_close_timeout=timedelta(seconds=15),
+                retry_policy=_ACTIVITY_RETRY,
+            )
 
-            # Step 1: fetch snapshot + extract ffmpeg frames (parallel)
-            if skip_frames:
-                frames_dir = await workflow.execute_activity(
+            # Frames: snapshot always, ffmpeg clip when enabled.
+            frame_count = 0
+            event_prefix = f"events/{primary_id}"
+            if input_data.get("skip_frames"):
+                await workflow.execute_activity(
                     fetch_snapshot_activity,
-                    input_data,
+                    {**input_data, "event_id": primary_id},
                     start_to_close_timeout=timedelta(seconds=30),
                     retry_policy=_ACTIVITY_RETRY,
                 )
             else:
-                snapshot_dir, (ffmpeg_dir, frame_count) = await asyncio.gather(
-                    workflow.execute_activity(
-                        fetch_snapshot_activity,
-                        input_data,
-                        start_to_close_timeout=timedelta(seconds=30),
-                        retry_policy=_ACTIVITY_RETRY,
-                    ),
-                    workflow.execute_activity(
-                        transcode_into_parts_activity,
-                        input_data,
-                        task_queue=FFMPEG_TASK_QUEUE,
-                        start_to_close_timeout=timedelta(hours=1),
-                        heartbeat_timeout=timedelta(seconds=60),
-                        retry_policy=_EXTRACT_RETRY,
-                    ),
-                )
-                frames_dir = snapshot_dir
-
-                # Upsert duration + frame count as search attributes
-                dur_sec = int(end_time - start_time)
-                workflow.upsert_search_attributes([
-                    SearchAttributePair(_SEARCH_DURATION, dur_sec),
-                ])
-                workflow.logger.info("duration=%ds frames=%d", dur_sec, frame_count)
-
-
-            # Step 2: progress patch
-            await workflow.execute_activity(
-                update_description_activity,
-                args=[event_id, f"Processing {label} on {camera}..."],
-                start_to_close_timeout=timedelta(seconds=15),
-                retry_policy=_ACTIVITY_RETRY,
-            )
-
-            # Step 3: initialize agent state on disk (activity — sandboxed in workflow)
-            genai_queue = GEMINI_TASK_QUEUE if model.startswith("gemini/") else OLLAMA_TASK_QUEUE
-            init_result = await workflow.execute_activity(
-                init_agent_state_activity,
-                arg={
-                    "event_id": event_id, "camera": camera, "label": label,
-                    "frames_dir": frames_dir, "prompts_path": input_data["prompts_path"],
-                    "data_box": input_data.get("data_box"),
-                    "start_time": start_time, "end_time": end_time,
-                },
-                task_queue=TASK_QUEUE,
-                start_to_close_timeout=timedelta(seconds=10),
-                retry_policy=_ACTIVITY_RETRY,
-            )
-            msg_path = init_result["msg_path"]
-            max_frames = init_result["max_frames"]
-
-            # Auto-run find_keyframes for clips with >5 frames
-            if max_frames > 5:
                 try:
-                    find_keyframes_result = await workflow.execute_activity(
-                        tool_find_keyframes_activity,
-                        arg={
-                            "msg_path": msg_path,
-                            "event_id": event_id,
-                            "max_frames": max_frames,
-                            "args": {"count": 8, "data_box": input_data.get("data_box")},
-                        },
-                        task_queue=genai_queue,
-                        start_to_close_timeout=timedelta(seconds=30),
-                        retry_policy=_ACTIVITY_RETRY,
-                    )
-                    keyframe_msg = f"[Keyframe analysis — precomputed, zero token cost]\n{find_keyframes_result['messages'][0]['content']}"
-                    await workflow.execute_activity(
-                        apply_tool_messages_activity,
-                        arg={
-                            "msg_path": msg_path,
-                            "outcomes": [{"messages": [{"role": "user", "content": keyframe_msg}]}],
-                        },
-                        task_queue=genai_queue,
-                        start_to_close_timeout=timedelta(seconds=10),
-                        retry_policy=_ACTIVITY_RETRY,
+                    _, (_, frame_count) = await asyncio.gather(
+                        workflow.execute_activity(
+                            fetch_snapshot_activity,
+                            {**input_data, "event_id": primary_id},
+                            start_to_close_timeout=timedelta(seconds=30),
+                            retry_policy=_ACTIVITY_RETRY,
+                        ),
+                        workflow.execute_activity(
+                            transcode_into_parts_activity,
+                            {**input_data, "event_id": primary_id},
+                            task_queue=FFMPEG_TASK_QUEUE,
+                            start_to_close_timeout=timedelta(hours=1),
+                            heartbeat_timeout=timedelta(seconds=60),
+                            retry_policy=_EXTRACT_RETRY,
+                        ),
                     )
                 except Exception:
-                    workflow.logger.warning("find_keyframes auto-run failed; LLM will fall back to calling it directly")
+                    workflow.logger.warning("Frame extraction failed for %s; falling back to the snapshot", log_ctx)
+                    frame_count = 0
 
-            session_result = await workflow.execute_child_workflow(
-                AgentSessionWorkflow,
-                arg={
-                    "msg_path": msg_path,
-                    "provider_path": input_data["provider_path"],
-                    "model": model,
-                    "event_id": event_id,
-                    "camera": camera,
-                    "label": label,
-                    "max_turns": MAX_TURNS_QUICK if label in QUICK_LABELS else MAX_TURNS,
-                    "max_frames": max_frames,
-                    "start_time": start_time,
-                    "end_time": end_time,
-                    "genai_queue": genai_queue,
-                    "prompts_path": input_data["prompts_path"],
-                    "depth": 0,
-                    "max_depth": 2,
-                    "parent_agent_dir": f"events/{event_id}/agent/",
-                },
-                id=f"{event_id}-agent-session",
-                task_queue=genai_queue,
-                parent_close_policy=ParentClosePolicy.TERMINATE,
-            )
-            description = session_result.get("description")
-            confidence = session_result.get("confidence")
-            total_cost = session_result.get("total_cost", {})
-            turns_low = session_result.get("turns_low", 0)
-            turns_high = session_result.get("turns_high", 0)
-            turns_max = session_result.get("turns_max", 0)
-            turns_transcode = session_result.get("turns_transcode", 0)
-            tool_failures = session_result.get("tool_failures", 0)
-            trace_entries = session_result.get("trace_entries", [])
-            turn = session_result.get("turns_used", 0) - 1
+            duration = int(float(scene.get("end") or 0) - float(scene.get("start") or 0))
+            workflow.upsert_search_attributes([SearchAttributePair(_SEARCH_DURATION, duration)])
 
-            # Format trace for UI + memo
-            def _format_trace(entries: list[dict]) -> str:
-                lines = []
-                for e in entries:
-                    if e["type"] == "turn":
-                        prefix = "(cached) " if e.get("cached") else ""
-                        lines.append(
-                            f"Turn {e['turn']}: {e['prompt_tokens']}+{e['completion_tokens']} tokens {prefix}"
-                        )
-                    elif e["type"] == "tool_call":
-                        n = e["name"]
-                        a = e.get("args", {})
-                        if n == "get_snapshot":
-                            lines.append("  -> get_snapshot()")
-                        elif n == "show_frame":
-                            lines.append(
-                                f"  -> show_frame({a.get('source', '?')[:50]}, {a.get('resolution', '?')}): {e.get('frames_shown', '?')} frames"
-                            )
-                        elif n == "crop":
-                            lines.append(
-                                f"  -> crop({a.get('source', '')[:30]}, count={e.get('count', '?')})"
-                            )
-                        elif n == "transcode":
-                            lines.append(
-                                f"  -> transcode(start={a.get('start')}, dur={a.get('duration', 1)}, {e.get('fps', '?')}fps): {e.get('frames_extracted', '?')} frames"
-                            )
-                        elif n == "compact":
-                            lines.append("  -> compact()")
-                        elif n == "set_description":
-                            lines.append(
-                                f"  -> set_description(confidence={e.get('confidence')}): {e.get('description', '')[:120]}"
-                            )
-                        elif n == "find_keyframes":
-                            a = e.get("args", {})
-                            kf = e.get("keyframes", [])
-                            lines.append(f"  -> find_keyframes(count={a.get('count', 5)}): {len(kf)} keyframes from {e.get('total_frames', '?')} frames")
-                            if kf and e.get("keyframe_scores"):
-                                top = sorted(e["keyframe_scores"].items(), key=lambda x: -x[1])[:3]
-                                top_str = ", ".join(f"#{f}({s:.3f})" for f, s in top)
-                                lines.append(f"    Top: {top_str}")
-                            sf = e.get("sharpest_frame")
-                            if sf is not None:
-                                blur = e.get("blur_scores", {}).get(str(sf))
-                                blur_str = f"{blur:.0f}" if isinstance(blur, (int, float)) else "?"
-                                lines.append(f"    Sharpest: #{sf} (edge={blur_str})")
-                        elif n == "frame_diff":
-                            a = e.get("args", {})
-                            label_b = a.get("frame_b") if a.get("frame_b") is not None else "neighbors"
-                            d = e.get("distance")
-                            d_str = f"{d:.3f}" if isinstance(d, (int, float)) else "?"
-                            lines.append(f"  -> frame_diff({a.get('frame_a')}, {label_b}) dist={d_str}")
-                        elif n == "tag_image":
-                            a = e.get("args", {})
-                            tc = e.get("tagged", "?")
-                            tt = e.get("total_tagged", "?")
-                            uc = e.get("useful_count", "?")
-                            lines.append(f"  -> tag_image({tc} tagged, total={tt}, useful={uc})")
-                        else:
-                            lines.append(f"  -> {n}()")
-                        if e.get("error"):
-                            lines.append(f"    ERROR: {e['error']}")
-                    elif e["type"] == "nudge":
-                        lines.append(f"  [nudge] {e['reason']}")
-                return "\n".join(lines)
-
-            trace_text = _format_trace(trace_entries)
-            trace_text += (
-                f"\n\nTotal: {turn+1} turns, {turns_low} L/{turns_high} H/{turns_max} M/{turns_transcode} T, "
-                f"{total_cost['prompt']}+{total_cost['completion']} tokens"
-            )
-
-            workflow.set_current_details(trace_text)
-            workflow.upsert_memo({
-                "AgentSummary": trace_text,
-                "AgentTokens": (
-                    f"in={total_cost['prompt']} "
-                    f"out={total_cost['completion']} "
-                    f"cached={total_cost.get('cached', 0)}"
-                ),
-                "AgentTurns": (
-                    f"turns={turn+1} "
-                    f"low={turns_low} "
-                    f"high={turns_high} "
-                    f"max={turns_max} "
-                    f"transcode={turns_transcode}"
-                ),
-                "AgentConfidence": confidence or "N/A",
-            })
-            if confidence:
-                workflow.upsert_search_attributes([
-                    SearchAttributePair(_SEARCH_CONFIDENCE, confidence),
-                ])
-            workflow.upsert_search_attributes([
-                SearchAttributePair(_SEARCH_TRANSCODE, turns_transcode > 0),
-            ])
-            workflow.upsert_search_attributes([
-                SearchAttributePair(_SEARCH_TOOL_FAILURES, tool_failures),
-            ])
-
-            # Persist agent logs (fire-and-forget activity)
-            trace_header = f"Event: {event_id}  Camera: {camera}  Label: {label}  Model: {model}\n"
-            trace_header += f"Frames available: {max_frames}  Snapshot: yes\n"
-            trace_header += f"Confidence: {confidence or 'N/A'}\n\n"
-            await workflow.execute_activity(
-                save_agent_log_activity,
-                arg={"event_id": event_id, "trace_text": trace_header + trace_text},
-                task_queue=genai_queue,
-                start_to_close_timeout=timedelta(seconds=10),
-                retry_policy=_ACTIVITY_RETRY,
-            )
-
-            stats = {
-                "event_id": event_id, "camera": camera, "label": label, "model": model,
-                "provider_path": input_data["provider_path"],
-                "turns": turn + 1, "turns_low": turns_low, "turns_high": turns_high,
-                "turns_max": turns_max, "turns_transcode": turns_transcode,
-                "total_cost": total_cost, "confidence": confidence,
-                "trace": trace_header + trace_text,
-            }
-            summary = await workflow.execute_activity(
-                summarize_agent_activity,
-                args=[stats],
-                task_queue=genai_queue,
-                start_to_close_timeout=timedelta(seconds=120),
-                retry_policy=_ACTIVITY_RETRY,
-            )
-            if summary:
-                description = f"{description}\n\n[{summary}]"
-
-            # Step 4: final result
-            if not description:
-                workflow.logger.error("No description from GenAI: %s", log_ctx)
-                await workflow.execute_activity(
-                    update_description_activity,
-                    args=[event_id, "Failed: GenAI returned no description"],
-                    start_to_close_timeout=timedelta(seconds=15),
+            data_box = primary.get("data_box")
+            keyframe_keys: list[str] = []
+            sharpest_key = None
+            if frame_count > 0:
+                picked = await workflow.execute_activity(
+                    pick_keyframes_activity,
+                    arg={"event_id": primary_id, "max_frames": frame_count,
+                         "args": {"count": 8, "data_box": data_box}},
+                    task_queue=LLM_TASK_QUEUE,
+                    start_to_close_timeout=timedelta(seconds=60),
                     retry_policy=_ACTIVITY_RETRY,
                 )
-                return
+                keyframe_keys = [f"{event_prefix}/frames/frame_{i:03d}.jpg"
+                                 for i in picked.get("keyframes") or []]
+                if picked.get("sharpest_frame") is not None:
+                    sharpest_key = f"{event_prefix}/frames/frame_{int(picked['sharpest_frame']):03d}.jpg"
+                workflow.logger.info("keyframes=%d sharpest=%s", len(keyframe_keys), picked.get("sharpest_frame"))
+            if not keyframe_keys:
+                keyframe_keys = [f"{event_prefix}/snapshot.jpg"]
+                sharpest_key = f"{event_prefix}/snapshot.jpg"
 
-            await workflow.execute_activity(
-                update_description_activity,
-                args=[event_id, description],
-                start_to_close_timeout=timedelta(seconds=15),
+            crop = await workflow.execute_activity(
+                crop_detection_activity,
+                arg={"event_id": primary_id, "frame_key": sharpest_key, "data_box": data_box},
+                task_queue=LLM_TASK_QUEUE,
+                start_to_close_timeout=timedelta(seconds=60),
                 retry_policy=_ACTIVITY_RETRY,
             )
 
-            workflow.logger.info("GenAI workflow completed: %s", log_ctx)
+            result = await workflow.execute_activity(
+                run_describe_scene,
+                arg={
+                    "scene_id": scene.get("scene_id") or f"{camera}-{int(float(scene.get('start') or 0))}",
+                    "camera": camera,
+                    "keyframes": keyframe_keys,
+                    "crop": crop,
+                    "labels": labels,
+                    "members": scene.get("members") or [],
+                    "prompts_path": input_data.get("prompts_path", "/var/lib/frigate-genai-sidecar/prompts.json"),
+                    "provider_path": input_data.get("provider_path", "/var/lib/frigate-genai-sidecar/provider.json"),
+                    "model": model,
+                },
+                task_queue=LLM_TASK_QUEUE,
+                start_to_close_timeout=timedelta(minutes=10),
+                heartbeat_timeout=timedelta(seconds=120),
+                retry_policy=_ACTIVITY_RETRY,
+            )
+
+            description = result.get("description") or ""
+            weak = _is_weak(result)
+            if weak:
+                description = f"{description}\n\nNeeds review ({label}).".strip()
+
+            # Durable record first: a crash between here and the Frigate write
+            # must not lose the description or the token counts.
             await workflow.execute_activity(
-                cleanup_cancelled_activity,
-                args=[input_data, False],
+                record_result_activity,
+                arg={
+                    "scene_id": scene.get("scene_id"),
+                    "camera": camera,
+                    "event_ids": [m.get("id") for m in scene.get("members") or []],
+                    "labels": labels,
+                    "priority": scene.get("priority", ""),
+                    "model": result.get("model") or model,
+                    "description": description,
+                    "confidence": result.get("confidence", ""),
+                    "needs_review": bool(result.get("needs_review")),
+                    "retry_of": retry_of,
+                    "seconds": result.get("seconds") or 0.0,
+                    "prompt_tokens": result.get("prompt_tokens") or 0,
+                    "completion_tokens": result.get("completion_tokens") or 0,
+                    "cloud_cost_microdollars": 0,
+                },
                 start_to_close_timeout=timedelta(seconds=30),
                 retry_policy=_ACTIVITY_RETRY,
             )
+
+            workflow.upsert_search_attributes([
+                SearchAttributePair(_SEARCH_COST, 0),
+            ])
+            if result.get("confidence"):
+                workflow.upsert_search_attributes([
+                    SearchAttributePair(_SEARCH_CONFIDENCE, result["confidence"]),
+                ])
+            workflow.upsert_memo({
+                "SceneId": scene.get("scene_id", ""),
+                "Model": result.get("model") or model,
+                "Confidence": result.get("confidence", "N/A"),
+                "Tokens": f"in={result.get('prompt_tokens', 0)} out={result.get('completion_tokens', 0)}",
+                "Seconds": f"{float(result.get('seconds') or 0):.1f}",
+            })
+            workflow.set_current_details(description)
+
+            await workflow.execute_activity(
+                update_description_activity,
+                args=[primary_id, description],
+                start_to_close_timeout=timedelta(seconds=60),
+                retry_policy=_DESCRIPTION_RETRY,
+            )
+
+            # One retry on the stronger model when the first pass was weak.
+            if weak and scene.get("priority") == MUST_KEEP and not retry_of:
+                try:
+                    await workflow.start_child_workflow(
+                        GenAIWorkflow,
+                        {**input_data, "scene": scene, "retry_of": scene.get("scene_id"),
+                         "model": STRONG_MODEL, "skip_frames": True},
+                        id=f"genai-{scene.get('scene_id')}-retry1",
+                        task_queue=TASK_QUEUE,
+                        parent_close_policy=ParentClosePolicy.ABANDON,
+                    )
+                except Exception:
+                    workflow.logger.warning("Weak-output retry could not be queued for %s", log_ctx)
+
+            await workflow.execute_activity(
+                cleanup_cancelled_activity,
+                args=[{"event_id": primary_id}, False],
+                start_to_close_timeout=timedelta(seconds=30),
+                retry_policy=_ACTIVITY_RETRY,
+            )
+            workflow.logger.info("GenAI workflow completed: %s", log_ctx)
         except asyncio.CancelledError:
             workflow.logger.info("GenAI workflow cancelled, cleaning up: %s", log_ctx)
             await workflow.execute_activity(
                 cleanup_cancelled_activity,
-                args=[input_data, True],
+                args=[{"event_id": primary_id}, True],
                 start_to_close_timeout=timedelta(seconds=30),
                 retry_policy=_ACTIVITY_RETRY,
             )

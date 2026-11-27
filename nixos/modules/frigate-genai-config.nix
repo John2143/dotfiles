@@ -111,18 +111,19 @@ let
   frigateGenaiPromptsFile = pkgs.writeText "frigate-genai-prompts.json"
     (builtins.toJSON (genaiPrompts // { describe = objectLabels.describe; }));
 
-  # Provider configuration — routed through LiteLLM proxy
+  # Provider configuration — 100% self-hosted: inference goes straight to the
+  # Ollama host, never through the LiteLLM proxy. The `ollama/` prefix (not
+  # `ollama_chat/`) makes _resolve_provider use ollama_base_url and the
+  # "ollama" placeholder key.
   frigateGenaiProviderFile = pkgs.writeText "frigate-genai-provider.json" (builtins.toJSON {
     provider = "litellm";
     model = [
-      "gemini/gemini-2.5-flash"
-      "gemini/gemini-2.5-flash-lite"
-      "gemini/gemini-2.5-pro"
-      "ollama_chat/gemma4:e4b"
-      # "ollama/qwen3-vl-64k"  # paused — qwen3-vl-64k superseded by gemma4:e4b (2026-08-03)
+      "ollama/gemma4:12b"
+      "ollama/gemma4:26b"
     ];
-    api_key_env = "LITELLM_FRIGATE_KEY";
-    base_url = "https://llm.2143.me/v1";
+    ollama_base_url = "http://office.ts.2143.me:11434/v1";
+    api_key_env = "";
+    base_url = "";
   });
 
   # ── GenAI Docker images ──────────────────────────────────────────

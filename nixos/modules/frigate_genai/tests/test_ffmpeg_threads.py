@@ -5,7 +5,7 @@ count (64 on `big`) instead of the pod's CPU limit; each 4K HEVC decode then
 held ~3-4 GiB and two concurrent transcodes OOM-killed the 8 GiB ffmpeg pod.
 ffmpeg options are positional: `-threads` before `-i` sets decoder threads,
 `-threads` after `-i` sets encoder threads, `-filter_threads` is global and
-must precede the output. Both ffmpeg call sites must carry all three.
+must precede the output. The single remaining call site must carry all three.
 
 subprocess.run is patched in each module's namespace, so no ffmpeg runs.
 """
@@ -22,7 +22,6 @@ if _PARENT not in sys.path:
 
 from frigate_genai.activities import frame_extraction
 from frigate_genai.config import FFMPEG_THREADS
-from frigate_genai.tools import transcode
 
 
 class _RecordingRun:
@@ -77,13 +76,6 @@ class FfmpegThreadCapTests(unittest.TestCase):
             with self.subTest(fps=fps):
                 cmd = self._run(frame_extraction, frame_extraction.transcode_into_parts,
                                 "cam01", 0, 5, "events/test", fps)
-                self._assert_threads_capped(cmd)
-
-    def test_transcode_frames_caps_decoder_filter_and_encoder_threads(self):
-        for fps in (None, 2):
-            with self.subTest(fps=fps):
-                cmd = self._run(transcode, transcode._transcode_frames,
-                                "cam01", 0, 5, 0, 1.0, fps, expected=[])
                 self._assert_threads_capped(cmd)
 
     def test_transcode_into_parts_uploads_by_frame_number_not_string_sort(self):

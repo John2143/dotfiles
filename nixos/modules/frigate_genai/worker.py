@@ -4,7 +4,7 @@ import asyncio
 import json
 import logging
 import os
-import re
+import hmac
 import threading
 import shutil
 import signal
@@ -14,6 +14,7 @@ import time
 import urllib.request as _urllib_request
 import urllib.parse
 from concurrent.futures import ThreadPoolExecutor
+from datetime import timedelta
 from http.server import HTTPServer, ThreadingHTTPServer, BaseHTTPRequestHandler
 
 import paho.mqtt.client as mqtt
@@ -32,8 +33,7 @@ from temporalio.api.operatorservice.v1 import AddSearchAttributesRequest
 from frigate_genai.config import (
     TASK_QUEUE,
     FFMPEG_TASK_QUEUE,
-    GEMINI_TASK_QUEUE,
-    OLLAMA_TASK_QUEUE,
+    LLM_TASK_QUEUE,
     DEPLOYMENT_NAME,
     BUILD_ID,
     _SEARCH_CAMERA,
@@ -48,29 +48,30 @@ from frigate_genai.s3_helpers import (
     _s3_delete,
     _s3_list,
     _s3_read_text,
-    _s3_agent_prefix,
     _stats,
     load_json,
 )
 from frigate_genai.activities.select_model import select_model_activity
-from frigate_genai.activities.lifecycle import update_description_activity, cleanup_cancelled_activity, summarize_agent_activity, save_agent_log_activity
-from frigate_genai.activities.agent_state import init_agent_state_activity, init_subagent_state_activity
-from frigate_genai.activities.genai_turn import run_genai_turn_activity, warm_openai_client
-from frigate_genai.activities.tool_apply import apply_tool_messages_activity
+from frigate_genai.activities.lifecycle import (
+    cleanup_cancelled_activity,
+    label_only_activity,
+    update_description_activity,
+)
+from frigate_genai.activities.records import record_result_activity
+from frigate_genai.activities.describe import run_describe_scene
+from frigate_genai.activities.frames import crop_detection_activity
+from frigate_genai.activities.dispatcher import (
+    collect_scenes_activity,
+    finish_drain_activity,
+    gate_status_activity,
+    genai_paused_activity,
+)
+from frigate_genai.activities.llm import warm_openai_client
 from frigate_genai.activities.frame_extraction import transcode_into_parts_activity, fetch_snapshot_activity
 from frigate_genai.activities.mqtt import _start_workflow_sync, _build_workflow_input, build_mqtt_client
-from frigate_genai.tools.get_snapshot import tool_get_snapshot_activity
-from frigate_genai.tools.show_frame import tool_show_frame_activity
-from frigate_genai.tools.crop import tool_crop_activity
-from frigate_genai.tools.compact import tool_compact_activity
-from frigate_genai.tools.set_description import tool_set_description_activity
-from frigate_genai.tools.upscale import tool_upscale_activity
-from frigate_genai.tools.transcode import tool_transcode_activity
-from frigate_genai.tools.find_keyframes import tool_find_keyframes_activity, tool_frame_diff_activity
-from frigate_genai.tools.tag_image import tool_tag_image_activity
+from frigate_genai.tools.find_keyframes import pick_keyframes_activity
 from frigate_genai.workflows.genai import GenAIWorkflow
-from frigate_genai.workflows.agent_session import AgentSessionWorkflow
-from frigate_genai.workflows.subagent import SubAgentWorkflow
+from frigate_genai.workflows.drain import DrainWorkflow
 
 log = logging.getLogger("frigate-genai-sidecar")
 
@@ -140,24 +141,30 @@ async function load() {
     const events = await r.json();
     const filtered = events.filter(e => DESCRIBE.includes(e.label) && e.has_clip && e.end_time);
     if (!filtered.length) { app.innerHTML = '<p>No eligible events found.</p>'; return; }
-    let html = '<table><tr><th>Snapshot</th><th>Camera</th><th>Label</th><th>Duration</th><th>Description</th><th></th><th></th><th></th></tr>';
+    let html = '<table><tr><th>Snapshot</th><th>Camera</th><th>Label</th><th>Duration</th><th>Description</th><th></th><th></th></tr>';
     for (const e of filtered) {
       const dur = (e.end_time - e.start_time).toFixed(1) + "s";
       const desc = (e.data?.description || "").substring(0, 120);
+      const id = esc(e.id);
       html += '<tr>';
-      html += '<td><img src="/api/events/' + e.id + '/snapshot.jpg" loading="lazy"></td>';
-      html += '<td>' + e.camera + '</td>';
-      html += '<td>' + e.label + '</td>';
-      html += '<td>' + dur + '</td>';
-      html += '<td class="desc" title="' + (e.data?.description || "").replace(/"/g,"&quot;") + '">' + (desc || "—") + '</td>';
-      html += '<td><a href="/agent/' + e.id + '" class="btn" target="_blank">View</a></td>';
-      html += '<td><button class="btn" onclick="reprocess(\'' + e.id + '\',this)">Reprocess</button></td>';
-      html += '<td><button class="btn" onclick="reprocessWithModel(\'' + e.id + '\',this)">Reprocess w/ model</button></td>';
+      html += '<td><img src="/api/events/' + encodeURIComponent(e.id) + '/snapshot.jpg" loading="lazy"></td>';
+      html += '<td>' + esc(e.camera) + '</td>';
+      html += '<td>' + esc(e.label) + '</td>';
+      html += '<td>' + esc(dur) + '</td>';
+      html += '<td class="desc" title="' + esc(e.data?.description || "") + '">' + (desc ? esc(desc) : "—") + '</td>';
+      html += '<td><button class="btn" onclick="reprocess(\'' + id + '\',this)">Reprocess</button></td>';
+      html += '<td><button class="btn" onclick="reprocessWithModel(\'' + id + '\',this)">Reprocess w/ model</button></td>';
       html += '</tr>';
     }
     html += '</table>';
     app.innerHTML = html;
-  } catch(err) { app.innerHTML = '<p class="err">Failed to load: ' + err.message + '</p>'; }
+  } catch(err) { app.innerHTML = '<p class="err">Failed to load: ' + esc(err.message) + '</p>'; }
+}
+
+function esc(value) {
+  return String(value == null ? "" : value)
+    .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;").replace(/'/g, "&#39;");
 }
 
 async function reprocess(id, btn) {
@@ -354,6 +361,48 @@ async def _run_until_stopped(workers: list[Worker], stop: asyncio.Event) -> None
     log.info("Workers shut down")
 
 
+DRAIN_INTERVAL_SECONDS = 300
+WORKFLOW_EXECUTION_TIMEOUT = timedelta(minutes=25)
+
+
+async def _start_drain(prompts_path: str, provider_path: str) -> None:
+    """Start a drain unless one is already running.
+
+    One fixed workflow id with ALLOW_DUPLICATE gives exactly one live drain:
+    the start fails while a run is open and succeeds once it closes.
+    """
+    from temporalio.common import WorkflowIDReusePolicy
+
+    client = _temporal_client
+    if client is None:
+        log.warning("dispatcher: Temporal client not ready, skipping drain")
+        return
+    try:
+        await client.start_workflow(
+            DrainWorkflow,
+            {"prompts_path": prompts_path, "provider_path": provider_path},
+            id="drain-current",
+            task_queue=TASK_QUEUE,
+            id_reuse_policy=WorkflowIDReusePolicy.ALLOW_DUPLICATE,
+            execution_timeout=WORKFLOW_EXECUTION_TIMEOUT,
+        )
+        log.info("dispatcher: drain started")
+    except Exception as e:
+        if "already started" in str(e).lower() or "already running" in str(e).lower():
+            log.debug("dispatcher: drain already running")
+        else:
+            log.warning("dispatcher: drain start failed: %s", e)
+
+
+async def _dispatcher_loop(prompts_path: str, provider_path: str) -> None:
+    while True:
+        try:
+            await _start_drain(prompts_path, provider_path)
+        except Exception:
+            log.exception("dispatcher: drain start raised")
+        await asyncio.sleep(DRAIN_INTERVAL_SECONDS)
+
+
 async def async_main(prompts_path: str, provider_path: str, mode: str = "triggers") -> None:
     global _temporal_client, _main_event_loop
 
@@ -362,7 +411,7 @@ async def async_main(prompts_path: str, provider_path: str, mode: str = "trigger
         format="%(asctime)s [%(name)s] %(levelname)s: %(message)s",
     )
     _main_event_loop = asyncio.get_running_loop()
-    if mode in ("genai-gemini", "genai-ollama"):
+    if mode in ("genai-ollama", "dispatcher"):
         # Only the LLM workers import openai; it adds ~50-70 MB RSS, which
         # OOM-killed the 128Mi mqtt-listener when every mode warmed it.
         log.info("OpenAI client warmed (schemas_complete=%s)", warm_openai_client())
@@ -408,111 +457,69 @@ async def async_main(prompts_path: str, provider_path: str, mode: str = "trigger
         log.debug("Search attribute registration skipped: %s", e)
 
     workers: list[Worker] = []
-    misc_activities = [select_model_activity, update_description_activity, fetch_snapshot_activity, cleanup_cancelled_activity, init_agent_state_activity, init_subagent_state_activity, tool_upscale_activity]
+
+    def _deployment_config() -> WorkerDeploymentConfig:
+        return WorkerDeploymentConfig(
+            version=WorkerDeploymentVersion(
+                deployment_name=DEPLOYMENT_NAME,
+                build_id=BUILD_ID,
+            ),
+            use_worker_versioning=True,
+            default_versioning_behavior=VersioningBehavior.PINNED,
+        )
+
+    # Activities GenAIWorkflow runs on its own (genai-tasks) queue.
+    core_activities = [
+        select_model_activity,
+        update_description_activity,
+        fetch_snapshot_activity,
+        cleanup_cancelled_activity,
+        record_result_activity,
+    ]
 
     if mode == "triggers":
-        deployment_config = WorkerDeploymentConfig(
-            version=WorkerDeploymentVersion(
-                deployment_name=DEPLOYMENT_NAME,
-                build_id=BUILD_ID,
-            ),
-            use_worker_versioning=True,
-            default_versioning_behavior=VersioningBehavior.PINNED,
-        )
-        main_worker = Worker(
+        workers = [Worker(
             _temporal_client,
             task_queue=TASK_QUEUE,
-            workflows=[GenAIWorkflow, AgentSessionWorkflow, SubAgentWorkflow],
-            activities=misc_activities,
-            deployment_config=deployment_config,
+            workflows=[GenAIWorkflow],
+            activities=core_activities,
+            deployment_config=_deployment_config(),
             graceful_shutdown_timeout=WORKER_GRACEFUL_SHUTDOWN,
-        )
-        workers = [main_worker]
+        )]
     elif mode == "ffmpeg":
-        deployment_config = WorkerDeploymentConfig(
-            version=WorkerDeploymentVersion(
-                deployment_name=DEPLOYMENT_NAME,
-                build_id=BUILD_ID,
-            ),
-            use_worker_versioning=True,
-            default_versioning_behavior=VersioningBehavior.PINNED,
-        )
-        ffmpeg_worker = Worker(
+        workers = [Worker(
             _temporal_client,
             task_queue=FFMPEG_TASK_QUEUE,
-            activities=[transcode_into_parts_activity, tool_transcode_activity],
+            activities=[transcode_into_parts_activity],
             activity_executor=ThreadPoolExecutor(max_workers=2),
             max_concurrent_activities=int(os.environ.get("TEMPORAL_MAX_FFMPEG", "2")),
-            deployment_config=deployment_config,
+            deployment_config=_deployment_config(),
             graceful_shutdown_timeout=WORKER_GRACEFUL_SHUTDOWN,
-        )
-        workers = [ffmpeg_worker]
-    elif mode == "genai-gemini":
-        deployment_config = WorkerDeploymentConfig(
-            version=WorkerDeploymentVersion(
-                deployment_name=DEPLOYMENT_NAME,
-                build_id=BUILD_ID,
-            ),
-            use_worker_versioning=True,
-            default_versioning_behavior=VersioningBehavior.PINNED,
-        )
-        main_worker = Worker(
-            _temporal_client,
-            task_queue=TASK_QUEUE,
-            activities=misc_activities,
-            deployment_config=deployment_config,
-            graceful_shutdown_timeout=WORKER_GRACEFUL_SHUTDOWN,
-        )
-        gemini_worker = Worker(
-            _temporal_client,
-            task_queue=GEMINI_TASK_QUEUE,
-            workflows=[AgentSessionWorkflow, SubAgentWorkflow],
-            activities=[run_genai_turn_activity,
-                        tool_find_keyframes_activity, tool_frame_diff_activity, tool_tag_image_activity,
-                        tool_get_snapshot_activity, tool_show_frame_activity,
-                        tool_crop_activity, tool_compact_activity,
-                        tool_set_description_activity, apply_tool_messages_activity,
-                        summarize_agent_activity,
-                        save_agent_log_activity,
-                        init_subagent_state_activity],
-            max_concurrent_activities=int(os.environ.get("TEMPORAL_MAX_GEMINI_GENAI", "5")),
-            deployment_config=deployment_config,
-            graceful_shutdown_timeout=WORKER_GRACEFUL_SHUTDOWN,
-        )
-        workers = [main_worker, gemini_worker]
+        )]
     elif mode == "genai-ollama":
-        deployment_config = WorkerDeploymentConfig(
-            version=WorkerDeploymentVersion(
-                deployment_name=DEPLOYMENT_NAME,
-                build_id=BUILD_ID,
-            ),
-            use_worker_versioning=True,
-            default_versioning_behavior=VersioningBehavior.PINNED,
-        )
-        main_worker = Worker(
+        workers = [Worker(
+            _temporal_client,
+            task_queue=LLM_TASK_QUEUE,
+            activities=[run_describe_scene, pick_keyframes_activity, crop_detection_activity],
+            max_concurrent_activities=int(os.environ.get("TEMPORAL_MAX_OLLAMA_GENAI", "1")),
+            deployment_config=_deployment_config(),
+            graceful_shutdown_timeout=WORKER_GRACEFUL_SHUTDOWN,
+        )]
+    elif mode == "dispatcher":
+        workers = [Worker(
             _temporal_client,
             task_queue=TASK_QUEUE,
-            activities=misc_activities,
-            deployment_config=deployment_config,
+            workflows=[DrainWorkflow],
+            activities=[
+                collect_scenes_activity,
+                gate_status_activity,
+                genai_paused_activity,
+                finish_drain_activity,
+                label_only_activity,
+            ],
+            deployment_config=_deployment_config(),
             graceful_shutdown_timeout=WORKER_GRACEFUL_SHUTDOWN,
-        )
-        ollama_worker = Worker(
-            _temporal_client,
-            task_queue=OLLAMA_TASK_QUEUE,
-            workflows=[AgentSessionWorkflow, SubAgentWorkflow],
-            activities=[run_genai_turn_activity,
-                        tool_find_keyframes_activity, tool_frame_diff_activity, tool_tag_image_activity,
-                        tool_get_snapshot_activity, tool_show_frame_activity,
-                        tool_crop_activity, tool_compact_activity,
-                        tool_set_description_activity, apply_tool_messages_activity,
-                        summarize_agent_activity,
-                        save_agent_log_activity,
-                        init_subagent_state_activity],
-            max_concurrent_activities=int(os.environ.get("TEMPORAL_MAX_OLLAMA_GENAI", "1")),
-            deployment_config=deployment_config,
-            graceful_shutdown_timeout=WORKER_GRACEFUL_SHUTDOWN,
-        )
-        workers = [main_worker, ollama_worker]
+        )]
     elif mode == "mqtt-listener":
         # No Temporal worker — MQTT client starts workflows via async_main.
         # Health HTTP handled by the mode != "dashboard" branch below.
@@ -567,14 +574,18 @@ async def async_main(prompts_path: str, provider_path: str, mode: str = "trigger
     if mode == 'mqtt-listener':
         client_mqtt = build_mqtt_client(asyncio.get_running_loop())
 
+    if mode == "dispatcher":
+        asyncio.create_task(_dispatcher_loop(prompts_path, provider_path))
+        log.info("Dispatcher loop started (drain every %ds)", DRAIN_INTERVAL_SECONDS)
+
     if mode == "dashboard":
         log.info("Dashboard server running, waiting for requests...")
 
         async def _do_reprocess(event_id: str, event: dict, model: str | None = None) -> str:
-            # Cancel every running GenAIWorkflow for this event (canonical +
-            # previous -re- runs) and wait for them to close, so the new run is
-            # the sole writer of events/<event_id>/agent/messages.json and its
-            # cleanup (archive + delete of events/<event_id>/) can't race us.
+            # Cancel every running GenAIWorkflow for this event (drain-started
+            # and previous -re- runs) and wait for them to close, so the new
+            # run is the sole writer of the event's description and its
+            # cleanup (delete of events/<event_id>/) cannot race us.
             handles = []
             try:
                 async for wf in _temporal_client.list_workflows(
@@ -704,10 +715,6 @@ async def async_main(prompts_path: str, provider_path: str, mode: str = "trigger
                         "global": paused_global,
                         "labels": paused_labels,
                     }).encode())
-                elif self.path.startswith("/agent/") and "/subagent/" in self.path:
-                    self._serve_subagent_view()
-                elif self.path.startswith("/agent/"):
-                    self._serve_agent_view()
                 elif self.path == "/healthz":
                     if _stats["temporal_connected"]:
                         self.send_response(200)
@@ -755,230 +762,34 @@ async def async_main(prompts_path: str, provider_path: str, mode: str = "trigger
                     self.end_headers()
                     self.wfile.write(str(e).encode())
 
-            def _serve_agent_view(self):
-                parts = self.path.split("/")
-                if len(parts) < 3:
-                    self.send_response(400)
-                    self.end_headers()
-                    return
-                event_id = parts[2]
-                if len(parts) >= 5 and parts[3] == "file":
-                    fname = parts[4]
-                    # Read agent_dir from messages.json to get actual S3 prefix
-                    msg_data = _s3_read_text(f"events/{event_id}/agent/messages.json")
-                    agent_dir = f"events/{event_id}/agent/"
-                    if msg_data:
-                        try:
-                            state = json.loads(msg_data)
-                            agent_dir = state.get("agent_dir", agent_dir)
-                        except Exception:
-                            pass
-                    # Subagent file? Check query param or path depth
-                    sub_dir = parts[5] if len(parts) >= 6 else None
-                    if sub_dir:
-                        agent_dir = f"events/{event_id}/agent/subagent/{sub_dir}/"
-                    data = _s3_get(f"{agent_dir}{fname}")
-                    if data is None:
-                        data = _s3_get(f"history/{event_id}/agent/{fname}")
-                    if data is not None:
-                        self.send_response(200)
-                        self._cors()
-                        self.send_header("Content-type", "image/jpeg")
-                        self.end_headers()
-                        self.wfile.write(data)
-                    else:
-                        self.send_response(404)
-                        self.end_headers()
-                    return
-                msg_data = _s3_read_text(f"events/{event_id}/agent/messages.json")
-                hist_fallback = False
-                if msg_data is None:
-                    msg_data = _s3_read_text(f"history/{event_id}/agent/messages.json")
-                    hist_fallback = msg_data is not None
-                if msg_data is None:
-                    self.send_response(404)
+            def _authorized(self) -> bool:
+                """Bearer-token gate for every mutating endpoint.
+
+                503 when no token is configured, so an unconfigured deployment
+                cannot be mutated at all rather than being mutated freely.
+                """
+                token = os.environ.get("GENAI_ADMIN_TOKEN", "")
+                if not token:
+                    self.send_response(503)
                     self._cors()
                     self.send_header("Content-type", "text/plain")
                     self.end_headers()
-                    self.wfile.write(b"Agent state not found")
-                    return
-                state = json.loads(msg_data)
-                msgs = state.get("messages", [])
-                agent_dir = state.get("agent_dir", "")
-                if hist_fallback:
-                    agent_dir = f"history/{event_id}/agent"
-                html = ['<!DOCTYPE html><html><head><meta charset="utf-8">'
-                        '<title>Agent: {}</title>'
-                        '<style>*{{margin:0;padding:0;box-sizing:border-box}}'
-                        'body{{background:#0f0f1a;color:#d4d4d8;font:13px system-ui;padding:16px}}'
-                        'h1{{font-size:16px;margin-bottom:8px;color:#fff}}'
-                        '.msg{{margin-bottom:12px;padding:10px 14px;border-radius:8px;max-width:900px}}'
-                        '.msg.system{{background:#1a1a2e;border-left:3px solid #666}}'
-                        '.msg.user{{background:#14283a;border-left:3px solid #4ade80}}'
-                        '.msg.assistant{{background:#2a1a2e;border-left:3px solid #c084fc}}'
-                        '.msg.tool{{background:#1a2e1a;border-left:3px solid #fbbf24}}'
-                        '.role{{font-size:10px;text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px;color:#888}}'
-                        'img{{max-width:400px;max-height:300px;border-radius:4px;margin:4px 4px 0 0;cursor:pointer}}'
-                        'img:hover{{outline:2px solid #4ade80}}'
-                        '.img-grid{{display:flex;flex-wrap:wrap;gap:8px;align-items:flex-start}}'
-                        '.img-grid img{{max-height:300px;width:auto;cursor:pointer}}'
-                        '.img-grid img.expanded{{max-height:none;max-width:100%}}'
-                        '.res-badge{{font-size:10px;color:#888;display:block;text-align:center}}'
-                        '.text{{line-height:1.5;white-space:pre-wrap}}'
-                        '.tool-call{{font-size:11px;color:#c084fc;font-family:monospace}}'
-                        '</style></head><body>'
-                        '<h1>Agent: {}</h1>'.format(event_id, event_id)]
-                for m in msgs:
-                    role = m.get("role", "?")
-                    html.append('<div class="msg {}"><div class="role">{}</div>'.format(role, role))
-                    if role == "assistant":
-                        tcs = m.get("tool_calls", [])
-                        if tcs:
-                            for tc in tcs:
-                                name = tc.get("function", {}).get("name", "?")
-                                args = tc.get("function", {}).get("arguments", "")
-                                if isinstance(args, str):
-                                    try: args = json.loads(args)
-                                    except Exception: pass
-                                html.append('<div class="tool-call">→ {}({})</div>'.format(
-                                    _escape(name), _escape(json.dumps(args)[:200])))
-                        content = m.get("content", "")
-                        if content:
-                            html.append('<div class="text">{}</div>'.format(_escape(str(content))))
-                    elif role == "tool":
-                        html.append('<div class="text">{}</div>'.format(_escape(str(m.get("content", "")))))
-                    elif role == "user":
-                        content = m.get("content", "")
-                        if isinstance(content, list):
-                            # FIRST PASS: Parse text parts to extract actual resolution
-                            cur_res = "high"  # default
-                            for part in content:
-                                if isinstance(part, dict) and part.get("type") == "text":
-                                    txt = part.get("text", "")
-                                    res_m = re.search(r"at (\w+) resolution", txt)
-                                    if res_m:
-                                        cur_res = res_m.group(1)
-                                        break  # Use first match
-                            
-                            # SECOND PASS: Render images with correct resolution badge
-                            img_parts = [p for p in content if isinstance(p, dict) and p.get("type") == "image_url"]
-                            has_multi = len(img_parts) > 1
-                            if has_multi:
-                                html.append('<div class="img-grid">')
-                            for part in content:
-                                if isinstance(part, dict):
-                                    if part.get("type") == "image_url":
-                                        url = part.get("image_url", {}).get("url", "")
-                                        if url.startswith("[[") and url.endswith("]]"):
-                                            fname = url[2:-2]
-                                            sizes = {"low": "200", "med": "300", "high": "500", "max": "700", "tiny": "150"}
-                                            w = sizes.get(cur_res, "400")
-                                            src = f"/agent/{event_id}/file/{fname}"
-                                            html.append('<img src="{}" loading="lazy" data-sized-width="{}">'.format(src, w))
-                                            badge_text = cur_res
-                                            html.append('<span class="res-badge">{}</span>'.format(_escape(badge_text)))
-                                        else:
-                                            html.append('<div class="text">[image: {}]</div>'.format(_escape(url[:80])))
-                                    elif part.get("type") == "text":
-                                        txt = part["text"]
-                                        html.append('<div class="text">{}</div>'.format(_escape(txt)))
-                            if has_multi:
-                                html.append('</div>')
-                        else:
-                            html.append('<div class="text">{}</div>'.format(_escape(str(content))))
-                    elif role == "system":
-                        html.append('<div class="text">{}</div>'.format(_escape(str(m.get("content", "")))))
-                    html.append('</div>')
-                html.append('<div style="margin-top:16px;color:#666;font-size:11px">'
-                            'camera: {} | start_time: {} | end_time: {} | max_frames: {}</div>'
-                            .format(state.get("camera","?"), state.get("start_time","?"),
-                                    state.get("end_time","?"), state.get("max_frames","?")))
-                html.append('<script>'
-                            'document.querySelectorAll(".msg.user img").forEach(function(i){'
-                            'i.addEventListener("click",function(){'
-                            'if(i.classList.contains("expanded")){'
-                            'i.classList.remove("expanded");'
-                            'i.style.maxWidth=i.dataset.sizedWidth+"px";'
-                            'i.style.maxHeight=""'
-                            '}else{'
-                            'i.classList.add("expanded");'
-                            'i.style.maxWidth="100%";'
-                            'i.style.maxHeight="none"'
-                            '}})})</script>'
-                            '</body></html>')
-                self.send_response(200)
-                self._cors()
-                self.send_header("Content-type", "text/html; charset=utf-8")
-                self.end_headers()
-                self.wfile.write("\n".join(html).encode())
-
-
-            def _serve_subagent_view(self):
-                parts = self.path.split("/")
-                event_id = parts[2]
-                sub_id = parts[4]  # s0, s1, ...
-                msg_data = _s3_read_text(f"events/{event_id}/agent/subagent/{sub_id}/messages.json")
-                if msg_data is None:
-                    msg_data = _s3_read_text(f"history/{event_id}/agent/subagent/{sub_id}/messages.json")
-                if msg_data is None:
-                    self.send_response(404)
+                    self.wfile.write(b"Mutations disabled: GENAI_ADMIN_TOKEN is not set")
+                    return False
+                header = self.headers.get("Authorization", "")
+                if not hmac.compare_digest(header, f"Bearer {token}"):
+                    self.send_response(401)
+                    self._cors()
+                    self.send_header("WWW-Authenticate", 'Bearer realm="frigate-genai"')
+                    self.send_header("Content-type", "text/plain")
                     self.end_headers()
-                    return
-                state = json.loads(msg_data)
-                agent_dir = state.get("agent_dir", f"events/{event_id}/agent/subagent/{sub_id}/")
-                task = state.get("task", "unknown task")
-                msgs = state.get("messages", [])
-                html = ['<!DOCTYPE html><html><head><meta charset="utf-8">'
-                        f'<title>Subagent: {task[:60]}</title>'
-                        '<style>*{{margin:0;padding:0;box-sizing:border-box}}'
-                        'body{{background:#0f0f1a;color:#d4d4d8;font:13px system-ui;padding:16px}}'
-                        'h1{{font-size:16px;margin-bottom:8px;color:#fff}}'
-                        '.msg{{margin-bottom:12px;padding:10px 14px;border-radius:8px;max-width:900px}}'
-                        '.msg.system{{background:#1a1a2e;border-left:3px solid #666}}'
-                        '.msg.user{{background:#14283a;border-left:3px solid #4ade80}}'
-                        '.msg.assistant{{background:#2a1a2e;border-left:3px solid #c084fc}}'
-                        '.msg.tool{{background:#1a2e1a;border-left:3px solid #fbbf24}}'
-                        '.role{{font-size:10px;text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px;color:#888}}'
-                        'img{{max-width:400px;max-height:300px;border-radius:4px;margin:4px 4px 0 0;cursor:pointer}}'
-                        'img:hover{{outline:2px solid #4ade80}}'
-                        '.img-grid{{display:flex;flex-wrap:wrap;gap:8px;align-items:flex-start}}'
-                        '.text{{white-space:pre-wrap;line-height:1.5}}'
-                        '.expanded{{max-width:100%!important;max-height:none!important}}'
-                        '</style></head><body>'
-                        f'<div style="margin-bottom:12px"><a href="/agent/{event_id}" style="color:#4ade80;font-size:14px">'
-                        f'&larr; Back to Agent {event_id}</a></div>'
-                        f'<h1>Subagent: {task[:80]}</h1>']
-                for m in msgs:
-                    role = m.get("role", "?")
-                    html.append(f'<div class="msg {role}">')
-                    html.append(f'<div class="role">{role}</div>')
-                    content = m.get("content", "")
-                    if isinstance(content, list):
-                        for part in content:
-                            if isinstance(part, dict):
-                                if part.get("type") == "image_url":
-                                    url = part.get("image_url", {}).get("url", "")
-                                    fname = url.lstrip("[[").rstrip("]]")
-                                    from urllib.parse import quote
-                                    html.append(f'<img src="/agent/{event_id}/file/{fname}" loading="lazy">')
-                                elif part.get("type") == "text":
-                                    from html import escape
-                                    html.append(f'<div class="text">{escape(part.get("text",""))}</div>')
-                    elif isinstance(content, str):
-                        from html import escape
-                        html.append(f'<div class="text">{escape(content)}</div>')
-                    html.append('</div>')
-                html.append(f'<div style="margin-top:16px;color:#666;font-size:11px">'
-                            f'task: {task} | camera: {state.get("camera","?")} | '
-                            f'start_time: {state.get("start_time","?")}</div>')
-                html.append('</body></html>')
-                self.send_response(200)
-                self._cors()
-                self.send_header("Content-type", "text/html; charset=utf-8")
-                self.end_headers()
-                self.wfile.write("\n".join(html).encode())
+                    self.wfile.write(b"Unauthorized")
+                    return False
+                return True
 
             def do_POST(self):
+                if not self._authorized():
+                    return
                 if self.path.startswith("/reprocess/"):
                     path_with_query = self.path.split("/reprocess/", 1)[1]
                     event_id = path_with_query.split("?", 1)[0]

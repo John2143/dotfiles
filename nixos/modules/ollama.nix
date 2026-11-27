@@ -33,6 +33,12 @@
         OLLAMA_KEEP_ALIVE = "5m";
         OLLAMA_NUM_PARALLEL = "1";
         OLLAMA_MAX_QUEUE = "512";
+        # One model at a time. Unset, Ollama keeps a second model resident
+        # (gemma4:e4b next to gemma4:12b was measured at 16.7 GB/24.5 GB in use),
+        # which starves the 26b call the frigate-genai dispatcher makes when the
+        # seat gate reports the card free. The dispatcher also unloads with
+        # keep_alive: 0 at the end of each drain.
+        OLLAMA_MAX_LOADED_MODELS = "1";
       };
     };
     # The stock ollama unit uses DynamicUser, which can't write to paths owned by

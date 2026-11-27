@@ -38,7 +38,7 @@ import json
 import sys
 
 import frigate_genai.__main__  # sets the env default; does not run main()
-from frigate_genai.activities.genai_turn import warm_openai_client
+from frigate_genai.activities.llm import warm_openai_client
 
 returned = warm_openai_client()
 

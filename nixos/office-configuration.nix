@@ -14,6 +14,9 @@
     ./office-hardware-configuration.nix
     ./modules/user-john.nix
     ./modules/ollama.nix
+    # Seat gate for the frigate-genai dispatcher: publishes
+    # frigate_genai_gate_open / free VRAM / loaded models to node_exporter.
+    ./modules/frigate-genai-seated.nix
     ./modules/teamspeak.nix
     #./waybar.nix
     ./modules/esrgan-upscaler.nix

@@ -26,8 +26,7 @@ _LEAF_MOCKS = [
 import frigate_genai.config as _cfg
 _cfg.TASK_QUEUE = "frigate-genai"
 _cfg.FFMPEG_TASK_QUEUE = "frigate-genai-ffmpeg"
-_cfg.GEMINI_TASK_QUEUE = "frigate-genai-gemini"
-_cfg.OLLAMA_TASK_QUEUE = "frigate-genai-ollama"
+_cfg.LLM_TASK_QUEUE = "frigate-genai-ollama"
 _cfg.DEPLOYMENT_NAME = "test-deploy"
 _cfg.BUILD_ID = "test-build"
 _cfg._SEARCH_CAMERA = "Camera"
