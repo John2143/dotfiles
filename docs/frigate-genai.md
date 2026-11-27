@@ -185,8 +185,10 @@ A healthy drain logs `collect_scenes: N events`, `drain: N scenes, M skips`, the
 cd nixos/modules && python3 -m unittest discover -s frigate_genai/tests -t . -v
 ```
 
-Quality set: 81 scenes under `scratch/T6GoldenSet/` (Frigate keeps clips 7 days —
-copy the frames to the NAS or the gate dies with the clips). Presence bars, judged
+Quality set: 81 scenes, preserved at
+`/mnt/nas/scratch/frigate-genai-golden-set-2026-11-27/` with a `SHA256SUMS` manifest
+(Frigate keeps clips 7 days, so the frames cannot be regenerated later; the scene
+list can be rebuilt from the 30-day replay at any time, the frames cannot). Presence bars, judged
 on one-sided 90% lower bounds, are met by **person (62/62) only**; dog reaches
 50/58 with detector facts (0.79 lower bound, just under the 0.90 bar); cat (1/11)
 and package (6/10) do not clear it, and non-bird wildlife has n = 3. The owner's
