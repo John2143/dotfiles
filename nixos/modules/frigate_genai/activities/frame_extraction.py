@@ -1,13 +1,14 @@
-"""Frame extraction activities for frigate-genai.
+"""Frame extraction for frigate-genai: ffmpeg frames from the recording.
 
-Transcodes video into frames via ffmpeg and fetches snapshots from Frigate API.
+Deliberately no snapshot: the event snapshot has the detector box and class
+burned in (snapshots.bounding_box is true), so it leaks the answer and measured
+worse for presence than a clean record frame.
 """
 
 import logging
 import math
 import subprocess
 import tempfile
-import urllib.request
 from pathlib import Path
 
 from temporalio import activity
@@ -97,19 +98,6 @@ def transcode_into_parts(
         return len(files)
 
 
-def fetch_snapshot(event_id: str) -> bytes | None:
-    """Fetch the event snapshot (close-up of tracked object)."""
-    url = _frigate_url(f"/api/events/{event_id}/snapshot.jpg")
-
-    try:
-        req = urllib.request.Request(url)
-        with urllib.request.urlopen(req, timeout=15) as resp:
-            return resp.read()
-    except Exception as e:
-        log.warning("Failed to fetch snapshot for %s: %s", event_id, e)
-        return None
-
-
 @activity.defn(name="transcode_into_parts")
 async def transcode_into_parts_activity(input_data: dict) -> tuple[str, int]:
     """Extract frames via ffmpeg (1 fps initial scan), upload to S3. Returns (event_prefix, frame_count)."""
@@ -134,15 +122,3 @@ async def transcode_into_parts_activity(input_data: dict) -> tuple[str, int]:
         )
     log.info("Extracted %d ffmpeg frames (1fps) to s3://%s/frames", uploaded, event_prefix)
     return event_prefix, uploaded
-
-
-@activity.defn(name="fetch_snapshot")
-async def fetch_snapshot_activity(input_data: dict) -> str:
-    """Fetch the snapshot from Frigate API, upload to S3. Returns event_prefix."""
-    event_id = input_data["event_id"]
-    event_prefix = _s3_event_prefix(event_id)
-    log.info("event_prefix=%s", event_prefix)
-    snapshot_bytes = await _run_with_heartbeat(fetch_snapshot, event_id)
-    if snapshot_bytes:
-        _s3_put(f"{event_prefix}/snapshot.jpg", snapshot_bytes)
-    return event_prefix

@@ -24,7 +24,15 @@ from frigate_genai.activities.records import (
     save_watermark,
 )
 from frigate_genai.config import _frigate_url
-from frigate_genai.intake import Decision, Scene, classify, merge_scenes, still_there
+from frigate_genai.intake import (
+    HOUSEHOLD_ZONES,
+    Decision,
+    Scene,
+    classify,
+    merge_scenes,
+    parse_zone_polygon,
+    still_there,
+)
 from frigate_genai.s3_helpers import _s3_get
 
 log = logging.getLogger("frigate-genai-sidecar")
@@ -129,6 +137,36 @@ def fetch_events(after: float, before: float) -> list[dict]:
     return events
 
 
+def fetch_zone_polygons() -> dict[str, dict[str, list[tuple[float, float]]]]:
+    """Zone polygons for the cameras that have any, from /api/config.
+
+    Frigate 0.18's event API does not report `entered_zones`, so the intake
+    decides property membership from the detection box against these polygons.
+    An empty result disables the zone-based skips (never the other way round).
+    """
+    try:
+        with urllib.request.urlopen(_frigate_url("/api/config"), timeout=30) as resp:
+            config = json.loads(resp.read().decode())
+    except Exception as e:
+        log.warning("zone fetch failed, zone-based skips disabled: %s", e)
+        return {}
+
+    polygons: dict[str, dict[str, list[tuple[float, float]]]] = {}
+    for camera, household in HOUSEHOLD_ZONES.items():
+        zones = ((config.get("cameras") or {}).get(camera) or {}).get("zones") or {}
+        parsed = {}
+        for name in household:
+            entry = zones.get(name)
+            if not entry:
+                continue
+            polygon = parse_zone_polygon(entry.get("coordinates", ""))
+            if len(polygon) >= 3:
+                parsed[name] = polygon
+        if parsed:
+            polygons[camera] = parsed
+    return polygons
+
+
 def _order(scenes: list[Scene]) -> list[Scene]:
     """P1 package/cat/wildlife, P2 person, P3 dog, P4 everything else."""
     def rank(scene: Scene) -> tuple[int, float]:
@@ -154,14 +192,16 @@ async def collect_scenes_activity(now: float) -> dict:
     watermark = load_watermark()
     done = load_done()
     events = fetch_events(watermark, now)
-    log.info("collect_scenes: %d events since %.0f", len(events), watermark)
+    zone_polygons = fetch_zone_polygons()
+    log.info("collect_scenes: %d events since %.0f, zones for %d cameras",
+             len(events), watermark, len(zone_polygons))
 
     fresh = [e for e in events if e.get("id") and e["id"] not in done]
     keep: list[dict] = []
     labelled: list[dict] = []
     skipped = 0
     for event in fresh:
-        decision, reason = classify(event)
+        decision, reason = classify(event, zone_polygons)
         if decision is Decision.SKIP:
             labelled.append({"id": event["id"], "reason": reason})
             done[event["id"]] = float(event.get("end_time") or 0)
@@ -169,7 +209,7 @@ async def collect_scenes_activity(now: float) -> dict:
         else:
             keep.append(event)
 
-    scenes = merge_scenes(keep)
+    scenes = merge_scenes(keep, zone_polygons=zone_polygons)
     last_described: Scene | None = None
     repeat = 0
     selected: list[Scene] = []

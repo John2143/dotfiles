@@ -84,23 +84,95 @@ def _entered_zones(event: dict) -> set[str]:
     return set(zones or [])
 
 
-def on_property(event: dict) -> bool | None:
-    """True inside a household zone, False outside, None when the camera has
-    no zones configured (nothing to judge)."""
+def parse_zone_polygon(coordinates: str) -> list[tuple[float, float]]:
+    """Frigate zones are a flat "x,y,x,y,..." string of normalised points."""
+    values = [p for p in (coordinates or "").replace(" ", "").split(",") if p]
+    points: list[tuple[float, float]] = []
+    for i in range(0, len(values) - 1, 2):
+        try:
+            points.append((float(values[i]), float(values[i + 1])))
+        except ValueError:
+            continue
+    return points
+
+
+def point_in_polygon(x: float, y: float, polygon: list[tuple[float, float]]) -> bool:
+    """Ray casting, boundary-exclusive. A degenerate polygon matches nothing."""
+    if len(polygon) < 3:
+        return False
+    inside = False
+    j = len(polygon) - 1
+    for i in range(len(polygon)):
+        xi, yi = polygon[i]
+        xj, yj = polygon[j]
+        if (yi > y) != (yj > y) and x < (xj - xi) * (y - yi) / (yj - yi) + xi:
+            inside = not inside
+        j = i
+    return inside
+
+
+def _box(event: dict) -> list[float] | None:
+    box = (event.get("data") or {}).get("box") or event.get("data_box")
+    if isinstance(box, (list, tuple)) and len(box) == 4:
+        try:
+            return [float(v) for v in box]
+        except (TypeError, ValueError):
+            return None
+    return None
+
+
+def _feet_and_middle(event: dict) -> list[tuple[float, float]]:
+    box = _box(event)
+    if box is None:
+        return []
+    x1, y1, x2, y2 = min(box[0], box[2]), min(box[1], box[3]), max(box[0], box[2]), max(box[1], box[3])
+    return [((x1 + x2) / 2, y2), ((x1 + x2) / 2, (y1 + y2) / 2)]
+
+
+def on_property(
+    event: dict,
+    zone_polygons: dict[str, dict[str, list[tuple[float, float]]]] | None = None,
+) -> bool | None:
+    """True inside a household zone, False outside, None when it cannot be told.
+
+    Frigate 0.18's event API no longer returns `entered_zones`, so membership is
+    computed from the detection box against the zone polygons in /api/config:
+    the box's feet and centre are tested. When the polygons are unavailable the
+    answer is None, and the callers below then keep the event rather than drop
+    it — a missing config must never silently suppress descriptions.
+    """
     camera = event.get("camera", "")
-    zones = HOUSEHOLD_ZONES.get(camera)
-    if zones is None:
+    household = HOUSEHOLD_ZONES.get(camera)
+    if household is None:
         return None
-    return bool(zones & _entered_zones(event))
+
+    entered = _entered_zones(event)
+    if entered:
+        return bool(household & entered)
+
+    polygons = (zone_polygons or {}).get(camera) or {}
+    points = _feet_and_middle(event)
+    if not polygons or not points:
+        return None
+    for name, polygon in polygons.items():
+        if name not in household:
+            continue
+        for x, y in points:
+            if point_in_polygon(x, y, polygon):
+                return True
+    return False
 
 
-def classify(event: dict) -> tuple[Decision, str]:
+def classify(
+    event: dict,
+    zone_polygons: dict[str, dict[str, list[tuple[float, float]]]] | None = None,
+) -> tuple[Decision, str]:
     """Decide what to do with one Frigate event. First match wins."""
     label = event.get("label", "")
     camera = event.get("camera", "")
     duration = _duration(event)
     score = _score(event)
-    inside = on_property(event)
+    inside = on_property(event, zone_polygons)
 
     if label in AUDIO_LABELS:
         return Decision.SKIP, "audio"
@@ -155,6 +227,7 @@ class Scene:
     members: list[dict] = field(default_factory=list)
     labels: frozenset[str] = frozenset()
     priority: str = Decision.LOW_PRIORITY.value
+    zone_polygons: dict[str, dict[str, list[tuple[float, float]]]] | None = None
 
     @property
     def primary(self) -> dict:
@@ -180,8 +253,11 @@ class Scene:
                     "label": m.get("label", ""),
                     "start_time": m.get("start_time"),
                     "end_time": m.get("end_time"),
-                    "top_score": _score(m),
+                    "duration": round(_duration(m), 1),
+                    "top_score": round(_score(m), 2),
+                    "sub_label": m.get("sub_label") or (m.get("data") or {}).get("sub_label"),
                     "entered_zones": sorted(_entered_zones(m)),
+                    "on_property": on_property(m, self.zone_polygons),
                 }
                 for m in self.members
             ],
@@ -199,6 +275,7 @@ def merge_scenes(
     events: list[dict],
     gap_s: float = MERGE_GAP_SECONDS,
     max_span_s: float = MERGE_MAX_SPAN_SECONDS,
+    zone_polygons: dict[str, dict[str, list[tuple[float, float]]]] | None = None,
 ) -> list[Scene]:
     """Group events into scenes: same camera, next event starts within `gap_s`
     of the previous end, and the scene never spans more than `max_span_s`."""
@@ -217,22 +294,26 @@ def merge_scenes(
                 starts = float(event.get("start_time") or 0)
                 ends = float(event.get("end_time") or starts)
                 if starts - previous_end > gap_s or ends - scene_start > max_span_s:
-                    scenes.append(_build_scene(camera, current))
+                    scenes.append(_build_scene(camera, current, zone_polygons))
                     current = []
             current.append(event)
         if current:
-            scenes.append(_build_scene(camera, current))
+            scenes.append(_build_scene(camera, current, zone_polygons))
 
     scenes.sort(key=lambda s: s.start)
     return scenes
 
 
-def _build_scene(camera: str, members: list[dict]) -> Scene:
+def _build_scene(
+    camera: str,
+    members: list[dict],
+    zone_polygons: dict[str, dict[str, list[tuple[float, float]]]] | None = None,
+) -> Scene:
     start = min(float(m.get("start_time") or 0) for m in members)
     end = max(float(m.get("end_time") or 0) for m in members)
     labels = frozenset(m.get("label", "") for m in members)
     priority = max(
-        (classify(m)[0] for m in members),
+        (classify(m, zone_polygons)[0] for m in members),
         key=lambda d: _PRIORITY_RANK.get(d, 0),
     )
     return Scene(
@@ -243,6 +324,7 @@ def _build_scene(camera: str, members: list[dict]) -> Scene:
         members=members,
         labels=labels,
         priority=priority.value,
+        zone_polygons=zone_polygons,
     )
 
 
