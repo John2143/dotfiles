@@ -34,7 +34,17 @@ class DrainWorkflow:
 
     @workflow.run
     async def run(self, arg: dict | None = None) -> dict:
-        arg = arg or {}
+        try:
+            return await self._drain(arg or {})
+        except asyncio.CancelledError:
+            raise
+        except Exception as e:
+            # A drain that fails is otherwise invisible outside the Temporal
+            # UI: the next tick starts a fresh run and the loop looks healthy.
+            workflow.logger.error("drain failed: %s: %s", type(e).__name__, e)
+            raise
+
+    async def _drain(self, arg: dict) -> dict:
         started_at = workflow.now()
         prompts_path = arg.get("prompts_path", "/var/lib/frigate-genai-sidecar/prompts.json")
         provider_path = arg.get("provider_path", "/var/lib/frigate-genai-sidecar/provider.json")
