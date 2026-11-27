@@ -1,6 +1,7 @@
 # Fleet maintenance agent
 
-**Status: design only (2026-11-25). Nothing here is built.** Tracking card: #508. The working
+**Status (2026-11-26): superseded for dependency updates.** Renovate stays on argo only and Dependabot covers the other active repos; the agent repair loop (Stages 2-3), the App, the PR renderer and Temporal are cancelled. Decision and evidence: board #541; rollout: board #574.
+Tracking card: #508. The working
 name is undecided; `steward` below is a placeholder (not `mend`: Mend.io is the company behind
 Renovate).
 
