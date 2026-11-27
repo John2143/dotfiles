@@ -25,7 +25,7 @@ from frigate_genai.config import (
     _SEARCH_MODEL,
 )
 from frigate_genai.activities.select_model import DEFAULT_MODEL, select_model_activity
-from frigate_genai.activities.frame_extraction import transcode_into_parts_activity, fetch_snapshot_activity
+from frigate_genai.activities.frame_extraction import transcode_into_parts_activity
 from frigate_genai.activities.records import record_result_activity
 from frigate_genai.activities.frames import crop_detection_activity
 from frigate_genai.activities.describe import run_describe_scene
@@ -110,36 +110,24 @@ class GenAIWorkflow:
                 retry_policy=_ACTIVITY_RETRY,
             )
 
-            # Frames: snapshot always, ffmpeg clip when enabled.
+            # Frames come from the recording only. The event snapshot carries
+            # the detector box and class burned in (snapshots.bounding_box is
+            # true), which is both an answer leak and a worse image: measured
+            # as a presence loss, not a gain.
             frame_count = 0
             event_prefix = f"events/{primary_id}"
-            if input_data.get("skip_frames"):
-                await workflow.execute_activity(
-                    fetch_snapshot_activity,
-                    {**input_data, "event_id": primary_id},
-                    start_to_close_timeout=timedelta(seconds=30),
-                    retry_policy=_ACTIVITY_RETRY,
-                )
-            else:
+            if not input_data.get("skip_frames"):
                 try:
-                    _, (_, frame_count) = await asyncio.gather(
-                        workflow.execute_activity(
-                            fetch_snapshot_activity,
-                            {**input_data, "event_id": primary_id},
-                            start_to_close_timeout=timedelta(seconds=30),
-                            retry_policy=_ACTIVITY_RETRY,
-                        ),
-                        workflow.execute_activity(
-                            transcode_into_parts_activity,
-                            {**input_data, "event_id": primary_id},
-                            task_queue=FFMPEG_TASK_QUEUE,
-                            start_to_close_timeout=timedelta(hours=1),
-                            heartbeat_timeout=timedelta(seconds=60),
-                            retry_policy=_EXTRACT_RETRY,
-                        ),
+                    _, frame_count = await workflow.execute_activity(
+                        transcode_into_parts_activity,
+                        {**input_data, "event_id": primary_id},
+                        task_queue=FFMPEG_TASK_QUEUE,
+                        start_to_close_timeout=timedelta(hours=1),
+                        heartbeat_timeout=timedelta(seconds=60),
+                        retry_policy=_EXTRACT_RETRY,
                     )
                 except Exception:
-                    workflow.logger.warning("Frame extraction failed for %s; falling back to the snapshot", log_ctx)
+                    workflow.logger.warning("Frame extraction failed for %s", log_ctx)
                     frame_count = 0
 
             duration = int(float(scene.get("end") or 0) - float(scene.get("start") or 0))
@@ -163,8 +151,20 @@ class GenAIWorkflow:
                     sharpest_key = f"{event_prefix}/frames/frame_{int(picked['sharpest_frame']):03d}.jpg"
                 workflow.logger.info("keyframes=%d sharpest=%s", len(keyframe_keys), picked.get("sharpest_frame"))
             if not keyframe_keys:
-                keyframe_keys = [f"{event_prefix}/snapshot.jpg"]
-                sharpest_key = f"{event_prefix}/snapshot.jpg"
+                await workflow.execute_activity(
+                    update_description_activity,
+                    args=[primary_id, "Skipped: no recording"],
+                    start_to_close_timeout=timedelta(seconds=60),
+                    retry_policy=_DESCRIPTION_RETRY,
+                )
+                await workflow.execute_activity(
+                    cleanup_cancelled_activity,
+                    args=[{"event_id": primary_id}, False],
+                    start_to_close_timeout=timedelta(seconds=30),
+                    retry_policy=_ACTIVITY_RETRY,
+                )
+                workflow.logger.info("No frames for %s; labelled and stopped", log_ctx)
+                return
 
             crop = await workflow.execute_activity(
                 crop_detection_activity,

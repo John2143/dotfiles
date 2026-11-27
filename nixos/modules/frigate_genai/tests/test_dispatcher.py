@@ -3,6 +3,7 @@ drain starter. All network and S3 I/O is patched; the logic under test is the
 classification, the merge, the persisted state and the fail-closed gate."""
 
 import asyncio
+import json
 import os
 import sys
 import unittest
@@ -56,6 +57,7 @@ class CollectScenesTests(unittest.TestCase):
             saved["spend"] = dict(counts)
 
         with patch.object(dispatcher, "fetch_events", return_value=events), \
+                patch.object(dispatcher, "fetch_zone_polygons", return_value={}), \
                 patch.object(dispatcher, "load_done", return_value=dict(done or {})), \
                 patch.object(dispatcher, "load_watermark", return_value=watermark), \
                 patch.object(dispatcher, "save_done", side_effect=fake_save_done), \
@@ -112,6 +114,43 @@ class CollectScenesTests(unittest.TestCase):
         self.assertEqual(len(result["scenes"]), 1, result["scenes"])
         self.assertEqual(result["scenes"][0]["members"][0]["id"], "cat1")
         self.assertEqual(saved["spend"]["still_there"], 1)
+
+
+class ZonePolygonFetchTests(unittest.TestCase):
+    def test_parses_only_household_zones(self):
+        config = {"cameras": {
+            "cam06": {"zones": {
+                "front_driveway": {"coordinates": "0,0,1,0,1,1,0,1"},
+                "house": {"coordinates": "0,0,0.2,0,0.2,0.2"},
+            }},
+            "cam02": {"zones": {
+                "in_court": {"coordinates": "0,0,1,0,1,1,0,1"},
+                "in_back_yard": {"coordinates": "0.1,0.1,0.4,0.1,0.4,0.4"},
+            }},
+        }}
+
+        class _Resp:
+            def read(self):
+                return json.dumps(config).encode()
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *a):
+                return False
+
+        with patch.object(dispatcher.urllib.request, "urlopen", return_value=_Resp()):
+            polygons = dispatcher.fetch_zone_polygons()
+
+        self.assertEqual(set(polygons), {"cam06", "cam02"})
+        self.assertIn("front_driveway", polygons["cam06"])
+        # cam02's in_court is the road, so it is never part of the household map.
+        self.assertNotIn("in_court", polygons["cam02"])
+        self.assertEqual(polygons["cam06"]["front_driveway"][2], (1.0, 1.0))
+
+    def test_fetch_failure_disables_zone_skips(self):
+        with patch.object(dispatcher.urllib.request, "urlopen", side_effect=OSError("boom")):
+            self.assertEqual(dispatcher.fetch_zone_polygons(), {})
 
 
 class GateTests(unittest.TestCase):

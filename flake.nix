@@ -4,9 +4,6 @@
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
     nixpkgs-stable.url = "github:NixOS/nixpkgs/nixos-26.05";
 
-    nix-cachyos-kernel.url = "github:xddxdd/nix-cachyos-kernel/release";
-    nix-cachyos-kernel.inputs.nixpkgs.follows = "nixpkgs";
-
     home-manager = {
       url = "github:nix-community/home-manager";
       inputs.nixpkgs.follows = "nixpkgs";
@@ -84,25 +81,12 @@
 
   outputs = {
     nixpkgs,
-    nix-cachyos-kernel,
     agenix,
     waytop,
     voxtype,
     ...
   } @ inputs: let
     system = "x86_64-linux";
-    catchy-os = [
-      ({pkgs, ...}: {
-        nixpkgs.overlays = [
-          nix-cachyos-kernel.overlays.default
-          #nix-cachyos-kernel.overlays.pinned
-        ];
-      })
-      ({pkgs, ...}: {
-        boot.kernelPackages = pkgs.cachyosKernels.linuxPackages-cachyos-latest;
-        #hardware.nvidia.package = config.boot.kernelPackages.nvidiaPackages.stable;
-      })
-    ];
     my-keys = [
       "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOktI2Vry/5fbhZiG35o5mf7w3dnaTEDqkRJVM07cu3a john@arch"
       "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFVckq0oXyXkxiLo39typ6PR039XrLwze/Cb0PZaTzmi john@office"
