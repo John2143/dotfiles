@@ -14,6 +14,8 @@ from frigate_genai.intake import (  # noqa: E402
     classify,
     iou,
     merge_scenes,
+    parse_zone_polygon,
+    point_in_polygon,
     still_there,
 )
 
@@ -124,6 +126,62 @@ class ClassifyTests(unittest.TestCase):
             classify(event(label="umbrella", camera="cam06", duration=40.0, top_score=0.8))[0],
             Decision.LOW_PRIORITY,
         )
+
+
+# A square covering the middle of the frame, as a stand-in for a real polygon.
+MIDDLE = [(0.3, 0.3), (0.7, 0.3), (0.7, 0.7), (0.3, 0.7)]
+ZONES = {"cam06": {"front_driveway": MIDDLE}}
+
+
+class ZoneGeometryTests(unittest.TestCase):
+    def test_parse_zone_polygon(self):
+        self.assertEqual(parse_zone_polygon("0.1,0.2,0.3,0.4,0.5,0.6"),
+                         [(0.1, 0.2), (0.3, 0.4), (0.5, 0.6)])
+        self.assertEqual(parse_zone_polygon(""), [])
+        self.assertEqual(parse_zone_polygon("0.1,0.2,oops,0.4,0.5,0.6"),
+                         [(0.1, 0.2), (0.5, 0.6)])
+
+    def test_point_in_polygon(self):
+        self.assertTrue(point_in_polygon(0.5, 0.5, MIDDLE))
+        self.assertFalse(point_in_polygon(0.1, 0.5, MIDDLE))
+        self.assertFalse(point_in_polygon(0.5, 0.9, MIDDLE))
+        self.assertFalse(point_in_polygon(0.5, 0.5, [(0, 0), (1, 1)]))
+
+    def test_box_on_the_driveway_is_property(self):
+        """No entered_zones (0.18 dropped it): the box decides."""
+        ev = event(camera="cam06", label="person", duration=5,
+                   box=[0.45, 0.45, 0.60, 0.65])
+        self.assertEqual(classify(ev, ZONES)[0], Decision.MUST_KEEP)
+
+    def test_box_off_the_driveway_is_a_street_pass_by(self):
+        ev = event(camera="cam06", label="person", duration=5,
+                   box=[0.02, 0.30, 0.10, 0.45])
+        self.assertEqual(classify(ev, ZONES), (Decision.SKIP, "street-pass-by"))
+
+    def test_missing_polygons_never_skip(self):
+        ev = event(camera="cam06", label="person", duration=5,
+                   box=[0.02, 0.30, 0.10, 0.45])
+        self.assertEqual(classify(ev)[0], Decision.MUST_KEEP)
+        self.assertEqual(classify(ev, {})[0], Decision.MUST_KEEP)
+
+    def test_event_without_box_never_skips_on_geometry(self):
+        ev = event(camera="cam06", label="person", duration=5)
+        ev["data"].pop("box")
+        self.assertEqual(classify(ev, ZONES)[0], Decision.MUST_KEEP)
+
+    def test_cam02_road_box_is_not_property(self):
+        road = [(0.0, 0.0), (0.4, 0.0), (0.4, 1.0), (0.0, 1.0)]
+        yard = [(0.5, 0.0), (0.9, 0.0), (0.9, 1.0), (0.5, 1.0)]
+        zones = {"cam02": {"in_court": road, "in_back_yard": yard}}
+        in_road = event(camera="cam02", label="car", duration=20, box=[0.1, 0.4, 0.2, 0.6])
+        self.assertEqual(classify(in_road, zones), (Decision.SKIP, "vehicle-outside-zones"))
+        in_yard = event(camera="cam02", label="car", duration=20, box=[0.6, 0.4, 0.7, 0.6])
+        self.assertEqual(classify(in_yard, zones)[0], Decision.LOW_PRIORITY)
+
+    def test_entered_zones_still_wins_when_present(self):
+        ev = event(camera="cam06", label="person", duration=5,
+                   zones=["front_driveway"], box=[0.02, 0.30, 0.10, 0.45])
+        self.assertEqual(classify(ev, ZONES)[0], Decision.MUST_KEEP)
 
 
 class MergeTests(unittest.TestCase):

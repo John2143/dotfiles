@@ -49,6 +49,12 @@ Pure functions, thresholds at module level.
 **Keep**: must-keep labels (person, package, carriers, cat, dog, wildlife) are
 described first; everything else (vehicles, face, umbrella, …) after.
 
+Property membership comes from the detection box tested against the household
+zone polygons in `/api/config` (feet and centre points): Frigate 0.18's event
+API no longer returns `entered_zones`. If the polygons cannot be fetched, the
+zone-based skips are disabled and events are kept — a config failure must never
+silently suppress descriptions.
+
 Events on one camera merge into a **scene** when the next starts within 120 s of
 the previous end and the scene spans at most 600 s. A scene that shows the same
 thing in the same box as the last *described* scene (IoU ≥ 0.5, within 30 min,
