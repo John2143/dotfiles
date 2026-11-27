@@ -46,6 +46,16 @@ in {
       type = lib.types.str;
       description = "Default gateway on the same link as address.";
     };
+    address6 = lib.mkOption {
+      type = lib.types.nullOr (lib.types.strMatching "[0-9a-fA-F:]+/[0-9]{1,3}");
+      default = null;
+      description = "Static IPv6 address in CIDR form; null when the node has no IPv6.";
+    };
+    gateway6 = lib.mkOption {
+      type = lib.types.nullOr (lib.types.strMatching "[0-9a-fA-F:]+");
+      default = null;
+      description = "IPv6 default gateway; null leaves the node with no IPv6 default route (a ULA-only host).";
+    };
     nameservers = lib.mkOption {
       type = lib.types.listOf lib.types.str;
     };
@@ -65,6 +75,15 @@ in {
   };
 
   config = {
+    # A gateway6 with no address6 would render a route out of an address the
+    # host does not have, so networkd would never bring the link online.
+    assertions = [
+      {
+        assertion = cfg.gateway6 == null || cfg.address6 != null;
+        message = "custom.platform.gateway6 requires address6";
+      }
+    ];
+
     # Module arguments for nixos/cluster/modules/disko.nix, which the host
     # entries pass without those arguments (mkHost supplies only compName).
     _module.args = {
@@ -78,6 +97,9 @@ in {
     nix.settings = {
       experimental-features = ["nix-command" "flakes"];
       trusted-users = ["root"];
+      # Nothing but root ever invokes nix here, so nothing else needs the
+      # daemon; the default is every local user.
+      allowed-users = ["root"];
     };
     nix.gc = {
       automatic = true;
@@ -96,13 +118,23 @@ in {
     # reported online before the default route exists.
     systemd.network.networks."10-lan" = {
       matchConfig.MACAddress = lib.toLower cfg.mac;
-      address = [cfg.address];
-      routes = [
-        {
-          Destination = "0.0.0.0/0";
-          Gateway = cfg.gateway;
-        }
-      ];
+      address = [cfg.address] ++ lib.optional (cfg.address6 != null) cfg.address6;
+      routes =
+        [
+          {
+            Destination = "0.0.0.0/0";
+            Gateway = cfg.gateway;
+          }
+        ]
+        # plat-home stops here: its ULA is link-local to the home LAN and the
+        # LAN has no public prefix, so there is no IPv6 default route to add.
+        ++ lib.optional (cfg.gateway6 != null) {
+          Destination = "::/0";
+          Gateway = cfg.gateway6;
+        };
+      # AcceptRA stays off because every address is static. LinkLocalAddressing
+      # keeps its `ipv6` default, so plat-nyc's fe80::1 gateway is on-link and
+      # needs no GatewayOnLink.
       networkConfig.IPv6AcceptRA = false;
       linkConfig.RequiredForOnline = "routable";
     };
@@ -117,8 +149,19 @@ in {
       # nixos-anywhere, the phase-2 k3s bootstrap and every later block ssh as
       # root with a key.
       settings.PermitRootLogin = "prohibit-password";
+      # This daemon exists to run root commands. No tunnels, no agent
+      # forwarding, no ~/.ssh/authorized_keys: keys come from ssh.nix only.
+      settings.AllowTcpForwarding = "no";
+      settings.AllowAgentForwarding = false;
+      settings.AllowStreamLocalForwarding = false;
+      settings.LoginGraceTime = 20;
+      settings.MaxAuthTries = 3;
+      settings.MaxStartups = "10:30:60";
+      authorizedKeysInHomedir = false;
     };
-    services.qemuGuest.enable = true;
+    # Only plat-home is a guest of bigp, where H6 verifies the agent from
+    # outside; on the cloud voters it is just another root-level socket.
+    services.qemuGuest.enable = cfg.site == "bigp";
 
     # No link-local name resolution on a public host: nothing on the platform
     # uses LLMNR or mDNS, and both listeners otherwise answer on 5355/5353.
@@ -129,7 +172,20 @@ in {
 
     # A voter whose kernel panics reboots after 10 s instead of sitting dead
     # until an operator notices. (Only panics: a hung k3s does not trigger it.)
-    boot.kernel.sysctl."kernel.panic" = 10;
+    # The rest shuts the autoconf and redirect paths nothing on these hosts
+    # uses. rp_filter stays at systemd's loose 2: strict filtering breaks the
+    # phase-2 WireGuard return path.
+    boot.kernel.sysctl = {
+      "kernel.panic" = 10;
+      "net.ipv6.conf.all.accept_ra" = 0;
+      "net.ipv6.conf.default.accept_ra" = 0;
+      "net.ipv6.conf.all.accept_redirects" = 0;
+      "net.ipv6.conf.default.accept_redirects" = 0;
+      "net.ipv4.conf.all.accept_redirects" = 0;
+      "net.ipv6.conf.all.accept_source_route" = 0;
+      "net.ipv4.conf.all.accept_source_route" = 0;
+      "net.ipv4.conf.all.send_redirects" = 0;
+    };
 
     # Keep the journal bounded: 1G used at most, and always leave 2G of the
     # 100G root free for etcd's own writes.

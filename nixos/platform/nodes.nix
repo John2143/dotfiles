@@ -13,6 +13,11 @@
 #   mac         must match the NIC exactly; the network config matches on the
 #               MAC, never on the interface name (it is not stable across
 #               kernels or providers).
+#   address6    Static IPv6 in CIDR form. The cloud voters get their public
+#               address (they may later front IPv6); plat-home gets the home
+#               ULA, because the LAN has no public prefix.
+#   gateway6    IPv6 default gateway, or absent. plat-home has none: a ULA is
+#               link-local to the home LAN only.
 {
   plat-bos = {
     site = "hostinger-bos";
@@ -25,6 +30,11 @@
     mac = "e2:e8:d4:c6:53:d2";
     address = "2.25.220.79/24";
     gateway = "2.25.220.254";
+    # Keep the /48: the gateway sits inside it, so it stays on-link. Narrowing
+    # to /64 breaks the default route unless GatewayOnLink=true or a /128 link
+    # route is added.
+    address6 = "2a02:4780:95:7d58::1/48";
+    gateway6 = "2a02:4780:95::1";
     nameservers = ["1.1.1.1" "9.9.9.9"];
   };
 
@@ -39,14 +49,16 @@
     mac = "bc:24:11:00:00:50";
     address = "192.168.5.50/24";
     gateway = "192.168.5.1";
+    address6 = "fd00:1::50/64";
     nameservers = ["192.168.5.1"];
   };
 
   # Captured from the running Ubuntu 2026-11-26 (cloud-init netplan, lsblk,
   # lspci): KVM, virtio-scsi + virtio-net, legacy BIOS (no /sys/firmware/efi),
   # one 100 GB disk. The 00:50:56 MAC prefix is Contabo's allocation, not
-  # VMware. IPv6 (2605:a144:2378:9787::1/64 via fe80::1) is not configured
-  # yet; nothing in the platform needs it.
+  # VMware. The IPv6 address is the one Contabo's panel assigns; the gateway
+  # fe80::1 comes from the cloud-init netplan captured at install, not a live
+  # probe, so N2's dead-man timer is what proves it.
   plat-nyc = {
     site = "contabo-us-east";
     publicIPv4 = "31.132.60.154";
@@ -58,6 +70,8 @@
     mac = "00:50:56:69:f8:c7";
     address = "31.132.60.154/22";
     gateway = "31.132.60.1";
+    address6 = "2605:a144:2378:9787::1/64";
+    gateway6 = "fe80::1";
     nameservers = ["209.126.15.53" "195.179.224.53"];
   };
 }
