@@ -11,6 +11,45 @@ if test $status = 0
     set -x NIX true
 end
 
+function dotfiles-fresh --description 'Pull and report the dotfiles revision a rebuild is about to build'
+    set -l repo ~/dotfiles
+    if test -n "$argv[1]"
+        set repo $argv[1]
+    end
+
+    if not git -C $repo rev-parse --git-dir >/dev/null 2>&1
+        echo "dotfiles: no git checkout at $repo — skipping freshness check" >&2
+        return 0
+    end
+
+    set -l branch (git -C $repo rev-parse --abbrev-ref HEAD 2>/dev/null)
+    set -l upstream (git -C $repo rev-parse --abbrev-ref --symbolic-full-name '@{upstream}' 2>/dev/null)
+
+    if not git -C $repo fetch --quiet origin 2>/dev/null
+        echo "dotfiles: could not fetch origin — building $branch@"(git -C $repo rev-parse --short HEAD)" unverified" >&2
+    else if test -n "$upstream"
+        set -l behind (git -C $repo rev-list --count "HEAD..$upstream" 2>/dev/null)
+        test -n "$behind"; or set behind 0
+        if test "$behind" -gt 0
+            if set -q DOTFILES_ALLOW_STALE
+                echo "dotfiles: $behind commit(s) behind $upstream — not pulling (DOTFILES_ALLOW_STALE)" >&2
+            else if git -C $repo pull --ff-only --quiet
+                echo "dotfiles: pulled $behind commit(s) from $upstream" >&2
+            else
+                echo "dotfiles: $behind commit(s) behind $upstream — pull failed, building the tree as it stands" >&2
+            end
+        end
+    end
+
+    set -l sha (git -C $repo rev-parse --short HEAD)
+    set -l dirty (git -C $repo status --porcelain 2>/dev/null)
+    if test -n "$dirty"
+        echo "dotfiles: building $branch@$sha with "(count $dirty)" uncommitted path(s)" >&2
+    else
+        echo "dotfiles: building $branch@$sha" >&2
+    end
+end
+
 if [ (uname) = "Linux" ]
     function screenshot_location
         date "+$HOME/screenshots/%Yy-%mm-%dd_%0Hh-%Mm-%Ss_.png"
@@ -34,12 +73,12 @@ if [ (uname) = "Linux" ]
         alias ehmg="fish -c 'cd ~/dotfiles/nixos/ ; nvim home.nix'"
         alias enf="fish -c 'cd ~/dotfiles/ ; nvim flake.nix'"
 
-        alias nos="fish -c 'nh os switch'"
-        alias nob="fish -c 'nh os boot'"
-        alias noss="fish -c 'nh os switch --fallback'"
-        alias nobs="fish -c 'nh os boot --fallback'"
-        alias nosss='sudo nixos-rebuild switch --flake ~/dotfiles --builders "" --option substituters "http://nas:8280/2143nix https://cache.nixos.org" --fallback'
-        alias nobbb='sudo nixos-rebuild boot --flake ~/dotfiles --builders "" --option substituters "http://nas:8280/2143nix https://cache.nixos.org" --fallback'
+        alias nos="dotfiles-fresh; and fish -c 'nh os switch'"
+        alias nob="dotfiles-fresh; and fish -c 'nh os boot'"
+        alias noss="dotfiles-fresh; and fish -c 'nh os switch --fallback'"
+        alias nobs="dotfiles-fresh; and fish -c 'nh os boot --fallback'"
+        alias nosss='dotfiles-fresh; and sudo nixos-rebuild switch --flake ~/dotfiles --builders "" --option substituters "http://nas:8280/2143nix https://cache.nixos.org" --fallback'
+        alias nobbb='dotfiles-fresh; and sudo nixos-rebuild boot --flake ~/dotfiles --builders "" --option substituters "http://nas:8280/2143nix https://cache.nixos.org" --fallback'
 
 
         alias update="fish -c 'cd ~/dotfiles/; nix flake update'"
@@ -91,10 +130,10 @@ if [ (uname) = "Darwin" ]
     else
         set -gx NH_DARWIN_FLAKE "$HOME/dotfiles#mac"
     end
-    alias nos="fish -c 'nh darwin switch'"
-    alias noss="fish -c 'nh darwin switch --fallback'"
-    alias nob="fish -c 'nh darwin build'"
-    alias nobs="fish -c 'nh darwin build --fallback'"
+    alias nos="dotfiles-fresh; and fish -c 'nh darwin switch'"
+    alias noss="dotfiles-fresh; and fish -c 'nh darwin switch --fallback'"
+    alias nob="dotfiles-fresh; and fish -c 'nh darwin build'"
+    alias nobs="dotfiles-fresh; and fish -c 'nh darwin build --fallback'"
 end
 
 alias lat="ls -la --tree"
