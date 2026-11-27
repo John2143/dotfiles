@@ -12,7 +12,7 @@ from datetime import timedelta
 from temporalio import workflow
 from temporalio.workflow import ParentClosePolicy
 
-from frigate_genai.config import TASK_QUEUE, _ACTIVITY_RETRY
+from frigate_genai.config import DISPATCHER_TASK_QUEUE, TASK_QUEUE, _ACTIVITY_RETRY
 from frigate_genai.activities.dispatcher import (
     collect_scenes_activity,
     finish_drain_activity,
@@ -41,7 +41,7 @@ class DrainWorkflow:
 
         if await workflow.execute_activity(
             genai_paused_activity,
-            task_queue=TASK_QUEUE,
+            task_queue=DISPATCHER_TASK_QUEUE,
             start_to_close_timeout=timedelta(seconds=10),
             retry_policy=_ACTIVITY_RETRY,
         ):
@@ -51,7 +51,7 @@ class DrainWorkflow:
         collected = await workflow.execute_activity(
             collect_scenes_activity,
             workflow.now().timestamp(),
-            task_queue=TASK_QUEUE,
+            task_queue=DISPATCHER_TASK_QUEUE,
             start_to_close_timeout=timedelta(minutes=5),
             retry_policy=_ACTIVITY_RETRY,
         )
@@ -65,7 +65,7 @@ class DrainWorkflow:
                 workflow.execute_activity(
                     label_only_activity,
                     args=[item["id"], item["reason"]],
-                    task_queue=TASK_QUEUE,
+                    task_queue=DISPATCHER_TASK_QUEUE,
                     start_to_close_timeout=timedelta(seconds=30),
                     retry_policy=_ACTIVITY_RETRY,
                 )
@@ -79,7 +79,7 @@ class DrainWorkflow:
         while remaining and (workflow.now() - started_at) < DRAIN_BUDGET:
             gate = await workflow.execute_activity(
                 gate_status_activity,
-                task_queue=TASK_QUEUE,
+                task_queue=DISPATCHER_TASK_QUEUE,
                 start_to_close_timeout=timedelta(seconds=20),
                 retry_policy=_ACTIVITY_RETRY,
             )
@@ -134,7 +134,7 @@ class DrainWorkflow:
                 "gate_reason": gate_reason,
                 "release_models": [DEFAULT_MODEL, STRONG_MODEL],
             },
-            task_queue=TASK_QUEUE,
+            task_queue=DISPATCHER_TASK_QUEUE,
             start_to_close_timeout=timedelta(seconds=60),
             retry_policy=_ACTIVITY_RETRY,
         )

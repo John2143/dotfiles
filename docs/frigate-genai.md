@@ -116,7 +116,12 @@ aws --endpoint-url "$S3_ENDPOINT" s3 rm s3://frigate-genai/_state/paused/genai
 ```
 
 `_state/paused/ollama` keeps the 12b model in use and never touches the 26b.
-The dashboard toggles the same flags.
+
+The dashboard toggles the same flags, but its mutating endpoints require
+`GENAI_ADMIN_TOKEN` in the `frigate-genai-worker-creds` secret (OpenBao path
+`john2143-com/default/frigate-genai-worker-creds`; `envFrom` exposes it to every
+pod). Without it they answer 503 and the S3 flags above remain the only switch —
+by design, so an unconfigured deployment cannot be mutated at all.
 
 ## State in SeaweedFS (`frigate-genai` bucket)
 
