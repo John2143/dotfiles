@@ -17,11 +17,11 @@ jobs:
     permissions:
       packages: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
-      - uses: cachix/install-nix-action@v31
+      - uses: cachix/install-nix-action@v32
         with:
           github_access_token: ${{ secrets.GITHUB_TOKEN }}
       - name: Build images (parallel)
@@ -94,7 +94,7 @@ jobs:
         echo "OWNER_LOWER=$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')" >> $GITHUB_ENV
         echo "FFMPEG_IMAGE=ghcr.io/$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')/frigate-genai-ffmpeg" >> $GITHUB_ENV
         echo "GENAI_IMAGE=ghcr.io/$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')/frigate-genai-genai" >> $GITHUB_ENV
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v7
       with:
         repository: 2143-Labs/argo
         ssh-key: ${{ secrets.DEPLOY_KEY_ARGO }}
