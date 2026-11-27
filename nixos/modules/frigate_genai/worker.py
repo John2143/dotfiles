@@ -68,7 +68,7 @@ from frigate_genai.activities.dispatcher import (
     genai_paused_activity,
 )
 from frigate_genai.activities.llm import warm_openai_client
-from frigate_genai.activities.frame_extraction import transcode_into_parts_activity, fetch_snapshot_activity
+from frigate_genai.activities.frame_extraction import transcode_into_parts_activity
 from frigate_genai.activities.mqtt import _start_workflow_sync, _build_workflow_input, build_mqtt_client
 from frigate_genai.tools.find_keyframes import pick_keyframes_activity
 from frigate_genai.workflows.genai import GenAIWorkflow
@@ -473,7 +473,6 @@ async def async_main(prompts_path: str, provider_path: str, mode: str = "trigger
     core_activities = [
         select_model_activity,
         update_description_activity,
-        fetch_snapshot_activity,
         cleanup_cancelled_activity,
         record_result_activity,
     ]

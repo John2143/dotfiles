@@ -13,7 +13,13 @@ _PARENT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file
 if _PARENT not in sys.path:
     sys.path.insert(0, _PARENT)
 
-from frigate_genai.activities.frames import centre_box, crop_bytes, normalise_box  # noqa: E402
+from frigate_genai.activities.frames import (  # noqa: E402
+    CROP_MAX_LONG_SIDE,
+    CROP_PADDING,
+    centre_box,
+    crop_bytes,
+    normalise_box,
+)
 from frigate_genai.activities.records import prune_done  # noqa: E402
 
 W, H = 1920, 1080
@@ -64,6 +70,16 @@ class CropTests(unittest.TestCase):
         image = Image.open(io.BytesIO(data))
         self.assertLess(image.width, W)
         self.assertGreater(image.width, 100)
+
+    def test_crop_is_context_sized_and_capped(self):
+        # Context crop = 2.2x linear, then the long side is capped so a 4K
+        # frame does not inflate the prompt.
+        self.assertAlmostEqual(CROP_PADDING, 0.6)
+        image = Image.open(io.BytesIO(crop_bytes(self._jpeg(), (0.30, 0.30, 0.70, 0.70))))
+        self.assertLessEqual(max(image.size), CROP_MAX_LONG_SIDE)
+        # A small box still gets a usable crop, not a 1-pixel sliver.
+        small = Image.open(io.BytesIO(crop_bytes(self._jpeg(), (0.49, 0.49, 0.51, 0.51))))
+        self.assertGreater(min(small.size), 20)
 
     def test_centre_box_is_60_percent(self):
         x1, y1, x2, y2 = centre_box()

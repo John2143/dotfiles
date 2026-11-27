@@ -56,7 +56,9 @@ def _arg(**overrides):
         "label_hints": {"person": "Describe clothing and what they carry."},
         "model": "ollama/gemma4:12b",
         "members": [
-            {"id": "e1", "label": "person", "start_time": 1000.0, "end_time": 1010.0},
+            {"id": "e1", "label": "person", "start_time": 1000.0, "end_time": 1010.0,
+             "duration": 10.0, "top_score": 0.91, "on_property": True,
+             "sub_label": "John", "entered_zones": ["front_driveway"]},
         ],
         "provider_path": "/unused",
     }
@@ -109,6 +111,15 @@ class DescribeSceneTests(unittest.TestCase):
         self.assertIn("Describe clothing", system)
 
         self.assertEqual(result["confidence"], "high")
+
+    def test_detector_facts_reach_the_prompt(self):
+        _, client = self._run([_GOOD])
+        call = client.chat.completions.calls[0]
+        text = call["messages"][-1]["content"][0]["text"]
+        self.assertIn("person 10.0 s score 0.91 inside our property", text)
+        self.assertIn("zones: front_driveway", text)
+        self.assertIn("identified as John", text)
+        self.assertIn("do not re-detect", text)
         self.assertFalse(result["needs_review"])
         self.assertIn("parcel", result["description"])
         self.assertIn("2 package", result["description"])
@@ -131,6 +142,15 @@ class DescribeSceneTests(unittest.TestCase):
     def test_malformed_then_good(self):
         result, _ = self._run(["nope", _GOOD])
         self.assertEqual(result["confidence"], "high")
+
+    def test_detector_facts_reach_the_prompt(self):
+        _, client = self._run([_GOOD])
+        call = client.chat.completions.calls[0]
+        text = call["messages"][-1]["content"][0]["text"]
+        self.assertIn("person 10.0 s score 0.91 inside our property", text)
+        self.assertIn("zones: front_driveway", text)
+        self.assertIn("identified as John", text)
+        self.assertIn("do not re-detect", text)
         self.assertFalse(result["needs_review"])
 
     def test_missing_required_key_is_malformed(self):
@@ -145,6 +165,15 @@ class DescribeSceneTests(unittest.TestCase):
         result, _ = self._run([fenced])
         self.assertEqual(result["confidence"], "high")
 
+    def test_detector_facts_reach_the_prompt(self):
+        _, client = self._run([_GOOD])
+        call = client.chat.completions.calls[0]
+        text = call["messages"][-1]["content"][0]["text"]
+        self.assertIn("person 10.0 s score 0.91 inside our property", text)
+        self.assertIn("zones: front_driveway", text)
+        self.assertIn("identified as John", text)
+        self.assertIn("do not re-detect", text)
+
     def test_response_format_rejection_falls_back(self):
         result, client = self._run([RuntimeError("400: response_format json_schema unsupported"), _GOOD])
         self.assertEqual(len(client.chat.completions.calls), 2)
@@ -153,6 +182,15 @@ class DescribeSceneTests(unittest.TestCase):
         self.assertNotIn("response_format", second)
         self.assertIn("JSON schema", second["messages"][0]["content"])
         self.assertEqual(result["confidence"], "high")
+
+    def test_detector_facts_reach_the_prompt(self):
+        _, client = self._run([_GOOD])
+        call = client.chat.completions.calls[0]
+        text = call["messages"][-1]["content"][0]["text"]
+        self.assertIn("person 10.0 s score 0.91 inside our property", text)
+        self.assertIn("zones: front_driveway", text)
+        self.assertIn("identified as John", text)
+        self.assertIn("do not re-detect", text)
 
     def test_no_images(self):
         with patch.object(describe, "_resolve_provider", return_value=(_FakeClient([_GOOD]), "m")), \

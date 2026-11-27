@@ -19,7 +19,12 @@ from frigate_genai.s3_helpers import _s3_get, _s3_put
 log = logging.getLogger("frigate-genai-sidecar")
 
 CROP_QUALITY = 95
-CROP_PADDING = 0.15
+# Context crop: 0.6 of the box's width/height on every side (2.2x linear).
+# Measured as the whole crop gain — a second, tighter crop adds nothing.
+CROP_PADDING = 0.6
+# Long side cap; the vision encoder downsamples anyway and a 4K crop would only
+# inflate the prompt.
+CROP_MAX_LONG_SIDE = 768
 FALLBACK_FRACTION = 0.60
 _LOG_BOXES = 50
 
@@ -98,6 +103,13 @@ def crop_bytes(raw: bytes, box: tuple[float, float, float, float]) -> bytes:
     px1, py1 = int(x1 * width), int(y1 * height)
     px2, py2 = max(px1 + 2, int(round(x2 * width))), max(py1 + 2, int(round(y2 * height)))
     cropped = image.crop((px1, py1, min(px2, width), min(py2, height)))
+    long_side = max(cropped.size)
+    if long_side > CROP_MAX_LONG_SIDE:
+        scale = CROP_MAX_LONG_SIDE / long_side
+        cropped = cropped.resize(
+            (max(1, int(cropped.width * scale)), max(1, int(cropped.height * scale))),
+            Image.LANCZOS,
+        )
     out = io.BytesIO()
     cropped.save(out, format="JPEG", quality=CROP_QUALITY)
     return out.getvalue()
