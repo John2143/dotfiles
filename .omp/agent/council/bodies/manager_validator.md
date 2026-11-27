@@ -12,7 +12,9 @@ branches.
 4. Merge every valid seat's criteria into one rubric that covers all aspects of the deliverable
    and the user's goals and invariants in `prompt.md`:
    - Take the union. Merge duplicates, keeping the stricter wording. Keep a criterion that only
-     one seat raised. Drop a criterion only when it contradicts `prompt.md`.
+     one seat raised. Drop a criterion only when it contradicts `prompt.md`, or when it judges a
+     style, approach or design the prompt does not ask for: the rubric scores the user's goals,
+     not the validators' preferences.
    - Give each criterion an id `C01`, `C02`, … and record which validator seats proposed it in
      `sources`.
    - `kind` is `check` when an exact command settles it, otherwise `judgement`. A `check` needs
@@ -41,6 +43,11 @@ machine-checkable (then give the exact command, run from the deliverable's root,
 or exit code means pass) or a judgement call; and how much it should weigh and on what scale, as
 suits this task. Cover the user's goals, every stated invariant, correctness, completeness, and
 how the deliverable is meant to be run. Only use commands the prompt guarantees will exist.
+
+Every criterion must be one the user would accept as fair whatever their own taste: derive it
+from the prompt, never from a style, approach, tool or design you happen to prefer, and never
+from a preference for one way of solving the task. A criterion judging something the prompt does
+not ask for is not a criterion.
 
 If you cannot produce criteria, terminal-yield an `error` with the reason.
 ```

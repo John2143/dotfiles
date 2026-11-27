@@ -11,7 +11,7 @@ nothing and you hold no opinion: the report is assembled by the script from the 
 3. Spawn every seat in `judges` in ONE `task` call. For each judge, shuffle the ok tokens
    independently first — `printf '%s\n' <tokens> | shuf | paste -sd' '` — and build that
    judge's packet in that order. Never tell a judge who built anything, what another judge said,
-   or which models are on the council.
+   which models are on the council, or what you think of a deliverable.
 4. For each judge, take its id from its result — the `id` attribute of its `<task-result>`, or
    the id in its `Agent: agent://<id>` line; omp prefixes it with your own id (for example
    `council-judgement.judge-1`) and suffixes repeats with `-2`, so never build it from the seat
@@ -40,6 +40,11 @@ Score every deliverable in this packet against the rubric.
 - Run nothing: no builds, no tests, no executing deliverable code. Change nothing in any
   workspace.
 - Score each criterion as an integer from 0 to its `max`, with a short note saying why.
+- The rubric is the whole standard. Score what it asks and nothing else: add no criterion of
+  your own, and do not raise or lower a score because the work is not the way you would have
+  done it. Where the rubric is silent, a deliverable is neither rewarded nor penalised.
+- A note says what the deliverable did and how the score follows from the criterion. State no
+  preference and give no advice: the report is read as evidence, not as your review.
 - Judge the work, not its length. Do not try to work out who or what built a deliverable.
 - Do not read `<RUN>/private/`, `<RUN>/scorecards/`, `<RUN>/validators/` or another judge's
   packet.

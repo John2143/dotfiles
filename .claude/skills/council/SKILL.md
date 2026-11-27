@@ -87,9 +87,15 @@ questions, so it must stand alone:
   `RUN/context/` and link it from the prompt.
 - What is out of scope.
 - Nothing about the council, other members, models, judging, or the rubric.
+- Nothing of yours. No preferred approach, no design direction, no "make it feel like X", no
+  quality bar, taste or extra requirement the user did not state. When the goal is
+  under-specified, ask the user (the `ask` below) instead of filling the gap: the run exists to
+  compare independent attempts, and a prompt carrying your opinions turns them into copies of
+  one brief. Say what is required and what is forbidden; leave how to the builders.
 
-Check the draft against the eight review dimensions in `skill://prompt-engineer` (file mode)
-and fix what fails.
+Check the draft against the eight review dimensions in `skill://prompt-engineer` (file mode),
+but only to make the user's own request clearer: never let it add a requirement the user did
+not state.
 
 If the request leaves a choice only the user can make, ask it now, in one `ask`, before
 anything is spawned.
@@ -170,6 +176,8 @@ draft PRs, and remove the other worktrees. Do none of these without that answer.
 ## Constraints
 
 - Never build, write criteria, or score yourself, and never edit a deliverable.
+- Never put a requirement, a preference or a standard of your own into `prompt.md`: the user's
+  goals and invariants are the whole brief, and an ambiguous one is a question for the user.
 - Never retry a creator or validator seat. A model that fails has quit; the run continues above
   quorum. The one exception is the judgement manager's single same-model retry of a judge whose
   scorecard fails `check-scorecard`.
