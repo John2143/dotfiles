@@ -78,6 +78,21 @@
   # dongle's power control: the parameter covers the driver, the rule covers the
   # device node across re-plugs.
   boot.kernelParams = ["btusb.enable_autosuspend=0"];
+
+  # The same dongle has a second fault: its isochronous interface exposes alt
+  # 0-5 and no alt 6, so btusb_work() falls past alt 6 straight to alt 1 (9
+  # byte packets), and wideband speech comes back as "corrupted SCO packet".
+  # The patch prefers the largest altsetting the adapter actually has (alt 5,
+  # 49 bytes). It is an RFC from linux-bluetooth, not upstream as of 6.18.64,
+  # so drop it once a real fix lands. Costs a kernel rebuild plus every
+  # out-of-tree module (nvidia legacy_580, arch-hardware-configuration.nix).
+  boot.kernelPatches = [
+    {
+      name = "btusb-rtl8761b-alt-5-4";
+      patch = ./patches/btusb-rtl8761b-alt-5-4.patch;
+    }
+  ];
+
   services.udev.extraRules = ''
     ACTION=="add|change", SUBSYSTEM=="usb", ATTR{idVendor}=="0b05", ATTR{idProduct}=="190e", TEST=="power/control", ATTR{power/control}="on"
 

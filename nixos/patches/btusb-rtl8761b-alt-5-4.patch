@@ -1,0 +1,23 @@
+--- a/drivers/bluetooth/btusb.c
++++ b/drivers/bluetooth/btusb.c
+@@ -2430,9 +2430,20 @@
+ 			 * data satisfy 60 bytes), requiring
+ 			 * MTU >= 3 (packets) * 25 (size) - 3 (headers) = 72
+ 			 * see also Core spec 5, vol 4, B 2.1.1 & Table 2.1.
++			 *
++			 * Some adapters have neither alt 6 nor a usable alt 3 but do
++			 * expose alt 5 or 4. The ASUS USB-BT500 (0b05:190e, RTL8761BU)
++			 * stops at alt 5 (49 byte packets); falling straight to alt 1
++			 * (9 bytes) cannot carry a WBS frame and the controller answers
++			 * with "corrupted SCO packet". Prefer the largest setting the
++			 * adapter actually has.
+ 			 */
+ 			if (btusb_find_altsetting(data, 6))
+ 				new_alts = 6;
++			else if (btusb_find_altsetting(data, 5))
++				new_alts = 5;
++			else if (btusb_find_altsetting(data, 4))
++				new_alts = 4;
+ 			else if (btusb_find_altsetting(data, 3) &&
+ 				 hdev->sco_mtu >= 72 &&
+ 				 test_bit(BTUSB_USE_ALT3_FOR_WBS, &data->flags))
