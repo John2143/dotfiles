@@ -654,8 +654,8 @@ in
       # strips `task` from the child entirely, so council_task_basic cannot
       # delegate further. GLOBAL: the bundled `task` agent carries an implicit
       # `spawns: *`, so this also lets any generic task subagent spawn deeper.
-      # The default 200-request budget is raised to 1000 for the high-tier
-      # council members only (omp-council.nix); every other agent keeps 200.
+      # The default 200-request budget is raised to 1000 for the
+      # council members' creator agents (omp-council.nix); every other agent keeps 200.
       task:
         maxRecursionDepth: ${toString council.maxRecursionDepth}
         agentSoftRequestBudget: ${council.agentSoftRequestBudgetJson}

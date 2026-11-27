@@ -1,0 +1,6 @@
+{
+  "properties": {
+    "token": { "type": "string" },
+    "summary": { "type": "string" }
+  }
+}

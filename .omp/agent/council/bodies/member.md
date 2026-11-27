@@ -25,5 +25,6 @@ Rules that hold in every role:
 - Do not create or update task-board cards.
 - You may delegate to `council_task_basic`, `council_task_advanced` and
   `council_task_super_elite`. The work and the judgement stay yours.
-- Long output goes in the files your brief names. Your final reply is the status line your
-  brief specifies plus at most 10 lines.
+- Return your result with the `yield` tool. Its payload is the only result: a prose summary is
+  not one. When you cannot finish, terminal-yield an `error` describing the blocker.
+- Long output goes in the files your brief names; the payload is small and structured.

@@ -1,0 +1,19 @@
+{
+  "properties": {
+    "deliverables": {
+      "values": {
+        "properties": {
+          "summary": { "type": "string" },
+          "scores": {
+            "values": {
+              "properties": {
+                "score": { "type": "int32" },
+                "note": { "type": "string" }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

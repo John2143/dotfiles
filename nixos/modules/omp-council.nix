@@ -1,5 +1,5 @@
 # Council agents for the `council` skill (.claude/skills/council). Everything
-# here is generated: 15 task-agent files, one model role per agent, one fallback
+# here is generated: 19 task-agent files, one model role per agent, one fallback
 # chain per agent, and the per-agent request budget. Imported by omp-config.nix.
 {lib}: let
   # ---- configuration: edit here ----
@@ -32,19 +32,23 @@
   # ---- end of configuration ----
 
   body = file: builtins.readFile (../../.omp/agent/council/bodies + "/${file}.md");
-  memberAgent = m: tier: "council_member_${m.name}_${tier}";
+  schema = name: builtins.fromJSON (builtins.readFile (../../.omp/agent/council/schemas + "/${name}.json"));
+  # role: creator, validator or judge. One agent carries one output schema, so
+  # every member gets one agent per role.
+  memberAgent = m: role: "council_member_${m.name}_${role}";
   taskSpawns = ["council_task_basic" "council_task_advanced" "council_task_super_elite"];
 
   memberAgents = lib.concatMap (m:
-    map (tier: {
-      name = memberAgent m tier;
-      description = "Council member bound to one model and thinking level. Produces a deliverable, validation criteria, or a scorecard for the council skill. Spawned only by council managers.";
+    map (role: {
+      name = memberAgent m role;
+      description = "Council member bound to one model and one role. Builds one deliverable, writes validation criteria, or scores anonymised deliverables for the council skill. Spawned only by council managers.";
       spawns = taskSpawns;
       inherit (m) model;
-      level = m.${tier};
+      level = if role == "creator" then m.high else m.low;
+      schema = role;
       fallback = [];
       body = body "member";
-    }) ["high" "low"])
+    }) ["creator" "validator" "judge"])
   members;
 
   taskAgents = [
@@ -77,22 +81,23 @@
   managerAgents = [
     {
       name = "council_manager_creator";
-      description = "Creator Council manager: gives one prompt to every high-tier council member, records each deliverable's workspace and notes. Spawned only by the council skill.";
-      spawns = map (m: memberAgent m "high") members;
+      description = "Creator Council manager: gives one prompt to every council member's creator agent and records each deliverable's workspace and notes. Spawned only by the council skill.";
+      spawns = map (m: memberAgent m "creator") members;
       inherit (managers.creator) model level fallback;
       body = body "manager_creator";
     }
     {
       name = "council_manager_validator";
-      description = "Validator Council manager: collects validation criteria from every low-tier council member and merges them into one rubric. Spawned only by the council skill.";
-      spawns = map (m: memberAgent m "low") members;
+      description = "Validator Council manager: collects validation criteria from every council member's validator agent and merges them into one rubric. Spawned only by the council skill.";
+      spawns = map (m: memberAgent m "validator") members;
       inherit (managers.validator) model level fallback;
+      schema = "rubric";
       body = body "manager_validator";
     }
     {
       name = "council_manager_judgement";
-      description = "Judgement Council manager: gathers run-time evidence, has every low-tier council member score the anonymised deliverables, and runs the report script. Spawned only by the council skill.";
-      spawns = (map (m: memberAgent m "low") members) ++ ["council_prepare_results"];
+      description = "Judgement Council manager: gathers run-time evidence, has every council member's judge agent score the anonymised deliverables, and runs the report script. Spawned only by the council skill.";
+      spawns = (map (m: memberAgent m "judge") members) ++ ["council_prepare_results"];
       inherit (managers.judgement) model level fallback;
       body = body "manager_judgement";
     }
@@ -112,19 +117,24 @@
   # model is a role alias, never a provider/id: a subagent on a role alias takes
   # that role's fallback chain, and an empty chain means "fail instead of
   # switching models" (omp task/executor.ts, resolveSubagentInheritedRetryFallbackChain).
+  # An agent with a schema gets `structured: true` plus a JTD `output`, so it
+  # returns through `yield` even with task.structured off. builtins.toJSON emits
+  # one flow mapping, which the YAML frontmatter loader parses.
   agentFile = a: {
     name = ".omp/agent/agents/${a.name}.md";
     value.text =
-      ''
-        ---
-        name: ${a.name}
-        description: ${builtins.toJSON a.description}
-        spawns: ${lib.concatStringsSep ", " a.spawns}
-        model: "@${a.name}"
-        thinking-level: ${a.level}
-        ---
-
-      ''
+      lib.concatStringsSep "\n" ([
+          "---"
+          "name: ${a.name}"
+          "description: ${builtins.toJSON a.description}"
+          "spawns: ${lib.concatStringsSep ", " a.spawns}"
+          "model: \"@${a.name}\""
+          "thinking-level: ${a.level}"
+        ]
+        ++ lib.optional (a ? schema) "structured: true"
+        ++ lib.optional (a ? schema) "output: ${builtins.toJSON (schema a.schema)}"
+        ++ ["---" ""])
+      + "\n"
       + a.body;
   };
 
@@ -133,8 +143,9 @@
     prepare_agent = prepareAgent.name;
     members = map (m: {
       inherit (m) name trust;
-      high_agent = memberAgent m "high";
-      low_agent = memberAgent m "low";
+      creator_agent = memberAgent m "creator";
+      validator_agent = memberAgent m "validator";
+      judge_agent = memberAgent m "judge";
     }) members;
   };
 in {
@@ -156,7 +167,7 @@ in {
     lib.concatStringsSep "\n    "
     (map (a: "${builtins.toJSON a.name}: ${builtins.toJSON a.fallback}") agents);
   agentSoftRequestBudgetJson = builtins.toJSON (lib.listToAttrs (map (m: {
-      name = memberAgent m "high";
+      name = memberAgent m "creator";
       value = creatorRequestBudget;
     })
     members));
