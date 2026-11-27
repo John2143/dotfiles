@@ -1040,7 +1040,7 @@
     script = ''
       set -euo pipefail
       store=/tank/seaweedfs-data
-      collections="imagehost-files edge-tofu-state rots4-replays"
+      collections="imagehost-files litellm-spend-logs history-old rots4-releases edge-tofu-state rots4-replays"
       snap=$(ls -1d "$store"/.zfs/snapshot/autosnap_*_daily 2>/dev/null | sort | tail -1 || true)
       if [ -z "$snap" ] || [ ! -d "$snap" ]; then
         echo "offsite-seaweedfs: no daily snapshot under $store/.zfs/snapshot"; exit 1
