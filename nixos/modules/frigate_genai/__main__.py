@@ -16,7 +16,7 @@ from frigate_genai.worker import async_main  # noqa: E402
 def main():
     parser = argparse.ArgumentParser(description="Frigate GenAI Sidecar")
     parser.add_argument("--mode", default="triggers",
-                        choices=["triggers", "ffmpeg", "genai-gemini", "genai-ollama", "mqtt-listener", "dashboard"])
+                        choices=["triggers", "ffmpeg", "genai-ollama", "dispatcher", "mqtt-listener", "dashboard"])
     args = parser.parse_args()
 
     prompts_path = "/var/lib/frigate-genai-sidecar/prompts.json"

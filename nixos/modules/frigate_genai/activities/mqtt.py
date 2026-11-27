@@ -1,4 +1,9 @@
-"""MQTT client and workflow-start helpers for frigate-genai."""
+"""MQTT client for frigate-genai.
+
+The listener no longer starts work for every finished event — that is the
+dispatcher's job. It only watches for the `redo` trigger an operator writes
+into an event's description, and honours the pause flags.
+"""
 
 import asyncio
 import json
@@ -14,6 +19,10 @@ from frigate_genai.config import TASK_QUEUE, _SEARCH_CAMERA, _SEARCH_LABEL, _SEA
 from frigate_genai.s3_helpers import _s3_get, _s3_put, _stats
 
 log = logging.getLogger("frigate-genai-sidecar")
+
+# Descriptions are published on tracked_object_update; frigate/events carries
+# the tracker state. Both are needed to see an operator's "redo".
+TOPICS = ("frigate/events", "frigate/tracked_object_update")
 
 
 def _start_workflow_sync(event: dict) -> None:
@@ -41,7 +50,7 @@ def _start_workflow_sync(event: dict) -> None:
             await client.start_workflow(
                 "GenAIWorkflow",
                 input_data,
-                id=f"genai-{event_id}",
+                id=f"genai-{event_id}-re-{int(time.time() * 1000)}",
                 task_queue=TASK_QUEUE,
                 search_attributes=TypedSearchAttributes([
                     SearchAttributePair(_SEARCH_CAMERA, camera),
@@ -74,7 +83,7 @@ def _build_workflow_input(event: dict, bypass_pause: bool = False) -> dict | Non
         if label and _s3_get(f"_state/paused/genai-{label}") is not None:
             log.info("Label pause active for '%s', skipping event %s", label, event.get("id"))
             return None
-    input_data = {
+    return {
         "data_box": event.get("data", {}).get("box"),
         "event_id": event["id"],
         "camera": event.get("camera", ""),
@@ -83,10 +92,12 @@ def _build_workflow_input(event: dict, bypass_pause: bool = False) -> dict | Non
         "end_time": event.get("end_time", event.get("start_time", 0)),
         "prompts_path": "/var/lib/frigate-genai-sidecar/prompts.json",
         "provider_path": "/var/lib/frigate-genai-sidecar/provider.json",
-        "paused-ollama": _s3_get("_state/paused/ollama") is not None,
-        "agentic": True,
     }
-    return input_data
+
+
+def _description(event: dict) -> str:
+    data = event.get("data") or {}
+    return str(data.get("description") or event.get("description") or "").strip().lower()
 
 
 def build_mqtt_client(loop: asyncio.AbstractEventLoop) -> mqtt.Client:
@@ -94,9 +105,10 @@ def build_mqtt_client(loop: asyncio.AbstractEventLoop) -> mqtt.Client:
 
     def on_connect(client, userdata, flags, reason_code, properties=None):
         if reason_code == 0:
-            log.info("MQTT connected, subscribing to frigate/events")
+            log.info("MQTT connected, subscribing to %s", ", ".join(TOPICS))
             _stats["mqtt_connected"] = True
-            client.subscribe("frigate/events")
+            for topic in TOPICS:
+                client.subscribe(topic)
         else:
             log.error("MQTT connection failed: rc=%d", reason_code)
 
@@ -109,33 +121,22 @@ def build_mqtt_client(loop: asyncio.AbstractEventLoop) -> mqtt.Client:
         log.debug("MQTT message on %s: %s", msg.topic, msg.payload[:200])
         try:
             payload = json.loads(msg.payload.decode())
-            event_type = payload.get("type", "")
-            after = payload.get("after", {})
+            after = payload.get("after", {}) or {}
+            before = payload.get("before", {}) or {}
             if not after.get("id"):
                 return
-            eid, camera, label = after["id"], after.get("camera"), after.get("label")
-
-            if event_type == "end" and after.get("has_clip"):
-                log.info("End event: %s (%s/%s)", eid, camera, label)
-                _start_workflow_sync(after)
-                _stats["events_processed"] += 1
-                _stats["last_event"] = eid
-                _s3_put("_state/stats.json", json.dumps(_stats).encode())
-
-            elif event_type == "update":
-                before = payload.get("before", {})
-                def _desc(e):
-                    return ((e.get("data") or {}).get("description") or e.get("description") or "").strip().lower()
-                if _desc(after) == "redo" and _desc(before) != "redo":
-                    after["has_clip"] = True
-                    log.info("Redo trigger: %s (%s/%s)", eid, camera, label)
-                    _start_workflow_sync(after)
-                    _stats["events_processed"] += 1
-                    _stats["last_event"] = eid
-                    _s3_put("_state/stats.json", json.dumps(_stats).encode())
+            if _description(after) != "redo" or _description(before) == "redo":
+                return
+            eid = after["id"]
+            after["has_clip"] = True
+            log.info("Redo trigger: %s (%s/%s)", eid, after.get("camera"), after.get("label"))
+            _start_workflow_sync(after)
+            _stats["events_processed"] += 1
+            _stats["last_event"] = eid
+            _s3_put("_state/stats.json", json.dumps(_stats).encode())
         except json.JSONDecodeError:
             log.debug("Non-JSON MQTT message on %s", msg.topic)
-        except Exception as e:
+        except Exception:
             log.exception("Error in MQTT message handler")
 
     mqtt_host = os.environ.get("MQTT_HOST", "localhost")
@@ -154,7 +155,7 @@ def build_mqtt_client(loop: asyncio.AbstractEventLoop) -> mqtt.Client:
         try:
             client.connect(mqtt_host, mqtt_port, 60)
             break
-        except Exception as e:
+        except Exception:
             log.warning("MQTT connection failed, retrying in 5s...")
             time.sleep(5)
 

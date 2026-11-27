@@ -15,7 +15,7 @@ from temporalio.exceptions import ApplicationError
 
 from frigate_genai.config import FFMPEG_THREADS, _frigate_url
 from frigate_genai.s3_helpers import _s3_event_prefix, _s3_put
-from frigate_genai.activities.genai_turn import _run_with_heartbeat
+from frigate_genai.activities.llm import _run_with_heartbeat
 
 log = logging.getLogger("frigate-genai-sidecar")
 

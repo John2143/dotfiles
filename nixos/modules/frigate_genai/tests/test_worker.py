@@ -1,5 +1,7 @@
-"""Regression: SubAgentWorkflow init_subagent_state_activity is registered
-on model-specific workers, not only the base TASK_QUEUE.
+"""Regression: worker mode registration matches the single-call pipeline —
+the dispatcher owns DrainWorkflow and intake, the triggers worker owns
+GenAIWorkflow, the LLM queue owns the describe activities, and the agent-loop
+modes are gone.
 
 Regression: SIGTERM drains Temporal workers instead of being ignored by PID 1
 (_install_stop_signal_handlers, _run_until_stopped)."""
@@ -21,30 +23,35 @@ from frigate_genai.worker import _install_stop_signal_handlers, _run_until_stopp
 _HANG_TIMEOUT = 3.0
 
 
-class WorkerActivityRegistrationTests(unittest.TestCase):
-    def test_init_subagent_state_on_gemini_and_ollama_workers(self):
-        """init_subagent_state_activity must appear in both genai-gemini
-        and genai-ollama worker activity lists — SubAgentWorkflow runs on
-        the model-specific queue with no explicit task_queue override."""
-        source = Path(__file__).parent.parent / "worker.py"
-        code = source.read_text()
+class WorkerModeRegistrationTests(unittest.TestCase):
+    def setUp(self):
+        self.code = (Path(__file__).parent.parent / "worker.py").read_text()
 
-        # Gemini mode block: find the Worker construction that runs on
-        # GEMINI_TASK_QUEUE and verify its activity list.
-        gemini_block = _block_after(code, "task_queue=GEMINI_TASK_QUEUE,", 20)
-        self.assertIn(
-            "init_subagent_state_activity",
-            gemini_block,
-            "init_subagent_state_activity missing from genai-gemini worker",
-        )
+    def test_dispatcher_owns_drain_and_intake(self):
+        block = _block_after(self.code, "if mode == \"dispatcher\":", 20)
+        self.assertIn("DrainWorkflow", block)
+        for activity in ("collect_scenes_activity", "gate_status_activity",
+                         "finish_drain_activity", "genai_paused_activity",
+                         "label_only_activity"):
+            self.assertIn(activity, block, f"{activity} missing from the dispatcher worker")
 
-        # Same for Ollama.
-        ollama_block = _block_after(code, "task_queue=OLLAMA_TASK_QUEUE,", 20)
-        self.assertIn(
-            "init_subagent_state_activity",
-            ollama_block,
-            "init_subagent_state_activity missing from genai-ollama worker",
-        )
+    def test_triggers_owns_the_description_workflow(self):
+        block = _block_after(self.code, "if mode == \"triggers\":", 12)
+        self.assertIn("GenAIWorkflow", block)
+        self.assertNotIn("AgentSessionWorkflow", block)
+        # record_result must be callable on the workflow's own queue.
+        core = _block_after(self.code, "core_activities = [", 8)
+        self.assertIn("record_result_activity", core)
+
+    def test_llm_queue_owns_the_model_activities(self):
+        block = _block_after(self.code, "elif mode == \"genai-ollama\":", 12)
+        for activity in ("run_describe_scene", "pick_keyframes_activity", "crop_detection_activity"):
+            self.assertIn(activity, block)
+
+    def test_cloud_and_agent_modes_are_gone(self):
+        for gone in ("genai-gemini", "AgentSessionWorkflow", "SubAgentWorkflow",
+                     "run_genai_turn_activity", "init_agent_state_activity"):
+            self.assertNotIn(gone, self.code)
 
 
 def _block_after(code: str, marker: str, line_count: int) -> str:

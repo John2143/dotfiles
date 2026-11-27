@@ -8,19 +8,15 @@ from temporalio.common import RetryPolicy, SearchAttributeKey
 # ── S3 bucket ──────────────────────────────────────────────────────────
 _S3_BUCKET = "frigate-genai"
 
-# ── Agent loop constants ──────────────────────────────────────────────
-MAX_TURNS = 100
-MAX_OUTPUT_TOKENS = 2048
-MAX_TURNS_QUICK = 3
-# Quick-pass labels: high-volume labels get a bounded agent session
-# (max_turns=MAX_TURNS_QUICK) plus a fast-conclusion system prompt.
-QUICK_LABELS = {"car"}
-
 # ── Temporal task queues ──────────────────────────────────────────────
 TASK_QUEUE = "genai-tasks"
 FFMPEG_TASK_QUEUE = "genai-tasks-ffmpeg"
-GEMINI_TASK_QUEUE = "genai-tasks-gemini"
-OLLAMA_TASK_QUEUE = "genai-tasks-ollama"
+# Queue name kept from the Ollama-only era so no manifest/CI rename is needed.
+LLM_TASK_QUEUE = "genai-tasks-ollama"
+# Drains get their own queue: two worker deployments must never both advertise
+# workflow types on one queue, or a task can be routed to a deployment that
+# does not implement it.
+DISPATCHER_TASK_QUEUE = "genai-dispatcher"
 
 # ── ffmpeg ────────────────────────────────────────────────────────────
 # Unset, ffmpeg sizes its decode/filter/encode thread pools to the host CPU
@@ -41,8 +37,6 @@ _SEARCH_DURATION = SearchAttributeKey.for_int("Duration")
 _SEARCH_COST = SearchAttributeKey.for_int("Cost")
 _SEARCH_MODEL = SearchAttributeKey.for_keyword("Model")
 _SEARCH_CONFIDENCE = SearchAttributeKey.for_keyword("Confidence")
-_SEARCH_TRANSCODE = SearchAttributeKey.for_bool("Transcode")
-_SEARCH_TOOL_FAILURES = SearchAttributeKey.for_int("ToolFailures")
 
 # ── Retry policies ────────────────────────────────────────────────────
 _ACTIVITY_RETRY = RetryPolicy(
@@ -67,19 +61,20 @@ _EXTRACT_RETRY = RetryPolicy(
     backoff_coefficient=2.0,
 )
 
+# The description write is the one step whose failure loses the whole scene's
+# work, so it keeps retrying for ~6 h: Frigate restarts, DB migrations and a
+# network blip all fit inside that.
+_DESCRIPTION_RETRY = RetryPolicy(
+    maximum_attempts=24,
+    initial_interval=timedelta(seconds=30),
+    maximum_interval=timedelta(minutes=30),
+    backoff_coefficient=2.0,
+)
+
 # Shorter than terminationGracePeriodSeconds (180) in argo
 # workloads/frigate-genai/*-workerdeployment.yaml, so in-flight activities get
 # 150 s to finish and cancellations are reported before SIGKILL.
 WORKER_GRACEFUL_SHUTDOWN = timedelta(seconds=150)
-
-# ── Image resolution presets ──────────────────────────────────────────
-_RES_LEVELS = {
-    "tiny": 320,
-    "low": 640,
-    "med": 960,
-    "high": 1280,
-    "max": None,  # special-cased: return original size
-}
 
 
 def _frigate_url(path: str = "") -> str:
