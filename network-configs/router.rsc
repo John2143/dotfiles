@@ -197,6 +197,8 @@ add address=192.168.5.41 comment=np2 mac-address=BC:24:11:00:00:41 server=\
     dchp1
 add address=192.168.5.42 comment=np3 mac-address=BC:24:11:00:00:42 server=\
     dchp1
+add address=192.168.5.50 comment=plat-home mac-address=BC:24:11:00:00:50 \
+    server=dchp1
 /ip dhcp-server network
 add address=192.168.1.0/24 dns-server=192.168.5.1 gateway=192.168.1.1
 add address=192.168.5.0/24 dns-server=192.168.5.1 gateway=192.168.5.1 \
@@ -440,7 +442,7 @@ add chain=metallb-in comment="nonprod service /128s" rule=\
 /snmp
 set enabled=yes
 /system clock
-set time-zone-name=America/New_York
+set time-zone-autodetect=no time-zone-name=America/New_York
 /system identity
 set name=router
 /system logging

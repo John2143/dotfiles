@@ -602,6 +602,10 @@ add address=192.168.5.42 address-lists="" agent-circuit-id="" \
     agent-remote-id="" !allow-dual-stack-queue comment=np3 dhcp-option="" \
     disabled=no !insert-queue-before mac-address=BC:24:11:00:00:42 \
     !parent-queue !queue-type server=dchp1
+add address=192.168.5.50 address-lists="" agent-circuit-id="" \
+    agent-remote-id="" !allow-dual-stack-queue comment=plat-home dhcp-option=\
+    "" disabled=no !insert-queue-before mac-address=BC:24:11:00:00:50 \
+    !parent-queue !queue-type server=dchp1
 /ip dhcp-server network
 add address=192.168.1.0/24 caps-manager="" dhcp-option="" dns-server=\
     192.168.5.1 gateway=192.168.1.1 !next-server ntp-server="" wins-server=""
@@ -1010,7 +1014,7 @@ set contact="" enabled=yes engine-id-suffix="" location="" src-address=:: \
     trap-community=public trap-generators=temp-exception trap-target="" \
     trap-version=1 vrf=main
 /system clock
-set time-zone-autodetect=yes time-zone-name=America/New_York
+set time-zone-autodetect=no time-zone-name=America/New_York
 /system clock manual
 set dst-delta=+00:00 dst-end="1970-01-01 00:00:00" dst-start=\
     "1970-01-01 00:00:00" time-zone=+00:00

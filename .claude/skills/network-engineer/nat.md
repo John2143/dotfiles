@@ -23,7 +23,7 @@ other fails silently, with no conntrack entry at the MikroTik.
 | Model / firmware | CR1000B / 3.6.0.2_BD |
 | LAN | 192.168.0.1/24, DHCP pool .100-.169 |
 | WAN | DHCP from ISP |
-| IPv6 | DHCPv6-PD; delegated prefix and LAN prefix change on renumber — re-read the admin panel |
+| IPv6 | DHCPv6-PD — the CR1000B requests a prefix from Verizon; its LAN side offers a single /64 and per-port pinholes, so a downstream router cannot get a delegated prefix (vendor guide §5.0e/5.1e/5.1f; not independently reproduced). Prefix and LAN prefix change on renumber — re-read the admin panel |
 
 Verizon forwards to the gateway `192.168.0.2` (all "Both"): 80, 443, 25, 587, 993, 9987,
 25565, 30033, 51820, and the two gameserver ranges `31000-34999` (ROTS previews) and
