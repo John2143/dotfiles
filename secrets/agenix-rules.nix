@@ -26,6 +26,13 @@ let
   mac = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDOnQAO6xyPOM67ut324LHAm07OQ67bKJ0R9c0aTWA1o jschmidt@DCIL-L562P1Q5NQ-M";
   # macbook is the personal Mac; it receives only the two LLM key files below.
   macbook = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAZ+dJLBD+o5mDZm+YrLZPPdafCXh3g9HNg/rMlPmGmq john@macbook-age";
+  # US platform voters. These are the hosts' SSH host keys
+  # (/etc/ssh/ssh_host_ed25519_key.pub), which is what agenix decrypts with
+  # there. Reinstalling a node changes its key: update it here and re-encrypt
+  # the platform-* secrets.
+  plat-bos = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIHk3vpWH9HSrZN74h6bsoVARm9ZXlf1rVRSJJt4DKZmD root@plat-bos";
+  plat-nyc = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAII8YeDuExqYCvpZs57GEFgNDKBwOWdYY+6gyKhfTWRlH root@plat-nyc";
+  plat-home = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIEDma4sJxZj+d7QD8DBOkGoPAN8KQzV4dDhqPaYFhTQw root@plat-home";
   # generate with `ssh-keygen -f ~/.ssh/age; cat ~/.ssh/age.pub -p` on each host, then paste here
 
   # Collect all keys that should be able to re-encrypt / manage secrets.
@@ -204,4 +211,13 @@ in {
 
   # Read-only Home Assistant account for the home-assistant-engineer skill.
   "ha-aiuser.age".publicKeys = [office arch];
+
+  # k3s cluster token for the US platform cluster: 64 hex characters. It also
+  # seeds the cluster's bootstrap encryption, so it is never rotated in place.
+  #   cd secrets && head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n' | agenix -e platform-k3s-token.age -i ~/.ssh/age
+  "platform-k3s-token.age".publicKeys = [office arch plat-bos plat-nyc plat-home];
+  # etcd snapshot credentials for the B2 bucket public-kube. Format:
+  #   AWS_ACCESS_KEY_ID=<keyID>
+  #   AWS_SECRET_ACCESS_KEY=<applicationKey>
+  "platform-etcd-s3.env.age".publicKeys = [office arch plat-bos plat-nyc plat-home];
 }
