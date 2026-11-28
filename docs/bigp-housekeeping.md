@@ -1,20 +1,22 @@
 # bigp post-rebuild housekeeping
 
-Last updated 2026-09-18.
+Last updated 2026-11-27.
 
-`bigp` is a PowerEdge R740 (service tag `6V3QK93`) running Proxmox VE 9.2.2 on Debian trixie. It was
-rebuilt on 2026-09-17 onto a new BOSS-S1 hardware RAID1 (`bigp_raid`) with a fresh Proxmox install and
-restored `/etc`. This file records the state of the post-rebuild housekeeping items: what is verified
-as already working, what is deliberately left alone, and what is still open.
+`bigp` is a PowerEdge R740 (service tag `6V3QK93`) running Proxmox VE 9.3.1 on kernel
+`7.0.14-30-pve`, Debian trixie. It was rebuilt on 2026-09-17 onto a new BOSS-S1 hardware RAID1
+(`bigp_raid`) with a fresh Proxmox install and restored `/etc`. This file records the state of the
+post-rebuild housekeeping items: what is verified as already working, what is deliberately left alone,
+and what is still open.
 
 ## ZFS scrub/trim — verified working, do not change
 
 `/etc/cron.d/zfsutils-linux` schedules `24 0 1-7 * *` → `/usr/lib/zfs-linux/trim` (TRIM, first
 Sunday) and `24 0 8-14 * *` → `/usr/lib/zfs-linux/scrub` (scrub, second Sunday, gated on
 `date +%w` = 0). `cron` is active and enabled; both helpers are executable. `zpool history tank` shows
-exactly this cadence: `2026-08-09.00:24:02` and `2026-09-13.00:24:02`. Next run: **Sun 2026-10-11
-00:24 EDT**. Systemd's `zfs-scrub-monthly@`/`zfs-scrub-weekly@` timers are deliberately **not** used,
-and cron does not catch up a missed run (a scrub is skipped if the host is down at that minute).
+exactly this cadence: `2026-08-09.00:24:02` and `2026-09-13.00:24:02`; the latest scrub finished
+`Sun 2026-11-08 00:44:35` (repaired 0B, 0 errors). Next run: **Sun 2026-12-13 00:24 EST**.
+Systemd's `zfs-scrub-monthly@`/`zfs-scrub-weekly@` timers are deliberately **not** used, and cron does
+not catch up a missed run (a scrub is skipped if the host is down at that minute).
 
 ## Alerting — currently silent, configuration to apply later
 
@@ -83,208 +85,103 @@ higher-hours member is the one expected to fail first.
 because flashing a live RAID member is riskier than the mismatch; if it is ever aligned, do it on a
 spare, off the array.
 
-## Deferred: Debian package upgrade
+## Package upgrades — PVE 9.3.1 landed 2026-11-27
 
-Procedure to run in a maintenance window — `apt update && apt full-upgrade`, then check whether a new
-kernel arrived (`dpkg -l 'proxmox-kernel*' 'pve-kernel*' | tail -5`) and reboot only if one did.
-Gracefully stop all guests before any reboot (`qm shutdown 105 104 103 102 101 100`, then
-`systemctl reboot`). VMs 100, 101, 103, 104 and 105 have `onboot: 1` and return on their own; VM 102
-(Windows) does not, so start it by hand afterwards. Proxmox packages are deliberately excluded from
-`unattended-upgrades`, which is restricted to the Debian security origin on this host, so PVE and Ceph
-upgrades happen only through this manual procedure.
+`apt full-upgrade` ran on 2026-11-27 and cleared the backlog that the 2026-09-18 source repair created
+(**181** entries then): **174 upgraded, 11 newly installed, 0 removed**. The host is now
+`proxmox-ve 9.3.0` / `pve-manager 9.3.1` on kernel **7.0.14-30-pve**, `pve-qemu-kvm 11.1.3-4`,
+`zfsutils-linux 2.4.4-pve1`, and `apt-get -s full-upgrade` reports `0 upgraded`. Nothing is held back
+any more — the two packages pinned before (`proxmox-kernel-7.0`, `pve-firewall`) moved with the rest.
+PVE packages remain excluded from `unattended-upgrades` (restricted to the Debian security origin), so
+this stays a manual procedure.
 
-Repairing the package sources on 2026-09-18 made the Proxmox stack visible to apt for the first time
-(the previous enterprise-only sources returned 401 with no subscription key), so the pending set is
-much larger than the handful of Debian updates that were visible before. Baseline captured on `bigp`
-with `apt list --upgradable` on **2026-09-18 02:16 EDT**: **181** entries — of the 179 the resolver
-would upgrade, 99 come from the Debian channels, 74 from the Proxmox channels and 6 from
-`trixie-security` alone; 2 are held back (`proxmox-kernel-7.0`, `pve-firewall`). Headline deltas:
-PVE 9.2.2 → 9.2.20, `proxmox-kernel-7.0` 7.0.2-6 → 7.0.14-17 (**a reboot would be required**), and
-Ceph 19.2.3-pve4 → 19.2.6-pve4.
+**Why it happened when it did:** advisory **PSA-2026-00111-1** (2026-11-26, no CVE) — an out-of-bounds
+read in `pvefw-logger` lets a crafted ICMPv6 packet leak host memory into
+`/var/log/pve-firewall.log`. Fixed in **`pve-firewall 6.0.9`**, which is what runs now. There was no
+smaller fix: installing only `pve-firewall` pulls 45 packages including `pve-manager`, because the
+archive has no self-consistent subset.
 
-```
-base-files/stable 13.8+deb13u7 amd64 [upgradable from: 13.8+deb13u5]
-bash/stable 5.2.37-2+b10 amd64 [upgradable from: 5.2.37-2+b9]
-bind9-dnsutils/stable-security 1:9.20.29-1~deb13u1 amd64 [upgradable from: 1:9.20.21-1~deb13u1]
-bind9-host/stable-security 1:9.20.29-1~deb13u1 amd64 [upgradable from: 1:9.20.21-1~deb13u1]
-bind9-libs/stable-security 1:9.20.29-1~deb13u1 amd64 [upgradable from: 1:9.20.21-1~deb13u1]
-bsdextrautils/stable,stable-security 2.41.5-0+deb13u1 amd64 [upgradable from: 2.41-5]
-bsdutils/stable,stable-security 1:2.41.5-0+deb13u1 amd64 [upgradable from: 1:2.41-5]
-busybox/stable 1:1.37.0-6+b9 amd64 [upgradable from: 1:1.37.0-6+b8]
-ceph-common/stable,stable 19.2.6-pve4 amd64 [upgradable from: 19.2.3-pve4]
-ceph-fuse/stable,stable 19.2.6-pve4 amd64 [upgradable from: 19.2.3-pve4]
-chrony/stable 4.8-4~bpo13+2 amd64 [upgradable from: 4.6.1-3+deb13u1]
-corosync/stable 3.1.10-pve3 amd64 [upgradable from: 3.1.10-pve2]
-curl/stable 8.14.1-2+deb13u5 amd64 [upgradable from: 8.14.1-2+deb13u3]
-dhcpcd-base/stable 1:10.1.0-11+deb13u4 amd64 [upgradable from: 1:10.1.0-11+deb13u2]
-dirmngr/stable 2.4.7-21+deb13u1+b5 amd64 [upgradable from: 2.4.7-21+deb13u1+b3]
-e2fsprogs/stable 1.47.2-3+b12 amd64 [upgradable from: 1.47.2-3+b11]
-eject/stable,stable-security 2.41.5-0+deb13u1 amd64 [upgradable from: 2.41-5]
-fdisk/stable,stable-security 2.41.5-0+deb13u1 amd64 [upgradable from: 2.41-5]
-frr-pythontools/stable 10.6.1-1+pve3 all [upgradable from: 10.6.1-1+pve2]
-frr/stable 10.6.1-1+pve3 amd64 [upgradable from: 10.6.1-1+pve2]
-gpg-agent/stable 2.4.7-21+deb13u1+b5 amd64 [upgradable from: 2.4.7-21+deb13u1+b3]
-gpgconf/stable 2.4.7-21+deb13u1+b5 amd64 [upgradable from: 2.4.7-21+deb13u1+b3]
-gpgsm/stable 2.4.7-21+deb13u1+b5 amd64 [upgradable from: 2.4.7-21+deb13u1+b3]
-gpg/stable 2.4.7-21+deb13u1+b5 amd64 [upgradable from: 2.4.7-21+deb13u1+b3]
-gzip/stable 1.13-1+deb13u1 amd64 [upgradable from: 1.13-1]
-krb5-locales/stable,stable-security 1.21.3-5+deb13u1 all [upgradable from: 1.21.3-5]
-libasound2-data/stable 1.2.14-1+deb13u1 all [upgradable from: 1.2.14-1]
-libasound2t64/stable 1.2.14-1+deb13u1 amd64 [upgradable from: 1.2.14-1]
-libaudit1/stable 1:4.0.2-2+deb13u1 amd64 [upgradable from: 1:4.0.2-2+b2]
-libaudit-common/stable 1:4.0.2-2+deb13u1 all [upgradable from: 1:4.0.2-2]
-libblkid1/stable,stable-security 2.41.5-0+deb13u1 amd64 [upgradable from: 2.41-5]
-libbytes-random-secure-perl/stable 0.29-4~deb13u1 all [upgradable from: 0.29-3]
-libc6/stable 2.41-12+deb13u4 amd64 [upgradable from: 2.41-12+deb13u3]
-libcap2-bin/stable 1:2.75-10+deb13u1+b3 amd64 [upgradable from: 1:2.75-10+deb13u1+b1]
-libcap2/stable 1:2.75-10+deb13u1+b3 amd64 [upgradable from: 1:2.75-10+deb13u1+b1]
-libc-bin/stable 2.41-12+deb13u4 amd64 [upgradable from: 2.41-12+deb13u3]
-libcephfs2/stable,stable 19.2.6-pve4 amd64 [upgradable from: 19.2.3-pve4]
-libcfg7/stable 3.1.10-pve3 amd64 [upgradable from: 3.1.10-pve2]
-libc-l10n/stable 2.41-12+deb13u4 all [upgradable from: 2.41-12+deb13u3]
-libcmap4/stable 3.1.10-pve3 amd64 [upgradable from: 3.1.10-pve2]
-libcom-err2/stable 1.47.2-3+b12 amd64 [upgradable from: 1.47.2-3+b11]
-libcorosync-common4/stable 3.1.10-pve3 amd64 [upgradable from: 3.1.10-pve2]
-libcpg4/stable 3.1.10-pve3 amd64 [upgradable from: 3.1.10-pve2]
-libcurl3t64-gnutls/stable 8.14.1-2+deb13u5 amd64 [upgradable from: 8.14.1-2+deb13u3]
-libcurl4t64/stable 8.14.1-2+deb13u5 amd64 [upgradable from: 8.14.1-2+deb13u3]
-libevent-2.1-7t64/stable-security 2.1.13-stable-1~deb13u1 amd64 [upgradable from: 2.1.12-stable-10+b1]
-libevent-core-2.1-7t64/stable-security 2.1.13-stable-1~deb13u1 amd64 [upgradable from: 2.1.12-stable-10+b1]
-libexpat1/stable,stable-security 2.8.3-1~deb13u1 amd64 [upgradable from: 2.7.1-2]
-libext2fs2t64/stable 1.47.2-3+b12 amd64 [upgradable from: 1.47.2-3+b11]
-libfdisk1/stable,stable-security 2.41.5-0+deb13u1 amd64 [upgradable from: 2.41-5]
-libgbm1/stable 25.0.7-2+deb13u1 amd64 [upgradable from: 25.0.7-2]
-libgcrypt20/stable,stable-security 1.11.0-7+deb13u1 amd64 [upgradable from: 1.11.0-7]
-libglib2.0-0t64/stable 2.84.4-3~deb13u5 amd64 [upgradable from: 2.84.4-3~deb13u3]
-libgraphite2-3/stable 1.3.14-2+deb13u1 amd64 [upgradable from: 1.3.14-2+b1]
-libgssapi-krb5-2/stable,stable-security 1.21.3-5+deb13u1 amd64 [upgradable from: 1.21.3-5]
-libgstreamer-plugins-base1.0-0/stable-security 1.26.2-1+deb13u2 amd64 [upgradable from: 1.26.2-1+deb13u1]
-libhtml-parser-perl/stable 3.83-2~deb13u1 amd64 [upgradable from: 3.83-1+b2]
-libhttp-daemon-perl/stable,stable-security 6.16-1+deb13u1 all [upgradable from: 6.16-1]
-libjs-extjs/stable 7.0.0-7 all [upgradable from: 7.0.0-5]
-libk5crypto3/stable,stable-security 1.21.3-5+deb13u1 amd64 [upgradable from: 1.21.3-5]
-libknet1t64/stable 1.35-pve2 amd64 [upgradable from: 1.31-pve1]
-libkrb5-3/stable,stable-security 1.21.3-5+deb13u1 amd64 [upgradable from: 1.21.3-5]
-libkrb5support0/stable,stable-security 1.21.3-5+deb13u1 amd64 [upgradable from: 1.21.3-5]
-liblastlog2-2/stable,stable-security 2.41.5-0+deb13u1 amd64 [upgradable from: 2.41-5]
-libldb2/stable 2:2.11.0+samba4.22.11+dfsg-0+deb13u1 amd64 [upgradable from: 2:2.11.0+samba4.22.8+dfsg-0+deb13u1]
-liblzma5/stable 5.8.1-1+deb13u1 amd64 [upgradable from: 5.8.1-1]
-libmount1/stable,stable-security 2.41.5-0+deb13u1 amd64 [upgradable from: 2.41-5]
-libnet-dns-perl/stable,stable-security 1.56-0+deb13u1 all [upgradable from: 1.50-1]
-libnozzle1t64/stable 1.35-pve2 amd64 [upgradable from: 1.31-pve1]
-libnss3/stable,stable-security 2:3.110-1+deb13u4 amd64 [upgradable from: 2:3.110-1+deb13u1]
-libnvpair3linux/stable 2.4.4-pve1 amd64 [upgradable from: 2.4.2-pve1]
-libpcre2-16-0/stable 10.46-1~deb13u2 amd64 [upgradable from: 10.46-1~deb13u1]
-libpcre2-8-0/stable 10.46-1~deb13u2 amd64 [upgradable from: 10.46-1~deb13u1]
-libpcre2-posix3/stable 10.46-1~deb13u2 amd64 [upgradable from: 10.46-1~deb13u1]
-libperl5.40/stable 5.40.1-6+deb13u1 amd64 [upgradable from: 5.40.1-6]
-libproxmox-acme-perl/stable 1.7.2 all [upgradable from: 1.7.1]
-libproxmox-acme-plugins/stable 1.7.2 all [upgradable from: 1.7.1]
-libproxmox-backup-qemu0/stable 2.0.3 amd64 [upgradable from: 2.0.2]
-libpve-access-control/stable 9.1.2 all [upgradable from: 9.1.1]
-libpve-apiclient-perl/stable 3.4.3 all [upgradable from: 3.4.2]
-libpve-cluster-api-perl/stable 9.1.6 all [upgradable from: 9.1.5]
-libpve-cluster-perl/stable 9.1.6 all [upgradable from: 9.1.5]
-libpve-common-perl/stable 9.2.2 all [upgradable from: 9.1.12]
-libpve-guest-common-perl/stable 6.0.5 all [upgradable from: 6.0.3]
-libpve-network-api-perl/stable 1.6.7 all [upgradable from: 1.6.5]
-libpve-network-perl/stable 1.6.7 all [upgradable from: 1.6.5]
-libpve-notify-perl/stable 9.1.6 all [upgradable from: 9.1.5]
-libpve-storage-perl/stable 9.1.10 all [upgradable from: 9.1.5]
-libpython3.13-minimal/stable 3.13.5-2+deb13u5 amd64 [upgradable from: 3.13.5-2+deb13u2]
-libpython3.13-stdlib/stable 3.13.5-2+deb13u5 amd64 [upgradable from: 3.13.5-2+deb13u2]
-libquorum5/stable 3.1.10-pve3 amd64 [upgradable from: 3.1.10-pve2]
-librabbitmq4/stable,stable-security 0.15.0-1+deb13u2 amd64 [upgradable from: 0.15.0-1]
-librados2-perl/stable 1.5.1 amd64 [upgradable from: 1.5.0]
-librados2/stable,stable 19.2.6-pve4 amd64 [upgradable from: 19.2.3-pve4]
-libradosstriper1/stable,stable 19.2.6-pve4 amd64 [upgradable from: 19.2.3-pve4]
-librbd1/stable,stable 19.2.6-pve4 amd64 [upgradable from: 19.2.3-pve4]
-librgw2/stable,stable 19.2.6-pve4 amd64 [upgradable from: 19.2.3-pve4]
-libslirp0/stable 4.8.0-1+deb13u1 amd64 [upgradable from: 4.8.0-1+b1]
-libsmartcols1/stable,stable-security 2.41.5-0+deb13u1 amd64 [upgradable from: 2.41-5]
-libsmbclient0/stable 2:4.22.11+dfsg-0+deb13u1 amd64 [upgradable from: 2:4.22.8+dfsg-0+deb13u1]
-libsqlite3-0/stable 3.46.1-7+deb13u2 amd64 [upgradable from: 3.46.1-7+deb13u1]
-libss2/stable 1.47.2-3+b12 amd64 [upgradable from: 1.47.2-3+b11]
-libssh2-1t64/stable 1.11.1-1+deb13u2 amd64 [upgradable from: 1.11.1-1]
-libssl3t64/stable,stable-security 3.5.7-1~deb13u2 amd64 [upgradable from: 3.5.6-1~deb13u1]
-libtalloc2/stable 2:2.4.3+samba4.22.11+dfsg-0+deb13u1 amd64 [upgradable from: 2:2.4.3+samba4.22.8+dfsg-0+deb13u1]
-libtasn1-6/stable 4.20.0-2+deb13u1 amd64 [upgradable from: 4.20.0-2]
-libtdb1/stable 2:1.4.13+samba4.22.11+dfsg-0+deb13u1 amd64 [upgradable from: 2:1.4.13+samba4.22.8+dfsg-0+deb13u1]
-libtevent0t64/stable 2:0.16.2+samba4.22.11+dfsg-0+deb13u1 amd64 [upgradable from: 2:0.16.2+samba4.22.8+dfsg-0+deb13u1]
-libunbound8/stable,stable-security 1.22.0-2+deb13u3 amd64 [upgradable from: 1.22.0-2+deb13u2]
-libuuid1/stable,stable-security 2.41.5-0+deb13u1 amd64 [upgradable from: 2.41-5]
-libuutil3linux/stable 2.4.4-pve1 amd64 [upgradable from: 2.4.2-pve1]
-libvotequorum8/stable 3.1.10-pve3 amd64 [upgradable from: 3.1.10-pve2]
-libwbclient0/stable 2:4.22.11+dfsg-0+deb13u1 amd64 [upgradable from: 2:4.22.8+dfsg-0+deb13u1]
-libxml2/stable 2.12.7+dfsg+really2.9.14-2.1+deb13u3 amd64 [upgradable from: 2.12.7+dfsg+really2.9.14-2.1+deb13u2]
-libxml-libxml-perl/stable 2.0207+dfsg+really+2.0134-5+deb13u1 amd64 [upgradable from: 2.0207+dfsg+really+2.0134-5+b2]
-libzfs7linux/stable 2.4.4-pve1 amd64 [upgradable from: 2.4.2-pve1]
-libzpool7linux/stable 2.4.4-pve1 amd64 [upgradable from: 2.4.2-pve1]
-locales/stable 2.41-12+deb13u4 all [upgradable from: 2.41-12+deb13u3]
-login/stable,stable-security 1:4.16.0-2+really2.41.5-0+deb13u1 amd64 [upgradable from: 1:4.16.0-2+really2.41-5]
-logsave/stable 1.47.2-3+b12 amd64 [upgradable from: 1.47.2-3+b11]
-mesa-libgallium/stable 25.0.7-2+deb13u1 amd64 [upgradable from: 25.0.7-2]
-mount/stable,stable-security 2.41.5-0+deb13u1 amd64 [upgradable from: 2.41-5]
-novnc-pve/stable 1.7.0-2 all [upgradable from: 1.7.0-1]
-openssl-provider-legacy/stable,stable-security 3.5.7-1~deb13u2 amd64 [upgradable from: 3.5.6-1~deb13u1]
-openssl/stable,stable-security 3.5.7-1~deb13u2 amd64 [upgradable from: 3.5.6-1~deb13u1]
-perl-base/stable 5.40.1-6+deb13u1 amd64 [upgradable from: 5.40.1-6]
-perl-modules-5.40/stable 5.40.1-6+deb13u1 all [upgradable from: 5.40.1-6]
-perl/stable 5.40.1-6+deb13u1 amd64 [upgradable from: 5.40.1-6]
-postfix/stable,stable-security 3.10.13-0+deb13u1 amd64 [upgradable from: 3.10.5-1~deb13u1]
-proxmox-backup-client/stable 4.2.6-1 amd64 [upgradable from: 4.2.0-1]
-proxmox-backup-file-restore/stable 4.2.6-1 amd64 [upgradable from: 4.2.0-1]
-proxmox-enterprise-support-keyring/stable 1.1 all [upgradable from: 1.0]
-proxmox-kernel-7.0/stable 7.0.14-17 amd64 [upgradable from: 7.0.2-6]
-proxmox-kernel-helper/stable 9.2.0 all [upgradable from: 9.1.0+fde2]
-proxmox-mini-journalreader/stable 1.7 amd64 [upgradable from: 1.6]
-proxmox-widget-toolkit/stable 5.2.8 all [upgradable from: 5.2.2]
-pve-cluster/stable 9.1.6 amd64 [upgradable from: 9.1.5]
-pve-container/stable 6.1.14 all [upgradable from: 6.1.10]
-pve-docs/stable 9.2.11 all [upgradable from: 9.2.1]
-pve-edk2-firmware-aarch64/stable 4.2026.08-1 all [upgradable from: 4.2025.05-2]
-pve-edk2-firmware-legacy/stable 4.2026.08-1 all [upgradable from: 4.2025.05-2]
-pve-edk2-firmware-ovmf/stable 4.2026.08-1 all [upgradable from: 4.2025.05-2]
-pve-edk2-firmware/stable 4.2026.08-1 all [upgradable from: 4.2025.05-2]
-pve-firewall/stable 6.0.6 amd64 [upgradable from: 6.0.4]
-pve-firmware/stable 3.18-6 all [upgradable from: 3.18-3]
-pve-ha-manager/stable 5.2.5 amd64 [upgradable from: 5.2.4]
-pve-i18n/stable 3.10.0 all [upgradable from: 3.7.4]
-pve-manager/stable 9.2.20 all [upgradable from: 9.2.2]
-pve-qemu-kvm/stable 11.0.3-3 amd64 [upgradable from: 11.0.0-3]
-pve-xtermjs/stable 6.0.0-2 all [upgradable from: 6.0.0-1]
-pve-yew-mobile-gui/stable 0.8.0 amd64 [upgradable from: 0.7.0]
-pve-yew-mobile-i18n/stable 3.10.0 all [upgradable from: 3.7.4]
-python3.13-minimal/stable 3.13.5-2+deb13u5 amd64 [upgradable from: 3.13.5-2+deb13u2]
-python3.13/stable 3.13.5-2+deb13u5 amd64 [upgradable from: 3.13.5-2+deb13u2]
-python3-ceph-argparse/stable,stable 19.2.6-pve4 all [upgradable from: 19.2.3-pve4]
-python3-ceph-common/stable,stable 19.2.6-pve4 all [upgradable from: 19.2.3-pve4]
-python3-cephfs/stable,stable 19.2.6-pve4 amd64 [upgradable from: 19.2.3-pve4]
-python3-idna/stable 3.10-1+deb13u1 all [upgradable from: 3.10-1]
-python3-rados/stable,stable 19.2.6-pve4 amd64 [upgradable from: 19.2.3-pve4]
-python3-rbd/stable,stable 19.2.6-pve4 amd64 [upgradable from: 19.2.3-pve4]
-python3-rgw/stable,stable 19.2.6-pve4 amd64 [upgradable from: 19.2.3-pve4]
-python3-urllib3/stable,stable-security 2.3.0-3+deb13u2 all [upgradable from: 2.3.0-3+deb13u1]
-qemu-server/stable 9.2.8 amd64 [upgradable from: 9.1.15]
-rsync/stable 3.4.1+ds1-5+deb13u4 amd64 [upgradable from: 3.4.1+ds1-5+deb13u2]
-samba-common/stable 2:4.22.11+dfsg-0+deb13u1 all [upgradable from: 2:4.22.8+dfsg-0+deb13u1]
-samba-libs/stable 2:4.22.11+dfsg-0+deb13u1 amd64 [upgradable from: 2:4.22.8+dfsg-0+deb13u1]
-shim-helpers-amd64-signed/stable 1+16.1+2+pmx1 amd64 [upgradable from: 1+16.1+1+pmx1]
-shim-signed-common/stable 1.51+pmx1+16.1-2+pmx1 all [upgradable from: 1.48+pmx1+16.1-1+pmx1]
-shim-signed/stable 1.51+pmx1+16.1-2+pmx1 amd64 [upgradable from: 1.48+pmx1+16.1-1+pmx1]
-shim-unsigned/stable 16.1-2+pmx1 amd64 [upgradable from: 16.1-1+pmx1]
-smbclient/stable 2:4.22.11+dfsg-0+deb13u1 amd64 [upgradable from: 2:4.22.8+dfsg-0+deb13u1]
-socat/stable 1.8.0.3-1+deb13u1 amd64 [upgradable from: 1.8.0.3-1]
-sqlite3/stable 3.46.1-7+deb13u2 amd64 [upgradable from: 3.46.1-7+deb13u1]
-tzdata/stable 2026c-0+deb13u1 all [upgradable from: 2026b-0+deb13u1]
-util-linux-extra/stable,stable-security 2.41.5-0+deb13u1 amd64 [upgradable from: 2.41-5]
-util-linux/stable,stable-security 2.41.5-0+deb13u1 amd64 [upgradable from: 2.41-5]
-xfsprogs/stable 6.13.0-2+deb13u1 amd64 [upgradable from: 6.13.0-2+b1]
-xz-utils/stable 5.8.1-1+deb13u1 amd64 [upgradable from: 5.8.1-1]
-zfs-initramfs/stable 2.4.4-pve1 all [upgradable from: 2.4.2-pve1]
-zfsutils-linux/stable 2.4.4-pve1 amd64 [upgradable from: 2.4.2-pve1]
-zfs-zed/stable 2.4.4-pve1 amd64 [upgradable from: 2.4.2-pve1]
-```
+**How it was done — two phases, not one window:**
+
+1. *Phase A, live, guests running*: config archive first
+   (`/root/pve-etc-2026-11-27.tgz`, 61 files), then
+   `apt-get -y -o Dpkg::Options::=--force-confold full-upgrade` under
+   `setsid nohup … > /root/apt-upgrade-2026-11-27.log` so a dropped SSH session cannot SIGHUP dpkg.
+   Took 292 s, 944 log lines, no `E:`/`W:` and no conffile prompt. `--force-confold` is needed for
+   `/etc/issue` (`base-files`); there is no `needrestart` on this host. PVE point releases apply live,
+   and the `pve-firewall` postinst restarts `pvefw-logger.service`
+   (`/var/lib/dpkg/info/pve-firewall.postinst:31`) — that restart, not a reboot, is what closes the
+   advisory.
+2. *Phase B, the disruptive part*: guests down, reboot, verify, guests up.
+
+**Reboot procedure that was used (18:41–18:58, ~17 min):**
+
+- Shut guests down in order, each with `--forceStop 1` as the fallback after its timeout:
+  `qm shutdown 102 --timeout 300` (Windows), then 150, 104, 105, 101, then
+  `qm shutdown 100 --timeout 300` (big, ~150 s while k3s stops), then 103. All seven stopped cleanly;
+  none needed the forced stop.
+- Do **not** `kubectl drain big` first: the other nodes cannot absorb its CPU requests, and draining
+  faults the Longhorn instance-manager and its single-replica volumes.
+- `systemctl reboot`. The host was back in **~2 min**; first SSH already reported `7.0.14-30-pve`.
+- `pve-guests.service` autostarted 100, 101, 103, 104, 105 and 150 (all `onboot: 1`, in parallel — no
+  guest has a `startup:` order). **102 (Windows) has no `onboot` and must be started by hand**
+  (`qm start 102`).
+- Verify after the reboot: `uname -r`; `zfs --version` **and** `modinfo -F version zfs` (both must read
+  `2.4.4-pve1` — before the reboot the image was still running module 2.4.2-pve1); `zpool status tank`;
+  `pvesm status`; `systemctl --failed`; `timedatectl show -p NTPSynchronized --value`.
+
+### Do not "fix" the ZFS import units
+
+`tank` is imported **on demand by PVE**, not at boot, and that is the intended design here:
+
+- the pool has `cachefile=none`, so `/etc/zfs/zpool.cache` is 0 bytes, so `zfs-import-cache.service`
+  skips every boot (`ConditionFileNotEmpty` unmet);
+- `zfs-import-scan.service` is disabled by the `50-zfs.preset` default;
+- `PVE::Storage::ZFSPoolPlugin::activate_storage` runs
+  `zpool import -d /dev/disk/by-id/ -o cachefile=none tank` when the first guest touching a `tank`
+  volume starts — it appears in `zpool history tank` seconds after each boot (2026-11-27 18:51:37 the
+  last time).
+
+So `zpool list` legitimately shows nothing until guests are up, and every guest disk lives on `tank`
+(see `qm config <id>`). Enabling the scan unit or writing a cache file is not a bug fix; it changes a
+working design.
+
+### Kernel rollback stays available — do not `zpool upgrade`
+
+`7.0.2-6-pve` is still installed and in the GRUB submenu (*Advanced options for Proxmox VE GNU/Linux*),
+so a bad boot can be reverted from the iDRAC virtual console (`https://192.168.5.254`). That only holds
+while the pool's feature set stays compatible: **never run `zpool upgrade tank`** without first
+deciding to give the old kernel up. The 9.3 opt-ins were likewise left alone — the 7.3 kernel branch is
+not installed and the nftables backend is not enabled.
+
+### Firewall backend on 9.3: still iptables, not nftables
+
+`proxmox-firewall.service` (nftables) is `active`, but it is a no-op: `nft list ruleset` is **empty**,
+`use_nftables` is absent from `/etc/pve/datacenter.cfg`, and policy is still enforced by the `PVEFW-*`
+chains in iptables-legacy (165 of them). "proxmox-firewall is active" does not mean "nftables is in
+use" — check `nft list ruleset`. Taking the 9.3 nftables opt-in is a separate change with its own
+testing.
+
+### What a reboot costs the cluster (observed 2026-11-27)
+
+- `big` was down ~10 min, past the 5 min default toleration, so **212 eviction events** fired and its
+  pods were rescheduled onto arch/closet/nas. They drift back afterwards (36 pods on `big` right after
+  boot, 103 about 40 min later). Expect requests near the ceiling in between — `closet` at 98% CPU,
+  `nas` at 99% memory. Nothing is stuck and nothing is Pending.
+- `tempo-0` crash-looped once because SeaweedFS was not ready yet, then reported
+  `backend-worker: Starting` for ~10 min before settling to `Healthy/Synced`. Do not restart it early;
+  it recovers on its own.
+- `mattermost-db` reads `Suspended` — that is the CNPG hibernation annotation
+  (`cnpg.io/hibernation: on`), not damage.
+- Health checks that actually work: UniFi's UI is on **:11443** (inform agent on :8080), **not** 443.
+
+### Unverified
+
+The PBS **server** version on VM 103 is still unknown: `root@192.168.5.20` refuses key auth and
+`/api2/json/version` needs credentials. The host side is `proxmox-backup-client 4.2.14-1`, and a
+`vzdump 105` snapshot backup to `pbs` succeeded on 2026-11-27, so the path works — but the server's own
+version (the subject of PSA-2026-00086-1) has never been read.
+
 
 ## Open hardware items
 
