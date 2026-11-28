@@ -25,6 +25,11 @@ DISPATCHER_TASK_QUEUE = "genai-dispatcher"
 # Matches resources.limits.cpu in argo workloads/frigate-genai/ffmpeg-workerdeployment.yaml.
 FFMPEG_THREADS = "4"
 
+# ── Models ────────────────────────────────────────────────────────────
+# Default lives with the activity that selects a model; the strong one is
+# needed by the backlog too, which must not import a workflow module.
+STRONG_MODEL = "ollama/gemma4:26b"
+
 # ── Worker deployment identity ────────────────────────────────────────
 DEPLOYMENT_NAME = os.environ.get("TEMPORAL_DEPLOYMENT_NAME", "local-dev")
 BUILD_ID = os.environ.get("TEMPORAL_WORKER_BUILD_ID", "local-dev")
@@ -37,6 +42,14 @@ _SEARCH_DURATION = SearchAttributeKey.for_int("Duration")
 _SEARCH_COST = SearchAttributeKey.for_int("Cost")
 _SEARCH_MODEL = SearchAttributeKey.for_keyword("Model")
 _SEARCH_CONFIDENCE = SearchAttributeKey.for_keyword("Confidence")
+# Admission ranks queued scenes with these. Keyword, not Int: priority is
+# categorical (p0..p3) and the namespace's three custom Int attributes
+# (Duration, Cost, ToolFailures) stay as they are.
+_SEARCH_SCENE_PRIORITY = SearchAttributeKey.for_keyword("ScenePriority")
+# Labels of a queued scene, comma-joined. Read back from the listing so
+# admission can hold a paused label without an RPC per candidate; never
+# queried.
+_SEARCH_SCENE_LABELS = SearchAttributeKey.for_keyword("SceneLabels")
 
 # ── Retry policies ────────────────────────────────────────────────────
 _ACTIVITY_RETRY = RetryPolicy(

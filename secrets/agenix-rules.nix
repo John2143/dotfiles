@@ -216,7 +216,7 @@ in {
   # seeds the cluster's bootstrap encryption, so it is never rotated in place.
   #   cd secrets && head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n' | agenix -e platform-k3s-token.age -i ~/.ssh/age
   "platform-k3s-token.age".publicKeys = [office arch plat-bos plat-nyc plat-home];
-  # etcd snapshot credentials for the B2 bucket public-kube. Format:
+  # etcd snapshot credentials for the B2 bucket 2143-labs-public-argo. Format:
   #   AWS_ACCESS_KEY_ID=<keyID>
   #   AWS_SECRET_ACCESS_KEY=<applicationKey>
   "platform-etcd-s3.env.age".publicKeys = [office arch plat-bos plat-nyc plat-home];

@@ -10,10 +10,9 @@ from datetime import timedelta
 
 from temporalio import workflow
 from temporalio.common import SearchAttributePair
-from temporalio.workflow import ParentClosePolicy
 
 from frigate_genai.config import (
-    TASK_QUEUE,
+    STRONG_MODEL,
     FFMPEG_TASK_QUEUE,
     LLM_TASK_QUEUE,
     _ACTIVITY_RETRY,
@@ -29,11 +28,11 @@ from frigate_genai.activities.frame_extraction import transcode_into_parts_activ
 from frigate_genai.activities.records import record_result_activity
 from frigate_genai.activities.frames import crop_detection_activity
 from frigate_genai.activities.describe import run_describe_scene
+from frigate_genai.activities.dispatcher import enqueue_retry_activity
 from frigate_genai.activities.lifecycle import update_description_activity, cleanup_cancelled_activity
 from frigate_genai.tools.find_keyframes import pick_keyframes_activity
 
 MUST_KEEP = "must_keep"
-STRONG_MODEL = "ollama/gemma4:26b"
 WEAK_CONFIDENCE = ("low", "nothing_found")
 
 
@@ -116,19 +115,18 @@ class GenAIWorkflow:
             # as a presence loss, not a gain.
             frame_count = 0
             event_prefix = f"events/{primary_id}"
-            if not input_data.get("skip_frames"):
-                try:
-                    _, frame_count = await workflow.execute_activity(
-                        transcode_into_parts_activity,
-                        {**input_data, "event_id": primary_id},
-                        task_queue=FFMPEG_TASK_QUEUE,
-                        start_to_close_timeout=timedelta(hours=1),
-                        heartbeat_timeout=timedelta(seconds=60),
-                        retry_policy=_EXTRACT_RETRY,
-                    )
-                except Exception:
-                    workflow.logger.warning("Frame extraction failed for %s", log_ctx)
-                    frame_count = 0
+            try:
+                _, frame_count = await workflow.execute_activity(
+                    transcode_into_parts_activity,
+                    {**input_data, "event_id": primary_id},
+                    task_queue=FFMPEG_TASK_QUEUE,
+                    start_to_close_timeout=timedelta(hours=1),
+                    heartbeat_timeout=timedelta(seconds=60),
+                    retry_policy=_EXTRACT_RETRY,
+                )
+            except Exception:
+                workflow.logger.warning("Frame extraction failed for %s", log_ctx)
+                frame_count = 0
 
             duration = int(float(scene.get("end") or 0) - float(scene.get("start") or 0))
             workflow.upsert_search_attributes([SearchAttributePair(_SEARCH_DURATION, duration)])
@@ -245,26 +243,29 @@ class GenAIWorkflow:
                 retry_policy=_DESCRIPTION_RETRY,
             )
 
-            # One retry on the stronger model when the first pass was weak.
-            if weak and scene.get("priority") == MUST_KEEP and not retry_of:
-                try:
-                    await workflow.start_child_workflow(
-                        GenAIWorkflow,
-                        {**input_data, "scene": scene, "retry_of": scene.get("scene_id"),
-                         "model": STRONG_MODEL, "skip_frames": True},
-                        id=f"genai-{scene.get('scene_id')}-retry1",
-                        task_queue=TASK_QUEUE,
-                        parent_close_policy=ParentClosePolicy.ABANDON,
-                    )
-                except Exception:
-                    workflow.logger.warning("Weak-output retry could not be queued for %s", log_ctx)
-
             await workflow.execute_activity(
                 cleanup_cancelled_activity,
                 args=[{"event_id": primary_id}, False],
                 start_to_close_timeout=timedelta(seconds=30),
                 retry_policy=_ACTIVITY_RETRY,
             )
+
+            # One retry on the stronger model when the first pass was weak.
+            # Queued through the backlog, and after the cleanup, so the retry
+            # waits for the gate and re-extracts frames this pass deleted
+            # rather than describing nothing.
+            if weak and scene.get("priority") == MUST_KEEP and not retry_of:
+                try:
+                    await workflow.execute_activity(
+                        enqueue_retry_activity,
+                        {**input_data, "scene": scene, "retry_of": scene.get("scene_id"),
+                         "model": STRONG_MODEL},
+                        start_to_close_timeout=timedelta(seconds=30),
+                        retry_policy=_ACTIVITY_RETRY,
+                    )
+                except Exception:
+                    workflow.logger.warning("Weak-output retry could not be queued for %s", log_ctx)
+
             workflow.logger.info("GenAI workflow completed: %s", log_ctx)
         except asyncio.CancelledError:
             workflow.logger.info("GenAI workflow cancelled, cleaning up: %s", log_ctx)

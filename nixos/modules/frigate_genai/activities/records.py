@@ -12,6 +12,7 @@ from datetime import datetime, timezone
 
 from temporalio import activity
 
+from frigate_genai.intake import Scene
 from frigate_genai.s3_helpers import _s3_get, _s3_put, _s3_read_text
 
 log = logging.getLogger("frigate-genai-sidecar")
@@ -19,6 +20,7 @@ log = logging.getLogger("frigate-genai-sidecar")
 RESULTS_PREFIX = "_state/results"
 DONE_KEY = "_state/done.json"
 WATERMARK_KEY = "_state/watermark.json"
+LAST_SCENES_KEY = "_state/last_scenes.json"
 SPEND_PREFIX = "_state/spend"
 DONE_RETENTION_SECONDS = 8 * 24 * 3600
 
@@ -85,18 +87,82 @@ def save_done(ids: dict[str, float], now: float) -> int:
     return len(pruned)
 
 
-def load_watermark() -> float:
+def load_watermark() -> float | None:
+    """Start time to read events from, or None on the very first run.
+
+    None means "start now": the first run must not sweep a week of history
+    into the queue. A corrupt object is treated the same way rather than
+    restarting from 0.
+    """
     raw = _s3_read_text(WATERMARK_KEY)
     if not raw:
-        return 0.0
+        return None
     try:
-        return float(json.loads(raw).get("end_time") or 0.0)
-    except (json.JSONDecodeError, AttributeError, TypeError, ValueError):
-        return 0.0
+        value = float(json.loads(raw)["start_time"])
+    except (json.JSONDecodeError, AttributeError, KeyError, TypeError, ValueError):
+        log.warning("watermark is corrupt; starting from now")
+        return None
+    return value if value > 0 else None
 
 
-def save_watermark(end_time: float) -> None:
-    _s3_put(WATERMARK_KEY, json.dumps({"end_time": end_time}).encode())
+def save_watermark(start_time: float) -> None:
+    _s3_put(WATERMARK_KEY, json.dumps({"start_time": start_time}).encode())
+
+
+def save_last_scenes(scenes: dict[str, Scene]) -> None:
+    """Persist the newest enqueued scene per camera.
+
+    `still_there` compares a scene with the previous one on the same camera.
+    Drains run every 5 minutes and the comparison used to live only inside one
+    drain, so it almost never fired; this carries it across drains.
+    """
+    payload = {}
+    for camera, scene in scenes.items():
+        payload[camera] = {
+            "scene_id": scene.scene_id,
+            "start": scene.start,
+            "end": scene.end,
+            "labels": sorted(scene.labels),
+            "members": [
+                {
+                    "id": m.get("id"),
+                    "label": m.get("label", ""),
+                    "start_time": m.get("start_time"),
+                    "end_time": m.get("end_time"),
+                    "data_box": (m.get("data") or {}).get("box") or m.get("data_box"),
+                }
+                for m in scene.members
+            ],
+        }
+    _s3_put(LAST_SCENES_KEY, json.dumps(payload, sort_keys=True).encode())
+
+
+def load_last_scenes() -> dict[str, Scene]:
+    """Rebuild the persisted per-camera scenes; {} disables `still_there`."""
+    raw = _s3_read_text(LAST_SCENES_KEY)
+    if not raw:
+        return {}
+    try:
+        payload = json.loads(raw)
+    except json.JSONDecodeError:
+        log.warning("last scenes are corrupt; still_there disabled for this drain")
+        return {}
+    if not isinstance(payload, dict):
+        return {}
+    scenes: dict[str, Scene] = {}
+    for camera, entry in payload.items():
+        try:
+            scenes[str(camera)] = Scene(
+                scene_id=entry["scene_id"],
+                camera=str(camera),
+                start=float(entry["start"]),
+                end=float(entry["end"]),
+                members=list(entry.get("members") or []),
+                labels=frozenset(entry.get("labels") or []),
+            )
+        except (KeyError, TypeError, ValueError, AttributeError):
+            continue
+    return scenes
 
 
 def spend_key(day: str | None = None) -> str:

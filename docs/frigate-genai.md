@@ -14,10 +14,10 @@ Frigate ──MQTT──> mqtt-listener  (redo triggers only)
    │
    └─/api/events──> dispatcher ──300 s──> DrainWorkflow (genai-dispatcher)
                         │                     │
-                        │ seat gate (Mimir)   ├─ collect: classify, merge, dedupe
-                        │                     ├─ label skips: "Skipped: <reason>"
-                        │                     └─ start GenAIWorkflow per scene
-                        │                            │
+                        │ seat gate (Mimir)   ├─ collect: classify, merge, dedupe, label skips
+                        │                     │  and queue PendingSceneWorkflow per scene
+                        │                     └─ admit: signal queued scenes, priority order
+                        │                            └─ PendingSceneWorkflow → GenAIWorkflow
                   office GPU host                    ├─ ffmpeg frames (genai-tasks-ffmpeg)
                   (Hyprland idle + VRAM)             ├─ pick_keyframes + crop_detection
                                                      ├─ describe_scene (genai-tasks-ollama)
@@ -30,7 +30,7 @@ Frigate ──MQTT──> mqtt-listener  (redo triggers only)
 |---|---|---|---|
 | triggers | `--mode=triggers` | 1 | Runs `GenAIWorkflow`; owns `genai-tasks` activities |
 | ollama worker | `--mode=genai-ollama` | 0–1 (KEDA) | Runs `describe_scene`, `pick_keyframes`, `crop_detection` on `genai-tasks-ollama` |
-| dispatcher | `--mode=dispatcher` | 1 | Runs `DrainWorkflow` + intake on `genai-dispatcher`; starts a drain every 300 s |
+| dispatcher | `--mode=dispatcher` | 1 | Runs `DrainWorkflow` + `PendingSceneWorkflow` + intake/admission on `genai-dispatcher`; starts a drain every 300 s |
 | ffmpeg | `--mode=ffmpeg` | 1 | `transcode_into_parts` on `genai-tasks-ffmpeg` |
 | mqtt-listener | `--mode=mqtt-listener` | 1 | Rewrites an event description to `redo` and it is re-described |
 | dashboard | `--mode=dashboard` | 1 | Event table, pause toggles, reprocess; mutating endpoints need `GENAI_ADMIN_TOKEN` |
@@ -64,8 +64,9 @@ Measured intake: ~234 scenes/day, 162 must-keep, worst day 294.
 
 ## The per-scene workflow (`GenAIWorkflow`)
 
-1. Model from the drain (12b by default, 26b when the card is free).
-2. ffmpeg frames from the recording (`skip_frames` for retries). No snapshot: the
+1. Model chosen when the scene is admitted from the backlog (12b by default,
+   26b for must-keep scenes when the card is free).
+2. ffmpeg frames from the recording. No snapshot: the
    event snapshot has the detector box and class burned in
    (`snapshots.bounding_box` is true), which both leaks the answer and measured
    worse than a clean record frame. No frames → `Skipped: no recording`.
@@ -131,6 +132,14 @@ aws --endpoint-url "$S3_ENDPOINT" s3 rm s3://frigate-genai/_state/paused/genai
 
 `_state/paused/ollama` keeps the 12b model in use and never touches the 26b.
 
+Pausing stops admission, not intake: new scenes are still classified and stored
+as `PendingSceneWorkflow` executions in Temporal, and unpausing describes them
+oldest-first within priority 0–3 (package/cat/wildlife, person, dog, everything
+else). A per-label flag `_state/paused/genai-<label>` holds any queued scene
+that carries that label instead of dropping it. A queued scene that is still
+not admitted 7 days after its own start is labelled `Skipped: expired while
+paused`, so nothing disappears silently.
+
 The dashboard toggles the same flags, but its mutating endpoints require
 `GENAI_ADMIN_TOKEN` in the `frigate-genai-worker-creds` secret (OpenBao path
 `john2143-com/default/frigate-genai-worker-creds`; `envFrom` exposes it to every
@@ -144,7 +153,8 @@ by design, so an unconfigured deployment cannot be mutated at all.
 | `events/<id>/frames/`, `snapshot.jpg`, `crop.jpg` | working artifacts, deleted when the workflow ends | 14d rule |
 | `_state/results/<scene_id>.json` | durable per-scene result: model, tokens, confidence, description | permanent |
 | `_state/done.json` | ids already handled; pruned to 8 days | permanent |
-| `_state/watermark.json` | last event `end_time` collected | permanent |
+| `_state/watermark.json` | `start_time` cursor for the next intake read (held at any event still in progress, max 24 h) | permanent |
+| `_state/last_scenes.json` | last queued scene per camera, for `still_there` across drains | permanent |
 | `_state/spend/<date>.json` | scenes, skips, retries, GPU seconds, `cloud_calls` | permanent |
 | `_state/paused/*` | pause flags | permanent |
 | `_state/stats.json` | dashboard counters | permanent |
@@ -175,8 +185,10 @@ curl -s localhost:8080/api/stats                                    # dashboard 
 curl -s 'http://mimir:8080/prometheus/api/v1/query?query=frigate_genai_gate_open'
 ```
 
-A healthy drain logs `collect_scenes: N events`, `drain: N scenes, M skips`, then
-`Describe <scene>: model=… conf=…`, and the newest
+A healthy drain logs `collect_scenes: N events since T`, `drain: N events, M skipped,
+K enqueued`, then either `drain: global pause active`, `drain: gate closed (<reason>)`
+or `drain finished: {...}` with a rising `admitted`, plus
+`Describe <scene>: model=… conf=…` from the ollama worker. The newest
 `_state/spend/<date>.json` has `cloud_calls: 0`.
 
 ## Verifying a change
