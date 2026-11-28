@@ -154,6 +154,15 @@ spec:
       - name: crowdsec-bouncer-key
         mountPath: /etc/traefik/secrets
         readOnly: true
+      # The page a blocked client sees (banFilePath on the bouncer Middlewares in
+      # argo). The plugin reads and parses that path inside New(), and Traefik runs
+      # with abortOnPluginFailure: true, so the Middlewares may only set banFilePath
+      # after this mount is live on every node: argo lands the ConfigMap first, this
+      # rebuild second, the Middlewares third. Merging this without the rebuild
+      # changes nothing.
+      - name: ban-page
+        mountPath: /etc/traefik/ban-page
+        readOnly: true
     deployment:
       replicas: 3
       initContainers:
@@ -174,6 +183,9 @@ spec:
         - name: crowdsec-bouncer-key
           secret:
             secretName: crowdsec-bouncer-key
+        - name: ban-page
+          configMap:
+            name: traefik-ban-page
         - name: crowdsec-bouncer-plugin-src
           configMap:
             name: crowdsec-bouncer-plugin-src
