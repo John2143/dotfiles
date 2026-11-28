@@ -62,7 +62,9 @@ from frigate_genai.activities.records import record_result_activity
 from frigate_genai.activities.describe import run_describe_scene
 from frigate_genai.activities.frames import crop_detection_activity
 from frigate_genai.activities.dispatcher import (
+    admit_scenes_activity,
     collect_scenes_activity,
+    enqueue_retry_activity,
     finish_drain_activity,
     gate_status_activity,
     genai_paused_activity,
@@ -73,6 +75,7 @@ from frigate_genai.activities.mqtt import _start_workflow_sync, _build_workflow_
 from frigate_genai.tools.find_keyframes import pick_keyframes_activity
 from frigate_genai.workflows.genai import GenAIWorkflow
 from frigate_genai.workflows.drain import DrainWorkflow
+from frigate_genai.workflows.pending import PendingSceneWorkflow
 
 log = logging.getLogger("frigate-genai-sidecar")
 
@@ -449,11 +452,13 @@ async def async_main(prompts_path: str, provider_path: str, mode: str = "trigger
                     "Confidence": IndexedValueType.INDEXED_VALUE_TYPE_KEYWORD,
                     "Transcode": IndexedValueType.INDEXED_VALUE_TYPE_BOOL,
                     "ToolFailures": IndexedValueType.INDEXED_VALUE_TYPE_INT,
+                    "ScenePriority": IndexedValueType.INDEXED_VALUE_TYPE_KEYWORD,
+                    "SceneLabels": IndexedValueType.INDEXED_VALUE_TYPE_KEYWORD,
                 },
                 namespace="default",
             ),
         )
-        log.info("Search attributes registered: Camera, Label, EventId, Duration, Cost, Model, Confidence, Transcode, ToolFailures")
+        log.info("Search attributes registered: Camera, Label, EventId, Duration, Cost, Model, Confidence, Transcode, ToolFailures, ScenePriority, SceneLabels")
     except Exception as e:
         log.debug("Search attribute registration skipped: %s", e)
 
@@ -475,6 +480,7 @@ async def async_main(prompts_path: str, provider_path: str, mode: str = "trigger
         update_description_activity,
         cleanup_cancelled_activity,
         record_result_activity,
+        enqueue_retry_activity,
     ]
 
     if mode == "triggers":
@@ -509,9 +515,10 @@ async def async_main(prompts_path: str, provider_path: str, mode: str = "trigger
         workers = [Worker(
             _temporal_client,
             task_queue=DISPATCHER_TASK_QUEUE,
-            workflows=[DrainWorkflow],
+            workflows=[DrainWorkflow, PendingSceneWorkflow],
             activities=[
                 collect_scenes_activity,
+                admit_scenes_activity,
                 gate_status_activity,
                 genai_paused_activity,
                 finish_drain_activity,
