@@ -167,7 +167,24 @@ testing.
 - `big` was down ~10 min, past the 5 min default toleration, so **212 eviction events** fired and its
   pods were rescheduled onto arch/closet/nas. They drift back afterwards (36 pods on `big` right after
   boot, 103 about 40 min later). Expect requests near the ceiling in between — `closet` at 98% CPU,
-  `nas` at 99% memory. Nothing is stuck and nothing is Pending.
+  `nas` at 99% memory.
+- **The rescheduling itself is what does the damage, and it is load, not disk.** `arch` (16 cores) went
+  from a `node_load1` baseline of 3–5 to **48.4** (18:40–19:50 local: 48.4 / 38.9 / 26.0 / 42.0 /
+  47.3). Its kubelet fell behind on the node lease, the node was `NotReady` 19:22–19:28, and the taint
+  manager evicted pods on it (`DeletionByTaintManager`, including `loki-write-0` and `openbao-1`).
+  The `arch` replica of three Longhorn volumes failed at 00:23Z and they went `degraded`; the
+  single-replica `data-loki-write-0` went **`faulted`**. `openbao-1` was killed mid-write and its
+  bbolt raft db came back corrupt (`freepages: failed to get all reachable pages`), so it never
+  restarted cleanly — that is the one thing here that did not heal itself (card #50).
+- **Do not read this as a disk problem.** At the worst moment `arch`'s `/` was 79% used of 443 GiB and
+  17% of its inodes, and `kube_node_status_condition{condition="DiskPressure"}` read `false` at every
+  sample all night. Disk pressure is not the signal for this failure mode, and nothing alerts on load
+  or IO saturation today. Budget headroom on arch before the next `big`-side reboot rather than
+  watching its disk.
+- Recovery needs no intervention: Longhorn rebuilt and every volume was `healthy` within ~1 h
+  (`replica-replenishment-wait-interval=3600s`), `loki-write-0` came back on its own, and `arch` was
+  rebooted at 19:55 — a clean `systemd-reboot`, not a crash, so the corruption did not come from an
+  unclean shutdown.
 - `tempo-0` crash-looped once because SeaweedFS was not ready yet, then reported
   `backend-worker: Starting` for ~10 min before settling to `Healthy/Synced`. Do not restart it early;
   it recovers on its own.
