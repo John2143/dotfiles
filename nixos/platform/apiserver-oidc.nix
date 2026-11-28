@@ -13,6 +13,11 @@
   authn = (pkgs.formats.yaml {}).generate "authentication-config.yaml" {
     apiVersion = "apiserver.config.k8s.io/v1";
     kind = "AuthenticationConfiguration";
+    # k3s normally passes --anonymous-auth=false, but skips it when an
+    # authentication-config file is given ("Not setting kube-apiserver
+    # 'anonymous-auth' flag"), and the API server's default is then to admit
+    # anonymous requests. Turn it off here instead.
+    anonymous.enabled = false;
     jwt = [
       {
         issuer = {
