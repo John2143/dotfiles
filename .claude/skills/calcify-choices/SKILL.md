@@ -1,5 +1,5 @@
 ---
-description: Pauses the current task to record the session's choices by who made them — user-driven choices become invariants, user-consented ones become recommendations — then resumes. Use when the user asks to calcify, lock in, or record decisions mid-task.
+description: Pauses the current task to record the session's choices by who made them — user-driven choices become invariants, user-consented ones become recommendations — then resumes. Use when the user asks to calcify, lock in, or record decisions mid-task, including while a plan is being drafted.
 argument-hint: "[--plan <path>] [--card <id>] [--repo-file <path>]"
 allowed-tools: Read, Write, Edit, mcp__ai_tasks_tasks_read, mcp__ai_tasks_tasks_update
 ---
@@ -18,4 +18,4 @@ Write one `## Choices` section to each target: Invariants and Recommendations as
 - **Card**: the board card this work belongs to; description only, `format: markdown`. `--card` overrides.
 - **Repo**: an existing decisions/ADR file, else `docs/decisions.md`; only choices that outlive this task; never commit. `--repo-file` overrides.
 
-Skip a target you can't write (no card, no git repo, plan mode) and say so. Report one line per target plus tier counts, then resume. Choices only — no status or findings.
+Plan mode is not a reason to skip this write-up: the plan file (`local://`) and the card description are both writable while planning, so record choices there as they are made rather than after approval. Repo docs are the exception — plan mode holds the working tree read-only, so write those at execution and say you deferred them. Skip a target you have no place for (no card, no git repo) and say so. Report one line per target plus tier counts, then resume. Choices only — no status or findings.
