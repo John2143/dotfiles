@@ -28,12 +28,13 @@ class WorkerModeRegistrationTests(unittest.TestCase):
     def setUp(self):
         self.code = (Path(__file__).parent.parent / "worker.py").read_text()
 
-    def test_dispatcher_owns_drain_and_intake(self):
-        block = _block_after(self.code, "if mode == \"dispatcher\":", 20)
+    def test_dispatcher_owns_drain_intake_and_admission(self):
+        block = _block_after(self.code, "if mode == \"dispatcher\":", 22)
         self.assertIn("DrainWorkflow", block)
-        for activity in ("collect_scenes_activity", "gate_status_activity",
-                         "finish_drain_activity", "genai_paused_activity",
-                         "label_only_activity"):
+        self.assertIn("PendingSceneWorkflow", block)
+        for activity in ("collect_scenes_activity", "admit_scenes_activity",
+                         "gate_status_activity", "finish_drain_activity",
+                         "genai_paused_activity", "label_only_activity"):
             self.assertIn(activity, block, f"{activity} missing from the dispatcher worker")
 
     def test_triggers_owns_the_description_workflow(self):
@@ -43,6 +44,15 @@ class WorkerModeRegistrationTests(unittest.TestCase):
         # record_result must be callable on the workflow's own queue.
         core = _block_after(self.code, "core_activities = [", 8)
         self.assertIn("record_result_activity", core)
+        # The weak-output retry is queued through the backlog from the scene's
+        # own queue, so it must be callable there.
+        self.assertIn("enqueue_retry_activity", core)
+
+    def test_scene_search_attributes_are_registered(self):
+        block = _block_after(self.code, "search_attributes={", 14)
+        self.assertIn('"ScenePriority"', block)
+        self.assertIn('"SceneLabels"', block)
+        self.assertIn("INDEXED_VALUE_TYPE_KEYWORD", block)
 
     def test_llm_queue_owns_the_model_activities(self):
         block = _block_after(self.code, "elif mode == \"genai-ollama\":", 12)
@@ -63,18 +73,30 @@ class DrainQueueRoutingTests(unittest.TestCase):
     "Activity function genai_paused is not registered on this worker".
     """
 
-    def test_dispatcher_activities_use_the_dispatcher_queue(self):
-        source = (Path(__file__).parent.parent / "workflows" / "drain.py").read_text()
-        workflow_queue = [line.strip() for line in source.splitlines()
-                          if "task_queue=TASK_QUEUE" in line]
-        # Exactly one call — the scene child — may run on the GenAI queue.
-        self.assertEqual(len(workflow_queue), 1, workflow_queue)
-        self.assertIn("task_queue=DISPATCHER_TASK_QUEUE", source)
+    def setUp(self):
+        self.root = Path(__file__).parent.parent
+        self.drain = (self.root / "workflows" / "drain.py").read_text()
+        self.pending = (self.root / "workflows" / "pending.py").read_text()
+        self.genai = (self.root / "workflows" / "genai.py").read_text()
 
-    def test_scene_children_stay_on_the_workflow_queue(self):
-        source = (Path(__file__).parent.parent / "workflows" / "drain.py").read_text()
-        block = _block_after(source, "start_child_workflow(", 16)
+    def test_drain_is_dispatcher_only_and_starts_no_children(self):
+        self.assertIn("task_queue=DISPATCHER_TASK_QUEUE", self.drain)
+        self.assertNotIn("task_queue=TASK_QUEUE", self.drain)
+        # Scenes are started by the collect and admission activities now.
+        self.assertNotIn("start_child_workflow", self.drain)
+
+    def test_the_child_scene_runs_on_the_workflow_queue(self):
+        block = _block_after(self.pending, "start_child_workflow(", 8)
         self.assertIn("task_queue=TASK_QUEUE", block)
+        self.assertEqual(self.pending.count("task_queue=TASK_QUEUE"), 1)
+
+    def test_genai_retries_through_the_backlog_after_cleanup(self):
+        # Built by concatenation so a grep for the removed flag stays clean.
+        self.assertNotIn("skip" + "_frames", self.genai)
+        self.assertNotIn("start_child_workflow", self.genai)
+        # Compare call sites, not the import lines.
+        cleanup = self.genai.index("cleanup_cancelled_activity,")
+        self.assertGreater(self.genai.index("enqueue_retry_activity,"), cleanup)
 
 
 def _block_after(code: str, marker: str, line_count: int) -> str:
