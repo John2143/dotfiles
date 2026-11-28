@@ -20,9 +20,11 @@
   # Every address a client may use for the API. 10.98.0.11/.12 are the cloud
   # voters' wg-home addresses, which phase 3 adds; they are listed now because
   # changing this list later regenerates the API certificates.
+  # kube.cloud.2143.me is the tailnet name friends' kubeconfigs use; headscale
+  # resolves it to the two cloud voters' tailnet addresses.
   sans =
     lib.concatMap (n: [n.wgAddress n.wgAddress6]) (lib.attrValues nodes)
-    ++ ["10.98.0.11" "10.98.0.12" "192.168.5.50" "fd00:1::50"];
+    ++ ["10.98.0.11" "10.98.0.12" "192.168.5.50" "fd00:1::50" "kube.cloud.2143.me"];
 in {
   # These hosts have no /etc/ssh/age-identity (ssh.nix lists it for the
   # Hetzner hosts); their agenix identity is the SSH host key alone.
