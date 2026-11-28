@@ -30,7 +30,7 @@
     publicIPv4 = "2.25.220.79";
     wgAddress = "10.98.1.11";
     wgAddress6 = "fd00:98::11";
-    wgPublicKey = null;
+    wgPublicKey = "Kfe6vAY6ypBtYDj4GjceIZt6B69LNs0eDKhy+R9smCk=";
     voter = true;
     edge = true;
     diskDevice = "/dev/sda";
@@ -51,7 +51,7 @@
     publicIPv4 = null;
     wgAddress = "10.98.1.13";
     wgAddress6 = "fd00:98::13";
-    wgPublicKey = null;
+    wgPublicKey = "ZCQPELIDE26ESiiIMsipXqgXrjHilxG9I/TbDEAa71Q=";
     voter = true;
     edge = false;
     diskDevice = "/dev/sda";
@@ -74,7 +74,7 @@
     publicIPv4 = "31.132.60.154";
     wgAddress = "10.98.1.12";
     wgAddress6 = "fd00:98::12";
-    wgPublicKey = null;
+    wgPublicKey = "ledWE/cBJzBtW0tpJnjUC8IC77/zEsnBBF8N9bciRSA=";
     voter = true;
     edge = true;
     diskDevice = "/dev/sda";
