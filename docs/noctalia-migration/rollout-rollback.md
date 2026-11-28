@@ -55,10 +55,11 @@ Expected: `0 errors, N warnings` and exit 0. An error almost always means an
 `[[setting]]` declaration.
 
 Build the system closure and inspect the closure diff (packages that disappear
-are the old stack):
+are the old stack). `dotfiles-fresh` fetches `~/dotfiles`, fast-forwards it when
+it is behind, and prints the revision about to be built:
 
 ```fish
-nixos-rebuild build --flake ~/dotfiles#office
+dotfiles-fresh; and nixos-rebuild build --flake ~/dotfiles#office
 nix store diff-closures /run/current-system ./result
 ```
 
@@ -86,7 +87,7 @@ session. Use a full `switch` with the rollback command from §5 ready.
 
 ```fish
 cd ~/dotfiles
-sudo nixos-rebuild switch --flake ~/dotfiles#office
+dotfiles-fresh; and sudo nixos-rebuild switch --flake ~/dotfiles#office
 ```
 
 Then restart the graphical session:
@@ -253,7 +254,7 @@ If it is merged:
 cd ~/dotfiles
 git log --oneline --merges -3              # find the merge commit
 git revert -m 1 <merge-commit>
-sudo nixos-rebuild switch --flake ~/dotfiles#office
+dotfiles-fresh; and sudo nixos-rebuild switch --flake ~/dotfiles#office
 ```
 
 Or reset master to the pre-merge commit if nothing else landed on top:
