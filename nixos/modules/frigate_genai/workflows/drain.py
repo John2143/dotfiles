@@ -68,7 +68,9 @@ class DrainWorkflow:
                              collected.get("enqueued", 0))
 
         admitted = 0
-        waiting = int(collected.get("enqueued") or 0)
+        # Unknown until admission lists the queue: a paused drain breaks before
+        # it does, and reporting 0 there would read as "nothing waiting".
+        waiting: int | None = None
         paused = False
         gate_reason = ""
         while (workflow.now() - started_at) < DRAIN_BUDGET:
