@@ -1,0 +1,19 @@
+{
+  "properties": {
+    "criteria": {
+      "elements": {
+        "properties": {
+          "title": { "type": "string" },
+          "description": { "type": "string" },
+          "kind": { "enum": ["check", "judgement"] },
+          "weight": { "type": "float64" },
+          "max": { "type": "int32" }
+        },
+        "optionalProperties": {
+          "command": { "type": "string" },
+          "pass_when": { "type": "string" }
+        }
+      }
+    }
+  }
+}
