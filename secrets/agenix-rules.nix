@@ -220,4 +220,11 @@ in {
   #   AWS_ACCESS_KEY_ID=<keyID>
   #   AWS_SECRET_ACCESS_KEY=<applicationKey>
   "platform-etcd-s3.env.age".publicKeys = [office arch plat-bos plat-nyc plat-home];
+  # OpenBao static unseal key for the platform cluster: 32 random bytes. Each
+  # node decrypts it to /run/openbao-seal/unseal-v1 and the OpenBao pods read
+  # it through a hostPath mount, so it is never a Kubernetes Secret. Rotation
+  # uses OpenBao's previous_key: add platform-openbao-unseal-v2.age, never
+  # re-encrypt v1 in place.
+  #   cd secrets && head -c 32 /dev/urandom | agenix -e platform-openbao-unseal.age -i ~/.ssh/age
+  "platform-openbao-unseal.age".publicKeys = [office arch plat-bos plat-nyc plat-home];
 }

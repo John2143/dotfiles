@@ -176,6 +176,8 @@
           ./nixos/platform/base.nix
           ./nixos/platform/wg-plat.nix
           ./nixos/platform/k3s.nix
+          ./nixos/platform/gvisor.nix
+          ./nixos/platform/edge.nix
           ./nixos/cluster/modules/disko.nix
           ./nixos/cluster/modules/ssh.nix
           # Provenance for the generation: same expression mkHost uses.
