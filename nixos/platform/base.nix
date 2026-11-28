@@ -28,6 +28,15 @@ in {
       type = lib.types.str;
       description = "wg-plat mesh address (10.98.1.0/24) — the node's identity in the cluster.";
     };
+    wgAddress6 = lib.mkOption {
+      type = lib.types.str;
+      description = "wg-plat mesh ULA (fd00:98::/64): the IPv6 half of the node's identity in the cluster.";
+    };
+    wgPublicKey = lib.mkOption {
+      type = lib.types.nullOr lib.types.str;
+      default = null;
+      description = "wg-plat public key, read from the node after its first deploy; null until then, and peers skip a null key.";
+    };
     voter = lib.mkOption {
       type = lib.types.bool;
       default = true;

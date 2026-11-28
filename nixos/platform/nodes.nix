@@ -10,6 +10,12 @@
 #   wgAddress   wg-plat mesh address: k3s --node-ip/--advertise-address and
 #               the flannel VXLAN interface live here, so this is the node's
 #               identity inside the cluster.
+#   wgAddress6  wg-plat ULA. Static on purpose: k3s --node-ip takes both
+#               families and flannel's IPv6 VXLAN device uses this address,
+#               so every peer lists it in allowedIPs.
+#   wgPublicKey wg-plat public key. The private key is generated on the node
+#               (/var/lib/wireguard/wg-plat.key) and never leaves it; a
+#               reinstalled node gets a new key and this value must be updated.
 #   mac         must match the NIC exactly; the network config matches on the
 #               MAC, never on the interface name (it is not stable across
 #               kernels or providers).
@@ -23,6 +29,8 @@
     site = "hostinger-bos";
     publicIPv4 = "2.25.220.79";
     wgAddress = "10.98.1.11";
+    wgAddress6 = "fd00:98::11";
+    wgPublicKey = null;
     voter = true;
     edge = true;
     diskDevice = "/dev/sda";
@@ -42,6 +50,8 @@
     site = "bigp";
     publicIPv4 = null;
     wgAddress = "10.98.1.13";
+    wgAddress6 = "fd00:98::13";
+    wgPublicKey = null;
     voter = true;
     edge = false;
     diskDevice = "/dev/sda";
@@ -63,6 +73,8 @@
     site = "contabo-us-east";
     publicIPv4 = "31.132.60.154";
     wgAddress = "10.98.1.12";
+    wgAddress6 = "fd00:98::12";
+    wgPublicKey = null;
     voter = true;
     edge = true;
     diskDevice = "/dev/sda";
