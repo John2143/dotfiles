@@ -113,7 +113,8 @@ interfaces are exported before blaming anything else.
 
 On the MacBook (client only):
 
-- `darwin-rebuild switch --flake .#macbook`.
+- `dotfiles-fresh; and darwin-rebuild switch --flake .#macbook` (`dotfiles-fresh` fetches
+  `~/dotfiles`, fast-forwards when behind, and prints the revision being built).
 - Open RustDesk. **Decline** the service/LaunchDaemon install prompt. Grant Accessibility or
   Input Monitoring only if RustDesk asks for them for keyboard capture as a client; it does not
   need Screen Recording.
@@ -256,5 +257,5 @@ Linux hosts:
 
 Mac: `brew uninstall --cask rustdesk`, remove the `"rustdesk"` cask line and the
 `rustdesk-tunnel.nix` import from `nixos/darwin-macbook.nix`, then
-`darwin-rebuild switch --flake .#macbook`. Optionally revoke RustDesk's grants in System
+`dotfiles-fresh; and darwin-rebuild switch --flake .#macbook`. Optionally revoke RustDesk's grants in System
 Settings → Privacy & Security.
