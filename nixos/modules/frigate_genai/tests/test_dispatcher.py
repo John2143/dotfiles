@@ -186,8 +186,14 @@ class CollectScenesTests(unittest.TestCase):
         _, saved, _ = self._collect(in_progress=[NOW - 30 * 3600])
         self.assertEqual(saved["watermark"], NOW)
 
-    def test_existing_watermark_is_never_rewound(self):
+    def test_in_progress_event_before_the_window_does_not_pin_the_cursor(self):
+        # Frigate filters on start_time, so an event that began before `after`
+        # is never returned; holding the cursor for it would freeze intake.
         _, saved, _ = self._collect(watermark=NOW - 100, in_progress=[NOW - 5000])
+        self.assertEqual(saved["watermark"], NOW)
+
+    def test_in_progress_event_inside_the_window_holds_the_cursor(self):
+        _, saved, _ = self._collect(watermark=NOW - 3600, in_progress=[NOW - 100, NOW - 50])
         self.assertEqual(saved["watermark"], NOW - 100)
 
     def test_still_there_inside_one_drain(self):

@@ -399,8 +399,13 @@ async def collect_scenes_activity(arg: dict) -> dict:
 
     # A scene still in progress has no end_time; holding the watermark at its
     # start makes the next drain read it again instead of stepping over it.
+    # Only events inside the window just read can hold: one that started before
+    # `after` was never returned by the fetch (Frigate filters on start_time)
+    # and never will be, so holding for it would pin the cursor at `after`
+    # until the event ages out of the 24 h cap, re-reading everything each
+    # drain for nothing.
     hold = [start for start in fetch_in_progress_starts()
-            if start >= now - IN_PROGRESS_HOLD_MAX_SECONDS]
+            if after <= start and start >= now - IN_PROGRESS_HOLD_MAX_SECONDS]
     new_watermark = max(after, min([now] + hold))
 
     save_watermark(new_watermark)
