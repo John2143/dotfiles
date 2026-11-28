@@ -139,6 +139,19 @@
   # one the MacBook's adapter actually reaches).
   services.macbookLink.interfaces = ["eno1" "enp7s0" "enp2s0f1"];
   networking.networkmanager.enable = true; # Easiest to use and most distros use this by default.
+  # The k3s API VIP (192.168.5.10) is announced by MetalLB over BGP only, so a
+  # direct on-link ARP for it goes unanswered (arch saw `192.168.5.10 dev
+  # enp2s0f0 FAILED`), and a fresh install has no kube-proxy rules to reach it,
+  # so the join hangs. Send it via the router, which has the BGP route.
+  networking.networkmanager.dispatcherScripts = [
+    {
+      type = "basic";
+      source = pkgs.writeText "k3s-vip-route" ''
+        [ "$1" = "enp2s0f0" ] && [ "$2" = "up" ] || exit 0
+        ${pkgs.iproute2}/bin/ip route replace 192.168.5.10/32 via 192.168.5.1 dev enp2s0f0
+      '';
+    }
+  ];
 
   # No tailnet subnet route from this desktop. k3s-server.nix advertises the LAN
   # and MetalLB subnets from every k3s server, and headscale makes the online,
@@ -203,6 +216,15 @@
     ipv6Mac = "98:b7:85:23:48:90";
     # Reserve 12 CPU + 16 GiB RAM for the system (Hyprland desktop, 32 GiB total per lshw). k8s gets 4 CPU, ~15.3 GiB.
     systemReserved = "cpu=12,memory=16Gi";
+    # k3s applies --node-label only at first registration (docs.k3s.io/advanced),
+    # so these matter when arch (re)joins as a new node. The first three were set
+    # by hand on the old Node; create-default-disk makes Longhorn (with
+    # create-default-disk-labeled-nodes=true) create the /mnt/longhorn disk. The
+    # exclude label keeps a re-registered arch off the MetalLB edge until the
+    # node-named lists in argo (API VIP endpoints, per-node 10.42.<n>.0/32 and
+    # .1/32 SNAT netpols; docs/node-maintenance.md "Add a node" step 3) are
+    # updated for its new pod CIDR; then remove that label by hand.
+    nodeLabels = ["workload-type=general" "beyla.enabled=true" "node.longhorn.io/create-default-disk=true" "node.kubernetes.io/exclude-from-external-load-balancers=true"];
   };
   custom.backup.enable = true;
 

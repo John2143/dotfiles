@@ -350,24 +350,9 @@ in {
   # real modes via the monitor rules in home.nix. Removed 2026-09-20.
   boot.extraModulePackages = [];
   boot.extraModprobeConfig = '''';
-  # Keyfile for pool1 LUKS auto-unlock at boot. Password keyslot (slot 0)
-  # is preserved as fallback — if the keyfile is missing or wrong, system
-  # still prompts for the LUKS passphrase.
-  # To generate/enroll: sudo cryptsetup luksAddKey /dev/sdb1 /etc/secrets/pool1-keyfile
-  boot.initrd.luks.devices."pool1" = {
-    device = "/dev/disk/by-uuid/9340760b-a19d-4392-9021-8f4b14c794f8";
-    keyFile = "/etc/secrets/pool1-keyfile";
-    allowDiscards = true;
-    crypttabExtraOpts = ["nofail"];
-  };
   #blacklist nouveau
   #options nouveauu modeset=0
 
-  fileSystems."/" = {
-    device = "/dev/disk/by-label/NIX";
-    fsType = "ext4";
-    neededForBoot = true;
-  };
   systemd.services.no-rgb = {
     description = "Turn off all RGB lighting at boot";
     after = ["multi-user.target"];
@@ -405,59 +390,16 @@ in {
   #neededForBoot = true;
   #};
 
-  fileSystems."/home/john" = {
-    device = "/dev/pool1a/john_home";
-    fsType = "ext4";
-    neededForBoot = true;
-  };
-
-  fileSystems."/mnt/monero" = {
-    device = "/dev/pool1b/monero";
-    fsType = "ext4";
-  };
-
   fileSystems."/mnt/d" = {
     device = "/dev/disk/by-label/xd";
     fsType = "ntfs";
     neededForBoot = false;
   };
 
-
-# SSD expansion volume (pool1/ssdext1, 663G ext4). Created manually
-# inside the pool1 LUKS volume alongside longhorn:
-#   sudo mkfs.ext4 /dev/pool1/ssdext1
-#   sudo install -d -m 0755 -o root -g root /mnt/ssdext1
-  fileSystems."/mnt/ssdext1" = {
-    device = "/dev/pool1/ssdext1";
-    fsType = "ext4";
-    options = ["defaults" "nofail" "x-systemd.after=lvm2-activation.service"];
-  };
-
-  # Longhorn replica disk for the k3s cluster. The LV (pool1/longhorn, 1.2T)
-  # was created manually inside the existing pool1 LUKS volume. Bring up the
-  # filesystem on first deploy with:
-  #   sudo mkfs.ext4 -L longhorn /dev/mapper/pool1-longhorn
-  #   sudo install -d -m 0755 -o root -g root /mnt/longhorn
-  # `nofail` keeps the box bootable if the LV is ever absent.
-  fileSystems."/mnt/longhorn" = {
-    device = "/dev/disk/by-label/longhorn";
-    fsType = "ext4";
-    options = ["defaults" "noatime" "nofail" "x-systemd.after=lvm2-activation.service"];
-  };
-
   #fileSystems."/mnt/games_b" = {
   #device = "/dev/pool1a/games_b";
   #fsType = "ext4";
   #};
-
-  fileSystems."/boot" = {
-    device = "/dev/disk/by-label/BOOT";
-    fsType = "vfat";
-    options = [
-      "fmask=0022"
-      "dmask=0022"
-    ];
-  };
 
   # fileSystems."/mnt/efi1" = {
   #   device = "/dev/disk/by-uuid/C84B-9CD5";
@@ -476,10 +418,6 @@ in {
   #     "dmask=0022"
   #   ];
   # };
-
-  swapDevices = [
-    {device = "/dev/disk/by-label/swap";}
-  ];
 
   # Enables DHCP on each ethernet and wireless interface. In case of scripted networking
   # (the default) this is the recommended approach. When using systemd-networkd it's

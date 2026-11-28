@@ -227,6 +227,8 @@
       // (mkHost {
         name = "arch";
         modules = [
+          inputs.disko.nixosModules.default
+          ./nixos/modules/disko_arch.nix
           ./nixos/shared-cli-configuration.nix
           ./nixos/shared-configuration.nix
           ./nixos/shared-games-configuration.nix
